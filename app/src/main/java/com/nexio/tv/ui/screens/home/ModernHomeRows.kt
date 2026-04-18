@@ -732,12 +732,11 @@ private fun ModernCarouselCard(
     }
     val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx, item.metaPreview?.id, item.metaPreview?.posterProviderTag) {
         imageUrl?.let {
-            val isBackdrop = focusedPosterBackdropExpandEnabled && isBackdropExpanded
             val diskKey = item.metaPreview?.let { meta ->
-                if (isBackdrop) {
+                if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
                     ArtworkImageCacheKeys.backdrop(meta.id)
                 } else {
-                    ArtworkImageCacheKeys.poster(meta.id, meta.posterProviderTag)
+                    ArtworkImageCacheKeys.poster(meta.id, meta.posterProviderTag, it)
                 }
             }
             ImageRequest.Builder(context)

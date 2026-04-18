@@ -2,9 +2,14 @@ package com.nexio.tv.core.image
 
 object ArtworkImageCacheKeys {
     private const val NATIVE_PROVIDER = "native"
+    private const val RPDB_PROVIDER = "rpdb"
+    private const val TOP_POSTERS_PROVIDER = "top_posters"
 
     fun poster(itemId: String, providerTag: String?): String =
-        build(itemId, providerTag?.takeIf { it.isNotBlank() } ?: NATIVE_PROVIDER, "poster")
+        build(itemId, resolvePosterProvider(providerTag, posterUrl = null), "poster")
+
+    fun poster(itemId: String, providerTag: String?, posterUrl: String?): String =
+        build(itemId, resolvePosterProvider(providerTag, posterUrl), "poster")
 
     fun backdrop(itemId: String): String =
         build(itemId, NATIVE_PROVIDER, "background")
@@ -14,6 +19,16 @@ object ArtworkImageCacheKeys {
 
     fun thumbnail(itemId: String): String =
         build(itemId, NATIVE_PROVIDER, "thumbnail")
+
+    private fun resolvePosterProvider(providerTag: String?, posterUrl: String?): String {
+        providerTag?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        val normalizedUrl = posterUrl?.trim().orEmpty()
+        return when {
+            normalizedUrl.startsWith("https://api.ratingposterdb.com/") -> RPDB_PROVIDER
+            normalizedUrl.startsWith("https://api.top-posters.com/") -> TOP_POSTERS_PROVIDER
+            else -> NATIVE_PROVIDER
+        }
+    }
 
     private fun build(itemId: String, provider: String, type: String): String =
         "${itemId}_${provider}_${type}"

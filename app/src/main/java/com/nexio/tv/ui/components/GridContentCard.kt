@@ -148,7 +148,7 @@ fun GridContentCard(
                         .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
                         .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}")
-                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag))
+                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, item.poster))
                         .build()
                 }
                 if (item.poster.isNullOrBlank()) {

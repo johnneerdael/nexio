@@ -456,7 +456,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             val itemKey = "${item.apiType}:${item.id}"
             val entries = buildList {
                 item.poster?.trim()?.takeIf(String::isNotEmpty)?.let {
-                    add(ImageCacheEntry(it, ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag)))
+                    add(ImageCacheEntry(it, ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, it)))
                 }
                 item.background?.trim()?.takeIf(String::isNotEmpty)?.let {
                     add(ImageCacheEntry(it, ArtworkImageCacheKeys.backdrop(item.id)))

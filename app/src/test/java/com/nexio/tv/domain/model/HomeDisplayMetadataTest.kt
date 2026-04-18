@@ -31,4 +31,32 @@ class HomeDisplayMetadataTest {
         assertEquals(93.0, displayMetadata.tomatoesRating ?: 0.0, 0.0)
         assertEquals(93.0, roundTripped.tomatoesRating ?: 0.0, 0.0)
     }
+
+    @Test
+    fun `toHomeDisplayMetadata and applyTo preserve poster provider tag`() {
+        val preview = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "https://api.ratingposterdb.com/key/imdb/poster-default/tt123.jpg",
+            posterShape = PosterShape.POSTER,
+            background = "background",
+            logo = "logo",
+            description = "description",
+            releaseInfo = "2025",
+            runtime = "120",
+            imdbRating = 8.3f,
+            tomatoesRating = 93.0,
+            genres = listOf("Drama"),
+            posterProviderTag = "rpdb"
+        )
+
+        val displayMetadata = preview.toHomeDisplayMetadata()
+        val roundTripped = displayMetadata.applyTo(
+            preview.copy(posterProviderTag = null)
+        )
+
+        assertEquals("rpdb", displayMetadata.posterProviderTag)
+        assertEquals("rpdb", roundTripped.posterProviderTag)
+    }
 }

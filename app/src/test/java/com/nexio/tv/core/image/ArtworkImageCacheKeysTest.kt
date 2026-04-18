@@ -17,6 +17,28 @@ class ArtworkImageCacheKeysTest {
     }
 
     @Test
+    fun `poster keys infer rpdb provider from poster url when tag is missing`() {
+        val key = ArtworkImageCacheKeys.poster(
+            itemId = "tt15940132",
+            providerTag = null,
+            posterUrl = "https://api.ratingposterdb.com/key/imdb/poster-default/tt15940132.jpg"
+        )
+
+        assertEquals("tt15940132_rpdb_poster", key)
+    }
+
+    @Test
+    fun `poster keys infer top posters provider from poster url when tag is missing`() {
+        val key = ArtworkImageCacheKeys.poster(
+            itemId = "tt15940132",
+            providerTag = null,
+            posterUrl = "https://api.top-posters.com/key/imdb/poster/tt15940132.jpg"
+        )
+
+        assertEquals("tt15940132_top_posters_poster", key)
+    }
+
+    @Test
     fun `native artwork keys are shared across profiles and languages`() {
         assertEquals("id249854_native_background", ArtworkImageCacheKeys.backdrop("id249854"))
         assertEquals("id249854_native_logo", ArtworkImageCacheKeys.logo("id249854"))
