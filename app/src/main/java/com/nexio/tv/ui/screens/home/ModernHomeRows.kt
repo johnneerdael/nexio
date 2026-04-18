@@ -100,6 +100,21 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
 private const val POSTER_PREFETCH_DISTANCE = 8
 
+internal fun resolveModernCarouselCardImageUrl(
+    focusedPosterBackdropExpandEnabled: Boolean,
+    isBackdropExpanded: Boolean,
+    frozenBackdropUrl: String?,
+    itemImageUrl: String?,
+    heroPoster: String?,
+    heroBackdrop: String?
+): String? {
+    return if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+        heroBackdrop ?: itemImageUrl ?: heroPoster
+    } else {
+        itemImageUrl ?: heroPoster ?: frozenBackdropUrl ?: heroBackdrop
+    }
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ModernContinueWatchingRowItem(
@@ -712,11 +727,14 @@ private fun ModernCarouselCard(
     if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
         frozenLogoUrl.value = item.heroPreview.logo
     }
-    val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-        item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
-    } else {
-        frozenBackdropUrl.value ?: item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
-    }
+    val imageUrl = resolveModernCarouselCardImageUrl(
+        focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
+        isBackdropExpanded = isBackdropExpanded,
+        frozenBackdropUrl = frozenBackdropUrl.value,
+        itemImageUrl = item.imageUrl,
+        heroPoster = item.heroPreview.poster,
+        heroBackdrop = item.heroPreview.backdrop
+    )
     // Keep decode target stable across expand/collapse to avoid recreating image requests/painters
     // purely due to animated width changes.
     val maxRequestCardWidth = if (focusedPosterBackdropExpandEnabled) {

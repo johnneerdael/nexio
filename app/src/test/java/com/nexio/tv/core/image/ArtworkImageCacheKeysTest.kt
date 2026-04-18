@@ -10,7 +10,7 @@ class ArtworkImageCacheKeysTest {
     fun `poster keys include item provider and type but not locale or profile`() {
         val key = ArtworkImageCacheKeys.poster("id249854", "topposters")
 
-        assertEquals("id249854_topposters_poster", key)
+        assertEquals("id249854_topposters_poster_v2", key)
         assertFalse(key.contains("en", ignoreCase = true))
         assertFalse(key.contains("nl", ignoreCase = true))
         assertFalse(key.contains("profile", ignoreCase = true))
@@ -24,7 +24,7 @@ class ArtworkImageCacheKeysTest {
             posterUrl = "https://api.ratingposterdb.com/key/imdb/poster-default/tt15940132.jpg"
         )
 
-        assertEquals("tt15940132_rpdb_poster", key)
+        assertEquals("tt15940132_rpdb_poster_v2", key)
     }
 
     @Test
@@ -35,7 +35,7 @@ class ArtworkImageCacheKeysTest {
             posterUrl = "https://api.top-posters.com/key/imdb/poster/tt15940132.jpg"
         )
 
-        assertEquals("tt15940132_top_posters_poster", key)
+        assertEquals("tt15940132_top_posters_poster_v2", key)
     }
 
     @Test
