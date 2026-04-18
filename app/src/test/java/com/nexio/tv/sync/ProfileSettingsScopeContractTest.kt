@@ -734,6 +734,17 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `modern vertical focus does not scan visible row pixels`() {
+        val contentSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeContent.kt").readText()
+        val rowsSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeRows.kt").readText()
+        val combinedSource = contentSource + "\n" + rowsSource
+
+        assertTrue(!combinedSource.contains("layoutInfo.visibleItemsInfo.find"))
+        assertTrue(!combinedSource.contains("minByOrNull"))
+        assertTrue(!combinedSource.contains("abs(targetCenter - sourceCenter"))
+    }
+
+    @Test
     fun `tracking scrobble service requires provider specific auth`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
 
