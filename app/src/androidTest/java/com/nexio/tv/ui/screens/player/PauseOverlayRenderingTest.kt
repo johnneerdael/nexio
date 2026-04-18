@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nexio.tv.domain.model.MetaCastMember
 import org.junit.Assert.assertEquals
@@ -90,6 +91,12 @@ class PauseOverlayRenderingTest {
         composeRule.onNodeWithTag("pause_overlay_root").assertIsDisplayed()
         composeRule.onNodeWithTag("pause_overlay_backdrop_fallback").assertIsDisplayed()
         composeRule.onNodeWithTag("pause_overlay_title_fallback").assertIsDisplayed()
+        composeRule.onNodeWithText("Anna Sawai").assertIsDisplayed()
+        composeRule.onNodeWithText("Cate Randa").assertIsDisplayed()
+        composeRule.onNodeWithText("Kiersey Clemons").assertIsDisplayed()
+        composeRule.onNodeWithText("May").assertIsDisplayed()
         assertEquals(2, composeRule.onAllNodesWithTag("pause_overlay_cast_photo").fetchSemanticsNodes().size)
+        assertEquals(2, composeRule.onAllNodesWithTag("pause_overlay_cast_name").fetchSemanticsNodes().size)
+        assertEquals(2, composeRule.onAllNodesWithTag("pause_overlay_cast_role").fetchSemanticsNodes().size)
     }
 }

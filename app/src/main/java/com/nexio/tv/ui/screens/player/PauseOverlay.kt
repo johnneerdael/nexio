@@ -314,6 +314,7 @@ private fun PauseMetadataView(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 LazyRow(
+                    modifier = Modifier.height(172.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     content = {
                         items(cast.take(8)) { member ->
@@ -398,7 +399,9 @@ private fun CastPictureChip(
     }
 
     Column(
-        modifier = Modifier.width(itemWidth),
+        modifier = Modifier
+            .width(itemWidth)
+            .height(172.dp),
         horizontalAlignment = Alignment.Start
     ) {
         Card(
@@ -439,9 +442,10 @@ private fun CastPictureChip(
         Text(
             text = member.name,
             style = nameStyle,
-            color = NexioColors.TextSecondary,
+            color = Color.White.copy(alpha = 0.94f),
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("pause_overlay_cast_name")
         )
 
         val displayCharacter = pauseOverlayCastDisplayRole(
@@ -455,9 +459,10 @@ private fun CastPictureChip(
             Text(
                 text = displayCharacter,
                 style = characterStyle,
-                color = NexioColors.TextTertiary,
+                color = Color.White.copy(alpha = 0.72f),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("pause_overlay_cast_role")
             )
         }
     }
