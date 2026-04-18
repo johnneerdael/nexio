@@ -114,6 +114,13 @@ class AndroidTvChannelPublisher @Inject constructor(
             }
 
             val selectedByKey = selectedRows.associateBy { it.option.key }
+            AndroidTvChannelArtworkCache.pruneUnreferencedFiles(
+                context = context,
+                activeDiskCacheKeys = selectedRows
+                    .flatMap { row -> row.items.take(MAX_PROGRAMS_PER_CHANNEL) }
+                    .mapNotNull { item -> AndroidTvChannelArtworkCache.posterRequest(context, item)?.diskCacheKey }
+                    .toSet()
+            )
             val existingChannels = queryOwnedChannels().associateBy { it.internalProviderId }
             val activeProviderIds = mutableSetOf<String>()
             val hadBrowsableOwnedChannel = existingChannels.values.any { it.isBrowsable }

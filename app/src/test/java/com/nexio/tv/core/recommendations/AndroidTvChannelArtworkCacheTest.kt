@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -47,6 +48,35 @@ class AndroidTvChannelArtworkCacheTest {
     fun `request returns null when item has no poster`() {
         assertNull(AndroidTvChannelArtworkCache.posterRequest(context, preview(poster = null)))
         assertNull(AndroidTvChannelArtworkCache.posterRequest(context, preview(poster = " ")))
+    }
+
+    @Test
+    fun `prune removes unreferenced channel artwork files`() {
+        val keepRequest = requireNotNull(
+            AndroidTvChannelArtworkCache.posterRequest(
+                context,
+                preview(id = "tt1", poster = "https://images.example/keep.jpg")
+            )
+        )
+        val removeRequest = requireNotNull(
+            AndroidTvChannelArtworkCache.posterRequest(
+                context,
+                preview(id = "tt2", poster = "https://images.example/remove.jpg")
+            )
+        )
+        val keepFile = AndroidTvChannelArtwork.posterFile(context, keepRequest.diskCacheKey)
+        val removeFile = AndroidTvChannelArtwork.posterFile(context, removeRequest.diskCacheKey)
+        keepFile.parentFile?.mkdirs()
+        keepFile.writeBytes(byteArrayOf(1))
+        removeFile.writeBytes(byteArrayOf(2))
+
+        AndroidTvChannelArtworkCache.pruneUnreferencedFiles(
+            context = context,
+            activeDiskCacheKeys = setOf(keepRequest.diskCacheKey)
+        )
+
+        assertTrue(keepFile.exists())
+        assertEquals(false, removeFile.exists())
     }
 
     private fun preview(

@@ -29,6 +29,10 @@ internal object AndroidTvChannelArtwork {
         return File(posterDirectory(context), fileNameForDiskCacheKey(diskCacheKey))
     }
 
+    fun posterDirectoryForMaintenance(context: Context): File {
+        return posterDirectory(context)
+    }
+
     fun resolvePosterFile(context: Context, uri: Uri): File? {
         if (uri.scheme != "content") return null
         if (uri.authority != authority(context)) return null
