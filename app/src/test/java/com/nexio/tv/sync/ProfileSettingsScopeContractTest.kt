@@ -704,6 +704,47 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `modern home presentation is built by view model and consumed by content`() {
+        val stateSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeUiState.kt").readText()
+        val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val pipelineSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelPresentationPipeline.kt").readText()
+        val contentSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeContent.kt").readText()
+
+        assertTrue(stateSource.contains("val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState()"))
+        assertTrue(viewModelSource.contains("internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()"))
+        assertTrue(pipelineSource.contains("buildModernHomePresentation("))
+        assertTrue(pipelineSource.contains("modernCarouselRowBuildCache"))
+        assertTrue(contentSource.contains("val presentation = contentState.modernHomePresentation"))
+        assertTrue(!contentSource.contains("val rowBuildCache = remember { ModernCarouselRowBuildCache() }"))
+        assertTrue(!contentSource.contains("buildCatalogItem("))
+    }
+
+    @Test
+    fun `initial continue watching resolution is owned by active home profile`() {
+        val homeStateSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeUiState.kt").readText()
+        val homeContinueWatchingSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
+        val homeScreenSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt").readText()
+        val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
+
+        assertTrue(homeStateSource.contains("val initialContinueWatchingResolved: Boolean = false"))
+        assertTrue(homeContinueWatchingSource.contains("ownedSnapshot.profileId != activeHomeProfileSession.profileId"))
+        assertTrue(homeContinueWatchingSource.contains("initialContinueWatchingResolved = true"))
+        assertTrue(homeViewModelSource.contains("initialContinueWatchingResolved = false"))
+        assertTrue(homeScreenSource.contains("uiState.initialContinueWatchingResolved"))
+    }
+
+    @Test
+    fun `modern vertical focus does not scan visible row pixels`() {
+        val contentSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeContent.kt").readText()
+        val rowsSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeRows.kt").readText()
+        val combinedSource = contentSource + "\n" + rowsSource
+
+        assertTrue(!combinedSource.contains("layoutInfo.visibleItemsInfo.find"))
+        assertTrue(!combinedSource.contains("minByOrNull"))
+        assertTrue(!combinedSource.contains("abs(targetCenter - sourceCenter"))
+    }
+
+    @Test
     fun `tracking scrobble service requires provider specific auth`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
 

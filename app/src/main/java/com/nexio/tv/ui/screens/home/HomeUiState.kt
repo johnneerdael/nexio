@@ -16,6 +16,8 @@ data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
     val traktUpNextItems: List<ContinueWatchingItem.NextUp> = emptyList(),
+    val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
+    val initialContinueWatchingResolved: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedItemId: String? = null,
