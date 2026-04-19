@@ -296,6 +296,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         "ASS_SSA_RENDER: FFmpeg startup probe did not detect embedded ASS/SSA " +
                             "host=${url.safeHost()}"
                     )
+                    if (shouldEnableAssSsaPipelineForProgressiveFallback(url, currentFilename)) {
+                        assSsaPipelineOverrideForCurrentStream = true
+                        Log.w(
+                            PlayerRuntimeController.TAG,
+                            "ASS_SSA_RENDER: enabling progressive ASS-ready pipeline after " +
+                                "negative startup probe host=${url.safeHost()} filename=${currentFilename ?: "unknown"}"
+                        )
+                    }
                 }
             }
             val requestedUseAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
@@ -712,7 +720,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 .also { assController?.setPlayer(it) }
             activePlayerUsesAssSsaRenderer = useAssSsaPipeline
             assSsaPipelineSwitchInFlight = false
-            _uiState.update { it.copy(useAssSsaRenderOverlay = useAssSsaPipeline) }
+            _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
 
             _exoPlayer?.apply {
                 
@@ -1873,7 +1881,26 @@ internal fun shouldEnableLegacyTextDecodingForAssSsaPipeline(
     return assSsaRenderActive
 }
 
+internal fun shouldEnableAssSsaPipelineForProgressiveFallback(
+    url: String,
+    filename: String?
+): Boolean {
+    if (!isProgressiveMediaUrl(url)) return false
+    val normalizedFilename = filename
+        ?.substringBefore('?')
+        ?.substringBefore('#')
+        ?.lowercase(Locale.US)
+        .orEmpty()
+    return normalizedFilename.endsWith(".mkv") ||
+        normalizedFilename.endsWith(".webm") ||
+        normalizedFilename.isBlank()
+}
+
 private fun shouldProbeEmbeddedAssSsaBeforePlayerInit(url: String): Boolean {
+    return isProgressiveMediaUrl(url)
+}
+
+private fun isProgressiveMediaUrl(url: String): Boolean {
     val normalized = url
         .substringBefore('?')
         .substringBefore('#')

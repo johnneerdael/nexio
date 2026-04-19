@@ -39,6 +39,10 @@ internal class AssSsaTranslatingSampleSink(
             downstream.onSubtitleSample(trackId, timeUs, data)
             return
         }
+        if (records.any { it.isSignLikeAssSsaEvent() }) {
+            downstream.onSubtitleSample(trackId, timeUs, data)
+            return
+        }
 
         if (useSystemPromptTranslation()) {
             scope.launch {
@@ -92,3 +96,24 @@ internal class AssSsaTranslatingSampleSink(
         downstream.onFontAttachment(name, data)
     }
 }
+
+private fun AssSsaEventRecord.isSignLikeAssSsaEvent(): Boolean {
+    val style = field("Style").orEmpty()
+    val actor = field("Actor") ?: field("Name").orEmpty()
+    if (style.equals("Signs", ignoreCase = true) ||
+        style.equals("Credits", ignoreCase = true) ||
+        actor.equals("SIGN", ignoreCase = true) ||
+        actor.equals("CREDITS", ignoreCase = true)
+    ) {
+        return true
+    }
+    if (POSITIONED_SIGN_TAG_PATTERN.containsMatchIn(text)) return true
+    return INLINE_FONT_SIZE_PATTERN.findAll(text).any { match ->
+        val fontSize = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: return@any false
+        fontSize <= SIGN_INLINE_FONT_SIZE_THRESHOLD
+    }
+}
+
+private val POSITIONED_SIGN_TAG_PATTERN = Regex("""\\(?:pos|move|org|clip|iclip)\(""")
+private val INLINE_FONT_SIZE_PATTERN = Regex("""\\fs([0-9]+(?:\.[0-9]+)?)""")
+private const val SIGN_INLINE_FONT_SIZE_THRESHOLD = 20.0
