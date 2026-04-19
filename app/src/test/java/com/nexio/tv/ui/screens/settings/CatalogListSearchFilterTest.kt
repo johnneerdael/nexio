@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.settings
 
 import com.nexio.tv.data.repository.MDBListListOption
+import com.nexio.tv.data.repository.TraktListSource
 import com.nexio.tv.data.repository.TraktPopularListOption
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -49,6 +50,34 @@ class CatalogListSearchFilterTest {
         assertEquals(listOf(awards), filterTraktPopularLists(lists, "phile"))
         assertEquals(listOf(awards), filterTraktPopularLists(lists, "award"))
         assertEquals(listOf(anime), filterTraktPopularLists(lists, "featured-"))
+    }
+
+    @Test
+    fun `filterTraktPopularLists includes personal user lists`() {
+        val lists = listOf(
+            TraktPopularListOption(
+                key = "me/favorite-sci-fi",
+                userId = "me",
+                listId = "favorite-sci-fi",
+                catalogIdBase = "trakt_list_me_favorite_sci_fi",
+                title = "Favorite Sci-Fi",
+                itemCount = 12,
+                source = TraktListSource.PERSONAL
+            ),
+            TraktPopularListOption(
+                key = "community/best-of-2026",
+                userId = "community",
+                listId = "best-of-2026",
+                catalogIdBase = "trakt_list_community_best_of_2026",
+                title = "Best of 2026",
+                itemCount = 40,
+                source = TraktListSource.POPULAR
+            )
+        )
+
+        val filtered = filterTraktPopularLists(lists, "sci")
+
+        assertEquals(listOf("me/favorite-sci-fi"), filtered.map { it.key })
     }
 
     @Test

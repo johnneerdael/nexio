@@ -253,7 +253,10 @@ class TraktViewModel @Inject constructor(
 
     fun onCatalogManagementOpened() {
         viewModelScope.launch {
-            traktDiscoveryService.ensureFresh(force = false)
+            traktDiscoveryService.ensureFresh(
+                force = true,
+                profileId = profileManager.activeProfileId.value
+            )
         }
     }
 

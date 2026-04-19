@@ -239,9 +239,10 @@ fun TraktSettingsContent(
                         key = { it.key }
                     ) { option ->
                         val selected = option.key in uiState.catalogPreferences.selectedPopularListKeys
+                        val sourceLabel = traktListSourceLabel(option.source)
                         SettingsToggleRow(
                             title = option.title,
-                            subtitle = stringResource(R.string.mdblist_list_item_count_subtitle, option.itemCount),
+                            subtitle = "$sourceLabel - ${stringResource(R.string.mdblist_list_item_count_subtitle, option.itemCount)}",
                             checked = selected,
                             onToggle = { viewModel.onPopularListSelected(option.key, !selected) }
                         )
