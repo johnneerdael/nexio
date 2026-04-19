@@ -15,6 +15,7 @@ import com.nexio.tv.data.repository.trakt.TraktDiscoveryMutationAdapter
 import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktPopularListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRecommendationItemDto
@@ -60,8 +61,15 @@ data class TraktPopularListOption(
     val listId: String,
     val catalogIdBase: String,
     val title: String,
-    val itemCount: Int
+    val itemCount: Int,
+    val source: TraktListSource = TraktListSource.POPULAR
 )
+
+enum class TraktListSource {
+    PERSONAL,
+    POPULAR,
+    SEARCH
+}
 
 data class TraktCustomListCatalog(
     val key: String,
@@ -331,7 +339,10 @@ class TraktDiscoveryService @Inject constructor(
                 emptyList()
             }
 
-            val popularLists = fetchPopularLists()
+            val popularLists = mergeTraktListOptions(
+                personal = fetchPersonalListOptions(),
+                popular = fetchPopularLists()
+            )
             val selectedCustomCatalogs = fetchSelectedPopularListCatalogs(
                 selectedKeys = prefs.selectedPopularListKeys,
                 options = popularLists
@@ -413,10 +424,13 @@ class TraktDiscoveryService @Inject constructor(
         val body = traktProgressService.getRecentActivities(maxAgeMs = 10_000L)
             ?: return true
         val fingerprint = listOfNotNull(
+            body.all,
             body.movies?.watchedAt,
             body.movies?.pausedAt,
             body.episodes?.watchedAt,
-            body.episodes?.pausedAt
+            body.episodes?.pausedAt,
+            body.lists?.updatedAt,
+            body.watchlist?.updatedAt
         ).joinToString("|")
 
         val changed = fingerprint != lastActivitiesFingerprint
@@ -520,6 +534,32 @@ class TraktDiscoveryService @Inject constructor(
         if (!response.isSuccessful) return emptyList()
         return response.body().orEmpty()
             .mapNotNull { dto -> mapPopularListOption(dto) }
+    }
+
+    private suspend fun fetchPersonalListOptions(): List<TraktPopularListOption> {
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getUserLists(
+                authorization = authHeader,
+                id = ME_PATH
+            )
+        } ?: return emptyList()
+        if (!response.isSuccessful) return emptyList()
+
+        return response.body().orEmpty()
+            .filter { it.type.equals("personal", ignoreCase = true) }
+            .mapNotNull { dto -> mapPersonalListOption(dto) }
+    }
+
+    private fun mergeTraktListOptions(
+        personal: List<TraktPopularListOption>,
+        popular: List<TraktPopularListOption>
+    ): List<TraktPopularListOption> {
+        return (personal + popular)
+            .distinctBy { it.key }
+            .sortedWith(
+                compareBy<TraktPopularListOption> { it.source != TraktListSource.PERSONAL }
+                    .thenBy { it.title.lowercase() }
+            )
     }
 
     private suspend fun fetchSelectedPopularListCatalogs(
@@ -731,7 +771,24 @@ class TraktDiscoveryService @Inject constructor(
             listId = listId,
             catalogIdBase = "trakt_list_${slugify(key)}",
             title = list.name ?: key,
-            itemCount = list.itemCount ?: 0
+            itemCount = list.itemCount ?: 0,
+            source = TraktListSource.POPULAR
+        )
+    }
+
+    private fun mapPersonalListOption(dto: TraktListSummaryDto): TraktPopularListOption? {
+        val listId = dto.ids?.slug
+            ?: dto.ids?.trakt?.toString()
+            ?: return null
+        val key = "$ME_PATH/$listId"
+        return TraktPopularListOption(
+            key = key,
+            userId = ME_PATH,
+            listId = listId,
+            catalogIdBase = "trakt_list_${slugify(key)}",
+            title = dto.name?.takeIf { it.isNotBlank() } ?: listId,
+            itemCount = dto.itemCount ?: 0,
+            source = TraktListSource.PERSONAL
         )
     }
 
@@ -747,7 +804,8 @@ class TraktDiscoveryService @Inject constructor(
             listId = listId,
             catalogIdBase = "trakt_list_${slugify("$userId/$listId")}",
             title = "$userId / $listId",
-            itemCount = 0
+            itemCount = 0,
+            source = if (userId == ME_PATH) TraktListSource.PERSONAL else TraktListSource.POPULAR
         )
     }
 
@@ -797,5 +855,9 @@ class TraktDiscoveryService @Inject constructor(
 
     private fun recommendationStatusKey(itemId: String, itemType: String): String {
         return "${itemType.lowercase()}|$itemId"
+    }
+
+    private companion object {
+        const val ME_PATH = "me"
     }
 }

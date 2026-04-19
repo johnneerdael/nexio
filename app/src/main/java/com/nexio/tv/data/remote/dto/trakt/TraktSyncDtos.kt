@@ -9,7 +9,9 @@ data class TraktLastActivitiesResponseDto(
     @Json(name = "movies") val movies: TraktLastActivitiesMediaDto? = null,
     @Json(name = "episodes") val episodes: TraktLastActivitiesMediaDto? = null,
     @Json(name = "shows") val shows: TraktLastActivitiesMediaDto? = null,
-    @Json(name = "seasons") val seasons: TraktLastActivitiesMediaDto? = null
+    @Json(name = "seasons") val seasons: TraktLastActivitiesMediaDto? = null,
+    @Json(name = "lists") val lists: TraktLastActivitiesListsDto? = null,
+    @Json(name = "watchlist") val watchlist: TraktLastActivitiesUpdatedDto? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -23,6 +25,19 @@ data class TraktLastActivitiesMediaDto(
     @Json(name = "paused_at") val pausedAt: String? = null,
     @Json(name = "hidden_at") val hiddenAt: String? = null,
     @Json(name = "dropped_at") val droppedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktLastActivitiesListsDto(
+    @Json(name = "liked_at") val likedAt: String? = null,
+    @Json(name = "reacted_at") val reactedAt: String? = null,
+    @Json(name = "updated_at") val updatedAt: String? = null,
+    @Json(name = "commented_at") val commentedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktLastActivitiesUpdatedDto(
+    @Json(name = "updated_at") val updatedAt: String? = null
 )
 
 @JsonClass(generateAdapter = true)
