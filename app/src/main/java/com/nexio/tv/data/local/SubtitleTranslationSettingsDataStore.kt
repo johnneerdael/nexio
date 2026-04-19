@@ -53,7 +53,8 @@ internal fun normalizeSubtitleTranslationSettings(
     providerName: String?,
     apiKey: String?,
     model: String?,
-    baseUrl: String?
+    baseUrl: String?,
+    assSsaSystemPromptEnabled: Boolean = false
 ): SubtitleTranslationSettings {
     val trimmedApiKey = apiKey?.trim().orEmpty()
     val trimmedProvider = providerName?.trim().orEmpty()
@@ -68,7 +69,8 @@ internal fun normalizeSubtitleTranslationSettings(
         enabled = enabled,
         apiKey = trimmedApiKey,
         model = model?.trim()?.takeIf(String::isNotBlank) ?: defaults.model,
-        baseUrl = baseUrl?.trim()?.trimEnd('/')?.takeIf(String::isNotBlank) ?: defaults.baseUrl
+        baseUrl = baseUrl?.trim()?.trimEnd('/')?.takeIf(String::isNotBlank) ?: defaults.baseUrl,
+        assSsaSystemPromptEnabled = assSsaSystemPromptEnabled
     )
 }
 
@@ -94,6 +96,7 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
     private val providerKey = stringPreferencesKey("subtitle_translation_provider")
     private val modelKey = stringPreferencesKey("subtitle_translation_model")
     private val baseUrlKey = stringPreferencesKey("subtitle_translation_base_url")
+    private val assSsaSystemPromptEnabledKey = booleanPreferencesKey("subtitle_translation_ass_ssa_system_prompt_enabled")
 
     val settings: Flow<SubtitleTranslationSettings> = dataStore.data.map { prefs ->
         normalizeSubtitleTranslationSettings(
@@ -101,7 +104,8 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
             providerName = prefs[providerKey],
             apiKey = prefs[apiKeyKey],
             model = prefs[modelKey],
-            baseUrl = prefs[baseUrlKey]
+            baseUrl = prefs[baseUrlKey],
+            assSsaSystemPromptEnabled = prefs[assSsaSystemPromptEnabledKey] ?: false
         )
     }
 
@@ -132,6 +136,12 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
     suspend fun setBaseUrl(baseUrl: String) {
         store().edit { prefs ->
             prefs[baseUrlKey] = baseUrl.trim()
+        }
+    }
+
+    suspend fun setAssSsaSystemPromptEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[assSsaSystemPromptEnabledKey] = enabled
         }
     }
 

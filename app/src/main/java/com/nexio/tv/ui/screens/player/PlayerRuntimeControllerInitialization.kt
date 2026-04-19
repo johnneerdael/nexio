@@ -62,6 +62,7 @@ import com.nexio.tv.ui.screens.player.ass.AssNoOpSubtitleParserFactory
 import com.nexio.tv.ui.screens.player.ass.AssSsaExtractorsFactory
 import com.nexio.tv.ui.screens.player.ass.AssSsaNativeBridge
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
+import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import com.nexio.tv.ui.screens.player.ass.AssSsaTimeRenderer
 import com.nexio.tv.ui.screens.player.ass.AssSsaTranslatingSampleSink
 import kotlinx.coroutines.Dispatchers
@@ -119,8 +120,53 @@ internal fun resolveAssSsaPipelineOverlayDecision(
 ): AssSsaPipelineOverlayDecision {
     return AssSsaPipelineOverlayDecision(
         useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
-        disableOverrideForCurrentStream = requestedUseAssSsaPipeline && !overlayAttached
+        disableOverrideForCurrentStream = false
     )
+}
+
+internal fun shouldRetryAssSsaPipelineWhenOverlayAvailable(
+    overrideForCurrentStream: Boolean?,
+    activePlayerUsesAssSsaRenderer: Boolean,
+    switchInFlight: Boolean,
+    fallbackHandled: Boolean,
+    overlayAvailable: Boolean
+): Boolean {
+    return overlayAvailable &&
+        overrideForCurrentStream == true &&
+        !activePlayerUsesAssSsaRenderer &&
+        !switchInFlight &&
+        !fallbackHandled
+}
+
+internal fun PlayerRuntimeController.setAssSsaRenderOverlayViewProvider(
+    provider: (() -> AssSsaRenderOverlayView?)?
+) {
+    assSsaOverlayViewProvider = provider
+    val overlayAvailable = provider?.invoke() != null
+    if (!shouldRetryAssSsaPipelineWhenOverlayAvailable(
+            overrideForCurrentStream = assSsaPipelineOverrideForCurrentStream,
+            activePlayerUsesAssSsaRenderer = activePlayerUsesAssSsaRenderer,
+            switchInFlight = assSsaPipelineSwitchInFlight,
+            fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream,
+            overlayAvailable = overlayAvailable
+        )
+    ) {
+        return
+    }
+
+    val player = _exoPlayer ?: return
+    val resumePosition = player.currentPosition.takeIf { it > 0L }
+    assSsaPipelineSwitchInFlight = true
+    _uiState.update { state ->
+        state.copy(
+            pendingSeekPosition = resumePosition ?: state.pendingSeekPosition,
+            showLoadingOverlay = state.loadingOverlayEnabled
+        )
+    }
+    scope.launch {
+        releasePlayer()
+        initializePlayer(currentStreamUrl, currentHeaders)
+    }
 }
 
 internal fun shouldEnableAssSsaSampleTranslation(
@@ -266,6 +312,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
                 assSsaPipelineOverrideForCurrentStream = false
                 assSsaPipelineFallbackHandledForCurrentStream = true
+            } else if (requestedUseAssSsaPipeline && assSsaOverlayView == null) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "ASS_SSA_RENDER: overlay view unavailable; waiting for overlay attachment " +
+                        "host=${url.safeHost()}"
+                )
             }
             val useAssSsaPipeline = overlayDecision.useAssSsaPipeline
             DoviBridge.resetRuntimeCounters()
@@ -596,6 +648,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             translationApiKeyPresent = subtitleTranslationSettings.apiKey.isNotBlank()
                         )
                     },
+                    useSystemPromptTranslation = {
+                        subtitleTranslationSettings.assSsaSystemPromptEnabled
+                    },
                     translate = { units ->
                         val translated = mutableMapOf<String, String>()
                         AssSsaTranslationBatchPlanner.plan(units).forEach { batch ->
@@ -607,6 +662,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             ).getOrThrow()
                         }
                         translated
+                    },
+                    translateRawAssSsa = { sample ->
+                        subtitleTranslationService.translateRawAssSsaText(
+                            text = sample,
+                            targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
+                            sourceLanguageCode = null,
+                            settings = subtitleTranslationSettings
+                        ).getOrThrow()
                     }
                 )
             }

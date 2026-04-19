@@ -1105,6 +1105,8 @@
     <string name="subtitle_translation_endpoint_title">API Endpoint</string>
     <string name="subtitle_translation_endpoint_subtitle">Leave default for the native provider or use a compatible endpoint such as OpenRouter</string>
     <string name="subtitle_translation_api_key_title">API Key</string>
+    <string name="subtitle_translation_ass_ssa_system_prompt_title">ASS/SSA system prompt mode</string>
+    <string name="subtitle_translation_ass_ssa_system_prompt_subtitle">Use the provider\'s raw ASS/SSA prompt path for embedded styled subtitles; falls back to the existing protected placeholder path when disabled</string>
     <string name="subtitle_translation_missing_api_key">Enter an API key before enabling subtitle translation.</string>
     <string name="subtitle_translation_missing_model">Enter a model before enabling subtitle translation.</string>
     <string name="subtitle_translation_invalid_endpoint">Enter an HTTP or HTTPS API endpoint.</string>

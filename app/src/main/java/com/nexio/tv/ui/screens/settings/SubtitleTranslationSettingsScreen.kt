@@ -165,6 +165,17 @@ fun SubtitleTranslationSettingsContent(
                         onClick = { activeDialog = SubtitleTranslationSettingsDialog.ApiKey }
                     )
                 }
+
+                item(key = "subtitle_translation_ass_ssa_system_prompt") {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.subtitle_translation_ass_ssa_system_prompt_title),
+                        subtitle = stringResource(R.string.subtitle_translation_ass_ssa_system_prompt_subtitle),
+                        checked = uiState.assSsaSystemPromptEnabled,
+                        onToggle = {
+                            viewModel.setAssSsaSystemPromptEnabled(!uiState.assSsaSystemPromptEnabled)
+                        }
+                    )
+                }
             }
         }
     }
