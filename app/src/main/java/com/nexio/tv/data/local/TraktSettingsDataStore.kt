@@ -32,13 +32,7 @@ object TraktCatalogIds {
         CALENDAR
     )
 
-    // Preserve current behavior by default and let users opt-in to the extra rails.
-    val DEFAULT_ENABLED: Set<String> = setOf(
-        UP_NEXT,
-        RECOMMENDED_MOVIES,
-        RECOMMENDED_SHOWS,
-        CALENDAR
-    )
+    val DEFAULT_ENABLED: Set<String> = emptySet()
 }
 
 data class TraktCatalogPreferences(

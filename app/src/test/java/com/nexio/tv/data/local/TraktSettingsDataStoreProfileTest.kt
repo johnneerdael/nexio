@@ -54,14 +54,17 @@ class TraktSettingsDataStoreProfileTest {
         TraktSettingsDataStore(factory, manager)
 
     @Test
-    fun `catalogPreferences isolated per profile`() = runTest {
+    fun `catalogPreferences default to no enabled catalogs and stay isolated per profile`() = runTest {
         val manager = makeManager()
         val settingsStore = makeSettingsStore(manager)
 
-        // Set catalog prefs on profile 1 — disable UP_NEXT
-        settingsStore.setCatalogEnabled(TraktCatalogIds.UP_NEXT, false)
-        val p1Prefs = settingsStore.catalogPreferences.first()
-        assertFalse("Profile 1 should have UP_NEXT disabled", TraktCatalogIds.UP_NEXT in p1Prefs.enabledCatalogs)
+        val p1Defaults = settingsStore.catalogPreferences.first()
+        assertTrue("Profile 1 should start with no enabled Trakt catalogs", p1Defaults.enabledCatalogs.isEmpty())
+        assertTrue("Built-in Trakt order should still be available for UI", p1Defaults.catalogOrder.contains(TraktCatalogIds.UP_NEXT))
+
+        settingsStore.setCatalogEnabled(TraktCatalogIds.UP_NEXT, true)
+        val p1Prefs = settingsStore.catalogPreferences.first { TraktCatalogIds.UP_NEXT in it.enabledCatalogs }
+        assertTrue("Profile 1 should persist manual UP_NEXT enablement", TraktCatalogIds.UP_NEXT in p1Prefs.enabledCatalogs)
 
         // Create and switch to profile 2
         manager.createProfile("Bob", "#8E24AA")
@@ -69,21 +72,19 @@ class TraktSettingsDataStoreProfileTest {
         manager.setActiveProfile(bobId)
         manager.activeProfileId.first { it == bobId }
 
-        // Profile 2 should have default prefs (UP_NEXT enabled by default)
-        val p2Prefs = settingsStore.catalogPreferences.first()
-        assertTrue("Profile 2 should have default UP_NEXT enabled", TraktCatalogIds.UP_NEXT in p2Prefs.enabledCatalogs)
+        val p2Defaults = settingsStore.catalogPreferences.first()
+        assertTrue("Profile 2 should also start with no enabled Trakt catalogs", p2Defaults.enabledCatalogs.isEmpty())
 
-        // Set different prefs on profile 2 — disable CALENDAR
-        settingsStore.setCatalogEnabled(TraktCatalogIds.CALENDAR, false)
-        val p2PrefsAfter = settingsStore.catalogPreferences.first { TraktCatalogIds.CALENDAR !in it.enabledCatalogs }
-        assertFalse("Profile 2 should have CALENDAR disabled", TraktCatalogIds.CALENDAR in p2PrefsAfter.enabledCatalogs)
+        settingsStore.setCatalogEnabled(TraktCatalogIds.CALENDAR, true)
+        val p2PrefsAfter = settingsStore.catalogPreferences.first { TraktCatalogIds.CALENDAR in it.enabledCatalogs }
+        assertTrue("Profile 2 should persist manual CALENDAR enablement", TraktCatalogIds.CALENDAR in p2PrefsAfter.enabledCatalogs)
 
         // Switch back to profile 1 — original prefs must be unchanged
         manager.setActiveProfile(1)
         manager.activeProfileId.first { it == 1 }
         val p1PrefsAgain = settingsStore.catalogPreferences.first()
-        assertFalse("Profile 1 UP_NEXT should still be disabled", TraktCatalogIds.UP_NEXT in p1PrefsAgain.enabledCatalogs)
-        assertTrue("Profile 1 CALENDAR should still be enabled", TraktCatalogIds.CALENDAR in p1PrefsAgain.enabledCatalogs)
+        assertTrue("Profile 1 UP_NEXT should still be enabled", TraktCatalogIds.UP_NEXT in p1PrefsAgain.enabledCatalogs)
+        assertFalse("Profile 1 CALENDAR should not inherit profile 2 enablement", TraktCatalogIds.CALENDAR in p1PrefsAgain.enabledCatalogs)
     }
 
 }
