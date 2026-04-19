@@ -55,6 +55,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.data.local.InternalPlayerEngine
+import com.nexio.tv.data.repository.AssSsaTranslationBatchPlanner
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.ui.screens.player.ass.AssNoOpSubtitleParserFactory
@@ -62,6 +63,7 @@ import com.nexio.tv.ui.screens.player.ass.AssSsaExtractorsFactory
 import com.nexio.tv.ui.screens.player.ass.AssSsaNativeBridge
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaTimeRenderer
+import com.nexio.tv.ui.screens.player.ass.AssSsaTranslatingSampleSink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -119,6 +121,20 @@ internal fun resolveAssSsaPipelineOverlayDecision(
         useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
         disableOverrideForCurrentStream = requestedUseAssSsaPipeline && !overlayAttached
     )
+}
+
+internal fun shouldEnableAssSsaSampleTranslation(
+    aiSubtitlesEnabled: Boolean,
+    selectedAddonSubtitlePresent: Boolean,
+    selectedSubtitleTrackIndex: Int,
+    translationSettingsEnabled: Boolean,
+    translationApiKeyPresent: Boolean
+): Boolean {
+    return aiSubtitlesEnabled &&
+        !selectedAddonSubtitlePresent &&
+        selectedSubtitleTrackIndex >= 0 &&
+        translationSettingsEnabled &&
+        translationApiKeyPresent
 }
 
 @androidx.annotation.OptIn(UnstableApi::class, ExperimentalApi::class)
@@ -567,10 +583,37 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             } else {
                 null
             }
+            val assSampleSink = assController?.let { controller ->
+                AssSsaTranslatingSampleSink(
+                    downstream = controller,
+                    scope = scope,
+                    isEnabled = {
+                        shouldEnableAssSsaSampleTranslation(
+                            aiSubtitlesEnabled = _uiState.value.aiSubtitlesEnabled,
+                            selectedAddonSubtitlePresent = _uiState.value.selectedAddonSubtitle != null,
+                            selectedSubtitleTrackIndex = _uiState.value.selectedSubtitleTrackIndex,
+                            translationSettingsEnabled = subtitleTranslationSettings.enabled,
+                            translationApiKeyPresent = subtitleTranslationSettings.apiKey.isNotBlank()
+                        )
+                    },
+                    translate = { units ->
+                        val translated = mutableMapOf<String, String>()
+                        AssSsaTranslationBatchPlanner.plan(units).forEach { batch ->
+                            translated += subtitleTranslationService.translateProtectedAssSsaUnits(
+                                units = batch.units,
+                                targetLanguageCode = _uiState.value.subtitleStyle.preferredLanguage,
+                                sourceLanguageCode = null,
+                                settings = subtitleTranslationSettings
+                            ).getOrThrow()
+                        }
+                        translated
+                    }
+                )
+            }
             assSsaRenderController = assController
             if (assController != null) {
                 mediaSourceFactory.configureSubtitleParsing(
-                    extractorsFactory = AssSsaExtractorsFactory(extractorsFactory, assController),
+                    extractorsFactory = AssSsaExtractorsFactory(extractorsFactory, assSampleSink ?: assController),
                     subtitleParserFactory = AssNoOpSubtitleParserFactory()
                 )
             } else {

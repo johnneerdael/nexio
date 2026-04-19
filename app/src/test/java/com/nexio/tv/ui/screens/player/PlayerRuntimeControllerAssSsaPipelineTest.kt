@@ -5,6 +5,7 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,6 +96,30 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
 
         assertFalse(decision.useAssSsaPipeline)
         assertTrue(decision.disableOverrideForCurrentStream)
+    }
+
+    @Test
+    fun assSsaTranslationSinkIsOnlyEnabledWhenAiTranslationIsConfigured() {
+        assertEquals(
+            false,
+            shouldEnableAssSsaSampleTranslation(
+                aiSubtitlesEnabled = false,
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrackIndex = 0,
+                translationSettingsEnabled = true,
+                translationApiKeyPresent = true
+            )
+        )
+        assertEquals(
+            true,
+            shouldEnableAssSsaSampleTranslation(
+                aiSubtitlesEnabled = true,
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrackIndex = 0,
+                translationSettingsEnabled = true,
+                translationApiKeyPresent = true
+            )
+        )
     }
 
     private fun tracksFor(format: Format, selected: Boolean): Tracks {
