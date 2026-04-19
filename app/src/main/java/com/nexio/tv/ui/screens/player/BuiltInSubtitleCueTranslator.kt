@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import com.nexio.tv.data.repository.SubtitleTranslationService
@@ -8,6 +9,7 @@ import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -31,6 +33,9 @@ internal class BuiltInSubtitleCueTranslator(
 
     override fun getConfigurationToken(format: Format): String? {
         if (!isEnabledProvider()) {
+            return null
+        }
+        if (format.isAssSsaCueTranslationUnsupported()) {
             return null
         }
         val settings = settingsProvider()
@@ -157,4 +162,15 @@ internal class BuiltInSubtitleCueTranslator(
         val message: String,
         val retryAfterMs: Long
     )
+}
+
+private fun Format.isAssSsaCueTranslationUnsupported(): Boolean {
+    if (sampleMimeType == MimeTypes.TEXT_SSA || sampleMimeType == "text/x-ass") {
+        return true
+    }
+    return codecs
+        ?.split(',')
+        ?.map { it.trim().lowercase(Locale.US) }
+        ?.any { codec -> codec == MimeTypes.TEXT_SSA || codec == "text/x-ass" }
+        ?: false
 }
