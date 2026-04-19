@@ -49,6 +49,7 @@ class KitsuAuthServiceTest {
         assertEquals("access", store.snapshot.accessToken)
         assertEquals("refresh", store.snapshot.refreshToken)
         assertEquals("user@example.com", store.snapshot.username)
+        assertEquals(true, store.snapshot.enabled)
         assertNull(store.snapshot.password)
     }
 

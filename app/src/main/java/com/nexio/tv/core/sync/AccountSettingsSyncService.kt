@@ -599,13 +599,13 @@ class AccountSettingsSyncService @Inject constructor(
                     topPostersEnabled = posterRatings.topPostersEnabled
                 ),
                 kitsuAuth = KitsuAuthSyncSettings(
-                    enabled = kitsuAuth.isAuthenticated,
+                    enabled = kitsuAuth.enabled,
                     connected = kitsuAuth.isAuthenticated,
                     username = kitsuAuth.username.orEmpty(),
                     accessTokenSecretRef = KITSU_ACCESS_SECRET_TYPE,
                     refreshTokenSecretRef = KITSU_REFRESH_SECRET_TYPE,
                     expiresAtEpochSeconds = kitsuAuth.expiresAtEpochSeconds,
-                    includeNsfw = false
+                    includeNsfw = kitsuAuth.includeNsfw
                 ),
                 traktAuth = TraktAuthSyncSettings(
                     connected = traktAuth.isAuthenticated,
@@ -741,6 +741,18 @@ class AccountSettingsSyncService @Inject constructor(
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
 
+        val remoteKitsu = settings.integrations.kitsuAuth
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
+        kitsuAuthDataStore.save(
+            currentKitsu.copy(
+                enabled = remoteKitsu.enabled,
+                username = remoteKitsu.username,
+                expiresAtEpochSeconds = remoteKitsu.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
+                includeNsfw = remoteKitsu.includeNsfw
+            )
+        )
+
         // Moved to v8 per-profile blob sync: Trakt catalog preferences
         // Moved to v8 per-profile blob sync: Simkl catalog preferences
         // Moved to v8 per-profile blob sync: player tracking provider and formatter settings
@@ -828,6 +840,18 @@ class AccountSettingsSyncService @Inject constructor(
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+
+        val remoteKitsu = settings.integrations.kitsuAuth
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
+        kitsuAuthDataStore.save(
+            currentKitsu.copy(
+                enabled = remoteKitsu.enabled,
+                username = remoteKitsu.username,
+                expiresAtEpochSeconds = remoteKitsu.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
+                includeNsfw = remoteKitsu.includeNsfw
+            )
+        )
 
         playerSettingsDataStore.setLoadingOverlayEnabled(settings.playback.general.loadingOverlayEnabled)
         playerSettingsDataStore.setPauseOverlayEnabled(settings.playback.general.pauseOverlayEnabled)
