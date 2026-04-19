@@ -41,7 +41,7 @@
   <string name="settings_catalogs_subtitle">Reihenfolge und Sichtbarkeit der Startseiten-Kataloge anpassen.</string>
   <string name="appearance_language_system">Systemstandard</string>
   <string name="mdblist_catalogs_subtitle">Persönliche Reihen und Top-Listen von MDBList verwalten</string>
-  <string name="trakt_catalogs_dialog_subtitle">Aktiviere oder deaktiviere integrierte Trakt-Kataloge. Wähle beliebte Listen aus, um benutzerdefinierte Reihen hinzuzufügen.</string>
+  <string name="trakt_catalogs_dialog_subtitle">Aktiviere Trakt-Katalogreihen für die Startseite. Füge eigene Listen oder Community-Listen als benutzerdefinierte Reihen hinzu.</string>
   <string name="poster_ratings_top_api_key_subtitle">Erforderlich, wenn TOPPosters aktiviert ist</string>
   <string name="mdblist_personal_list_badge">Persönliche Liste</string>
   <string name="animeskip_dialog_title">Anime Skip Client-ID</string>
@@ -64,7 +64,7 @@
   <string name="poster_ratings_rpdb_dialog_placeholder">Gib den RPDB-API-Schlüssel ein</string>
   <string name="poster_ratings_top_dialog_title">TOPPosters-API-Schlüssel</string>
   <string name="trakt_catalog_trending_movies">Trending Filme</string>
-  <string name="trakt_popular_lists_title">Beliebte Listen</string>
+  <string name="trakt_popular_lists_title">Trakt-Listen</string>
   <string name="poster_ratings_api_key_title">API-Schlüssel</string>
   <string name="mdblist_top_list_badge">Top-Liste</string>
   <string name="playback_resolution_matching_sub">Erlaube Änderungen des Anzeigemodus, um sie an die Videoauflösung anzupassen.</string>
@@ -105,7 +105,7 @@
   <string name="poster_ratings_top_title">TOPPosters</string>
   <string name="trakt_move_down">Nach unten bewegen</string>
   <string name="sub_startup_mode_preferred_desc">Rufe Untertitel vor der Wiedergabe ab und lade Spuren in der bevorzugten/sekundären Sprache.</string>
-  <string name="trakt_popular_lists_subtitle">Wähle Listen aus, um sie als benutzerdefinierte Trakt-Kataloge auf der Startseite hinzuzufügen.</string>
+  <string name="trakt_popular_lists_subtitle">Aktiviere eigene Trakt-Listen oder Community-Listen als Katalogreihen auf der Startseite.</string>
   <string name="audio_dv_experimental_preserve_mapping_sub">Experimentelle DV8.1-Konvertierung mit höherer Genauigkeit, bei der Mapping-Metadaten erhalten bleiben. Möglicherweise weniger kompatibel als der Standard-DV7-Konvertierungspfad.</string>
   <string name="sub_startup_mode_all_desc">Rufe alle Add-on-Untertitel ab und lade sie vor dem Start der Wiedergabe. Langsamste Startzeit.</string>
   <string name="trakt_catalog_popular_shows">Beliebte Serien</string>
@@ -135,8 +135,10 @@
   <string name="streams_filter_wrong_episodes_sub">Blende Streams aus, deren erkannte Staffel- oder Episodenangaben nicht zur angeforderten Episode passen.</string>
   <string name="streams_filter_wrong_movie_year_title">Falsches Filmjahr filtern</string>
   <string name="streams_filter_wrong_movie_year_sub">Blende Film-Streams aus, deren erkanntes Jahr nicht zum angeforderten Titeljahr passt.</string>
-  <string name="trakt_popular_lists_search_hint">Beliebte Listen suchen</string>
-  <string name="trakt_popular_lists_empty">Noch keine beliebten Listen verfügbar. Synchronisiere Trakt und versuche es erneut.</string>
+  <string name="trakt_popular_lists_search_hint">Trakt-Listen suchen</string>
+  <string name="trakt_popular_lists_empty">Noch keine Trakt-Listen gefunden. Erstelle eine Liste in Trakt oder versuche es später erneut.</string>
+  <string name="trakt_list_source_personal">Deine Liste</string>
+  <string name="trakt_list_source_community">Community-Liste</string>
   <string name="trakt_popular_lists_no_search_results">Keine beliebten Listen entsprechen deiner Suche.</string>
 
   <string name="app_name">NEXIO</string>

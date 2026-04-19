@@ -41,7 +41,7 @@
   <string name="settings_catalogs_subtitle">Pas de volgorde en zichtbaarheid van catalogi op Home aan.</string>
   <string name="appearance_language_system">Systeemstandaard</string>
   <string name="mdblist_catalogs_subtitle">Beheer persoonlijke rijen en toplijsten van MDBList</string>
-  <string name="trakt_catalogs_dialog_subtitle">Schakel ingebouwde Trakt-catalogi in of uit. Selecteer populaire lijsten om aangepaste rijen toe te voegen.</string>
+  <string name="trakt_catalogs_dialog_subtitle">Schakel Trakt-catalogusrijen in voor Home. Voeg eigen lijsten of communitylijsten toe als aangepaste rijen.</string>
   <string name="poster_ratings_top_api_key_subtitle">Vereist wanneer TOPPosters is ingeschakeld</string>
   <string name="mdblist_personal_list_badge">Persoonlijke lijst</string>
   <string name="animeskip_dialog_title">Anime Skip Client-ID</string>
@@ -64,7 +64,7 @@
   <string name="poster_ratings_rpdb_dialog_placeholder">Voer de RPDB API-sleutel in</string>
   <string name="poster_ratings_top_dialog_title">TOPPosters API-sleutel</string>
   <string name="trakt_catalog_trending_movies">Trending films</string>
-  <string name="trakt_popular_lists_title">Populaire lijsten</string>
+  <string name="trakt_popular_lists_title">Trakt-lijsten</string>
   <string name="poster_ratings_api_key_title">API-sleutel</string>
   <string name="mdblist_top_list_badge">Toplijst</string>
   <string name="playback_resolution_matching_sub">Sta wijzigingen in de weergavemodus toe zodat deze overeenkomen met de videoresolutie.</string>
@@ -105,7 +105,7 @@
   <string name="poster_ratings_top_title">TOPPosters</string>
   <string name="trakt_move_down">Omlaag verplaatsen</string>
   <string name="sub_startup_mode_preferred_desc">Haal ondertitels vooraf op en voeg tracks in voorkeurs-/secundaire talen toe.</string>
-  <string name="trakt_popular_lists_subtitle">Selecteer lijsten om toe te voegen als aangepaste Trakt-catalogi op Home.</string>
+  <string name="trakt_popular_lists_subtitle">Schakel je eigen Trakt-lijsten of communitylijsten in als catalogusrijen op Home.</string>
   <string name="audio_dv_experimental_preserve_mapping_sub">Experimentele DV8.1-conversie met hogere betrouwbaarheid waarbij de mapping-metadata behouden blijft. Mogelijk minder compatibel dan het standaard DV7-conversiepad.</string>
   <string name="sub_startup_mode_all_desc">Haal alle add-on-ondertitels vooraf op en voeg deze toe voordat het afspelen begint. Langzaamste opstarttijd.</string>
   <string name="trakt_catalog_popular_shows">Populaire series</string>
@@ -187,8 +187,10 @@
   <string name="playback_buffer_chunk_size_sub">Grootte van elke downloadchunk per verbinding.</string>
   <string name="playback_buffer_info">Status: %1$s. Bereik: %2$d-%3$d MB. Houdt ongeveer %4$dMB vrije ruimte aan. Beschikbare vrije schijfruimte: %5$s.</string>
   <string name="playback_memory_usage_estimate">Geschat geheugengebruik: %1$d / %2$d MB</string>
-  <string name="trakt_popular_lists_search_hint">Zoek populaire lijsten</string>
-  <string name="trakt_popular_lists_empty">Nog geen populaire lijsten beschikbaar. Synchroniseer Trakt en probeer opnieuw.</string>
+  <string name="trakt_popular_lists_search_hint">Zoek Trakt-lijsten</string>
+  <string name="trakt_popular_lists_empty">Nog geen Trakt-lijsten gevonden. Maak een lijst in Trakt of probeer het later opnieuw.</string>
+  <string name="trakt_list_source_personal">Jouw lijst</string>
+  <string name="trakt_list_source_community">Communitylijst</string>
   <string name="trakt_popular_lists_no_search_results">Geen populaire lijsten gevonden voor je zoekopdracht.</string>
 
   <string name="app_name">NEXIO</string>
