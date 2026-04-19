@@ -29,7 +29,12 @@ internal data class PlayerNavigationArgs(
     val videoHash: String?,
     val videoSize: Long?,
     val startFromBeginning: Boolean,
-    val launchSource: PlayerLaunchSource
+    val launchSource: PlayerLaunchSource,
+    val resumePositionMs: Long?,
+    val resumeDurationMs: Long?,
+    val resumeProgressPercent: Float?,
+    val resumeLastWatchedMs: Long?,
+    val resumeSource: String?
 ) {
     companion object {
         fun from(savedStateHandle: SavedStateHandle): PlayerNavigationArgs {
@@ -65,7 +70,12 @@ internal data class PlayerNavigationArgs(
                 videoHash = savedStateHandle.get<String>("videoHash")?.takeIf { it.isNotEmpty() },
                 videoSize = savedStateHandle.get<String>("videoSize")?.toLongOrNull(),
                 startFromBeginning = savedStateHandle.get<String>("startFromBeginning")?.toBooleanStrictOrNull() == true,
-                launchSource = PlayerLaunchSource.from(decodedOrNull("launchSource"))
+                launchSource = PlayerLaunchSource.from(decodedOrNull("launchSource")),
+                resumePositionMs = savedStateHandle.get<String>("resumePositionMs")?.toLongOrNull(),
+                resumeDurationMs = savedStateHandle.get<String>("resumeDurationMs")?.toLongOrNull(),
+                resumeProgressPercent = savedStateHandle.get<String>("resumeProgressPercent")?.toFloatOrNull(),
+                resumeLastWatchedMs = savedStateHandle.get<String>("resumeLastWatchedMs")?.toLongOrNull(),
+                resumeSource = decodedOrNull("resumeSource")
             )
         }
     }

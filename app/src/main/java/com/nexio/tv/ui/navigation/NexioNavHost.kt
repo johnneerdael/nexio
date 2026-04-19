@@ -413,6 +413,31 @@ fun NexioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = "false"
+                },
+                navArgument("resumePositionMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeDurationMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeProgressPercent") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeLastWatchedMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeSource") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) { backStackEntry ->
@@ -490,7 +515,12 @@ fun NexioNavHost(
                                 videoHash = playbackInfo.videoHash,
                                 videoSize = playbackInfo.videoSize,
                                 startFromBeginning = startFromBeginning,
-                                launchSource = PlayerLaunchSource.STREAM
+                                launchSource = PlayerLaunchSource.STREAM,
+                                resumePositionMs = playbackInfo.resumePositionMs,
+                                resumeDurationMs = playbackInfo.resumeDurationMs,
+                                resumeProgressPercent = playbackInfo.resumeProgressPercent,
+                                resumeLastWatchedMs = playbackInfo.resumeLastWatchedMs,
+                                resumeSource = playbackInfo.resumeSource
                             )
                         )
                     }
@@ -527,7 +557,12 @@ fun NexioNavHost(
                                 videoHash = playbackInfo.videoHash,
                                 videoSize = playbackInfo.videoSize,
                                 startFromBeginning = startFromBeginning,
-                                launchSource = PlayerLaunchSource.STREAM
+                                launchSource = PlayerLaunchSource.STREAM,
+                                resumePositionMs = playbackInfo.resumePositionMs,
+                                resumeDurationMs = playbackInfo.resumeDurationMs,
+                                resumeProgressPercent = playbackInfo.resumeProgressPercent,
+                                resumeLastWatchedMs = playbackInfo.resumeLastWatchedMs,
+                                resumeSource = playbackInfo.resumeSource
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -683,6 +718,31 @@ fun NexioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = PlayerLaunchSource.STREAM.routeValue
+                },
+                navArgument("resumePositionMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeDurationMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeProgressPercent") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeLastWatchedMs") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("resumeSource") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) { backStackEntry ->
@@ -1155,7 +1215,12 @@ internal fun buildManualSelectionStreamRoute(
     contentName: String? = null,
     runtime: Int? = null,
     originalLanguage: String? = null,
-    returnToDetailOnBack: Boolean
+    returnToDetailOnBack: Boolean,
+    resumePositionMs: Long? = null,
+    resumeDurationMs: Long? = null,
+    resumeProgressPercent: Float? = null,
+    resumeLastWatchedMs: Long? = null,
+    resumeSource: String? = null
 ): String {
     return Screen.Stream.createRoute(
         videoId = videoId,
@@ -1175,7 +1240,12 @@ internal fun buildManualSelectionStreamRoute(
         originalLanguage = originalLanguage,
         manualSelection = true,
         returnToDetailOnBack = returnToDetailOnBack,
-        deterministicAutoplay = false
+        deterministicAutoplay = false,
+        resumePositionMs = resumePositionMs,
+        resumeDurationMs = resumeDurationMs,
+        resumeProgressPercent = resumeProgressPercent,
+        resumeLastWatchedMs = resumeLastWatchedMs,
+        resumeSource = resumeSource
     )
 }
 
@@ -1203,7 +1273,12 @@ internal fun buildContinueWatchingStreamRoute(
             returnToDetailOnBack = deterministicAutoplayEnabled ||
                 item.progress.contentType.equals("series", ignoreCase = true),
             startFromBeginning = startFromBeginning,
-            deterministicAutoplay = deterministicAutoplayEnabled
+            deterministicAutoplay = deterministicAutoplayEnabled,
+            resumePositionMs = item.progress.position,
+            resumeDurationMs = item.progress.duration,
+            resumeProgressPercent = item.progress.progressPercent,
+            resumeLastWatchedMs = item.progress.lastWatched,
+            resumeSource = item.progress.source
         )
 
         is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
@@ -1262,7 +1337,12 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
             contentId = item.progress.contentId,
             contentName = item.progress.name,
             runtime = continueWatchingRuntimeMinutes(item),
-            returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true)
+            returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
+            resumePositionMs = item.progress.position,
+            resumeDurationMs = item.progress.duration,
+            resumeProgressPercent = item.progress.progressPercent,
+            resumeLastWatchedMs = item.progress.lastWatched,
+            resumeSource = item.progress.source
         )
 
         is ContinueWatchingItem.NextUp -> buildManualSelectionStreamRoute(

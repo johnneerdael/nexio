@@ -80,6 +80,25 @@ class StreamRuntimeRoutingTest {
     }
 
     @Test
+    fun `continue watching route carries resume progress into stream handoff`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 9_091_000L,
+                    positionMs = 123_000L,
+                    progressPercent = 12.5f
+                )
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        assertTrue(route.contains("resumePositionMs=123000"))
+        assertTrue(route.contains("resumeDurationMs=9091000"))
+        assertTrue(route.contains("resumeProgressPercent=12.5"))
+        assertTrue(route.contains("resumeLastWatchedMs=42"))
+    }
+
+    @Test
     fun `missing runtime is hydrated before continue watching route build`() = runTest {
         val route = buildContinueWatchingStreamRouteWithHydration(
             item = ContinueWatchingItem.NextUp(
@@ -182,7 +201,12 @@ class StreamRuntimeRoutingTest {
         assertTrue(route.contains("runtime=62"))
     }
 
-    private fun watchProgress(durationMs: Long, contentType: String = "movie"): WatchProgress {
+    private fun watchProgress(
+        durationMs: Long,
+        contentType: String = "movie",
+        positionMs: Long = 1_000L,
+        progressPercent: Float? = null
+    ): WatchProgress {
         return WatchProgress(
             contentId = "tt123",
             contentType = contentType,
@@ -194,9 +218,10 @@ class StreamRuntimeRoutingTest {
             season = null,
             episode = null,
             episodeTitle = null,
-            position = 1_000L,
+            position = positionMs,
             duration = durationMs,
-            lastWatched = 42L
+            lastWatched = 42L,
+            progressPercent = progressPercent
         )
     }
 

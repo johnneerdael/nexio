@@ -123,6 +123,11 @@ class StreamScreenViewModel @Inject constructor(
     private val year: String? = savedStateHandle.getOptionalString("year")
     private val contentId: String? = savedStateHandle.getOptionalString("contentId")
     private val contentName: String? = savedStateHandle.getOptionalString("contentName")
+    private val resumePositionMs: Long? = savedStateHandle.get<String>("resumePositionMs")?.toLongOrNull()
+    private val resumeDurationMs: Long? = savedStateHandle.get<String>("resumeDurationMs")?.toLongOrNull()
+    private val resumeProgressPercent: Float? = savedStateHandle.get<String>("resumeProgressPercent")?.toFloatOrNull()
+    private val resumeLastWatchedMs: Long? = savedStateHandle.get<String>("resumeLastWatchedMs")?.toLongOrNull()
+    private val resumeSource: String? = savedStateHandle.getOptionalString("resumeSource")
     private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
         ?.toBooleanStrictOrNull()
         ?: false
@@ -956,7 +961,12 @@ class StreamScreenViewModel @Inject constructor(
             filename = stream.behaviorHints?.filename,
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
-            streamKey = stream.wrappedOriginalStreamKey
+            streamKey = stream.wrappedOriginalStreamKey,
+            resumePositionMs = resumePositionMs,
+            resumeDurationMs = resumeDurationMs,
+            resumeProgressPercent = resumeProgressPercent,
+            resumeLastWatchedMs = resumeLastWatchedMs,
+            resumeSource = resumeSource
         )
 
         val url = playbackInfo.url
@@ -1144,6 +1154,11 @@ class StreamScreenViewModel @Inject constructor(
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
             streamKey = selectedKey,
+            resumePositionMs = resumePositionMs,
+            resumeDurationMs = resumeDurationMs,
+            resumeProgressPercent = resumeProgressPercent,
+            resumeLastWatchedMs = resumeLastWatchedMs,
+            resumeSource = resumeSource,
             isWebDl = item.parsed.quality.equals("WEB-DL", ignoreCase = true),
             isDolbyVisionCandidate = item.parsed.visualTags.any { tag ->
                 val normalized = tag.lowercase()
@@ -1703,6 +1718,11 @@ data class StreamPlaybackInfo(
     val videoHash: String? = null,
     val videoSize: Long? = null,
     val streamKey: String? = null,
+    val resumePositionMs: Long? = null,
+    val resumeDurationMs: Long? = null,
+    val resumeProgressPercent: Float? = null,
+    val resumeLastWatchedMs: Long? = null,
+    val resumeSource: String? = null,
     val isWebDl: Boolean = false,
     val isDolbyVisionCandidate: Boolean = false,
     val autoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList()

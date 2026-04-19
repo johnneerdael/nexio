@@ -411,11 +411,15 @@ internal fun PlayerRuntimeController.observeTheIntroDbSettings() {
     }
 }
 
-internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode: Int?) {
+internal fun PlayerRuntimeController.loadSavedProgressFor(
+    season: Int?,
+    episode: Int?,
+    routeResumeProgress: WatchProgress? = null
+) {
     if (contentId == null) return
     
     scope.launch {
-        pendingResumeProgress = null
+        pendingResumeProgress = routeResumeProgress?.takeIf(::shouldUseSavedProgressForResume)
         val progress = if (season != null && episode != null) {
             watchProgressRepository.getEpisodeProgress(contentId, season, episode).firstOrNull()
         } else {
@@ -433,6 +437,10 @@ internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode:
                         }
                     }
                 }
+            }
+        } ?: run {
+            if (pendingResumeProgress != null) {
+                tryApplyPendingResumeProgressForCurrentBackend()
             }
         }
     }
