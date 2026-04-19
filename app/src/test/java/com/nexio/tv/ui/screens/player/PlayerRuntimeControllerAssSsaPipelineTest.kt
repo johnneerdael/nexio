@@ -126,6 +126,34 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
+    fun negativeProbeEnablesAssReadyPipelineForProgressiveMkvFallback() {
+        assertTrue(
+            shouldEnableAssSsaPipelineForProgressiveFallback(
+                url = "https://example.test/proxy",
+                filename = "episode.mkv"
+            )
+        )
+        assertTrue(
+            shouldEnableAssSsaPipelineForProgressiveFallback(
+                url = "https://example.test/proxy",
+                filename = null
+            )
+        )
+        assertFalse(
+            shouldEnableAssSsaPipelineForProgressiveFallback(
+                url = "https://example.test/playlist.m3u8",
+                filename = "episode.mkv"
+            )
+        )
+        assertFalse(
+            shouldEnableAssSsaPipelineForProgressiveFallback(
+                url = "https://example.test/video.mp4",
+                filename = "episode.mp4"
+            )
+        )
+    }
+
+    @Test
     fun overlayProviderNullStillStartsAssSsaPipeline() {
         val decision = resolveAssSsaPipelineOverlayDecision(
             requestedUseAssSsaPipeline = true,

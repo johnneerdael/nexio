@@ -110,6 +110,34 @@ class AssSsaTranslatingSampleSinkTest {
     }
 
     @Test
+    fun signLikeSamplesArePreservedInProtectedModeToAvoidTinyDialogue() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sample = "Dialogue: 0,0:00:43.77,0:00:45.65,Default,SIGN,0,0,0,,{\\bord3\\shad0\\fs14\\pos(475.43,40)}Hirose..."
+        var protectedProviderCalls = 0
+        var rawProviderCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            useSystemPromptTranslation = { false },
+            translate = {
+                protectedProviderCalls += 1
+                emptyMap()
+            },
+            translateRawAssSsa = { raw ->
+                rawProviderCalls += 1
+                raw
+            }
+        )
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 43_770_000L, data = sample.toByteArray())
+
+        assertEquals(0, protectedProviderCalls)
+        assertEquals(0, rawProviderCalls)
+        assertEquals(sample, downstream.samples.single().decodeToString())
+    }
+
+    @Test
     fun systemPromptModeBatchesRawAssSampleBeforeDelegating() = runTest {
         val downstream = RecordingAssSsaSampleSink()
         val sample = listOf(

@@ -182,7 +182,7 @@ class AssSsaRenderControllerTest {
     }
 
     @Test
-    fun selectedTrackStartsRenderLoopAndClearOverlayStopsIt() {
+    fun trackHeaderAloneDoesNotStartRenderLoopBeforeSelection() {
         val native = FakeAssSsaNativeApi()
         val controller = newController(native)
 
@@ -193,6 +193,24 @@ class AssSsaRenderControllerTest {
             headerData = "[Script Info]".toByteArray(),
             Format.Builder().setLanguage("en").build()
         )
+
+        assertFalse(controller.isRenderLoopScheduledForTesting())
+    }
+
+    @Test
+    fun selectedTrackStartsRenderLoopAndClearOverlayStopsIt() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+        val format = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(1280, 720)
+        controller.setPlayer(mockk<ExoPlayer>(relaxed = true))
+        controller.onTrackHeader(
+            trackId = 9,
+            headerData = "[Script Info]".toByteArray(),
+            format
+        )
+        controller.selectTrackByFormat(format)
 
         assertTrue(controller.isRenderLoopScheduledForTesting())
 

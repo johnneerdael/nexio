@@ -656,6 +656,9 @@ internal fun PlayerRuntimeController.maybeAdjustAssSsaPipelineForTracks(tracks: 
         fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream
     )
     adjustment.overrideForCurrentStream?.let { assSsaPipelineOverrideForCurrentStream = it }
+    _uiState.update {
+        it.copy(useAssSsaRenderOverlay = desiredUseAssSsaPipeline && activePlayerUsesAssSsaRenderer)
+    }
     if (desiredUseAssSsaPipeline && !activePlayerUsesAssSsaRenderer && !adjustment.shouldReinitializePlayer) {
         Log.w(
             PlayerRuntimeController.TAG,

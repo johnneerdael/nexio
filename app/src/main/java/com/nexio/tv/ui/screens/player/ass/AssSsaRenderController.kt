@@ -237,10 +237,6 @@ internal class AssSsaRenderController(
         synchronized(stateLock) {
             if (released) return
             tracks[trackId] = TrackState(trackId, headerData, format)
-            if (selectedTrackId == null && tracks.size == 1) {
-                selectedTrackId = trackId
-                startRenderLoopIfNeeded()
-            }
             if (selectedTrackId == trackId && handle != 0L) {
                 loadedTrackId = null
                 loadSelectedTrackHeader(handle)
