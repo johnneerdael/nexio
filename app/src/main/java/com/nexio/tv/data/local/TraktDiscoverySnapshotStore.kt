@@ -174,8 +174,19 @@ class TraktDiscoverySnapshotStore private constructor(
                     "trakt_list_${slugify(normalizedKey)}"
                 },
                 title = obj.cleanString("title").ifBlank { normalizedKey },
-                itemCount = obj.cleanInt("itemCount")
+                itemCount = obj.cleanInt("itemCount"),
+                alternateKeys = decodeStringList(obj, "alternateKeys")
             )
+        }
+    }
+
+    private fun decodeStringList(root: JsonObject, key: String): List<String> {
+        val array = root.getAsJsonArray(key) ?: return emptyList()
+        return array.mapNotNull { element ->
+            if (element.isJsonNull) return@mapNotNull null
+            runCatching { element.asString.trim() }
+                .getOrDefault("")
+                .takeIf { it.isNotBlank() && it != "undefined" && it != "null" }
         }
     }
 

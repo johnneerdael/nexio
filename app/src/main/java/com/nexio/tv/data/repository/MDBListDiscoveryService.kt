@@ -264,7 +264,7 @@ class MDBListDiscoveryService @Inject constructor(
         apiKey: String,
         option: MDBListListOption
     ): List<MDBListCustomCatalog> {
-        val detailBody = requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+        val detailBody = requestListDetailBody(apiKey = apiKey, option = option)
         val detailOptions = detailBody
             ?.let(::parseJsonArray)
             ?.let { parseListOptions(it, isPersonal = option.isPersonal) }
@@ -272,7 +272,10 @@ class MDBListDiscoveryService @Inject constructor(
         val resolvedListIds = if (option.itemListIds.isNotEmpty()) {
             option.itemListIds
         } else {
-            detailBody?.let(::parseResolvedListIds).orEmpty()
+            detailBody
+                ?.let(::parseResolvedListIds)
+                .orEmpty()
+                .ifEmpty { listOf(option.listId).filter { it.isNumericListId() } }
         }
         val displayTitle = firstNonBlank(
             detailOptions.firstOrNull()?.title,
@@ -337,6 +340,17 @@ class MDBListDiscoveryService @Inject constructor(
             )
         }
         return catalogs
+    }
+
+    private suspend fun requestListDetailBody(
+        apiKey: String,
+        option: MDBListListOption
+    ): String? {
+        val byName = requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+        if (!byName.isNullOrBlank() || !option.listId.isNumericListId()) {
+            return byName
+        }
+        return requestBody(apiKey = apiKey, relativeUrl = "lists/${option.listId}")
     }
 
     private fun parseTopListKeyFallback(key: String): MDBListListOption? {
@@ -669,5 +683,9 @@ class MDBListDiscoveryService @Inject constructor(
             .replace(Regex("[^a-z0-9]+"), "_")
             .trim('_')
             .ifBlank { "custom" }
+    }
+
+    private fun String.isNumericListId(): Boolean {
+        return isNotBlank() && all { it.isDigit() }
     }
 }
