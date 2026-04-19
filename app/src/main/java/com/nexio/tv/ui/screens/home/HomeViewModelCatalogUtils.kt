@@ -593,6 +593,12 @@ private fun MDBListDiscoverySnapshot.listTitle(key: String): String? {
     return (personalLists + topLists).firstOrNull {
         canonicalSyntheticCatalogOrderKey(it.key) == canonical
     }?.title?.takeIf { it.isNotBlank() }
+        ?: customListCatalogs.firstOrNull {
+            canonicalSyntheticCatalogOrderKey(it.key) == canonical
+        }?.catalogName
+            ?.removeSuffix(" (Movies)")
+            ?.removeSuffix(" (Shows)")
+            ?.takeIf { it.isNotBlank() }
 }
 
 private fun traktCatalogTitle(key: String): String? {
