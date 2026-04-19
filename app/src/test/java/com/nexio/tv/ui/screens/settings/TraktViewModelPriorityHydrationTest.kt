@@ -50,7 +50,6 @@ class TraktViewModelPriorityHydrationTest {
 
         every { authService.hasRequiredCredentials() } returns false
         every { authDataStore.state } returns MutableStateFlow(TraktAuthState())
-        every { settingsDataStore.continueWatchingDaysCap } returns MutableStateFlow(90)
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(TraktCatalogPreferences())
         every { discoveryService.observeSnapshot() } returns MutableStateFlow(TraktDiscoverySnapshot())
         every { scrobbleService.observeWatchingNowState() } returns MutableStateFlow(

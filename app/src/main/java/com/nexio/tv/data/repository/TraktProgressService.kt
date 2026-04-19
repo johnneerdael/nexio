@@ -5,7 +5,6 @@ import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
@@ -75,7 +74,6 @@ class TraktProgressService @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
     private val metaRepository: MetaRepository,
-    private val traktSettingsDataStore: TraktSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore
 ) {
     data class NextUpEntry(
@@ -467,8 +465,6 @@ class TraktProgressService @Inject constructor(
     @Volatile
     private var lastEventDrivenRefreshMs: Long = 0L
     @Volatile
-    private var continueWatchingWindowDays: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP
-    @Volatile
     private var diskFirstHomeStartupEnabled: Boolean = false
     @Volatile
     private var startupRefreshGateUntilElapsedMs: Long = 0L
@@ -476,11 +472,6 @@ class TraktProgressService @Inject constructor(
     private var startupGateInitialized: Boolean = false
 
     init {
-        scope.launch {
-            traktSettingsDataStore.continueWatchingDaysCap.collectLatest { days ->
-                continueWatchingWindowDays = days
-            }
-        }
         scope.launch {
             val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
             applyStartupRefreshGate(enabled, "init")
@@ -498,15 +489,6 @@ class TraktProgressService @Inject constructor(
                 }
             }
         }
-    }
-
-    private fun isAllHistoryWindow(): Boolean {
-        return continueWatchingWindowDays == TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL
-    }
-
-    private fun recentWatchWindowMs(): Long? {
-        if (isAllHistoryWindow()) return null
-        return continueWatchingWindowDays.toLong() * 24L * 60L * 60L * 1000L
     }
 
     suspend fun refreshNow() {
@@ -1945,11 +1927,8 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {
         val recentCompletedEpisodes = fetchRecentEpisodeHistorySnapshot()
-        val playbackStartAt = recentWatchWindowMs()?.let { windowMs ->
-            toTraktUtcDateTime(System.currentTimeMillis() - windowMs)
-        }
-        val inProgressMovies = getPlayback("movies", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackMovie(it) }
-        val inProgressEpisodes = getPlayback("episodes", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackEpisode(it) }
+        val inProgressMovies = getPlayback("movies", force = force).mapNotNull { mapPlaybackMovie(it) }
+        val inProgressEpisodes = getPlayback("episodes", force = force).mapNotNull { mapPlaybackEpisode(it) }
 
         val mergedByKey = linkedMapOf<String, WatchProgress>()
 
@@ -1969,21 +1948,17 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun fetchRecentEpisodeHistorySnapshot(): List<WatchProgress> {
-        val cutoffMs = recentWatchWindowMs()?.let { windowMs ->
-            System.currentTimeMillis() - windowMs
-        }
         val results = linkedMapOf<String, WatchProgress>()
         var page = 1
         val pageLimit = 100
-        val maxPages = if (isAllHistoryWindow()) 20 else 5
+        val maxPages = 20
 
         while (page <= maxPages) {
             val response = traktAuthService.executeAuthorizedRequest { authHeader ->
                 traktApi.getEpisodeHistory(
                     authorization = authHeader,
                     page = page,
-                    limit = pageLimit,
-                    startAt = cutoffMs?.let(::toTraktUtcDateTime)
+                    limit = pageLimit
                 )
             } ?: break
 
@@ -1994,10 +1969,6 @@ class TraktProgressService @Inject constructor(
             var shouldStop = false
             items.forEach { item ->
                 val mapped = mapEpisodeHistoryItem(item) ?: return@forEach
-                if (cutoffMs != null && mapped.lastWatched < cutoffMs) {
-                    shouldStop = true
-                    return@forEach
-                }
                 results.putIfAbsent(mapped.contentId, mapped)
                 if (results.size >= maxRecentEpisodeHistoryEntries) {
                     shouldStop = true

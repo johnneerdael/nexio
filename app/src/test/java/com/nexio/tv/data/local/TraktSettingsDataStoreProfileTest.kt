@@ -11,7 +11,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -87,34 +86,4 @@ class TraktSettingsDataStoreProfileTest {
         assertTrue("Profile 1 CALENDAR should still be enabled", TraktCatalogIds.CALENDAR in p1PrefsAgain.enabledCatalogs)
     }
 
-    @Test
-    fun `continueWatchingDaysCap isolated per profile`() = runTest {
-        val manager = makeManager()
-        val settingsStore = makeSettingsStore(manager)
-
-        // Set days cap on profile 1
-        settingsStore.setContinueWatchingDaysCap(30)
-        val p1Cap = settingsStore.continueWatchingDaysCap.first { it == 30 }
-        assertEquals(30, p1Cap)
-
-        // Create and switch to profile 2
-        manager.createProfile("Carol", "#43A047")
-        val carolId = manager.profiles.first { it.size >= 2 }.first { it.id != 1 }.id
-        manager.setActiveProfile(carolId)
-        manager.activeProfileId.first { it == carolId }
-
-        // Profile 2 should have default cap
-        val p2Cap = settingsStore.continueWatchingDaysCap.first()
-        assertEquals(
-            "Profile 2 should have default days cap",
-            TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
-            p2Cap
-        )
-
-        // Switch back to profile 1 — cap must still be 30
-        manager.setActiveProfile(1)
-        manager.activeProfileId.first { it == 1 }
-        val p1CapAgain = settingsStore.continueWatchingDaysCap.first()
-        assertEquals(30, p1CapAgain)
-    }
 }

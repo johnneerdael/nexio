@@ -1,7 +1,6 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
 import com.nexio.tv.domain.model.WatchProgress
@@ -17,9 +16,6 @@ class TraktProgressServiceOptimisticRemovalTest {
 
     @Test
     fun `applyOptimisticRemoval removes episode from shared episode progress snapshot immediately`() {
-        val traktSettings = mockk<TraktSettingsDataStore>(relaxed = true) {
-            every { continueWatchingDaysCap } returns flowOf(TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP)
-        }
         val debugSettings = mockk<DebugSettingsDataStore>(relaxed = true) {
             every { diskFirstHomeStartupEnabled } returns flowOf(false)
         }
@@ -31,7 +27,6 @@ class TraktProgressServiceOptimisticRemovalTest {
             traktAuthService = traktAuthService,
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
             metaRepository = mockk<MetaRepository>(relaxed = true),
-            traktSettingsDataStore = traktSettings,
             debugSettingsDataStore = debugSettings
         )
 

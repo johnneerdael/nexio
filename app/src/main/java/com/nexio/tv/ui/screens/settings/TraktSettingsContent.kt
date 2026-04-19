@@ -19,7 +19,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -28,13 +27,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.data.local.TraktCatalogIds
-import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -46,24 +44,7 @@ fun TraktSettingsContent(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     var showDisconnectConfirm by remember { mutableStateOf(false) }
-    var showDaysCapDialog by remember { mutableStateOf(false) }
     var showCatalogDialog by remember { mutableStateOf(false) }
-    val strAllHistory = stringResource(R.string.trakt_all_history)
-    val strDaysFormat = stringResource(R.string.trakt_days_format)
-    val cwWindowFormatter: (Int) -> String = { days ->
-        formatContinueWatchingWindow(days, strAllHistory) { strDaysFormat.format(it) }
-    }
-    val continueWatchingDayOptions = remember {
-        listOf(
-            14,
-            30,
-            60,
-            90,
-            180,
-            365,
-            TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL
-        )
-    }
 
     val statusValue = when (uiState.mode) {
         TraktConnectionMode.CONNECTED -> {
@@ -132,14 +113,6 @@ fun TraktSettingsContent(
                                     viewModel.onCatalogManagementOpened()
                                     showCatalogDialog = true
                                 }
-                            )
-                        }
-                        item(key = "trakt_cw_window") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.trakt_continue_watching_window),
-                                subtitle = stringResource(R.string.trakt_continue_watching_subtitle),
-                                value = cwWindowFormatter(uiState.continueWatchingDaysCap),
-                                onClick = { showDaysCapDialog = true }
                             )
                         }
                     }
@@ -307,45 +280,6 @@ fun TraktSettingsContent(
         }
     }
 
-    if (showDaysCapDialog) {
-        NexioDialog(
-            onDismiss = { showDaysCapDialog = false },
-            title = stringResource(R.string.trakt_cw_window_title),
-            subtitle = stringResource(R.string.trakt_cw_window_subtitle),
-            width = 620.dp,
-            suppressFirstKeyUp = false
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                continueWatchingDayOptions.chunked(2).forEach { rowOptions ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        rowOptions.forEach { days ->
-                            val selected = uiState.continueWatchingDaysCap == days
-                            Button(
-                                onClick = {
-                                    viewModel.onContinueWatchingDaysCapSelected(days)
-                                    showDaysCapDialog = false
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.colors(
-                                    containerColor = if (selected) NexioColors.Primary else NexioColors.BackgroundCard,
-                                    contentColor = if (selected) Color.Black else NexioColors.TextPrimary
-                                )
-                            ) {
-                                Text(cwWindowFormatter(days))
-                            }
-                        }
-                        if (rowOptions.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if (showDisconnectConfirm) {
         NexioDialog(
             onDismiss = { showDisconnectConfirm = false },
@@ -404,13 +338,5 @@ private fun traktCatalogSubtitle(catalogId: String): String {
         TraktCatalogIds.RECOMMENDED_SHOWS -> stringResource(R.string.trakt_catalog_recommended_shows_subtitle)
         TraktCatalogIds.CALENDAR -> stringResource(R.string.trakt_catalog_calendar_subtitle)
         else -> ""
-    }
-}
-
-private fun formatContinueWatchingWindow(days: Int, allHistoryLabel: String, daysFormat: (Int) -> String): String {
-    return if (days == TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL) {
-        allHistoryLabel
-    } else {
-        daysFormat(days)
     }
 }

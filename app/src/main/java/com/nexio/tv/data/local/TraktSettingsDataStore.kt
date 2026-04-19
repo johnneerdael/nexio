@@ -1,7 +1,6 @@
 package com.nexio.tv.data.local
 
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nexio.tv.core.profile.ProfileManager
@@ -56,30 +55,16 @@ class TraktSettingsDataStore @Inject constructor(
 ) {
     companion object {
         private const val FEATURE = "trakt_settings"
-
-        const val CONTINUE_WATCHING_DAYS_CAP_ALL = 0
-        const val DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
-        const val MIN_CONTINUE_WATCHING_DAYS_CAP = 7
-        const val MAX_CONTINUE_WATCHING_DAYS_CAP = 365
     }
 
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
 
-    private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
     private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
     private val dismissedRecommendationKeysKey = stringSetPreferencesKey("dismissed_recommendation_keys")
     private val catalogEnabledSetKey = stringSetPreferencesKey("catalog_enabled_set")
     private val catalogOrderCsvKey = stringPreferencesKey("catalog_order_csv")
     private val selectedPopularListKeysKey = stringSetPreferencesKey("selected_popular_list_keys")
-
-    val continueWatchingDaysCap: Flow<Int> = profileManager.activeProfileId.flatMapLatest { pid ->
-        store(pid).data.map { prefs ->
-            normalizeContinueWatchingDaysCap(
-                prefs[continueWatchingDaysCapKey] ?: DEFAULT_CONTINUE_WATCHING_DAYS_CAP
-            )
-        }
-    }
 
     val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
         store(pid).data.map { prefs ->
@@ -109,20 +94,6 @@ class TraktSettingsDataStore @Inject constructor(
                 catalogOrder = order,
                 selectedPopularListKeys = selectedListKeys
             )
-        }
-    }
-
-    suspend fun setContinueWatchingDaysCap(days: Int) {
-        store().edit { prefs ->
-            prefs[continueWatchingDaysCapKey] = normalizeContinueWatchingDaysCap(days)
-        }
-    }
-
-    private fun normalizeContinueWatchingDaysCap(days: Int): Int {
-        return if (days == CONTINUE_WATCHING_DAYS_CAP_ALL) {
-            CONTINUE_WATCHING_DAYS_CAP_ALL
-        } else {
-            days.coerceIn(MIN_CONTINUE_WATCHING_DAYS_CAP, MAX_CONTINUE_WATCHING_DAYS_CAP)
         }
     }
 
