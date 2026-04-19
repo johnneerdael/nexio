@@ -465,8 +465,8 @@ class TraktProgressService @Inject constructor(
     private val fastSyncThrottleMs = 15_000L
     private val manualRefreshSignalThrottleMs = 3_000L
     private val eventDrivenRefreshThrottleMs = 30_000L
-    private val nextUpValidationVisibleCandidateLimit = 200
-    private val nextUpValidationBudget = 200
+    private val nextUpValidationVisibleCandidateLimit = 30
+    private val nextUpValidationBudget = 30
     private val nextUpValidationPositiveTtlMs = 10 * 60_000L
     private val nextUpValidationNegativeTtlMs = 5 * 60_000L
     @Volatile
