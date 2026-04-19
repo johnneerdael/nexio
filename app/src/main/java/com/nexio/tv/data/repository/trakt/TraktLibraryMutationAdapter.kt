@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository.trakt
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
@@ -13,6 +14,7 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -58,7 +60,8 @@ class TraktLibraryMutationAdapter @Inject constructor(
             MUTATION_KIND_CREATE_LIST -> {
                 libraryServiceProvider.get().reconcileQueuedCreateListSuccess(
                     provisionalKey = envelope.provisionalKey(),
-                    createdList = createdListsByEnvelopeId.remove(envelope.id)
+                    createdList = createdListsByEnvelopeId.remove(envelope.id),
+                    profileId = envelope.profileId
                 )
             }
 
@@ -75,10 +78,14 @@ class TraktLibraryMutationAdapter @Inject constructor(
         if (provisionalKey != null) {
             service.rollbackQueuedLibraryMutation(
                 rollbackState = envelope.rollbackState(),
-                provisionalKeyToRemove = provisionalKey
+                provisionalKeyToRemove = provisionalKey,
+                profileId = envelope.profileId
             )
         } else {
-            service.refreshNow()
+            service.rollbackQueuedLibraryMutation(
+                rollbackState = envelope.rollbackState(),
+                profileId = envelope.profileId
+            )
         }
     }
 
@@ -92,6 +99,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
             }
         ) {
             executor.createUserList(
+                session = envelope.session(),
                 id = ME_PATH,
                 body = envelope.listRequestBody()
             )
@@ -101,6 +109,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
     private suspend fun executeUpdateList(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         return executeMutation(failureLabel = "update list") {
             executor.updateUserList(
+                session = envelope.session(),
                 id = ME_PATH,
                 listId = envelope.listId(),
                 body = envelope.listRequestBody()
@@ -111,6 +120,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
     private suspend fun executeDeleteList(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         return executeMutation(failureLabel = "delete list") {
             executor.deleteUserList(
+                session = envelope.session(),
                 id = ME_PATH,
                 listId = envelope.listId()
             )
@@ -120,6 +130,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
     private suspend fun executeReorderLists(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         return executeMutation(failureLabel = "reorder lists") {
             executor.reorderUserLists(
+                session = envelope.session(),
                 id = ME_PATH,
                 body = envelope.reorderRequestBody()
             )
@@ -132,13 +143,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
             failureLabel = "add to watchlist",
             successValidator = ::isSuccessfulAddResponse
         ) {
-            executor.addToWatchlist(envelope.listItemsBody())
+            executor.addToWatchlist(envelope.session(), envelope.listItemsBody())
         }
     }
 
     private suspend fun executeWatchlistRemove(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         return executeMutation(failureLabel = "remove from watchlist") {
-            executor.removeFromWatchlist(envelope.listItemsBody())
+            executor.removeFromWatchlist(envelope.session(), envelope.listItemsBody())
         }
     }
 
@@ -149,6 +160,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
             successValidator = ::isSuccessfulAddResponse
         ) {
             executor.addUserListItems(
+                session = envelope.session(),
                 id = ME_PATH,
                 listId = envelope.listId(),
                 body = envelope.listItemsBody()
@@ -159,6 +171,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
     private suspend fun executeListRemove(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         return executeMutation(failureLabel = "remove from list") {
             executor.removeUserListItems(
+                session = envelope.session(),
                 id = ME_PATH,
                 listId = envelope.listId(),
                 body = envelope.listItemsBody()
@@ -452,6 +465,13 @@ class TraktLibraryMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.provisionalKeyOrNull(): String? {
             return metadata.get(METADATA_PROVISIONAL_KEY)?.asString
+        }
+
+        private fun TraktMutationEnvelope.session(): TrackingAuthSession {
+            return TrackingAuthSession(
+                provider = TrackingProvider.TRAKT,
+                profileId = profileId
+            )
         }
 
         private const val ME_PATH = "me"

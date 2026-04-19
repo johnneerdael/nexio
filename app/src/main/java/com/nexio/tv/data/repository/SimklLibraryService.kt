@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklLibrarySnapshotStore
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListRequestDto
@@ -15,17 +16,19 @@ import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -42,7 +45,8 @@ class SimklLibraryService @Inject constructor(
     private val simklAuthDataStore: SimklAuthDataStore,
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
     private val snapshotStore: SimklLibrarySnapshotStore,
-    private val metaRepository: MetaRepository
+    private val metaRepository: MetaRepository,
+    private val profileManager: ProfileManager? = null
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
@@ -66,6 +70,15 @@ class SimklLibraryService @Inject constructor(
         val releaseInfo: String?,
         val imdbRating: Float?,
         val genres: List<String>
+    )
+
+    private data class ActivityTimestamps(
+        val lastTvShowsAllAt: String? = null,
+        val lastMoviesAllAt: String? = null,
+        val lastAnimeAllAt: String? = null,
+        val lastTvShowsRemovedFromListAt: String? = null,
+        val lastMoviesRemovedFromListAt: String? = null,
+        val lastAnimeRemovedFromListAt: String? = null
     )
 
     companion object {
@@ -98,33 +111,14 @@ class SimklLibraryService @Inject constructor(
     private var lastAutoRefreshMs = 0L
 
     init {
-        snapshotStore.read()?.let { persisted ->
-            val restored = rebuildSnapshotFromRollback(
-                LibraryRollbackState(
-                    listTabs = persisted.listTabs,
-                    entriesByList = persisted.entriesByList
-                )
-            ).copy(updatedAtMs = persisted.updatedAtMs)
-            metadataState.value = persisted.metadataByContentKey.mapValues { (_, metadata) ->
-                LibraryMetadata(
-                    name = metadata.name,
-                    poster = metadata.poster,
-                    background = metadata.background,
-                    logo = metadata.logo,
-                    description = metadata.description,
-                    releaseInfo = metadata.releaseInfo,
-                    imdbRating = metadata.imdbRating,
-                    genres = metadata.genres
-                )
+        restoreSnapshotForProfile(activeProfileId())
+        profileManager?.let { manager ->
+            scope.launch {
+                manager.activeProfileId
+                    .collectLatest { profileId ->
+                        restoreSnapshotForProfile(profileId)
+                    }
             }
-            snapshotState.value = restored
-            hasCacheState.value = restored.updatedAtMs > 0L || restored.allEntries.isNotEmpty()
-            lastTvShowsAllAt = persisted.lastTvShowsAllAt
-            lastMoviesAllAt = persisted.lastMoviesAllAt
-            lastAnimeAllAt = persisted.lastAnimeAllAt
-            lastTvShowsRemovedFromListAt = persisted.lastTvShowsRemovedFromListAt
-            lastMoviesRemovedFromListAt = persisted.lastMoviesRemovedFromListAt
-            lastAnimeRemovedFromListAt = persisted.lastAnimeRemovedFromListAt
         }
     }
 
@@ -158,25 +152,27 @@ class SimklLibraryService @Inject constructor(
         if (snapshot[WATCHLIST_KEY] == true) {
             performOptimisticMutation(
                 optimistic = { current -> removeItemFromAllLists(current, item) }
-            ) { before ->
+            ) { before, profileId ->
                 val body = buildRemoveBody(item)
                 traktMutationOutboxCoordinator.enqueueAndDrain(
                     SimklLibraryMutationAdapter.buildRemoveEnvelope(
                         body = body,
-                        rollbackState = rollbackStateFor(before)
+                        rollbackState = rollbackStateFor(before),
+                        profileId = profileId
                     )
                 )
             }
         } else {
             performOptimisticMutation(
                 optimistic = { current -> addItemToList(current, item, WATCHLIST_KEY) }
-            ) { before ->
+            ) { before, profileId ->
                 val body = buildAddBody(item, WATCHLIST_KEY)
                 traktMutationOutboxCoordinator.enqueueAndDrain(
                     SimklLibraryMutationAdapter.buildAddToListEnvelope(
                         listKey = WATCHLIST_KEY,
                         body = body,
-                        rollbackState = rollbackStateFor(before)
+                        rollbackState = rollbackStateFor(before),
+                        profileId = profileId
                     )
                 )
             }
@@ -193,11 +189,12 @@ class SimklLibraryService @Inject constructor(
         if (desiredEnabled.isEmpty()) {
             performOptimisticMutation(
                 optimistic = { current -> removeItemFromAllLists(current, item) }
-            ) { before ->
+            ) { before, profileId ->
                 traktMutationOutboxCoordinator.enqueueAndDrain(
                     SimklLibraryMutationAdapter.buildRemoveEnvelope(
                         body = buildRemoveBody(item),
-                        rollbackState = rollbackStateFor(before)
+                        rollbackState = rollbackStateFor(before),
+                        profileId = profileId
                     )
                 )
             }
@@ -205,12 +202,13 @@ class SimklLibraryService @Inject constructor(
             val target = STATUS_KEYS.firstOrNull { it in desiredEnabled } ?: WATCHLIST_KEY
             performOptimisticMutation(
                 optimistic = { current -> addItemToList(removeItemFromAllLists(current, item), item, target) }
-            ) { before ->
+            ) { before, profileId ->
                 traktMutationOutboxCoordinator.enqueueAndDrain(
                     SimklLibraryMutationAdapter.buildAddToListEnvelope(
                         listKey = target,
                         body = buildAddBody(item, target),
-                        rollbackState = rollbackStateFor(before)
+                        rollbackState = rollbackStateFor(before),
+                        profileId = profileId
                     )
                 )
             }
@@ -218,23 +216,45 @@ class SimklLibraryService @Inject constructor(
     }
 
     suspend fun refreshNow(force: Boolean = false) {
-        if (!simklAuthDataStore.isEffectivelyAuthenticated.first()) {
-            snapshotState.value = buildEmptySnapshot()
-            hasCacheState.value = false
+        val profileId = activeProfileId()
+        if (!simklAuthDataStore.stateForProfile(profileId).first().isAuthenticated) {
+            if (profileId == activeProfileId()) {
+                clearInMemorySnapshot()
+            }
             return
         }
-        ensureFresh(force)
+        ensureFresh(force, profileId)
     }
 
-    private suspend fun ensureFresh(force: Boolean = false) = withContext(Dispatchers.IO) {
+    internal suspend fun refreshProfile(profileId: Int, force: Boolean = true) {
+        if (!simklAuthDataStore.stateForProfile(profileId).first().isAuthenticated) {
+            if (profileId == activeProfileId()) {
+                clearInMemorySnapshot()
+            }
+            return
+        }
+        ensureFresh(force, profileId)
+    }
+
+    private suspend fun ensureFresh(
+        force: Boolean = false,
+        profileId: Int = activeProfileId()
+    ) = withContext(Dispatchers.IO) {
         refreshMutex.withLock {
             val now = System.currentTimeMillis()
-            if (!force && snapshotState.value.updatedAtMs > 0L && now - lastAutoRefreshMs < autoRefreshThrottleMs) {
+            if (
+                profileId == activeProfileId() &&
+                !force &&
+                snapshotState.value.updatedAtMs > 0L &&
+                now - lastAutoRefreshMs < autoRefreshThrottleMs
+            ) {
                 return@withLock
             }
-            refreshingState.value = true
+            val session = TrackingAuthSession(TrackingProvider.SIMKL, profileId)
+            val activeAtStart = profileId == activeProfileId()
+            if (activeAtStart) refreshingState.value = true
             runCatching {
-                val activitiesResponse = remote.getLastActivities()
+                val activitiesResponse = remote.getLastActivities(session)
                 if (!activitiesResponse.isSuccessful) {
                     Log.w("SimklLibraryService", "Failed to fetch SIMKL activities (${activitiesResponse.code()}), skipping sync")
                     return@runCatching
@@ -244,49 +264,80 @@ class SimklLibraryService @Inject constructor(
                 val currentMoviesAll = activities?.movies?.all
                 val currentAnimeAll = activities?.anime?.all
 
+                val previousTimestamps = if (profileId == activeProfileId()) {
+                    currentActivityTimestamps()
+                } else {
+                    persistedActivityTimestamps(profileId)
+                }
+                val previousMetadata = if (profileId == activeProfileId()) {
+                    metadataState.value
+                } else {
+                    persistedMetadataForProfile(profileId)
+                }
+
                 // Detect first sync: no per-type timestamps saved yet
-                val isFirstSync = lastTvShowsAllAt == null && lastMoviesAllAt == null && lastAnimeAllAt == null
+                val isFirstSync = previousTimestamps.lastTvShowsAllAt == null &&
+                    previousTimestamps.lastMoviesAllAt == null &&
+                    previousTimestamps.lastAnimeAllAt == null
 
                 // Skip entirely if nothing changed across any type
                 if (!force && !isFirstSync &&
-                    currentTvShowsAll == lastTvShowsAllAt &&
-                    currentMoviesAll == lastMoviesAllAt &&
-                    currentAnimeAll == lastAnimeAllAt
+                    currentTvShowsAll == previousTimestamps.lastTvShowsAllAt &&
+                    currentMoviesAll == previousTimestamps.lastMoviesAllAt &&
+                    currentAnimeAll == previousTimestamps.lastAnimeAllAt
                 ) {
-                    lastAutoRefreshMs = now
+                    if (profileId == activeProfileId()) {
+                        lastAutoRefreshMs = now
+                    }
                     return@runCatching
                 }
 
-                val snapshot = if (isFirstSync) {
+                val snapshot = if (force || isFirstSync) {
                     // Phase 1: single GET /sync/all-items/ — no type filter, no date_from
-                    fetchInitialSnapshot()
+                    fetchInitialSnapshot(session)
                 } else {
                     // Phase 2: per-type delta using type-specific saved timestamps
-                    fetchDeltaAndMerge(activities)
+                    fetchDeltaAndMerge(
+                        activities = activities,
+                        session = session,
+                        previousTimestamps = previousTimestamps,
+                        baseSnapshot = if (profileId == activeProfileId()) {
+                            snapshotState.value
+                        } else {
+                            snapshotFromPersisted(profileId)
+                        }
+                    )
                 } ?: return@runCatching
 
                 // Save per-type timestamps from this activities response
-                lastTvShowsAllAt = currentTvShowsAll
-                lastMoviesAllAt = currentMoviesAll
-                lastAnimeAllAt = currentAnimeAll
-                lastTvShowsRemovedFromListAt = activities?.tvShows?.removedFromList
-                lastMoviesRemovedFromListAt = activities?.movies?.removedFromList
-                lastAnimeRemovedFromListAt = activities?.anime?.removedFromList
-                lastAutoRefreshMs = now
-                snapshotState.value = snapshot
-                hasCacheState.value = snapshot.updatedAtMs > 0L || snapshot.allEntries.isNotEmpty()
-                persistSnapshot(snapshot, metadataState.value)
-                hydrateMetadata(snapshot.allEntries)
+                val updatedTimestamps = ActivityTimestamps(
+                    lastTvShowsAllAt = currentTvShowsAll,
+                    lastMoviesAllAt = currentMoviesAll,
+                    lastAnimeAllAt = currentAnimeAll,
+                    lastTvShowsRemovedFromListAt = activities?.tvShows?.removedFromList,
+                    lastMoviesRemovedFromListAt = activities?.movies?.removedFromList,
+                    lastAnimeRemovedFromListAt = activities?.anime?.removedFromList
+                )
+                persistSnapshot(snapshot, previousMetadata, profileId, updatedTimestamps)
+                if (profileId == activeProfileId()) {
+                    applyActivityTimestamps(updatedTimestamps)
+                    lastAutoRefreshMs = now
+                    snapshotState.value = snapshot
+                    hasCacheState.value = snapshot.updatedAtMs > 0L || snapshot.allEntries.isNotEmpty()
+                    hydrateMetadata(snapshot.allEntries, profileId)
+                }
             }.onFailure {
                 Log.w("SimklLibraryService", "Failed to refresh SIMKL library", it)
             }
-            refreshingState.value = false
+            if (activeAtStart || profileId == activeProfileId()) {
+                refreshingState.value = false
+            }
         }
     }
 
-    private suspend fun fetchInitialSnapshot(): Snapshot? {
+    private suspend fun fetchInitialSnapshot(session: TrackingAuthSession): Snapshot? {
         // Spec: first sync uses GET /sync/all-items/ with no type filter and no date_from
-        val response = remote.getAllItems(dateFrom = null, extended = "full")
+        val response = remote.getAllItems(dateFrom = null, extended = "full", session = session)
         if (!response.isSuccessful) {
             Log.w("SimklLibraryService", "Failed to fetch initial SIMKL all-items (${response.code()})")
             return null
@@ -295,29 +346,37 @@ class SimklLibraryService @Inject constructor(
     }
 
     private suspend fun fetchDeltaAndMerge(
-        activities: com.nexio.tv.data.remote.dto.simkl.SimklLastActivitiesResponseDto?
+        activities: com.nexio.tv.data.remote.dto.simkl.SimklLastActivitiesResponseDto?,
+        session: TrackingAuthSession,
+        previousTimestamps: ActivityTimestamps,
+        baseSnapshot: Snapshot
     ): Snapshot? {
         // If removals changed for ANY type, fall back to a full re-fetch so removed items are cleaned up
         val removalsChanged =
-            activities?.tvShows?.removedFromList != lastTvShowsRemovedFromListAt ||
-            activities?.movies?.removedFromList != lastMoviesRemovedFromListAt ||
-            activities?.anime?.removedFromList != lastAnimeRemovedFromListAt
+            activities?.tvShows?.removedFromList != previousTimestamps.lastTvShowsRemovedFromListAt ||
+            activities?.movies?.removedFromList != previousTimestamps.lastMoviesRemovedFromListAt ||
+            activities?.anime?.removedFromList != previousTimestamps.lastAnimeRemovedFromListAt
         if (removalsChanged) {
-            return fetchInitialSnapshot()
+            return fetchInitialSnapshot(session)
         }
 
         // Per-type delta: fetch only types whose timestamp changed, using the saved timestamp as date_from
         data class TypeConfig(val type: String, val extended: String, val currentAll: String?, val savedAll: String?)
         val types = listOf(
-            TypeConfig("shows", "full", activities?.tvShows?.all, lastTvShowsAllAt),
-            TypeConfig("movies", "full", activities?.movies?.all, lastMoviesAllAt),
-            TypeConfig("anime", "full_anime_seasons", activities?.anime?.all, lastAnimeAllAt)
+            TypeConfig("shows", "full", activities?.tvShows?.all, previousTimestamps.lastTvShowsAllAt),
+            TypeConfig("movies", "full", activities?.movies?.all, previousTimestamps.lastMoviesAllAt),
+            TypeConfig("anime", "full_anime_seasons", activities?.anime?.all, previousTimestamps.lastAnimeAllAt)
         )
 
-        var merged = snapshotState.value
+        var merged = baseSnapshot
         for (tc in types) {
             if (tc.currentAll == tc.savedAll) continue  // no changes for this type
-            val response = remote.getAllItemsByType(tc.type, dateFrom = tc.savedAll, extended = tc.extended)
+            val response = remote.getAllItemsByType(
+                type = tc.type,
+                dateFrom = tc.savedAll,
+                extended = tc.extended,
+                session = session
+            )
             if (!response.isSuccessful) {
                 Log.w("SimklLibraryService", "Failed to fetch SIMKL ${tc.type} delta (${response.code()})")
                 continue
@@ -427,29 +486,35 @@ class SimklLibraryService @Inject constructor(
         timestamps.filterNotNull().filter { it.isNotBlank() }.maxOrNull()
 
     internal suspend fun rollbackQueuedLibraryMutation(
-        rollbackState: LibraryRollbackState
+        rollbackState: LibraryRollbackState,
+        profileId: Int = activeProfileId()
     ) {
+        if (profileId != activeProfileId()) {
+            ensureFresh(force = true, profileId = profileId)
+            return
+        }
         val restored = rebuildSnapshotFromRollback(rollbackState)
         snapshotState.value = restored
         hasCacheState.value = restored.updatedAtMs > 0L || restored.allEntries.isNotEmpty()
-        persistSnapshot(restored, metadataState.value)
+        persistSnapshot(restored, metadataState.value, profileId)
     }
 
     private suspend fun performOptimisticMutation(
         optimistic: (Snapshot) -> Snapshot,
-        remoteMutation: suspend (before: Snapshot) -> Unit
+        remoteMutation: suspend (before: Snapshot, profileId: Int) -> Unit
     ) {
         val before = snapshotState.value
+        val profileId = activeProfileId()
         val after = optimistic(before)
         snapshotState.value = after
         hasCacheState.value = after.updatedAtMs > 0L || after.allEntries.isNotEmpty()
-        persistSnapshot(after, metadataState.value)
+        persistSnapshot(after, metadataState.value, profileId)
         runCatching {
-            remoteMutation(before)
+            remoteMutation(before, profileId)
         }.onFailure {
             snapshotState.value = before
             hasCacheState.value = before.updatedAtMs > 0L || before.allEntries.isNotEmpty()
-            persistSnapshot(before, metadataState.value)
+            persistSnapshot(before, metadataState.value, profileId)
             throw it
         }
     }
@@ -558,7 +623,7 @@ class SimklLibraryService @Inject constructor(
         }
     }
 
-    private fun hydrateMetadata(entries: List<LibraryEntry>) {
+    private fun hydrateMetadata(entries: List<LibraryEntry>, profileId: Int = activeProfileId()) {
         entries.take(metadataHydrationLimit).forEach { entry ->
             val key = contentKey(entry.id, entry.type)
             if (metadataState.value.containsKey(key)) return@forEach
@@ -579,8 +644,10 @@ class SimklLibraryService @Inject constructor(
                             current + (key to metadata)
                         }
                         if (updatedMetadata != null) {
-                            metadataState.value = updatedMetadata
-                            persistSnapshot(snapshotState.value, updatedMetadata)
+                            if (profileId == activeProfileId()) {
+                                metadataState.value = updatedMetadata
+                                persistSnapshot(snapshotState.value, updatedMetadata, profileId)
+                            }
                         }
                     }
                 } finally {
@@ -674,7 +741,77 @@ class SimklLibraryService @Inject constructor(
         )
     )
 
-    private fun persistSnapshot(snapshot: Snapshot, metadata: Map<String, LibraryMetadata>) {
+    private fun restoreSnapshotForProfile(profileId: Int) {
+        val persisted = snapshotStore.read(profileId)
+        if (persisted == null) {
+            clearInMemorySnapshot()
+            return
+        }
+        restorePersistedSnapshot(persisted)
+    }
+
+    private fun snapshotFromPersisted(profileId: Int): Snapshot {
+        val persisted = snapshotStore.read(profileId) ?: return buildEmptySnapshot()
+        return rebuildSnapshotFromRollback(
+            LibraryRollbackState(
+                listTabs = persisted.listTabs,
+                entriesByList = persisted.entriesByList
+            )
+        ).copy(updatedAtMs = persisted.updatedAtMs)
+    }
+
+    private fun restorePersistedSnapshot(persisted: SimklLibrarySnapshotStore.Snapshot) {
+        val restored = rebuildSnapshotFromRollback(
+            LibraryRollbackState(
+                listTabs = persisted.listTabs,
+                entriesByList = persisted.entriesByList
+            )
+        ).copy(updatedAtMs = persisted.updatedAtMs)
+        metadataState.value = persisted.metadataByContentKey.mapValues { (_, metadata) ->
+            LibraryMetadata(
+                name = metadata.name,
+                poster = metadata.poster,
+                background = metadata.background,
+                logo = metadata.logo,
+                description = metadata.description,
+                releaseInfo = metadata.releaseInfo,
+                imdbRating = metadata.imdbRating,
+                genres = metadata.genres
+            )
+        }
+        snapshotState.value = restored
+        hasCacheState.value = restored.updatedAtMs > 0L || restored.allEntries.isNotEmpty()
+        applyActivityTimestamps(
+            ActivityTimestamps(
+                lastTvShowsAllAt = persisted.lastTvShowsAllAt,
+                lastMoviesAllAt = persisted.lastMoviesAllAt,
+                lastAnimeAllAt = persisted.lastAnimeAllAt,
+                lastTvShowsRemovedFromListAt = persisted.lastTvShowsRemovedFromListAt,
+                lastMoviesRemovedFromListAt = persisted.lastMoviesRemovedFromListAt,
+                lastAnimeRemovedFromListAt = persisted.lastAnimeRemovedFromListAt
+            )
+        )
+    }
+
+    private fun clearInMemorySnapshot() {
+        snapshotState.value = buildEmptySnapshot()
+        metadataState.value = emptyMap()
+        hasCacheState.value = false
+        lastTvShowsAllAt = null
+        lastMoviesAllAt = null
+        lastAnimeAllAt = null
+        lastTvShowsRemovedFromListAt = null
+        lastMoviesRemovedFromListAt = null
+        lastAnimeRemovedFromListAt = null
+        lastAutoRefreshMs = 0L
+    }
+
+    private fun persistSnapshot(
+        snapshot: Snapshot,
+        metadata: Map<String, LibraryMetadata>,
+        profileId: Int = activeProfileId(),
+        timestamps: ActivityTimestamps = currentActivityTimestamps()
+    ) {
         snapshotStore.write(
             SimklLibrarySnapshotStore.Snapshot(
                 listTabs = snapshot.listTabs,
@@ -692,13 +829,63 @@ class SimklLibraryService @Inject constructor(
                     )
                 },
                 updatedAtMs = snapshot.updatedAtMs,
-                lastTvShowsAllAt = lastTvShowsAllAt,
-                lastMoviesAllAt = lastMoviesAllAt,
-                lastAnimeAllAt = lastAnimeAllAt,
-                lastTvShowsRemovedFromListAt = lastTvShowsRemovedFromListAt,
-                lastMoviesRemovedFromListAt = lastMoviesRemovedFromListAt,
-                lastAnimeRemovedFromListAt = lastAnimeRemovedFromListAt
-            )
+                lastTvShowsAllAt = timestamps.lastTvShowsAllAt,
+                lastMoviesAllAt = timestamps.lastMoviesAllAt,
+                lastAnimeAllAt = timestamps.lastAnimeAllAt,
+                lastTvShowsRemovedFromListAt = timestamps.lastTvShowsRemovedFromListAt,
+                lastMoviesRemovedFromListAt = timestamps.lastMoviesRemovedFromListAt,
+                lastAnimeRemovedFromListAt = timestamps.lastAnimeRemovedFromListAt
+            ),
+            profileId
         )
     }
+
+    private fun currentActivityTimestamps(): ActivityTimestamps {
+        return ActivityTimestamps(
+            lastTvShowsAllAt = lastTvShowsAllAt,
+            lastMoviesAllAt = lastMoviesAllAt,
+            lastAnimeAllAt = lastAnimeAllAt,
+            lastTvShowsRemovedFromListAt = lastTvShowsRemovedFromListAt,
+            lastMoviesRemovedFromListAt = lastMoviesRemovedFromListAt,
+            lastAnimeRemovedFromListAt = lastAnimeRemovedFromListAt
+        )
+    }
+
+    private fun persistedActivityTimestamps(profileId: Int): ActivityTimestamps {
+        val persisted = snapshotStore.read(profileId) ?: return ActivityTimestamps()
+        return ActivityTimestamps(
+            lastTvShowsAllAt = persisted.lastTvShowsAllAt,
+            lastMoviesAllAt = persisted.lastMoviesAllAt,
+            lastAnimeAllAt = persisted.lastAnimeAllAt,
+            lastTvShowsRemovedFromListAt = persisted.lastTvShowsRemovedFromListAt,
+            lastMoviesRemovedFromListAt = persisted.lastMoviesRemovedFromListAt,
+            lastAnimeRemovedFromListAt = persisted.lastAnimeRemovedFromListAt
+        )
+    }
+
+    private fun persistedMetadataForProfile(profileId: Int): Map<String, LibraryMetadata> {
+        return snapshotStore.read(profileId)?.metadataByContentKey.orEmpty().mapValues { (_, metadata) ->
+            LibraryMetadata(
+                name = metadata.name,
+                poster = metadata.poster,
+                background = metadata.background,
+                logo = metadata.logo,
+                description = metadata.description,
+                releaseInfo = metadata.releaseInfo,
+                imdbRating = metadata.imdbRating,
+                genres = metadata.genres
+            )
+        }
+    }
+
+    private fun applyActivityTimestamps(timestamps: ActivityTimestamps) {
+        lastTvShowsAllAt = timestamps.lastTvShowsAllAt
+        lastMoviesAllAt = timestamps.lastMoviesAllAt
+        lastAnimeAllAt = timestamps.lastAnimeAllAt
+        lastTvShowsRemovedFromListAt = timestamps.lastTvShowsRemovedFromListAt
+        lastMoviesRemovedFromListAt = timestamps.lastMoviesRemovedFromListAt
+        lastAnimeRemovedFromListAt = timestamps.lastAnimeRemovedFromListAt
+    }
+
+    private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
 }

@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -28,6 +29,7 @@ import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineScope
@@ -60,7 +62,8 @@ class TraktLibraryService @Inject constructor(
     private val metaRepository: MetaRepository,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val snapshotStore: TraktLibrarySnapshotStore
+    private val snapshotStore: TraktLibrarySnapshotStore,
+    private val profileManager: ProfileManager? = null
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
@@ -110,24 +113,21 @@ class TraktLibraryService @Inject constructor(
     private var startupGateInitialized: Boolean = false
 
     init {
-        val persistedSnapshot = snapshotStore.read()
-        if (persistedSnapshot != null) {
-            logDebug(
-                "init found persisted snapshot updatedAtMs=${persistedSnapshot.updatedAtMs} " +
-                    "listTabs=${persistedSnapshot.listTabs.size} " +
-                    "listsWithEntries=${persistedSnapshot.entriesByList.count { it.value.isNotEmpty() }} " +
-                    "metadata=${persistedSnapshot.metadataByContentKey.size}"
-            )
-            restorePersistedState(persistedSnapshot)
-        } else {
-            logDebug("init found no persisted snapshot")
-        }
+        restoreSnapshotForProfile(activeProfileId())
         scope.launch {
             val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
             applyStartupRefreshGate(enabled, "init")
             startupGateInitialized = true
             debugSettingsDataStore.diskFirstHomeStartupEnabled.collectLatest { updated ->
                 applyStartupRefreshGate(updated, "toggle_change")
+            }
+        }
+        profileManager?.let { manager ->
+            scope.launch {
+                manager.activeProfileId
+                    .collectLatest { profileId ->
+                        restoreSnapshotForProfile(profileId)
+                    }
             }
         }
     }
@@ -377,7 +377,7 @@ class TraktLibraryService @Inject constructor(
     private suspend fun enqueueLibraryMutation(
         envelope: TraktMutationEnvelope
     ) {
-        traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
+        traktMutationOutboxCoordinator.enqueueAndDrain(envelope.copy(profileId = activeProfileId()))
     }
 
     suspend fun refreshNow() {
@@ -388,7 +388,7 @@ class TraktLibraryService @Inject constructor(
         refresh(force = false)
     }
 
-    private suspend fun refresh(force: Boolean): Boolean {
+    private suspend fun refresh(force: Boolean, profileId: Int = activeProfileId()): Boolean {
         ensureStartupGateInitialized()
         if (!force && isStartupRefreshGated()) {
             Log.d("TraktLibraryService", "refresh deferred by startup gate")
@@ -396,22 +396,37 @@ class TraktLibraryService @Inject constructor(
         }
         val now = System.currentTimeMillis()
         return refreshMutex.withLock {
-            if (!force && now - lastRefreshMs <= cacheTtlMs && snapshotState.value.updatedAtMs > 0L) {
+            if (
+                profileId == activeProfileId() &&
+                !force &&
+                now - lastRefreshMs <= cacheTtlMs &&
+                snapshotState.value.updatedAtMs > 0L
+            ) {
                 return@withLock true
             }
 
-            refreshingState.value = true
+            val activeAtStart = profileId == activeProfileId()
+            if (activeAtStart) refreshingState.value = true
             try {
-                val previousMetadata = metadataState.value
-                val refreshed = runCatching { fetchSnapshot() }.getOrNull() ?: return@withLock false
+                val session = TrackingAuthSession(TrackingProvider.TRAKT, profileId)
+                val previousMetadata = if (profileId == activeProfileId()) {
+                    metadataState.value
+                } else {
+                    persistedMetadataForProfile(profileId)
+                }
+                val refreshed = runCatching { fetchSnapshot(session) }.getOrNull() ?: return@withLock false
                 val baseSnapshot = applyMetadata(refreshed, previousMetadata)
                 val primedMetadata = primeMetadata(baseSnapshot.allEntries, previousMetadata)
                 val snapshotToPersist = applyMetadata(baseSnapshot, primedMetadata)
-                persistAndRestoreSnapshot(snapshotToPersist, primedMetadata)
-                hydrateMetadata(snapshotState.value.allEntries)
+                persistAndRestoreSnapshot(snapshotToPersist, primedMetadata, profileId = profileId)
+                if (profileId == activeProfileId()) {
+                    hydrateMetadata(snapshotState.value.allEntries, profileId)
+                }
                 true
             } finally {
-                refreshingState.value = false
+                if (activeAtStart || profileId == activeProfileId()) {
+                    refreshingState.value = false
+                }
             }
         }
     }
@@ -454,13 +469,14 @@ class TraktLibraryService @Inject constructor(
     ) {
         val before = snapshotState.value
         val beforeMetadata = metadataState.value
+        val profileId = activeProfileId()
         val optimisticSnapshot = applyMetadata(optimistic(before), beforeMetadata)
-        persistAndRestoreSnapshot(optimisticSnapshot, beforeMetadata)
-        hydrateMetadata(snapshotState.value.allEntries)
+        persistAndRestoreSnapshot(optimisticSnapshot, beforeMetadata, profileId = profileId)
+        hydrateMetadata(snapshotState.value.allEntries, profileId)
         try {
             mutation(before, beforeMetadata, optimisticSnapshot)
         } catch (error: Throwable) {
-            persistAndRestoreSnapshot(before, beforeMetadata)
+            persistAndRestoreSnapshot(before, beforeMetadata, profileId = profileId)
             throw error
         }
     }
@@ -546,10 +562,10 @@ class TraktLibraryService @Inject constructor(
         )
     }
 
-    private suspend fun fetchSnapshot(): Snapshot {
-        val watchlistEntries = fetchWatchlistEntries()
+    private suspend fun fetchSnapshot(session: TrackingAuthSession): Snapshot {
+        val watchlistEntries = fetchWatchlistEntries(session)
 
-        val personalLists = fetchPersonalLists()
+        val personalLists = fetchPersonalLists(session)
         val personalTabs = personalLists.tabs
         val personalEntriesByList = personalLists.entriesByList
 
@@ -611,15 +627,15 @@ class TraktLibraryService @Inject constructor(
         )
     }
 
-    private suspend fun fetchWatchlistEntries(): List<LibraryEntry> {
-        val moviesResponse = traktAuthService.executeAuthorizedRequest { authHeader ->
+    private suspend fun fetchWatchlistEntries(session: TrackingAuthSession): List<LibraryEntry> {
+        val moviesResponse = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
             traktApi.getWatchlist(
                 authorization = authHeader,
                 type = "movies"
             )
         } ?: throw IllegalStateException("Failed to fetch watchlist movies")
 
-        val showsResponse = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val showsResponse = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
             traktApi.getWatchlist(
                 authorization = authHeader,
                 type = "shows"
@@ -643,8 +659,8 @@ class TraktLibraryService @Inject constructor(
         val entriesByList: Map<String, List<LibraryEntry>>
     )
 
-    private suspend fun fetchPersonalLists(): PersonalListFetchResult {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+    private suspend fun fetchPersonalLists(session: TrackingAuthSession): PersonalListFetchResult {
+        val response = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
             traktApi.getUserLists(
                 authorization = authHeader,
                 id = ME_PATH
@@ -668,8 +684,8 @@ class TraktLibraryService @Inject constructor(
                         if (listIdPath.isNullOrBlank()) {
                             tab.key to emptyList()
                         } else {
-                            val movies = fetchPersonalListItems(listIdPath, "movie", tab.key)
-                            val shows = fetchPersonalListItems(listIdPath, "show", tab.key)
+                            val movies = fetchPersonalListItems(session, listIdPath, "movie", tab.key)
+                            val shows = fetchPersonalListItems(session, listIdPath, "show", tab.key)
                             tab.key to (movies + shows).sortedWith(
                                 compareBy<LibraryEntry> { it.traktRank ?: Int.MAX_VALUE }
                                     .thenByDescending { it.listedAt }
@@ -687,11 +703,12 @@ class TraktLibraryService @Inject constructor(
     }
 
     private suspend fun fetchPersonalListItems(
+        session: TrackingAuthSession,
         listIdPath: String,
         type: String,
         listKey: String
     ): List<LibraryEntry> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
             traktApi.getUserListItems(
                 authorization = authHeader,
                 id = ME_PATH,
@@ -924,11 +941,16 @@ class TraktLibraryService @Inject constructor(
 
     internal suspend fun reconcileQueuedCreateListSuccess(
         provisionalKey: String,
-        createdList: TraktListSummaryDto?
+        createdList: TraktListSummaryDto?,
+        profileId: Int = activeProfileId()
     ) {
         val createdTab = createdList?.let(::mapListTab)
         if (createdTab == null) {
-            refresh(force = true)
+            refresh(force = true, profileId = profileId)
+            return
+        }
+        if (profileId != activeProfileId()) {
+            refresh(force = true, profileId = profileId)
             return
         }
         val current = snapshotState.value
@@ -965,26 +987,34 @@ class TraktLibraryService @Inject constructor(
 
         persistAndRestoreSnapshot(
             snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
-            metadata = metadataState.value
+            metadata = metadataState.value,
+            profileId = profileId
         )
     }
 
     internal suspend fun rollbackQueuedLibraryMutation(
         rollbackState: LibraryRollbackState,
-        provisionalKeyToRemove: String? = null
+        provisionalKeyToRemove: String? = null,
+        profileId: Int = activeProfileId()
     ) {
+        if (profileId != activeProfileId()) {
+            refresh(force = true, profileId = profileId)
+            return
+        }
         if (provisionalKeyToRemove != null) {
             val current = snapshotState.value
             val updatedTabs = current.listTabs.filterNot { it.key == provisionalKeyToRemove }
             val updatedEntries = current.entriesByList.filterKeys { it != provisionalKeyToRemove }
             persistAndRestoreSnapshot(
                 snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
-                metadata = metadataState.value
+                metadata = metadataState.value,
+                profileId = profileId
             )
         } else if (rollbackState.replaceAll) {
             persistAndRestoreSnapshot(
                 snapshot = rebuildSnapshot(rollbackState.listTabs, rollbackState.entriesByList),
-                metadata = metadataState.value
+                metadata = metadataState.value,
+                profileId = profileId
             )
         } else {
             val current = snapshotState.value
@@ -999,10 +1029,11 @@ class TraktLibraryService @Inject constructor(
             }
             persistAndRestoreSnapshot(
                 snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
-                metadata = metadataState.value
+                metadata = metadataState.value,
+                profileId = profileId
             )
         }
-        refresh(force = true)
+        refresh(force = true, profileId = profileId)
     }
 
     private fun rollbackState(snapshot: Snapshot): LibraryRollbackState {
@@ -1121,7 +1152,7 @@ class TraktLibraryService @Inject constructor(
         return existingMetadata + fetchedMetadata
     }
 
-    private fun hydrateMetadata(entries: List<LibraryEntry>) {
+    private fun hydrateMetadata(entries: List<LibraryEntry>, profileId: Int = activeProfileId()) {
         entries.take(metadataHydrationLimit).forEach { entry ->
             val key = contentKey(entry.id, entry.type)
             if (metadataState.value.containsKey(key)) return@forEach
@@ -1144,7 +1175,9 @@ class TraktLibraryService @Inject constructor(
                             current + (key to metadata)
                         }
                         if (updatedMetadata != null) {
-                            persistAndRestoreSnapshot(snapshotState.value, updatedMetadata)
+                            if (profileId == activeProfileId()) {
+                                persistAndRestoreSnapshot(snapshotState.value, updatedMetadata, profileId = profileId)
+                            }
                         }
                     }
                 } finally {
@@ -1228,9 +1261,35 @@ class TraktLibraryService @Inject constructor(
         )
     }
 
+    private fun restoreSnapshotForProfile(profileId: Int) {
+        val persisted = snapshotStore.read(profileId)
+        if (persisted == null) {
+            logDebug("restore found no persisted snapshot profile=$profileId")
+            clearInMemorySnapshot()
+            return
+        }
+        restorePersistedState(persisted)
+    }
+
+    private fun persistedMetadataForProfile(profileId: Int): Map<String, LibraryMetadata> {
+        return snapshotStore.read(profileId)?.metadataByContentKey.orEmpty().mapValues { (_, metadata) ->
+            LibraryMetadata(
+                name = metadata.name,
+                poster = metadata.poster,
+                background = metadata.background,
+                logo = metadata.logo,
+                description = metadata.description,
+                releaseInfo = metadata.releaseInfo,
+                imdbRating = metadata.imdbRating,
+                genres = metadata.genres
+            )
+        }
+    }
+
     private fun persistAndRestoreSnapshot(
         snapshot: Snapshot,
-        metadata: Map<String, LibraryMetadata>
+        metadata: Map<String, LibraryMetadata>,
+        profileId: Int = activeProfileId()
     ) {
         logDebug(
             "persist start updatedAtMs=${snapshot.updatedAtMs} " +
@@ -1257,23 +1316,27 @@ class TraktLibraryService @Inject constructor(
         )
         if (!hasCache(persisted)) {
             logDebug("persist aborted no cacheable content; clearing snapshot store")
-            snapshotStore.clear()
-            clearInMemorySnapshot()
+            snapshotStore.clear(profileId)
+            if (profileId == activeProfileId()) {
+                clearInMemorySnapshot()
+            }
             return
         }
-        snapshotStore.write(persisted)
-        val restored = snapshotStore.read()
+        snapshotStore.write(persisted, profileId)
+        val restored = snapshotStore.read(profileId)
         if (restored == null) {
             logDebug("persist readback returned null; falling back to in-memory persisted snapshot")
         }
-        restorePersistedState(restored ?: persisted)
+        if (profileId == activeProfileId()) {
+            restorePersistedState(restored ?: persisted)
+        }
     }
 
     private fun clearCachedState() {
         logDebug("clear cached state")
         clearInMemorySnapshot()
         refreshingState.value = false
-        snapshotStore.clear()
+        snapshotStore.clear(activeProfileId())
     }
 
     private fun clearInMemorySnapshot() {
@@ -1303,6 +1366,8 @@ class TraktLibraryService @Inject constructor(
     private fun logDebug(message: String) {
         runCatching { Log.d(TAG, message) }
     }
+
+    private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
 
     companion object {
         private const val TAG = "TraktLibraryService"

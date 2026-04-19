@@ -48,7 +48,7 @@ class SimklLibraryMutationAdapterTest {
             failure = TraktMutationSettlement.TerminalFailure(reason = "boom", httpStatusCode = 500)
         )
 
-        coVerify(exactly = 1) { libraryService.rollbackQueuedLibraryMutation(any()) }
+        coVerify(exactly = 1) { libraryService.rollbackQueuedLibraryMutation(any(), envelope.profileId) }
     }
 
     @Test
@@ -65,7 +65,7 @@ class SimklLibraryMutationAdapterTest {
             rollbackState = SimklLibraryService.LibraryRollbackState()
         )
 
-        coEvery { remote.addToList(any()) } returns Response.success(SimklAddToListResponseDto(result = "ok"))
+        coEvery { remote.addToList(any(), any()) } returns Response.success(SimklAddToListResponseDto(result = "ok"))
 
         val result = adapter.execute(envelope)
 
@@ -88,6 +88,6 @@ class SimklLibraryMutationAdapterTest {
 
         adapter.reconcileSuccess(envelope)
 
-        coVerify(exactly = 1) { libraryService.refreshNow(force = true) }
+        coVerify(exactly = 1) { libraryService.refreshProfile(profileId = envelope.profileId, force = true) }
     }
 }

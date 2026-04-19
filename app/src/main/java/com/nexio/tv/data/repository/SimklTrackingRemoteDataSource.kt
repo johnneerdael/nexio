@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.remote.api.SimklApi
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListResponseDto
@@ -13,16 +12,17 @@ import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleResponseDto
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
 import retrofit2.Response
 
 @Singleton
 class SimklTrackingRemoteDataSource @Inject constructor(
     private val simklApi: SimklApi,
-    private val simklAuthDataStore: SimklAuthDataStore
+    private val simklAuthService: SimklAuthService
 ) {
-    suspend fun getLastActivities(): Response<SimklLastActivitiesResponseDto> {
-        return simklApi.getLastActivities(authorizationHeader())
+    suspend fun getLastActivities(session: TrackingAuthSession? = null): Response<SimklLastActivitiesResponseDto> {
+        return authorized(session) { authHeader ->
+            simklApi.getLastActivities(authHeader)
+        }
     }
 
     suspend fun getAllItemsByStatus(
@@ -30,81 +30,126 @@ class SimklTrackingRemoteDataSource @Inject constructor(
         status: String,
         dateFrom: String? = null,
         extended: String? = null,
-        episodeWatchedAt: String? = null
+        episodeWatchedAt: String? = null,
+        session: TrackingAuthSession? = null
     ): Response<List<SimklLibraryItemDto>> {
-        return simklApi.getAllItemsByStatus(
-            authorization = authorizationHeader(),
-            type = type,
-            status = status,
-            dateFrom = dateFrom,
-            extended = extended,
-            episodeWatchedAt = episodeWatchedAt
-        )
+        return authorized(session) { authHeader ->
+            simklApi.getAllItemsByStatus(
+                authorization = authHeader,
+                type = type,
+                status = status,
+                dateFrom = dateFrom,
+                extended = extended,
+                episodeWatchedAt = episodeWatchedAt
+            )
+        }
     }
 
     suspend fun getAllItemsByType(
         type: String,
         dateFrom: String? = null,
-        extended: String? = null
+        extended: String? = null,
+        session: TrackingAuthSession? = null
     ): Response<List<SimklLibraryItemDto>> {
-        return simklApi.getAllItemsByType(
-            authorization = authorizationHeader(),
-            type = type,
-            dateFrom = dateFrom,
-            extended = extended
-        )
+        return authorized(session) { authHeader ->
+            simklApi.getAllItemsByType(
+                authorization = authHeader,
+                type = type,
+                dateFrom = dateFrom,
+                extended = extended
+            )
+        }
     }
 
     suspend fun getAllItems(
         dateFrom: String? = null,
-        extended: String? = null
+        extended: String? = null,
+        session: TrackingAuthSession? = null
     ): Response<List<SimklLibraryItemDto>> {
-        return simklApi.getAllItems(
-            authorization = authorizationHeader(),
-            dateFrom = dateFrom,
-            extended = extended
-        )
+        return authorized(session) { authHeader ->
+            simklApi.getAllItems(
+                authorization = authHeader,
+                dateFrom = dateFrom,
+                extended = extended
+            )
+        }
     }
 
-    suspend fun getPlayback(type: String): Response<List<SimklPlaybackItemDto>> {
-        return simklApi.getPlayback(authorization = authorizationHeader(), type = type)
+    suspend fun getPlayback(type: String, session: TrackingAuthSession? = null): Response<List<SimklPlaybackItemDto>> {
+        return authorized(session) { authHeader -> simklApi.getPlayback(authorization = authHeader, type = type) }
     }
 
-    suspend fun deletePlayback(playbackId: Long): Response<Unit> {
-        return simklApi.deletePlayback(authorization = authorizationHeader(), playbackId = playbackId)
+    suspend fun deletePlayback(playbackId: Long, session: TrackingAuthSession? = null): Response<Unit> {
+        return authorized(session) { authHeader -> simklApi.deletePlayback(authorization = authHeader, playbackId = playbackId) }
     }
 
-    suspend fun addToList(body: SimklAddToListRequestDto): Response<SimklAddToListResponseDto> {
-        return simklApi.addToList(authorization = authorizationHeader(), body = body)
+    suspend fun addToList(
+        body: SimklAddToListRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<SimklAddToListResponseDto> {
+        return authorizedWrite(session) { authHeader -> simklApi.addToList(authorization = authHeader, body = body) }
     }
 
-    suspend fun addHistory(body: SimklHistoryAddRequestDto): Response<Unit> {
-        return simklApi.addHistory(authorization = authorizationHeader(), body = body)
+    suspend fun addHistory(body: SimklHistoryAddRequestDto, session: TrackingAuthSession? = null): Response<Unit> {
+        return authorizedWrite(session) { authHeader -> simklApi.addHistory(authorization = authHeader, body = body) }
     }
 
-    suspend fun removeFromHistoryAndLists(body: SimklHistoryRemoveRequestDto): Response<Unit> {
-        return simklApi.removeFromHistoryAndLists(authorization = authorizationHeader(), body = body)
+    suspend fun removeFromHistoryAndLists(
+        body: SimklHistoryRemoveRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<Unit> {
+        return authorizedWrite(session) { authHeader ->
+            simklApi.removeFromHistoryAndLists(authorization = authHeader, body = body)
+        }
     }
 
-    suspend fun scrobbleStart(body: SimklScrobbleRequestDto): Response<SimklScrobbleResponseDto> {
-        return simklApi.scrobbleStart(authorization = authorizationHeader(), body = body)
+    suspend fun scrobbleStart(
+        body: SimklScrobbleRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<SimklScrobbleResponseDto> {
+        return authorizedWrite(session) { authHeader -> simklApi.scrobbleStart(authorization = authHeader, body = body) }
     }
 
-    suspend fun scrobblePause(body: SimklScrobbleRequestDto): Response<SimklScrobbleResponseDto> {
-        return simklApi.scrobblePause(authorization = authorizationHeader(), body = body)
+    suspend fun scrobblePause(
+        body: SimklScrobbleRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<SimklScrobbleResponseDto> {
+        return authorizedWrite(session) { authHeader -> simklApi.scrobblePause(authorization = authHeader, body = body) }
     }
 
-    suspend fun scrobbleStop(body: SimklScrobbleRequestDto): Response<SimklScrobbleResponseDto> {
-        return simklApi.scrobbleStop(authorization = authorizationHeader(), body = body)
+    suspend fun scrobbleStop(
+        body: SimklScrobbleRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<SimklScrobbleResponseDto> {
+        return authorizedWrite(session) { authHeader -> simklApi.scrobbleStop(authorization = authHeader, body = body) }
     }
 
-    suspend fun checkin(body: SimklScrobbleRequestDto): Response<SimklScrobbleResponseDto> {
-        return simklApi.checkin(authorization = authorizationHeader(), body = body)
+    suspend fun checkin(
+        body: SimklScrobbleRequestDto,
+        session: TrackingAuthSession? = null
+    ): Response<SimklScrobbleResponseDto> {
+        return authorizedWrite(session) { authHeader -> simklApi.checkin(authorization = authHeader, body = body) }
     }
 
-    private suspend fun authorizationHeader(): String {
-        val token = simklAuthDataStore.state.first().accessToken?.trim().orEmpty()
-        require(token.isNotBlank()) { "SIMKL authentication required" }
-        return "Bearer $token"
+    private suspend fun <T> authorized(
+        session: TrackingAuthSession?,
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T> {
+        return if (session != null) {
+            simklAuthService.executeAuthorizedRequest(session, call)
+        } else {
+            simklAuthService.executeAuthorizedRequest(call)
+        } ?: throw IllegalStateException("SIMKL authentication required")
+    }
+
+    private suspend fun <T> authorizedWrite(
+        session: TrackingAuthSession?,
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T> {
+        return if (session != null) {
+            simklAuthService.executeAuthorizedWriteRequest(session, call)
+        } else {
+            simklAuthService.executeAuthorizedWriteRequest(call)
+        } ?: throw IllegalStateException("SIMKL authentication required")
     }
 }

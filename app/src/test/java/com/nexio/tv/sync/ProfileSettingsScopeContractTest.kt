@@ -780,6 +780,42 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `tracking library services enforce profile owned state and api sessions`() {
+        val traktLibrarySource = File("app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt").readText()
+        val traktLibraryAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationAdapter.kt").readText()
+        val simklLibrarySource = File("app/src/main/java/com/nexio/tv/data/repository/SimklLibraryService.kt").readText()
+        val simklLibraryAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/simkl/SimklLibraryMutationAdapter.kt").readText()
+        val simklRemoteSource = File("app/src/main/java/com/nexio/tv/data/repository/SimklTrackingRemoteDataSource.kt").readText()
+
+        assertTrue(traktLibrarySource.contains("restoreSnapshotForProfile(activeProfileId())"))
+        assertTrue(traktLibrarySource.contains("restoreSnapshotForProfile(profileId)"))
+        assertTrue(traktLibrarySource.contains("snapshotStore.read(profileId)"))
+        assertTrue(traktLibrarySource.contains("snapshotStore.write(persisted, profileId)"))
+        assertTrue(traktLibrarySource.contains("envelope.copy(profileId = activeProfileId())"))
+        assertTrue(traktLibrarySource.contains("TrackingAuthSession(TrackingProvider.TRAKT, profileId)"))
+        assertTrue(traktLibrarySource.contains("fetchSnapshot(session)"))
+        assertTrue(traktLibraryAdapterSource.contains("executor.addToWatchlist(envelope.session(), envelope.listItemsBody())"))
+        assertTrue(traktLibraryAdapterSource.contains("TrackingAuthSession("))
+        assertTrue(traktLibraryAdapterSource.contains("provider = TrackingProvider.TRAKT"))
+        assertTrue(traktLibraryAdapterSource.contains("profileId = profileId"))
+
+        assertTrue(simklLibrarySource.contains("restoreSnapshotForProfile(activeProfileId())"))
+        assertTrue(simklLibrarySource.contains("restoreSnapshotForProfile(profileId)"))
+        assertTrue(simklLibrarySource.contains("snapshotStore.read(profileId)"))
+        assertTrue(simklLibrarySource.contains("profileId = profileId"))
+        assertTrue(simklLibrarySource.contains("TrackingAuthSession(TrackingProvider.SIMKL, profileId)"))
+        assertTrue(simklLibrarySource.contains("remote.getLastActivities(session)"))
+        assertTrue(simklLibrarySource.contains("previousTimestamps = previousTimestamps"))
+        assertTrue(simklLibraryAdapterSource.contains("remote.addToList(envelope.addBody(), envelope.session())"))
+        assertTrue(simklLibraryAdapterSource.contains("provider = TrackingProvider.SIMKL"))
+        assertTrue(simklLibraryAdapterSource.contains("profileId = profileId"))
+
+        assertTrue(simklRemoteSource.contains("session: TrackingAuthSession? = null"))
+        assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthorizedRequest(session, call)"))
+        assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthorizedWriteRequest(session, call)"))
+    }
+
+    @Test
     fun `new trakt mutations are stamped with captured profile id`() {
         val scrobbleServiceSource = File("app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt").readText()
         val watchProgressSource = File("app/src/main/java/com/nexio/tv/data/repository/WatchProgressRepositoryImpl.kt").readText()
