@@ -383,6 +383,62 @@ class SubtitleTranslationServiceProviderTest {
         }
     }
 
+    @Test
+    fun protectedAssBatchTranslationSendsPlaceholderContractAndMapsItems() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":\"evt_1\",\"text\":\"Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ boos\"}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                httpClient = OkHttpClient()
+            )
+            val unit = AssSsaProtectedTranslationUnit.fromTokens(
+                id = "evt_1",
+                tokens = AssSsaTextTokenizer.tokenize("""I am {\i1}not{\i0} angry""")
+            )
+
+            val result = service.translateProtectedAssSsaUnits(
+                units = listOf(unit),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString()
+                )
+            )
+
+            assertEquals(
+                mapOf("evt_1" to "Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ boos"),
+                result.getOrThrow()
+            )
+            val body = server.takeRequest().body.readUtf8()
+            assertTrue(body.contains("Translate subtitle text from the source language to the target language."))
+            assertTrue(body.contains("⟦[A-Z_]+_[0-9]+⟧"))
+            assertTrue(body.contains("I am ⟦ASS_000⟧not⟦ASS_001⟧ angry"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
     private suspend fun assertProviderErrorDoesNotSplitAdaptiveChunks(
         statusCode: Int,
         expectedRequestCount: Int = 1
