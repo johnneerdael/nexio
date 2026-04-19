@@ -222,6 +222,7 @@ data class IntegrationSettings(
     @EncodeDefault
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
+    val kitsuAuth: KitsuAuthSyncSettings = KitsuAuthSyncSettings(),
     val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings(),
     val simklAuth: SimklAuthSyncSettings = SimklAuthSyncSettings()
 )
@@ -356,6 +357,17 @@ data class SubtitleTranslationSyncSettings(
 data class PosterRatingsSyncSettings(
     val rpdbEnabled: Boolean = false,
     val topPostersEnabled: Boolean = false
+)
+
+@Serializable
+data class KitsuAuthSyncSettings(
+    val enabled: Boolean = false,
+    val connected: Boolean = false,
+    val username: String = "",
+    val accessTokenSecretRef: String? = null,
+    val refreshTokenSecretRef: String? = null,
+    val expiresAtEpochSeconds: Long? = null,
+    val includeNsfw: Boolean = false
 )
 
 @Serializable

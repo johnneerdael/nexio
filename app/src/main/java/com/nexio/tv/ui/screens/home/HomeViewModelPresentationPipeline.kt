@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -708,7 +709,7 @@ internal fun HomeViewModel.mergeFocusedItemEnrichment(
 }
 
 internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaPreview): TvMetadataEnrichment? {
-    if (item.type.isHomeTvContent()) {
+    if (item.type.isHomeTvContent() || AnimeStremioId.parse(item.id) != null) {
         return tvMetadataRouter.fetchEnrichment(
             TvMetadataRequest(
                 contentId = item.id,
