@@ -76,3 +76,4 @@ tools/
 .tmp/
 state/
 docs/superpowers/
+.openrouter.env

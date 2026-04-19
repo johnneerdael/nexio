@@ -232,6 +232,7 @@ class PlayerRuntimeController(
     internal var sourceChipErrorDismissJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
     internal var builtInAiSubtitleTranslationJob: Job? = null
+    internal var aiSubtitleErrorDismissJob: Job? = null
     internal var addonSubtitleOverlayJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
     internal var hostActivityRef: WeakReference<Activity>? = null

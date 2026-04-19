@@ -24,7 +24,8 @@ data class SubtitleTranslationSettings(
     val apiKey: String = "",
     val model: String = SubtitleTranslationDefaults.OPENAI_MODEL,
     val baseUrl: String = SubtitleTranslationDefaults.OPENAI_BASE_URL,
-    val assSsaSystemPromptEnabled: Boolean = false
+    val assSsaSystemPromptEnabled: Boolean = false,
+    val subRipSystemPromptEnabled: Boolean = false
 )
 
 typealias GeminiSettings = SubtitleTranslationSettings

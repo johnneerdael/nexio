@@ -3,6 +3,8 @@ package com.nexio.tv.data.repository
 import android.content.Context
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
+import com.nexio.tv.domain.model.Subtitle
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -10,11 +12,14 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import kotlin.io.path.createTempDirectory
 
 class SubtitleTranslationServiceProviderTest {
     @Test
@@ -436,6 +441,103 @@ class SubtitleTranslationServiceProviderTest {
             assertTrue(body.contains("I am ⟦ASS_000⟧not⟦ASS_001⟧ angry"))
         } finally {
             server.shutdown()
+        }
+    }
+
+    @Test
+    fun subRipSystemPromptModeSendsRawSrtBatchAndWritesTranslatedSrt() = runTest {
+        val server = MockWebServer()
+        val sourceSrt = """
+            1
+            00:00:01,000 --> 00:00:02,000
+            <i>Hello there.</i>
+
+            2
+            00:00:02,500 --> 00:00:03,500
+            - Speaker 1: Come on.
+            - Speaker 2: Watch it.
+        """.trimIndent()
+        val translatedSrt = """
+            1
+            00:00:01,000 --> 00:00:02,000
+            <i>Hallo daar.</i>
+
+            2
+            00:00:02,500 --> 00:00:03,500
+            - Speaker 1: Kom op.
+            - Speaker 2: Kijk uit.
+        """.trimIndent()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return if (request.path == "/subtitle.srt") {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setBody(sourceSrt)
+                } else {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setBody(
+                            """
+                            {
+                              "choices": [
+                                {
+                                  "message": {
+                                    "content": ${JSONObject.quote(translatedSrt)}
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        )
+                }
+            }
+        }
+        server.start()
+        val cacheDir = createTempDirectory("subrip-system-prompt-test").toFile()
+        try {
+            val context = mockk<Context>()
+            every { context.cacheDir } returns cacheDir
+            val service = SubtitleTranslationService(
+                context = context,
+                httpClient = OkHttpClient()
+            )
+
+            val result = service.translateSubtitle(
+                sourceSubtitle = Subtitle(
+                    id = "sub-1",
+                    url = server.url("/subtitle.srt").toString(),
+                    lang = "en",
+                    addonName = "Addon",
+                    addonLogo = null
+                ),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "deepseek/deepseek-v3.2-exp:nitro",
+                    baseUrl = server.url("/v1").toString(),
+                    subRipSystemPromptEnabled = true
+                )
+            ).getOrThrow()
+
+            val translatedFile = File(result.translatedSubtitle.url.removePrefix("file:"))
+            assertEquals(translatedSrt + "\n", translatedFile.readText())
+
+            val translationRequest = server.takeRequest()
+            assertEquals("/subtitle.srt", translationRequest.path)
+            val providerRequest = server.takeRequest()
+            val body = providerRequest.body.readUtf8()
+            assertTrue(body.contains("SRT_TRANSLATION_ENGINE"))
+            assertTrue(body.contains("TARGET LANGUAGE: Dutch"))
+            assertTrue(body.contains("00:00:01,000 --> 00:00:02,000"))
+            assertTrue(body.contains("Hello there."))
+            assertTrue(body.contains("- Speaker 1: Come on."))
+            assertFalse(body.contains(""""items""""))
+            assertFalse(body.contains("response_format"))
+        } finally {
+            server.shutdown()
+            cacheDir.deleteRecursively()
         }
     }
 

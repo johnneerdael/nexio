@@ -1107,6 +1107,8 @@
     <string name="subtitle_translation_api_key_title">API Key</string>
     <string name="subtitle_translation_ass_ssa_system_prompt_title">ASS/SSA system prompt mode</string>
     <string name="subtitle_translation_ass_ssa_system_prompt_subtitle">Use the provider\'s raw ASS/SSA prompt path for embedded styled subtitles; falls back to the existing protected placeholder path when disabled</string>
+    <string name="subtitle_translation_subrip_system_prompt_title">SubRip system prompt mode</string>
+    <string name="subtitle_translation_subrip_system_prompt_subtitle">Use the raw SRT preservation prompt for SubRip subtitle files; falls back to text-only cue translation when disabled</string>
     <string name="subtitle_translation_missing_api_key">Enter an API key before enabling subtitle translation.</string>
     <string name="subtitle_translation_missing_model">Enter a model before enabling subtitle translation.</string>
     <string name="subtitle_translation_invalid_endpoint">Enter an HTTP or HTTPS API endpoint.</string>

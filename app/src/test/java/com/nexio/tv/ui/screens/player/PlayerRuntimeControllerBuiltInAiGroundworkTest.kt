@@ -28,6 +28,31 @@ import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.EmptyCoroutineContext
 
 class PlayerRuntimeControllerBuiltInAiGroundworkTest {
+    @Test
+    fun `built in bitmap cues block ai subtitle enablement`() {
+        assertEquals(
+            false,
+            shouldAllowBuiltInAiSubtitleEnable(
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrackIndex = 0,
+                currentCueGroupHasCues = true,
+                currentCueGroupIsTextOnly = false
+            )
+        )
+    }
+
+    @Test
+    fun `built in ai subtitle enablement is allowed before cue shape is known`() {
+        assertEquals(
+            true,
+            shouldAllowBuiltInAiSubtitleEnable(
+                selectedAddonSubtitlePresent = false,
+                selectedSubtitleTrackIndex = 0,
+                currentCueGroupHasCues = false,
+                currentCueGroupIsTextOnly = false
+            )
+        )
+    }
 
     @Test
     fun `built in translator configuration token changes when provider configuration changes`() {
