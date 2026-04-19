@@ -177,12 +177,6 @@ class TraktProgressService @Inject constructor(
         val weakDerivation: Boolean
     )
 
-    private data class NextEpisodeDecision(
-        val season: Int,
-        val episode: Int,
-        val weakDerivation: Boolean
-    )
-
     internal data class CachedNextUpValidation(
         val result: TraktNextUpValidationResult,
         val updatedAtMs: Long,
@@ -471,8 +465,8 @@ class TraktProgressService @Inject constructor(
     private val fastSyncThrottleMs = 15_000L
     private val manualRefreshSignalThrottleMs = 3_000L
     private val eventDrivenRefreshThrottleMs = 30_000L
-    private val nextUpValidationVisibleCandidateLimit = 20
-    private val nextUpValidationBudget = 5
+    private val nextUpValidationVisibleCandidateLimit = 200
+    private val nextUpValidationBudget = 200
     private val nextUpValidationPositiveTtlMs = 10 * 60_000L
     private val nextUpValidationNegativeTtlMs = 5 * 60_000L
     @Volatile
@@ -1118,12 +1112,9 @@ class TraktProgressService @Inject constructor(
             reconcileOptimistic(progressSnapshot)
         }
 
-        // Derive next-up locally from already-fetched data instead of calling
-        // GET /shows/{id}/progress/watched per show (the old rate-limit hot path).
         val watchedShows = getWatchedShowsSnapshot(forceRefresh = activityChanged || force)
         val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = false)
-        val allNextUpSnapshot = deriveNextUpFromHistory(
-            progressSnapshot = progressSnapshot,
+        val allNextUpSnapshot = deriveNextUpFromWatchedShows(
             watchedShows = watchedShows,
             hiddenProgress = hiddenProgress,
             forceValidation = activityChanged
@@ -1610,121 +1601,47 @@ class TraktProgressService @Inject constructor(
         return response.body()
     }
 
-    /**
-     * Derives the "next up" list locally from episode history and watched-shows data.
-     *
-     * This replaces the old bulk-fetch approach that called
-     * `GET /shows/{id}/progress/watched` per show (the #1 Trakt rate-limit hot path).
-     * Instead, we determine the next unwatched episode by looking at the most recently
-     * completed episode per show and incrementing, using addon metadata when available.
-     */
-    private suspend fun deriveNextUpFromHistory(
-        progressSnapshot: List<WatchProgress>,
+    private suspend fun deriveNextUpFromWatchedShows(
         watchedShows: Map<String, WatchedShowIndexEntry>,
         hiddenProgress: HiddenProgressSnapshot,
         forceValidation: Boolean = false
     ): List<NextUpEntry> {
-        val completedByShow = progressSnapshot
-            .filter { it.season != null && it.episode != null }
-            .filter { (it.progressPercent ?: 0f) >= 90f }
-            .groupBy { it.contentId }
-
-        val entries = mutableListOf<DerivedNextUpCandidate>()
-
-        for ((contentId, episodes) in completedByShow) {
-            val canonicalId = canonicalLookupKey(contentId)
-            if (canonicalId in hiddenProgress.hiddenShowIds || canonicalId in hiddenProgress.droppedShowIds) continue
-            if (contentId in hiddenProgress.hiddenShowIds || contentId in hiddenProgress.droppedShowIds) continue
-
-            val showInfo = watchedShows[contentId] ?: watchedShows[canonicalId]
-            val showName = showInfo?.name ?: contentId
-
-            val latestEpisode = episodes.maxByOrNull { it.lastWatched } ?: continue
-            val lastSeason = latestEpisode.season ?: continue
-            val lastEpisode = latestEpisode.episode ?: continue
-
-            val nextEpisodeDecision = determineNextEpisode(
-                contentId = contentId,
-                lastSeason = lastSeason,
-                lastEpisode = lastEpisode
-            ) ?: continue
-            val nextSeason = nextEpisodeDecision.season
-            val nextEpisode = nextEpisodeDecision.episode
-
-            if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(contentId, nextSeason))) continue
-
-            val episodeInfo = resolveEpisodeInfo(contentId, nextSeason, nextEpisode)
-
-            entries.add(
+        val entries = watchedShows.values
+            .asSequence()
+            .filter { showInfo ->
+                val contentId = showInfo.contentId
+                val canonicalId = canonicalLookupKey(contentId)
+                contentId !in hiddenProgress.hiddenShowIds &&
+                    contentId !in hiddenProgress.droppedShowIds &&
+                    canonicalId !in hiddenProgress.hiddenShowIds &&
+                    canonicalId !in hiddenProgress.droppedShowIds
+            }
+            .sortedByDescending { it.lastWatchedAtMs }
+            .map { showInfo ->
                 DerivedNextUpCandidate(
                     entry = NextUpEntry(
-                        contentId = contentId,
+                        contentId = showInfo.contentId,
                         contentType = "series",
-                        name = showName,
-                        season = nextSeason,
-                        episode = nextEpisode,
+                        name = showInfo.name,
+                        season = 0,
+                        episode = 0,
                         episodeTitle = null,
-                        videoId = episodeInfo.videoId,
-                        firstAired = episodeInfo.released,
+                        videoId = showInfo.contentId,
+                        firstAired = null,
                         firstAiredMs = 0L,
-                        activityAtMs = latestEpisode.lastWatched,
-                        traktShowId = showInfo?.traktShowId ?: latestEpisode.traktShowId,
+                        activityAtMs = showInfo.lastWatchedAtMs,
+                        traktShowId = showInfo.traktShowId,
                         traktEpisodeId = null
                     ),
-                    weakDerivation = nextEpisodeDecision.weakDerivation
+                    weakDerivation = true
                 )
-            )
-        }
+            }
+            .toList()
 
         return validateNextUpCandidates(
-            candidates = entries.sortedByDescending { it.entry.activityAtMs },
+            candidates = entries,
             hiddenProgress = hiddenProgress,
             forceValidation = forceValidation
-        )
-    }
-
-    /**
-     * Determines the next episode after [lastSeason]/[lastEpisode].
-     * Uses addon metadata to find the exact next episode when available.
-     * Returns null if the show appears completed (no more episodes in metadata).
-     * Falls back to (lastSeason, lastEpisode+1) when no metadata is available.
-     */
-    private fun determineNextEpisode(
-        contentId: String,
-        lastSeason: Int,
-        lastEpisode: Int
-    ): NextEpisodeDecision? {
-        val metadata = metadataState.value[contentId]
-        if (metadata != null && metadata.episodes.isNotEmpty()) {
-            val nextInSeason = metadata.episodes.keys
-                .filter { (s, e) -> s == lastSeason && e > lastEpisode }
-                .minByOrNull { (_, e) -> e }
-            if (nextInSeason != null) {
-                return NextEpisodeDecision(
-                    season = nextInSeason.first,
-                    episode = nextInSeason.second,
-                    weakDerivation = false
-                )
-            }
-
-            val nextSeasonEp = metadata.episodes.keys
-                .filter { (s, _) -> s > lastSeason }
-                .minByOrNull { (s, e) -> s * 10000 + e }
-            if (nextSeasonEp != null) {
-                return NextEpisodeDecision(
-                    season = nextSeasonEp.first,
-                    episode = nextSeasonEp.second,
-                    weakDerivation = false
-                )
-            }
-
-            return null
-        }
-
-        return NextEpisodeDecision(
-            season = lastSeason,
-            episode = lastEpisode + 1,
-            weakDerivation = true
         )
     }
 

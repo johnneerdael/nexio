@@ -49,6 +49,25 @@ class TraktProgressRuntimeStateTest {
     }
 
     @Test
+    fun `show continue watching uses watched shows as progress validation candidates`() {
+        val source = source()
+
+        assertTrue(source.contains("deriveNextUpFromWatchedShows("))
+        assertTrue(source.contains("watchedShows.values"))
+        assertTrue(source.contains("weakDerivation = true"))
+        assertFalse(source.contains("deriveNextUpFromHistory("))
+        assertFalse(source.contains("determineNextEpisode("))
+    }
+
+    @Test
+    fun `show continue watching validates enough watched shows to match Trakt web progress`() {
+        val source = source()
+
+        assertTrue(source.contains("private val nextUpValidationVisibleCandidateLimit = 200"))
+        assertTrue(source.contains("private val nextUpValidationBudget = 200"))
+    }
+
+    @Test
     fun `episode history prefers highest episode when season mark timestamps match`() {
         val earlyEpisode = historyProgress(season = 12, episode = 2, lastWatched = 1_000L)
         val seasonFinale = historyProgress(season = 12, episode = 24, lastWatched = 1_000L)
