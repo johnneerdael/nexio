@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
@@ -153,6 +154,76 @@ class CatalogPlanTest {
         assertEquals(TraktCatalogIds.TRENDING_MOVIES, row.catalogId)
         assertFalse(row.isLoading)
         assertEquals(1, row.items.size)
+    }
+
+    @Test
+    fun `trakt custom list snapshot does not publish when list key is not selected`() {
+        val snapshot = TraktDiscoverySnapshot(
+            customListCatalogs = listOf(
+                TraktCustomListCatalog(
+                    key = "me/favorite-sci-fi",
+                    catalogId = "trakt_list_me_favorite_sci_fi_movies",
+                    catalogName = "Favorite Sci-Fi (Movies)",
+                    type = ContentType.MOVIE,
+                    items = listOf(sampleItem())
+                )
+            )
+        )
+
+        val plan = buildConfiguredCatalogPlan(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(
+                enabledCatalogs = emptySet(),
+                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER,
+                selectedPopularListKeys = emptySet()
+            ),
+            traktSnapshot = snapshot,
+            hasTraktUpNextItems = false,
+            simklPrefs = SimklCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            simklSnapshot = SimklDiscoverySnapshot(),
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertTrue(plan.publishableOrderKeys.isEmpty())
+        assertTrue(plan.rails.isEmpty())
+    }
+
+    @Test
+    fun `trakt personal custom list publishes after manual selection`() {
+        val snapshot = TraktDiscoverySnapshot(
+            customListCatalogs = listOf(
+                TraktCustomListCatalog(
+                    key = "me/favorite-sci-fi",
+                    catalogId = "trakt_list_me_favorite_sci_fi_movies",
+                    catalogName = "Favorite Sci-Fi (Movies)",
+                    type = ContentType.MOVIE,
+                    items = listOf(sampleItem())
+                )
+            )
+        )
+
+        val plan = buildConfiguredCatalogPlan(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(
+                enabledCatalogs = emptySet(),
+                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER,
+                selectedPopularListKeys = setOf("me/favorite-sci-fi")
+            ),
+            traktSnapshot = snapshot,
+            hasTraktUpNextItems = false,
+            simklPrefs = SimklCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            simklSnapshot = SimklDiscoverySnapshot(),
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(listOf("me/favorite-sci-fi"), plan.publishableOrderKeys)
+        assertEquals("trakt_list_me_favorite_sci_fi_movies", plan.rails.single().toPopulatedRows().single().catalogId)
     }
 
     private fun sampleItem(): MetaPreview {
