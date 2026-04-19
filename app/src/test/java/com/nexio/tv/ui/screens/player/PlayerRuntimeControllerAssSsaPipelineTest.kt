@@ -88,14 +88,36 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun overlayProviderNullFallsBackWithoutAssSsaPipeline() {
+    fun overlayProviderNullWaitsForRetryWithoutDisablingAssSsaPipeline() {
         val decision = resolveAssSsaPipelineOverlayDecision(
             requestedUseAssSsaPipeline = true,
             overlayAttached = false
         )
 
         assertFalse(decision.useAssSsaPipeline)
-        assertTrue(decision.disableOverrideForCurrentStream)
+        assertFalse(decision.disableOverrideForCurrentStream)
+    }
+
+    @Test
+    fun overlayAvailabilityRetriesPendingAssSsaPipeline() {
+        assertTrue(
+            shouldRetryAssSsaPipelineWhenOverlayAvailable(
+                overrideForCurrentStream = true,
+                activePlayerUsesAssSsaRenderer = false,
+                switchInFlight = false,
+                fallbackHandled = false,
+                overlayAvailable = true
+            )
+        )
+        assertFalse(
+            shouldRetryAssSsaPipelineWhenOverlayAvailable(
+                overrideForCurrentStream = true,
+                activePlayerUsesAssSsaRenderer = false,
+                switchInFlight = false,
+                fallbackHandled = true,
+                overlayAvailable = true
+            )
+        )
     }
 
     @Test
