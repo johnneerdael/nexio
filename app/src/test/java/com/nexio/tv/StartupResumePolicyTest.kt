@@ -100,4 +100,36 @@ class StartupResumePolicyTest {
             )
         )
     }
+
+    @Test
+    fun `startup profile selection shows only before profile gate is passed`() {
+        assertTrue(
+            shouldShowStartupProfileSelection(
+                hasPassedProfileSelectionGate = false,
+                profileCount = 2
+            )
+        )
+        assertFalse(
+            shouldShowStartupProfileSelection(
+                hasPassedProfileSelectionGate = true,
+                profileCount = 2
+            )
+        )
+    }
+
+    @Test
+    fun `startup profile selection stays hidden when there is one or no profiles`() {
+        assertFalse(
+            shouldShowStartupProfileSelection(
+                hasPassedProfileSelectionGate = false,
+                profileCount = 1
+            )
+        )
+        assertFalse(
+            shouldShowStartupProfileSelection(
+                hasPassedProfileSelectionGate = false,
+                profileCount = 0
+            )
+        )
+    }
 }

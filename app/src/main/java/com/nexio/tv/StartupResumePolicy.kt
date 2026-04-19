@@ -37,3 +37,10 @@ internal fun shouldShowAuthQrOnStartup(
         authState is AuthState.SignedOut &&
         !onboardingCompletedThisSession
 }
+
+internal fun shouldShowStartupProfileSelection(
+    hasPassedProfileSelectionGate: Boolean,
+    profileCount: Int
+): Boolean {
+    return !hasPassedProfileSelectionGate && profileCount > 1
+}
