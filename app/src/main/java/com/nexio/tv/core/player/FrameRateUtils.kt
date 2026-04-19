@@ -7,9 +7,6 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.Display
-import androidx.media3.decoder.ffmpeg.FfmpegLibrary
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -436,26 +433,15 @@ object FrameRateUtils {
         return frameRate.isFinite() && frameRate in MIN_VALID_VIDEO_FPS..MAX_VALID_VIDEO_FPS
     }
 
-    private fun parseFfmpegStreamMetadata(json: String?): FrameRateDetection? {
-        if (json.isNullOrBlank()) return null
-        val streams = runCatching {
-            JsonParser.parseString(json)
-                .asJsonObject
-                .getAsJsonArray("streams")
-                ?.mapNotNull { element ->
-                    element?.takeIf { it.isJsonObject }?.asJsonObject
-                }
-                .orEmpty()
-        }.getOrNull() ?: return null
-
-        val video = streams.firstOrNull { stream ->
-            stream.stringOrNull("codec_type").equals("video", ignoreCase = true)
+    private fun parseFfmpegStreamMetadata(metadata: FfmpegStreamMetadataProbeResult?): FrameRateDetection? {
+        val video = metadata?.streams?.firstOrNull { stream ->
+            stream.codecType.equals("video", ignoreCase = true)
         } ?: return null
 
-        val width = video.intOrNull("width")?.takeIf { it > 0 }
-        val height = video.intOrNull("height")?.takeIf { it > 0 }
-        val measured = parseProbeRational(video.stringOrNull("avg_frame_rate"))
-            ?: parseProbeRational(video.stringOrNull("r_frame_rate"))
+        val width = video.width?.takeIf { it > 0 }
+        val height = video.height?.takeIf { it > 0 }
+        val measured = parseProbeRational(video.avgFrameRate)
+            ?: parseProbeRational(video.rFrameRate)
             ?: return null
 
         return FrameRateDetection(
@@ -470,15 +456,9 @@ object FrameRateUtils {
         sourceUrl: String,
         headers: Map<String, String> = emptyMap()
     ): FrameRateDetection? {
-        val headerBlob = headers
-            .filterKeys { !it.equals("Range", ignoreCase = true) }
-            .entries
-            .joinToString(separator = "") { (key, value) -> "$key: $value\r\n" }
-            .ifBlank { null }
-
         return runCatching {
             parseFfmpegStreamMetadata(
-                FfmpegLibrary.probeDolbyVisionStreamMetadataJson(sourceUrl, headerBlob)
+                FfmpegStreamMetadataProbe.probeBlocking(sourceUrl, headers)
             )
         }.getOrElse { error ->
             Log.w(TAG, "FFmpeg frame rate probe failed: ${error.message}")
@@ -635,25 +615,11 @@ object FrameRateUtils {
     internal fun parseProbeRationalForTests(value: String?): Float? = parseProbeRational(value)
 
     internal fun parseFfmpegStreamMetadataForTests(json: String?): FrameRateDetection? =
-        parseFfmpegStreamMetadata(json)
+        parseFfmpegStreamMetadata(FfmpegStreamMetadataProbe.parse(json))
 
     internal fun resetDisplayModeSessionStateForTests() {
         blockDisplayModeChangesOutsideMainPlayer = true
         mainPlayerDisplayModeSessionActive = false
         originalModeId = null
     }
-}
-
-private fun JsonObject.stringOrNull(name: String): String? {
-    return get(name)
-        ?.takeUnless { it.isJsonNull }
-        ?.runCatching { asString }
-        ?.getOrNull()
-}
-
-private fun JsonObject.intOrNull(name: String): Int? {
-    return get(name)
-        ?.takeUnless { it.isJsonNull }
-        ?.runCatching { asInt }
-        ?.getOrNull()
 }

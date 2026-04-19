@@ -88,13 +88,45 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun overlayProviderNullWaitsForRetryWithoutDisablingAssSsaPipeline() {
+    fun startupProbeRunsOnlyBeforeFirstDecisionForProgressiveStreams() {
+        assertTrue(
+            shouldRunEmbeddedAssSsaStartupProbe(
+                nativeAssSsaAvailable = true,
+                pipelineOverrideForCurrentStream = null,
+                url = "https://example.test/video.mkv"
+            )
+        )
+        assertFalse(
+            shouldRunEmbeddedAssSsaStartupProbe(
+                nativeAssSsaAvailable = false,
+                pipelineOverrideForCurrentStream = null,
+                url = "https://example.test/video.mkv"
+            )
+        )
+        assertFalse(
+            shouldRunEmbeddedAssSsaStartupProbe(
+                nativeAssSsaAvailable = true,
+                pipelineOverrideForCurrentStream = true,
+                url = "https://example.test/video.mkv"
+            )
+        )
+        assertFalse(
+            shouldRunEmbeddedAssSsaStartupProbe(
+                nativeAssSsaAvailable = true,
+                pipelineOverrideForCurrentStream = null,
+                url = "https://example.test/playlist.m3u8"
+            )
+        )
+    }
+
+    @Test
+    fun overlayProviderNullStillStartsAssSsaPipeline() {
         val decision = resolveAssSsaPipelineOverlayDecision(
             requestedUseAssSsaPipeline = true,
             overlayAttached = false
         )
 
-        assertFalse(decision.useAssSsaPipeline)
+        assertTrue(decision.useAssSsaPipeline)
         assertFalse(decision.disableOverrideForCurrentStream)
     }
 
@@ -120,6 +152,18 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
                 translationApiKeyPresent = true
             )
         )
+    }
+
+    @Test
+    fun assSsaTrackSelectionAfterPlayerInitDoesNotReinitializePlayback() {
+        val adjustment = resolveAssSsaPipelineTrackAdjustment(
+            desiredUseAssSsaPipeline = true,
+            activePlayerUsesAssSsaRenderer = false,
+            fallbackHandled = false
+        )
+
+        assertEquals(true, adjustment.overrideForCurrentStream)
+        assertFalse(adjustment.shouldReinitializePlayer)
     }
 
     private fun tracksFor(format: Format, selected: Boolean): Tracks {

@@ -650,27 +650,17 @@ internal fun PlayerRuntimeController.maybeAdjustAssSsaPipelineForTracks(tracks: 
     if (assSsaPipelineSwitchInFlight) return
 
     val desiredUseAssSsaPipeline = tracks.hasSelectedAssSsaTextTrack()
-    if (desiredUseAssSsaPipeline && assSsaPipelineFallbackHandledForCurrentStream) {
-        assSsaPipelineOverrideForCurrentStream = false
-        return
-    }
-    if (desiredUseAssSsaPipeline == activePlayerUsesAssSsaRenderer) return
-
-    val player = _exoPlayer ?: return
-    val resumePosition = player.currentPosition.takeIf { it > 0L }
-    assSsaPipelineOverrideForCurrentStream = desiredUseAssSsaPipeline
-    assSsaPipelineSwitchInFlight = true
-
-    _uiState.update { state ->
-        state.copy(
-            pendingSeekPosition = resumePosition ?: state.pendingSeekPosition,
-            showLoadingOverlay = state.loadingOverlayEnabled
+    val adjustment = resolveAssSsaPipelineTrackAdjustment(
+        desiredUseAssSsaPipeline = desiredUseAssSsaPipeline,
+        activePlayerUsesAssSsaRenderer = activePlayerUsesAssSsaRenderer,
+        fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream
+    )
+    adjustment.overrideForCurrentStream?.let { assSsaPipelineOverrideForCurrentStream = it }
+    if (desiredUseAssSsaPipeline && !activePlayerUsesAssSsaRenderer && !adjustment.shouldReinitializePlayer) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "ASS_SSA_RENDER: selected after player init; keeping current playback to avoid reinitialization"
         )
-    }
-
-    scope.launch {
-        releasePlayer()
-        initializePlayer(currentStreamUrl, currentHeaders)
     }
 }
 

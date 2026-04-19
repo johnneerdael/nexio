@@ -47,6 +47,7 @@ import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
+import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.core.player.queryDisplayHdrCapabilities
 import com.nexio.tv.core.player.resolveDolbyVisionBaseLayerDecision
@@ -76,6 +77,7 @@ import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
+private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
 
 internal data class StartupSubtitlePreparation(
     val fetchedSubtitles: List<Subtitle>,
@@ -114,13 +116,41 @@ internal data class AssSsaPipelineOverlayDecision(
     val disableOverrideForCurrentStream: Boolean
 )
 
+internal data class AssSsaPipelineTrackAdjustment(
+    val overrideForCurrentStream: Boolean?,
+    val shouldReinitializePlayer: Boolean
+)
+
 internal fun resolveAssSsaPipelineOverlayDecision(
     requestedUseAssSsaPipeline: Boolean,
     overlayAttached: Boolean
 ): AssSsaPipelineOverlayDecision {
     return AssSsaPipelineOverlayDecision(
-        useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
+        useAssSsaPipeline = requestedUseAssSsaPipeline,
         disableOverrideForCurrentStream = false
+    )
+}
+
+internal fun resolveAssSsaPipelineTrackAdjustment(
+    desiredUseAssSsaPipeline: Boolean,
+    activePlayerUsesAssSsaRenderer: Boolean,
+    fallbackHandled: Boolean
+): AssSsaPipelineTrackAdjustment {
+    if (desiredUseAssSsaPipeline && fallbackHandled) {
+        return AssSsaPipelineTrackAdjustment(
+            overrideForCurrentStream = false,
+            shouldReinitializePlayer = false
+        )
+    }
+    if (desiredUseAssSsaPipeline == activePlayerUsesAssSsaRenderer) {
+        return AssSsaPipelineTrackAdjustment(
+            overrideForCurrentStream = null,
+            shouldReinitializePlayer = false
+        )
+    }
+    return AssSsaPipelineTrackAdjustment(
+        overrideForCurrentStream = desiredUseAssSsaPipeline,
+        shouldReinitializePlayer = false
     )
 }
 
@@ -128,6 +158,7 @@ internal fun PlayerRuntimeController.setAssSsaRenderOverlayViewProvider(
     provider: (() -> AssSsaRenderOverlayView?)?
 ) {
     assSsaOverlayViewProvider = provider
+    assSsaRenderController?.setOverlayView(provider?.invoke())
 }
 
 internal fun shouldEnableAssSsaSampleTranslation(
@@ -243,6 +274,30 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             }
             val retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
+            if (shouldRunEmbeddedAssSsaStartupProbe(
+                    nativeAssSsaAvailable = AssSsaNativeBridge.nativeAvailable,
+                    pipelineOverrideForCurrentStream = assSsaPipelineOverrideForCurrentStream,
+                    url = url
+                )
+            ) {
+                val metadata = withTimeoutOrNull(ASS_SSA_STARTUP_PROBE_TIMEOUT_MS) {
+                    FfmpegStreamMetadataProbe.probe(url = url, headers = headers)
+                }
+                if (metadata?.hasEmbeddedAssSsaSubtitleStream == true) {
+                    assSsaPipelineOverrideForCurrentStream = true
+                    Log.i(
+                        PlayerRuntimeController.TAG,
+                        "ASS_SSA_RENDER: FFmpeg startup probe detected embedded ASS/SSA " +
+                            "host=${url.safeHost()}"
+                    )
+                } else {
+                    Log.d(
+                        PlayerRuntimeController.TAG,
+                        "ASS_SSA_RENDER: FFmpeg startup probe did not detect embedded ASS/SSA " +
+                            "host=${url.safeHost()}"
+                    )
+                }
+            }
             val requestedUseAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
                 assSsaPipelineOverrideForCurrentStream == true
             if (!AssSsaNativeBridge.nativeAvailable &&
@@ -276,7 +331,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             } else if (requestedUseAssSsaPipeline && assSsaOverlayView == null) {
                 Log.w(
                     PlayerRuntimeController.TAG,
-                    "ASS_SSA_RENDER: overlay view unavailable; waiting for overlay attachment " +
+                    "ASS_SSA_RENDER: overlay view unavailable; starting pipeline and waiting for attachment " +
                         "host=${url.safeHost()}"
                 )
             }
@@ -587,7 +642,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             assSsaRenderController?.release()
             assSsaRenderController = null
-            val assController = if (useAssSsaPipeline && assSsaOverlayView != null) {
+            val assController = if (useAssSsaPipeline) {
                 AssSsaRenderController(
                     context = context,
                     overlayView = assSsaOverlayView,
@@ -1796,6 +1851,24 @@ private fun PlaybackException.isMediaPeriodHolderStateCrash(): Boolean {
 
 private fun String.safeHost(): String {
     return runCatching { Uri.parse(this).host ?: "unknown" }.getOrDefault("unknown")
+}
+
+internal fun shouldRunEmbeddedAssSsaStartupProbe(
+    nativeAssSsaAvailable: Boolean,
+    pipelineOverrideForCurrentStream: Boolean?,
+    url: String
+): Boolean {
+    return nativeAssSsaAvailable &&
+        pipelineOverrideForCurrentStream == null &&
+        shouldProbeEmbeddedAssSsaBeforePlayerInit(url)
+}
+
+private fun shouldProbeEmbeddedAssSsaBeforePlayerInit(url: String): Boolean {
+    val normalized = url
+        .substringBefore('?')
+        .substringBefore('#')
+        .lowercase(Locale.US)
+    return !normalized.endsWith(".m3u8") && !normalized.endsWith(".mpd")
 }
 
 private fun createDolbyVisionFallbackCodecSelector(
