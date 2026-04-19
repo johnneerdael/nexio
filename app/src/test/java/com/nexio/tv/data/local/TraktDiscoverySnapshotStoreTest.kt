@@ -9,6 +9,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class TraktDiscoverySnapshotStoreTest {
@@ -31,6 +32,47 @@ class TraktDiscoverySnapshotStoreTest {
 
         assertEquals(profileOne.trendingMovieItems.single().id, store.read(profileId = 1)?.trendingMovieItems?.single()?.id)
         assertEquals(profileTwo.trendingMovieItems.single().id, store.read(profileId = 2)?.trendingMovieItems?.single()?.id)
+    }
+
+    @Test
+    fun `read sanitizes null popular list fields before snapshot hashing`() {
+        val prefsByName = linkedMapOf<String, InMemorySharedPreferences>()
+        val context = mockContext(prefsByName)
+        val store = TraktDiscoverySnapshotStore(context)
+        prefsByName.getOrPut(TraktDiscoverySnapshotStore.BASE_PREFS_NAME) { InMemorySharedPreferences() }
+            .edit()
+            .putString(
+                "snapshot",
+                """
+                {
+                  "popularLists": [
+                    {
+                      "key": "user/list-one",
+                      "userId": "user",
+                      "listId": "list-one",
+                      "catalogIdBase": null,
+                      "title": null,
+                      "itemCount": 4
+                    },
+                    {
+                      "key": "broken",
+                      "userId": null,
+                      "listId": null
+                    }
+                  ],
+                  "updatedAtMs": 123
+                }
+                """.trimIndent()
+            )
+            .commit()
+
+        val snapshot = store.read(profileId = 1)
+
+        assertNotNull(snapshot)
+        assertEquals(1, snapshot?.popularLists?.size)
+        assertEquals("trakt_list_user_list_one", snapshot?.popularLists?.single()?.catalogIdBase)
+        assertEquals("user/list-one", snapshot?.popularLists?.single()?.title)
+        snapshot.hashCode()
     }
 
     private fun mockContext(prefsByName: MutableMap<String, InMemorySharedPreferences>): Context {

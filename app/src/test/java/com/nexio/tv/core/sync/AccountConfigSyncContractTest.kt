@@ -20,6 +20,7 @@ import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
@@ -30,6 +31,7 @@ import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
+import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ImdbSettings
@@ -50,6 +52,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -128,10 +131,29 @@ class AccountConfigSyncContractTest {
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next", "trakt_recommended_movies"),
             traktSelectedPopularListKeys = listOf("popular-a"),
+            traktPinnedListOptions = listOf(
+                TraktPinnedListOptionSync(
+                    key = "user/list-a",
+                    userId = "user",
+                    listId = "list-a",
+                    catalogIdBase = "trakt_list_user_list_a",
+                    title = "List A",
+                    itemCount = 12
+                )
+            ),
             simklCatalogEnabledSet = listOf("simkl_tv_trending_today", "simkl_movie_trending_today"),
             simklCatalogOrder = listOf("simkl_tv_trending_today", "simkl_movie_trending_today"),
             mdbListHiddenPersonalListKeys = listOf("personal-hidden"),
             mdbListSelectedTopListKeys = listOf("top-selected"),
+            mdbListPinnedTopListOptions = listOf(
+                MDBListPinnedListOptionSync(
+                    key = "top:owner/list-b",
+                    owner = "owner",
+                    listId = "list-b",
+                    title = "List B",
+                    itemCount = 7
+                )
+            ),
             mdbListCatalogOrder = listOf("mdb-top", "mdb-personal"),
             trackingProvider = TrackingProvider.SIMKL,
             formatter = FormatterSyncSettings(
@@ -185,6 +207,18 @@ class AccountConfigSyncContractTest {
         )
         assertTrue(json["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.containsKey("torBox") == true)
         assertTrue(json["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.containsKey("easyDebrid") == true)
+        assertEquals(
+            "\"List A\"",
+            json["catalogs"]?.jsonObject?.get("trakt")?.jsonObject
+                ?.get("pinnedListOptions")?.jsonArray?.first()?.jsonObject
+                ?.get("title")?.toString()
+        )
+        assertEquals(
+            "\"List B\"",
+            json["catalogs"]?.jsonObject?.get("mdblist")?.jsonObject
+                ?.get("pinnedTopListOptions")?.jsonArray?.first()?.jsonObject
+                ?.get("title")?.toString()
+        )
         assertFalse(json.containsKey("appearance"))
         assertFalse(json.containsKey("layout"))
         assertFalse(json.containsKey("trakt"))

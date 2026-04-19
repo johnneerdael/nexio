@@ -3,6 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
@@ -116,7 +117,7 @@ class TraktDiscoverySnapshotStore private constructor(
             popularMovieItems = decodeArray(root, "popularMovieItems"),
             popularShowItems = decodeArray(root, "popularShowItems"),
             customListCatalogs = decodeArray(root, "customListCatalogs"),
-            popularLists = decodeArray(root, "popularLists"),
+            popularLists = decodePopularLists(root),
             recommendationRefsByStatusKey = decodeMap(root, "recommendationRefsByStatusKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
@@ -147,9 +148,65 @@ class TraktDiscoverySnapshotStore private constructor(
         return gson.fromJson<List<T>>(array, type) ?: emptyList()
     }
 
+    private fun decodePopularLists(root: JsonObject): List<TraktPopularListOption> {
+        val array = root.getAsJsonArray("popularLists") ?: return emptyList()
+        return array.mapNotNull { element ->
+            val obj = element.asJsonObjectOrNull() ?: return@mapNotNull null
+            val key = obj.cleanString("key")
+            val userId = obj.cleanString("userId").ifBlank {
+                key.substringBefore('/').trim()
+            }
+            val listId = obj.cleanString("listId").ifBlank {
+                key.substringAfter('/', missingDelimiterValue = "").trim()
+            }
+            val normalizedKey = key.ifBlank {
+                if (userId.isNotBlank() && listId.isNotBlank()) "$userId/$listId" else ""
+            }
+            if (normalizedKey.isBlank() || userId.isBlank() || listId.isBlank()) {
+                return@mapNotNull null
+            }
+
+            TraktPopularListOption(
+                key = normalizedKey,
+                userId = userId,
+                listId = listId,
+                catalogIdBase = obj.cleanString("catalogIdBase").ifBlank {
+                    "trakt_list_${slugify(normalizedKey)}"
+                },
+                title = obj.cleanString("title").ifBlank { normalizedKey },
+                itemCount = obj.cleanInt("itemCount")
+            )
+        }
+    }
+
     private fun decodeMap(root: JsonObject, key: String): Map<String, TraktRecommendationRef> {
         val value = root.get(key) ?: return emptyMap()
         val type = object : TypeToken<Map<String, TraktRecommendationRef>>() {}.type
         return gson.fromJson<Map<String, TraktRecommendationRef>>(value, type) ?: emptyMap()
+    }
+
+    private fun JsonElement.asJsonObjectOrNull(): JsonObject? =
+        takeIf { it.isJsonObject }?.asJsonObject
+
+    private fun JsonObject.cleanString(key: String): String {
+        val value = get(key) ?: return ""
+        if (value.isJsonNull) return ""
+        return runCatching { value.asString.trim() }
+            .getOrDefault("")
+            .takeUnless { it == "undefined" || it == "null" }
+            ?: ""
+    }
+
+    private fun JsonObject.cleanInt(key: String): Int {
+        val value = get(key) ?: return 0
+        if (value.isJsonNull) return 0
+        return runCatching { value.asInt }.getOrDefault(0).coerceAtLeast(0)
+    }
+
+    private fun slugify(value: String): String {
+        return value.lowercase()
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .ifBlank { "custom" }
     }
 }

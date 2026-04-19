@@ -2640,6 +2640,11 @@ private fun buildSyntheticMDBListRows(
                 .filter { prefs.isTopListSelected(it.key) }
                 .map { it.key }
         )
+        addAll(
+            snapshot.customListCatalogs
+                .filter { it.key in prefs.selectedTopListKeys }
+                .map { it.key }
+        )
     }
     if (availableKeys.isEmpty()) return emptyList()
 
@@ -2707,6 +2712,7 @@ internal fun shouldRefreshMDBListDiscoveryForState(
     val requiredKeys = buildSet {
         addAll(snapshot.personalLists.filter { prefs.isPersonalListEnabled(it.key) }.map { it.key })
         addAll(snapshot.topLists.filter { prefs.isTopListSelected(it.key) }.map { it.key })
+        addAll(prefs.selectedTopListKeys)
     }
     if (requiredKeys.isEmpty()) {
         return enabledPersonalCount == 0 && selectedTopCount > 0

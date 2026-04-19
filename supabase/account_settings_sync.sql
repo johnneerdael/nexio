@@ -1500,6 +1500,44 @@ begin
 end;
 $$;
 
+create or replace function public.account_settings_preserve_catalog_option_pins(
+  p_existing_payload jsonb,
+  p_incoming_payload jsonb,
+  p_normalized_payload jsonb
+)
+returns jsonb
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_result jsonb := coalesce(p_normalized_payload, '{}'::jsonb);
+  v_existing jsonb := coalesce(p_existing_payload, '{}'::jsonb);
+  v_incoming jsonb := coalesce(p_incoming_payload, '{}'::jsonb);
+begin
+  if v_incoming#>'{catalogs,trakt,pinnedListOptions}' is null
+      and v_existing#>'{catalogs,trakt,pinnedListOptions}' is not null then
+    v_result := jsonb_set(
+      v_result,
+      '{catalogs,trakt,pinnedListOptions}',
+      v_existing#>'{catalogs,trakt,pinnedListOptions}',
+      true
+    );
+  end if;
+
+  if v_incoming#>'{catalogs,mdblist,pinnedTopListOptions}' is null
+      and v_existing#>'{catalogs,mdblist,pinnedTopListOptions}' is not null then
+    v_result := jsonb_set(
+      v_result,
+      '{catalogs,mdblist,pinnedTopListOptions}',
+      v_existing#>'{catalogs,mdblist,pinnedTopListOptions}',
+      true
+    );
+  end if;
+
+  return v_result;
+end;
+$$;
+
 create or replace function public.sync_push_account_settings_v7(
   p_settings_payload jsonb,
   p_base_revision bigint,
@@ -1633,6 +1671,11 @@ begin
     p_existing_payload => v_current_payload,
     p_contract_version => 6
   );
+  v_incoming_payload := public.account_settings_preserve_catalog_option_pins(
+    p_existing_payload => v_current_payload,
+    p_incoming_payload => p_settings_payload,
+    p_normalized_payload => v_incoming_payload
+  );
 
   if v_current_revision = coalesce(p_base_revision, 0) then
     v_next_payload := v_incoming_payload;
@@ -1648,6 +1691,11 @@ begin
       p_payload => v_merged_payload,
       p_existing_payload => v_current_payload,
       p_contract_version => 6
+    );
+    v_next_payload := public.account_settings_preserve_catalog_option_pins(
+      p_existing_payload => v_current_payload,
+      p_incoming_payload => v_merged_payload,
+      p_normalized_payload => v_next_payload
     );
   end if;
 
@@ -1739,3 +1787,4 @@ revoke all on function public.account_settings_path_array(text) from public;
 revoke all on function public.account_settings_path_value(jsonb, text) from public;
 revoke all on function public.account_settings_paths_overlap(text, text) from public;
 revoke all on function public.account_settings_merge_changed_paths(jsonb, jsonb, text[]) from public;
+revoke all on function public.account_settings_preserve_catalog_option_pins(jsonb, jsonb, jsonb) from public;
