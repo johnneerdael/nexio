@@ -306,17 +306,26 @@ class CatalogOrderViewModel @Inject constructor(
         addBuiltIn(TraktCatalogIds.RECOMMENDED_SHOWS, "Trakt Recommended Shows", "series")
         addBuiltIn(TraktCatalogIds.CALENDAR, "Trakt Calendar (Next 7 Days)", "series")
 
-        snapshot.popularLists
-            .filter { it.key in prefs.selectedPopularListKeys }
-            .forEach { list ->
+        val popularByKey = snapshot.popularLists.associateBy { it.key }
+        val customNameByKey = snapshot.customListCatalogs
+            .groupBy { it.key }
+            .mapValues { (_, catalogs) ->
+                catalogs.firstOrNull()?.catalogName
+                    ?.removeSuffix(" (Movies)")
+                    ?.removeSuffix(" (Shows)")
+                    ?: catalogs.firstOrNull()?.key.orEmpty()
+            }
+
+        prefs.selectedPopularListKeys.forEach { key ->
+            val list = popularByKey[key]
             entries += CatalogOrderEntry(
-                key = list.key,
-                disableKey = list.key,
-                catalogName = list.title,
+                key = key,
+                disableKey = key,
+                catalogName = list?.title ?: customNameByKey[key] ?: key,
                 addonName = "Trakt",
                 typeLabel = "custom list",
                 isToggleable = true,
-                isDisabled = list.key in disabledKeys
+                isDisabled = key in disabledKeys
             )
         }
         return entries
@@ -338,6 +347,11 @@ class CatalogOrderViewModel @Inject constructor(
                     .filter { prefs.isTopListSelected(it.key) }
                     .map { it.key }
             )
+            addAll(
+                snapshot.customListCatalogs
+                    .filter { it.key in prefs.selectedTopListKeys }
+                    .map { it.key }
+            )
         }
         if (availableKeys.isEmpty()) return emptyList()
 
@@ -346,18 +360,26 @@ class CatalogOrderViewModel @Inject constructor(
         } else {
             prefs.catalogOrder.filter { it in availableKeys } + availableKeys.filterNot { it in prefs.catalogOrder }
         }
+        val customNameByKey = snapshot.customListCatalogs
+            .groupBy { it.key }
+            .mapValues { (_, catalogs) ->
+                catalogs.firstOrNull()?.catalogName
+                    ?.removeSuffix(" (Movies)")
+                    ?.removeSuffix(" (Shows)")
+                    ?: catalogs.firstOrNull()?.key.orEmpty()
+            }
         val listsByKey = (snapshot.personalLists + snapshot.topLists).associateBy { it.key }
 
         return orderedKeys.mapNotNull { key ->
-            val option = listsByKey[key] ?: return@mapNotNull null
+            val option = listsByKey[key]
             CatalogOrderEntry(
-                key = option.key,
-                disableKey = option.key,
-                catalogName = option.title,
+                key = option?.key ?: key,
+                disableKey = option?.key ?: key,
+                catalogName = option?.title ?: customNameByKey[key] ?: key,
                 addonName = "MDBList",
-                typeLabel = if (option.isPersonal) "personal list" else "top list",
+                typeLabel = if (option?.isPersonal == true) "personal list" else "top list",
                 isToggleable = true,
-                isDisabled = option.key in disabledKeys
+                isDisabled = key in disabledKeys
             )
         }
     }

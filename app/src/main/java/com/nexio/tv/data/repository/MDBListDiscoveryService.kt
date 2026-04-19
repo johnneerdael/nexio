@@ -241,6 +241,11 @@ class MDBListDiscoveryService @Inject constructor(
         val activeOptions = linkedMapOf<String, MDBListListOption>().apply {
             putAll(personalEnabled)
             putAll(topSelected)
+            catalogPrefs.selectedTopListKeys.forEach { key ->
+                if (!containsKey(key)) {
+                    parseTopListKeyFallback(key)?.let { put(it.key, it) }
+                }
+            }
         }
         if (activeOptions.isEmpty()) return emptyList()
 
@@ -319,6 +324,22 @@ class MDBListDiscoveryService @Inject constructor(
             )
         }
         return catalogs
+    }
+
+    private fun parseTopListKeyFallback(key: String): MDBListListOption? {
+        val payload = key.trim().substringAfter("top:", missingDelimiterValue = "").trim()
+        if (payload.isBlank()) return null
+        val owner = payload.substringBefore('/').trim()
+        val listId = payload.substringAfter('/', missingDelimiterValue = "").trim()
+        if (owner.isBlank() || listId.isBlank()) return null
+        return MDBListListOption(
+            key = "top:$owner/$listId",
+            owner = owner,
+            listId = listId,
+            title = "$owner/$listId",
+            itemCount = 0,
+            isPersonal = false
+        )
     }
 
     private suspend fun requestArray(apiKey: String, relativeUrl: String): JSONArray? {
