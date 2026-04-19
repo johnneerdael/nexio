@@ -9,10 +9,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class KitsuAuthSnapshot(
+    val enabled: Boolean = false,
     val username: String? = null,
     val accessToken: String? = null,
     val refreshToken: String? = null,
     val expiresAtEpochSeconds: Long? = null,
+    val includeNsfw: Boolean = false,
     val password: String? = null
 ) {
     val isAuthenticated: Boolean
@@ -49,6 +51,7 @@ class KitsuAuthService(
         authStore.save(
             KitsuAuthSnapshot(
                 username = normalizedUsername,
+                enabled = true,
                 accessToken = accessToken,
                 refreshToken = refreshToken,
                 expiresAtEpochSeconds = nowEpochSeconds() + (body.expiresIn ?: 0L),
@@ -85,6 +88,10 @@ class KitsuAuthService(
             )
         )
         return newAccessToken
+    }
+
+    suspend fun providerEnabled(): Boolean {
+        return authStore.state.first().enabled
     }
 
     suspend fun disconnect() {

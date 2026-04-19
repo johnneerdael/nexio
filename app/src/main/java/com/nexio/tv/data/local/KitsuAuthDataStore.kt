@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.core.profile.ProfileManager
@@ -29,6 +30,8 @@ class KitsuAuthDataStore @Inject constructor(
     }
 
     private val usernameKey = stringPreferencesKey("username")
+    private val enabledKey = booleanPreferencesKey("enabled")
+    private val includeNsfwKey = booleanPreferencesKey("include_nsfw")
     private val accessTokenKey = stringPreferencesKey("access_token")
     private val refreshTokenKey = stringPreferencesKey("refresh_token")
     private val expiresAtKey = longPreferencesKey("expires_at_epoch_seconds")
@@ -38,10 +41,12 @@ class KitsuAuthDataStore @Inject constructor(
 
     fun stateForProfile(profileId: Int): Flow<KitsuAuthSnapshot> = store(profileId).data.map { preferences ->
         KitsuAuthSnapshot(
+            enabled = preferences[enabledKey] ?: false,
             username = preferences[usernameKey],
             accessToken = preferences[accessTokenKey],
             refreshToken = preferences[refreshTokenKey],
             expiresAtEpochSeconds = preferences[expiresAtKey],
+            includeNsfw = preferences[includeNsfwKey] ?: false,
             password = null
         )
     }
@@ -52,6 +57,8 @@ class KitsuAuthDataStore @Inject constructor(
 
     override suspend fun save(snapshot: KitsuAuthSnapshot) {
         store().edit { preferences ->
+            preferences[enabledKey] = snapshot.enabled
+            preferences[includeNsfwKey] = snapshot.includeNsfw
             val username = snapshot.username?.trim().orEmpty()
             if (username.isBlank()) preferences.remove(usernameKey) else preferences[usernameKey] = username
             val accessToken = snapshot.accessToken.orEmpty()
