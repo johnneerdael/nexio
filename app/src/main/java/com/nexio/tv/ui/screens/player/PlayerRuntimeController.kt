@@ -387,7 +387,7 @@ class PlayerRuntimeController(
         refreshScrobbleItem()
         mediaSourceFactory.warmupVodCacheAsync()
         if (!navigationArgs.startFromBeginning) {
-            loadSavedProgressFor(currentSeason, currentEpisode)
+            loadSavedProgressFor(currentSeason, currentEpisode, navigationArgs.toRouteResumeProgress())
         }
         observeDebugSettings()
         observeSubtitleSettings()
@@ -424,4 +424,31 @@ class PlayerRuntimeController(
             com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
         }
     }
+}
+
+internal fun PlayerNavigationArgs.toRouteResumeProgress(): WatchProgress? {
+    val id = contentId?.takeIf { it.isNotBlank() } ?: return null
+    val type = contentType?.takeIf { it.isNotBlank() } ?: return null
+    val vid = videoId?.takeIf { it.isNotBlank() } ?: id
+    val hasResumePoint = (resumePositionMs ?: 0L) > 0L ||
+        resumeProgressPercent?.let { it > 0f } == true
+    if (!hasResumePoint) return null
+
+    return WatchProgress(
+        contentId = id,
+        contentType = type,
+        name = contentName?.takeIf { it.isNotBlank() } ?: title,
+        poster = poster,
+        backdrop = backdrop,
+        logo = logo,
+        videoId = vid,
+        season = initialSeason,
+        episode = initialEpisode,
+        episodeTitle = initialEpisodeTitle,
+        position = resumePositionMs ?: 0L,
+        duration = resumeDurationMs ?: 0L,
+        lastWatched = resumeLastWatchedMs ?: 0L,
+        progressPercent = resumeProgressPercent,
+        source = resumeSource ?: WatchProgress.SOURCE_LOCAL
+    )
 }
