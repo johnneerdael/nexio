@@ -8,7 +8,6 @@ import android.view.Display
 import com.nexio.tv.ui.screens.stream.AutoPlayStreamAlternative
 import com.nexio.tv.ui.screens.stream.StreamPlaybackInfo
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
-import com.google.gson.JsonParser
 import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScoringConfig
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshotProvider
@@ -18,8 +17,6 @@ import com.nexio.tv.data.repository.benchmark.ShadowHdrTier
 import com.nexio.tv.data.repository.benchmark.ShadowSupportLevel
 import com.nexio.tv.data.repository.benchmark.ShadowVideoCodecTier
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -476,32 +473,8 @@ class DolbyVisionAutoPlayGate(
 }
 
 class FfmpegDolbyVisionProfileProbe(
-    private val backend: NativeDolbyVisionProfileBackend = object : NativeDolbyVisionProfileBackend {
-        override fun probe(url: String, requestHeadersBlob: String?): Int {
-            return FfmpegLibrary.probeDolbyVisionProfile(url, requestHeadersBlob)
-        }
-
-        override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? {
-            return FfmpegLibrary.probeDolbyVisionMetadataBlob(url, requestHeadersBlob)
-        }
-
-        override fun probeBlob(url: String, requestHeadersBlob: String?): String? {
-            return FfmpegLibrary.probeDolbyVisionProbeBlob(url, requestHeadersBlob)
-        }
-
-        override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
-            return FfmpegLibrary.probeDolbyVisionStreamMetadataJson(url, requestHeadersBlob)
-        }
-    }
+    private val backend: NativeDolbyVisionProfileBackend = DefaultNativeDolbyVisionProfileBackend
 ) : DolbyVisionProfileProbe {
-
-    companion object {
-        // The bundled FFmpeg network/crypto probe path is not safe to enter concurrently on all
-        // Android builds, so native probe calls are serialized even when callers dispatch them
-        // asynchronously.
-        private val nativeProbeMutex = Mutex()
-    }
-
     override suspend fun probe(
         context: Context,
         url: String,
@@ -515,11 +488,13 @@ class FfmpegDolbyVisionProfileProbe(
                 ?.let { appContext ->
                     runCatching { DeviceCapabilitySnapshotProvider(appContext).capture() }.getOrNull()
                 }
-            val metadataJson = nativeProbeMutex.withLock {
-                backend.probeStreamMetadataJson(url, headerBlob)
+            val metadata = if (backend === DefaultNativeDolbyVisionProfileBackend) {
+                FfmpegStreamMetadataProbe.probe(url = url, headers = headers.orEmpty())
+            } else {
+                FfmpegStreamMetadataProbe.parse(backend.probeStreamMetadataJson(url, headerBlob))
             }
             parseStreamMetadataProbeResult(
-                json = metadataJson,
+                metadata = metadata,
                 device = deviceSnapshot
             ) ?: DolbyVisionProfileProbeResult.failed("ffprobe_probe_failed")
         }.getOrElse { error ->
@@ -529,19 +504,28 @@ class FfmpegDolbyVisionProfileProbe(
     }
 }
 
+private object DefaultNativeDolbyVisionProfileBackend : NativeDolbyVisionProfileBackend {
+    override fun probe(url: String, requestHeadersBlob: String?): Int {
+        return FfmpegLibrary.probeDolbyVisionProfile(url, requestHeadersBlob)
+    }
+
+    override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? {
+        return FfmpegLibrary.probeDolbyVisionMetadataBlob(url, requestHeadersBlob)
+    }
+
+    override fun probeBlob(url: String, requestHeadersBlob: String?): String? {
+        return FfmpegLibrary.probeDolbyVisionProbeBlob(url, requestHeadersBlob)
+    }
+
+    override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
+        return FfmpegLibrary.probeDolbyVisionStreamMetadataJson(url, requestHeadersBlob)
+    }
+}
+
 private data class NativeDolbyVisionMetadata(
     val videoCodec: String? = null,
     val audioCodec: String? = null,
     val hdrType: String? = null
-)
-
-private data class StreamProbeStreamMetadata(
-    val codecType: String,
-    val codecName: String?,
-    val colorTransfer: String?,
-    val colorPrimaries: String?,
-    val dvProfile: Int?,
-    val hdr10Plus: Boolean
 )
 
 private fun parseNativeDolbyVisionMetadataBlob(blob: String?): NativeDolbyVisionMetadata {
@@ -614,27 +598,10 @@ private fun parseNativeDolbyVisionProbeBlob(blob: String?): DolbyVisionProfilePr
 }
 
 private fun parseStreamMetadataProbeResult(
-    json: String?,
+    metadata: FfmpegStreamMetadataProbeResult?,
     device: DeviceCapabilitySnapshot?
 ): DolbyVisionProfileProbeResult? {
-    if (json.isNullOrBlank()) return null
-    val streams = runCatching {
-        JsonParser.parseString(json)
-            .asJsonObject
-            .getAsJsonArray("streams")
-            ?.mapNotNull { element ->
-                val obj = element?.asJsonObject ?: return@mapNotNull null
-                StreamProbeStreamMetadata(
-                    codecType = obj.get("codec_type")?.asString ?: return@mapNotNull null,
-                    codecName = obj.get("codec_name")?.asString,
-                    colorTransfer = obj.get("color_transfer")?.asString,
-                    colorPrimaries = obj.get("color_primaries")?.asString,
-                    dvProfile = obj.get("dv_profile")?.asInt,
-                    hdr10Plus = obj.get("hdr10_plus")?.asBoolean ?: false
-                )
-            }
-            .orEmpty()
-    }.getOrNull() ?: return null
+    val streams = metadata?.streams ?: return null
 
     val selectedVideo = selectBestVideoStream(streams, device) ?: return null
     val selectedAudio = selectBestAudioStream(streams, device)
@@ -657,16 +624,16 @@ private fun parseStreamMetadataProbeResult(
 }
 
 private data class SelectedVideoStream(
-    val stream: StreamProbeStreamMetadata,
+    val stream: FfmpegStreamMetadata,
     val selectedHdrTier: ShadowHdrTier
 )
 
 private data class SelectedAudioStream(
-    val stream: StreamProbeStreamMetadata
+    val stream: FfmpegStreamMetadata
 )
 
 private fun selectBestVideoStream(
-    streams: List<StreamProbeStreamMetadata>,
+    streams: List<FfmpegStreamMetadata>,
     device: DeviceCapabilitySnapshot?
 ): SelectedVideoStream? {
     val rewards = BenchmarkAwareStreamScoringConfig.default().contentRewards
@@ -691,7 +658,7 @@ private fun selectBestVideoStream(
 }
 
 private fun selectBestAudioStream(
-    streams: List<StreamProbeStreamMetadata>,
+    streams: List<FfmpegStreamMetadata>,
     device: DeviceCapabilitySnapshot?
 ): SelectedAudioStream? {
     val rewards = BenchmarkAwareStreamScoringConfig.default().contentRewards
@@ -741,7 +708,7 @@ private fun resolveProbeVideoCodecTier(
     }
 }
 
-private fun resolveProbeHdrTier(stream: StreamProbeStreamMetadata): ShadowHdrTier {
+private fun resolveProbeHdrTier(stream: FfmpegStreamMetadata): ShadowHdrTier {
     return when {
         stream.dvProfile != null -> ShadowHdrTier.DOLBY_VISION
         stream.hdr10Plus -> ShadowHdrTier.HDR10_PLUS

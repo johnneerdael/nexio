@@ -71,7 +71,7 @@ internal data class AssSsaEventChunk(
 
 internal class AssSsaRenderController(
     private val context: Context,
-    private val overlayView: AssSsaRenderOverlayView,
+    overlayView: AssSsaRenderOverlayView?,
     private val subtitleDelayUsProvider: () -> Long,
     private val native: AssSsaNativeApi = JniAssSsaNativeApi
 ) : AssSsaSampleSink {
@@ -85,6 +85,7 @@ internal class AssSsaRenderController(
     private val eventChunks = mutableListOf<AssSsaEventChunk>()
     private val rawSamples = mutableListOf<RawSample>()
     private val fontAttachments = mutableListOf<FontAttachment>()
+    private var overlayView: AssSsaRenderOverlayView? = overlayView
     private var player: ExoPlayer? = null
     private var selectedTrackId: Int? = null
     private var loadedTrackId: Int? = null
@@ -108,6 +109,22 @@ internal class AssSsaRenderController(
             renderCurrentFrame()
             startRenderLoopIfNeeded()
         }
+    }
+
+    fun setOverlayView(overlayView: AssSsaRenderOverlayView?) {
+        val previousOverlay = synchronized(stateLock) {
+            if (released || this.overlayView === overlayView) return
+            val previous = this.overlayView
+            this.overlayView = overlayView
+            previous
+        }
+        runOnMainThread {
+            previousOverlay?.removeCallbacks(renderRunnable)
+            if (overlayView == null || previousOverlay !== overlayView) {
+                previousOverlay?.clearOverlay()
+            }
+        }
+        startRenderLoopIfNeeded()
     }
 
     fun setPlayer(player: ExoPlayer?) {
@@ -178,9 +195,7 @@ internal class AssSsaRenderController(
 
     fun clearOverlay() {
         stopRenderLoop()
-        runOnMainThread {
-            overlayView.clearOverlay()
-        }
+        clearOverlayView()
     }
 
     fun resetForNewStream() {
@@ -292,6 +307,7 @@ internal class AssSsaRenderController(
 
     private fun renderCurrentFrame() {
         synchronized(stateLock) {
+            val overlay = overlayView ?: return
             if (!ensureNativeInitialized(replayEvents = true)) {
                 clearOverlay()
                 return
@@ -303,7 +319,7 @@ internal class AssSsaRenderController(
                     (subtitleDelayUsProvider() / 1000L)
                 ).coerceAtLeast(0L)
             if (native.render(handle, adjustedPositionMs, bitmap)) {
-                overlayView.setRenderedBitmap(bitmap)
+                overlay.setRenderedBitmap(bitmap)
             } else {
                 clearOverlayView()
             }
@@ -316,28 +332,31 @@ internal class AssSsaRenderController(
             renderLoopScheduled = true
         }
         runOnMainThread {
-            synchronized(stateLock) {
+            val overlay = synchronized(stateLock) {
                 if (!canRunRenderLoop() || !renderLoopScheduled) {
                     renderLoopScheduled = false
                     return@runOnMainThread
                 }
+                overlayView
             }
-            overlayView.postOnAnimation(renderRunnable)
+            overlay?.postOnAnimation(renderRunnable)
         }
     }
 
     private fun stopRenderLoop() {
-        synchronized(stateLock) {
+        val overlay = synchronized(stateLock) {
             renderLoopScheduled = false
+            overlayView
         }
         runOnMainThread {
-            overlayView.removeCallbacks(renderRunnable)
+            overlay?.removeCallbacks(renderRunnable)
         }
     }
 
-    private fun canRunRenderLoop(): Boolean {
+    private fun canRunRenderLoop(): Boolean = synchronized(stateLock) {
         val trackId = selectedTrackId
-        return !released &&
+        !released &&
+            overlayView != null &&
             player != null &&
             trackId != null &&
             tracks.containsKey(trackId) &&
@@ -355,8 +374,11 @@ internal class AssSsaRenderController(
     }
 
     private fun clearOverlayView() {
+        val overlay = synchronized(stateLock) {
+            overlayView
+        }
         runOnMainThread {
-            overlayView.clearOverlay()
+            overlay?.clearOverlay()
         }
     }
 

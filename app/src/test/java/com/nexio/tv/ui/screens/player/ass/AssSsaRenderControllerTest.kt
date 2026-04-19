@@ -151,6 +151,37 @@ class AssSsaRenderControllerTest {
     }
 
     @Test
+    fun acceptsSamplesBeforeOverlayAttachesAndRendersAfterAttach() {
+        val native = FakeAssSsaNativeApi()
+        val controller = AssSsaRenderController(
+            context = ApplicationProvider.getApplicationContext(),
+            overlayView = null,
+            subtitleDelayUsProvider = { 0L },
+            native = native
+        )
+        val format = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(1280, 720)
+        controller.setPlayer(mockk<ExoPlayer>(relaxed = true))
+        controller.onTrackHeader(trackId = 9, headerData = "[Script Info]".toByteArray(), format)
+        controller.selectTrackByFormat(format)
+        controller.onSubtitleSample(
+            trackId = 9,
+            timeUs = 1_000_000L,
+            data = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,Early".toByteArray()
+        )
+
+        assertFalse(controller.isRenderLoopScheduledForTesting())
+        assertEquals(1, native.chunks.size)
+
+        val overlay = newOverlay()
+        controller.setOverlayView(overlay)
+        controller.renderCurrentFrameForTesting()
+
+        assertTrue(overlay.hasRenderedBitmapForTesting())
+    }
+
+    @Test
     fun selectedTrackStartsRenderLoopAndClearOverlayStopsIt() {
         val native = FakeAssSsaNativeApi()
         val controller = newController(native)
