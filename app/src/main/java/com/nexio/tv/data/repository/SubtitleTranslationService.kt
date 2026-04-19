@@ -287,6 +287,64 @@ class SubtitleTranslationService @Inject constructor(
         )
     }
 
+    internal suspend fun translateProtectedAssSsaUnits(
+        units: List<AssSsaProtectedTranslationUnit>,
+        targetLanguageCode: String,
+        sourceLanguageCode: String?,
+        settings: SubtitleTranslationSettings
+    ): Result<Map<String, String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val normalizedTarget = targetLanguageCode.trim().ifBlank {
+                throw IllegalArgumentException("Target language is required.")
+            }
+            val normalizedSettings = settings.copy(apiKey = settings.apiKey.trim())
+            if (normalizedSettings.apiKey.isBlank()) {
+                throw IllegalArgumentException("Subtitle translation API key is missing.")
+            }
+            if (units.isEmpty()) {
+                return@runCatching emptyMap()
+            }
+
+            val payload = JSONObject()
+                .put("source_language", sourceLanguageCode.orEmpty().ifBlank { "auto" })
+                .put("target_language", normalizedTarget)
+                .put("placeholder_pattern", "⟦[A-Z_]+_[0-9]+⟧")
+                .put(
+                    "items",
+                    JSONArray().apply {
+                        units.forEach { unit ->
+                            put(
+                                JSONObject()
+                                    .put("id", unit.id)
+                                    .put("text", unit.protectedText)
+                                    .put(
+                                        "placeholders",
+                                        JSONArray().apply {
+                                            unit.placeholders.forEach { placeholder ->
+                                                put(placeholder.token)
+                                            }
+                                        }
+                                    )
+                            )
+                        }
+                    }
+                )
+
+            val response = executeTranslationRequest(
+                promptPayload = payload,
+                targetLanguageCode = normalizedTarget,
+                targetLanguageName = displayLanguage(normalizedTarget),
+                sourceLanguageName = displaySourceLanguage(sourceLanguageCode),
+                markerPayload = null,
+                settings = normalizedSettings,
+                includeSchema = true,
+                systemPromptOverride = buildProtectedAssSsaSystemPrompt()
+            ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
+
+            parseProtectedAssSsaResponse(response, units)
+        }
+    }
+
     private suspend fun downloadSubtitleText(url: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(url)
@@ -633,9 +691,11 @@ class SubtitleTranslationService @Inject constructor(
         sourceLanguageName: String,
         markerPayload: String?,
         settings: SubtitleTranslationSettings,
-        includeSchema: Boolean
+        includeSchema: Boolean,
+        systemPromptOverride: String? = null
     ): String? {
-        val systemPrompt = buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
+        val systemPrompt = systemPromptOverride
+            ?: buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
         val endpoint = providerEndpoint(settings)
         val request = when (settings.provider) {
             SubtitleTranslationProvider.OPENAI -> openAiRequest(
@@ -869,6 +929,56 @@ class SubtitleTranslationService @Inject constructor(
             throw IllegalStateException("Subtitle translation provider returned an incomplete translation payload.")
         }
         return parsed.filterKeys { it in expectedIds }
+    }
+
+    private fun buildProtectedAssSsaSystemPrompt(): String {
+        return """
+            You are a subtitle localization engine.
+            Translate subtitle text from the source language to the target language.
+            Return JSON only with this exact shape: {"items":[{"id":"same id as input","text":"translated subtitle text"}]}.
+            Translate only item.text.
+            Do not translate, edit, remove, reorder, duplicate, or normalize placeholders.
+            Placeholders match this pattern: ⟦[A-Z_]+_[0-9]+⟧.
+            Copy every placeholder from the source item.text into the translated item.text exactly.
+            Preserve the semantic role of placeholders. If a placeholder marks styling around a word, place it around the translated equivalent of that word.
+            Preserve line-break placeholders unless the input explicitly says line breaks may be adjusted.
+            Do not introduce raw ASS/SSA syntax. Do not output "{", "}", "\pos", "\move", "\clip", "\iclip", "\p", "\t", "\fad", "\fade", "\org", color tags, or any backslash ASS override tag.
+            Do not add markdown, comments, explanations, code fences, or extra keys.
+            Preserve subtitle brevity and natural speech.
+            The number of output items must equal the number of input items.
+            Every output id must match one input id exactly.
+        """.trimIndent()
+    }
+
+    private fun parseProtectedAssSsaResponse(
+        responseText: String,
+        units: List<AssSsaProtectedTranslationUnit>
+    ): Map<String, String> {
+        val normalized = sanitizeJsonResponse(responseText)
+        val array = when {
+            normalized.startsWith("[") -> JSONArray(normalized)
+            normalized.startsWith("{") -> JSONObject(normalized).optJSONArray("items") ?: JSONArray()
+            else -> JSONArray()
+        }
+        if (array.length() == 0) {
+            throw IllegalStateException("Subtitle translation provider returned an empty translation payload.")
+        }
+        val expected = units.associateBy { it.id }
+        val parsed = mutableMapOf<String, String>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val id = item.optString("id")
+            val text = item.optString("text")
+            val unit = expected[id] ?: continue
+            unit.reconstruct(text).getOrThrow()
+            parsed[id] = text
+        }
+        expected.keys.forEach { id ->
+            if (!parsed.containsKey(id)) {
+                throw IllegalStateException("Subtitle translation provider returned an incomplete translation payload.")
+            }
+        }
+        return parsed
     }
 
     private fun geminiCompatibilitySettings(apiKey: String): SubtitleTranslationSettings {
