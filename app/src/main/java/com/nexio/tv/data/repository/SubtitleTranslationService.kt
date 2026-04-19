@@ -33,6 +33,8 @@ private const val TAG = "SubtitleTranslation"
 private const val MAX_TRANSLATION_PROVIDER_ATTEMPTS = 4
 private const val DEFAULT_RETRY_DELAY_MS = 1_000L
 private const val MAX_RETRY_DELAY_MS = 8_000L
+private val RAW_ASS_TRANSLATION_SYNTAX_PATTERN =
+    Regex("""\\(?![Nnh])(?:[A-Za-z]+\d*|\d+[A-Za-z]+)""")
 
 internal fun subtitleTranslationCueCacheKey(
     text: String,
@@ -359,6 +361,43 @@ class SubtitleTranslationService @Inject constructor(
             ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
             parseProtectedAssSsaResponse(response, units)
+        }
+    }
+
+    internal suspend fun translateRawAssSsaText(
+        text: String,
+        targetLanguageCode: String,
+        sourceLanguageCode: String?,
+        settings: SubtitleTranslationSettings
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val normalizedTarget = targetLanguageCode.trim().ifBlank {
+                throw IllegalArgumentException("Target language is required.")
+            }
+            val normalizedSettings = settings.copy(apiKey = settings.apiKey.trim())
+            if (normalizedSettings.apiKey.isBlank()) {
+                throw IllegalArgumentException("Subtitle translation API key is missing.")
+            }
+            if (text.isBlank()) {
+                return@runCatching text
+            }
+
+            val response = executeRawTranslationRequest(
+                systemPrompt = buildRawAssSsaSystemPrompt(
+                    targetLanguageName = displayLanguage(normalizedTarget)
+                ),
+                userPayload = text,
+                sourceLanguageName = displaySourceLanguage(sourceLanguageCode),
+                targetLanguageName = displayLanguage(normalizedTarget),
+                settings = normalizedSettings
+            ) ?: throw IllegalStateException("Subtitle translation provider did not return raw ASS/SSA text.")
+
+            val translated = sanitizeRawAssSsaResponse(response)
+            validateRawAssSsaTranslation(
+                source = text,
+                translated = translated
+            ).getOrThrow()
+            translated
         }
     }
 
@@ -701,6 +740,41 @@ class SubtitleTranslationService @Inject constructor(
             .put("generationConfig", generationConfig)
     }
 
+    private fun buildGeminiRawGenerationRequest(
+        userPayload: String,
+        systemPrompt: String
+    ): JSONObject {
+        val generationConfig = JSONObject()
+            .put("temperature", 0.2)
+            .put(
+                "thinkingConfig",
+                JSONObject().put("thinkingBudget", 0)
+            )
+
+        return JSONObject()
+            .put(
+                "systemInstruction",
+                JSONObject().put(
+                    "parts",
+                    JSONArray().put(
+                        JSONObject().put("text", systemPrompt)
+                    )
+                )
+            )
+            .put(
+                "contents",
+                JSONArray().put(
+                    JSONObject().put(
+                        "parts",
+                        JSONArray().put(
+                            JSONObject().put("text", userPayload)
+                        )
+                    )
+                )
+            )
+            .put("generationConfig", generationConfig)
+    }
+
     private fun executeTranslationRequest(
         promptPayload: JSONObject,
         targetLanguageCode: String,
@@ -772,6 +846,84 @@ class SubtitleTranslationService @Inject constructor(
                             attempt = attempt
                         )
                         Log.w(TAG, "Retrying subtitle translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
+                        sleepBeforeRetry(delayMs)
+                        attempt += 1
+                        continue
+                    }
+                    throw providerException(settings.provider, response.code, raw)
+                }
+                return when (settings.provider) {
+                    SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
+                    SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
+                    SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+                    SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
+                }
+            }
+        }
+    }
+
+    private fun executeRawTranslationRequest(
+        systemPrompt: String,
+        userPayload: String,
+        sourceLanguageName: String,
+        targetLanguageName: String,
+        settings: SubtitleTranslationSettings
+    ): String? {
+        val endpoint = providerEndpoint(settings)
+        val request = when (settings.provider) {
+            SubtitleTranslationProvider.OPENAI -> openAiRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildOpenAiChatCompletionRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    userPayload = userPayload,
+                    includeJsonMode = false
+                )
+            )
+            SubtitleTranslationProvider.ANTHROPIC -> anthropicRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildAnthropicMessagesRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    userPayload = userPayload
+                )
+            )
+            SubtitleTranslationProvider.GEMINI -> geminiRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildGeminiRawGenerationRequest(
+                    userPayload = userPayload,
+                    systemPrompt = systemPrompt
+                )
+            )
+            SubtitleTranslationProvider.DASHSCOPE -> dashScopeRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildDashScopeGenerationRequest(
+                    settings = settings,
+                    markerPayload = userPayload,
+                    sourceLanguage = sourceLanguageName,
+                    targetLanguage = targetLanguageName
+                )
+            )
+        }
+
+        var attempt = 1
+        while (true) {
+            httpClient.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Raw ASS/SSA translation request failed provider=${settings.provider} code=${response.code} attempt=$attempt body=${raw.take(300)}")
+                    val providerError = classifyProviderError(settings.provider, response.code, raw)
+                    if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
+                        val delayMs = retryDelayMs(
+                            responseHeader = response.header("Retry-After"),
+                            body = raw,
+                            attempt = attempt
+                        )
+                        Log.w(TAG, "Retrying raw ASS/SSA translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
                         sleepBeforeRetry(delayMs)
                         attempt += 1
                         continue
@@ -967,6 +1119,86 @@ class SubtitleTranslationService @Inject constructor(
         """.trimIndent()
     }
 
+    private fun buildRawAssSsaSystemPrompt(targetLanguageName: String): String {
+        return """
+            You are ASS_SSA_SUBTITLE_TRANSLATOR.
+
+            target_language = $targetLanguageName
+
+            TASK
+            Translate only visible natural-language subtitle text into target_language. Preserve all ASS/SSA syntax byte-exact. Output only the translated result in the same container/shape as the input. No explanations, notes, Markdown, or extra text.
+
+            INPUT
+            Input may be raw ASS/SSA Text fields, raw ASS/SSA Dialogue/Comment event lines, or multi-line ASS/SSA chunks.
+
+            If input is raw, output only the translated raw string.
+
+            TRANSLATION STYLE
+            Translate naturally and concisely for subtitles. Preserve meaning, tone, names, speaker intent, punctuation where natural, and line rhythm. Do not summarize, explain, add notes, censor, or expand unnecessarily.
+
+            PROTECTED ASS/SSA SYNTAX — COPY EXACTLY
+            Translate only human-language text outside protected syntax and outside drawing mode.
+
+            1. Special text escapes outside override blocks are protected:
+            \N \n \h
+            Copy them exactly. Do not change case. Do not replace with real newlines or spaces.
+
+            2. Override blocks are protected:
+            Any substring from { to } is an ASS/SSA override block. Copy complete override blocks exactly unless moving a whole inline block is clearly necessary to keep styling on the equivalent translated word/phrase. Never edit characters inside an override block. Never translate anything inside braces, including comments or unknown text.
+
+            3. Known ASS/SSA override tags to protect inside braces:
+            \i \b \u \s
+            \fn \fs \fe
+            \bord \xbord \ybord
+            \shad \xshad \yshad
+            \be \blur
+            \fscx \fscy \fsp
+            \frx \fry \frz \fr
+            \fax \fay
+            \c \1c \2c \3c \4c
+            \alpha \1a \2a \3a \4a
+            \an \a \q \r
+            \k \K \kf \ko \kt
+            \pos \move \org
+            \fad \fade \t
+            \clip \iclip
+            \p \pbo
+
+            4. Protect all tag parameters:
+            Numbers, signs, decimals, commas, parentheses, font names, style names, charset/encoding values, &H...& color/alpha values, rectangular coordinates, vector drawing arguments, and nested style modifiers inside \t(...). Do not normalize or reinterpret them.
+
+            5. Drawing mode:
+            If an override block contains \p followed by an integer greater than 0, drawing mode is ON. All following non-brace text is vector drawing data, not language, until a later override block containing \p0 turns drawing mode OFF. In drawing mode, copy all non-brace text exactly. Protect drawing commands:
+            m n l b s p c
+            and all coordinates, spaces, signs, and decimals.
+
+            6. Vector clips:
+            Everything inside vector \clip(...) or \iclip(...) is protected, including drawing commands m n l b s p c and coordinates. Rectangular \clip/\iclip coordinates are also protected.
+
+            7. Full ASS/SSA event lines:
+            If input is a full Dialogue event line, keep every non-Text field byte-exact: event type, Layer/Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, commas, timing, spacing. Translate only the Text field. If you cannot confidently identify the Text field, return the input unchanged.
+            If input is a non-dialogue ASS/SSA line such as Format, Style, Comment, Picture, Sound, Movie, Command, header, section, font, or graphics data, copy it unchanged.
+
+            PLACEMENT RULES
+            Preserve every protected item exactly once and in the same relative order. You may move whole inline formatting blocks only when needed to preserve equivalent emphasis/styling after translation. Never move or modify line-level positioning/effect blocks such as \pos, \move, \org, \clip, \iclip, \fad, \fade, \an, \a, or \q except by copying them exactly as originally placed.
+
+            FORBIDDEN
+            Do not add new ASS/SSA tags.
+            Do not remove tags.
+            Do not rewrite tags.
+            Do not convert ASS/SSA to HTML, XML, Markdown, SRT, or plain text.
+            Do not alter braces, backslashes, tag case, field commas, timing, colors, alpha, font names, style names, drawing commands, or protected whitespace.
+            Do not translate text inside {...}.
+            Do not translate drawing data.
+            Do not output explanations.
+
+            FAIL-SAFE
+            If preserving ASS/SSA syntax conflicts with translation, preserve syntax first.
+            If unsure whether something is text or syntax, copy it unchanged.
+            If the input is malformed or cannot be safely translated, return the original text unchanged.
+        """.trimIndent()
+    }
+
     private fun parseProtectedAssSsaResponse(
         responseText: String,
         units: List<AssSsaProtectedTranslationUnit>
@@ -996,6 +1228,90 @@ class SubtitleTranslationService @Inject constructor(
             }
         }
         return parsed
+    }
+
+    private fun sanitizeRawAssSsaResponse(responseText: String): String {
+        val trimmed = responseText.trim()
+        val unfenced = if (trimmed.startsWith("```")) {
+            trimmed
+                .replaceFirst(Regex("""^```[A-Za-z0-9_-]*\s*"""), "")
+                .replace(Regex("""\s*```\s*$"""), "")
+                .trim()
+        } else {
+            trimmed
+        }
+        return unfenced
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+    }
+
+    private fun validateRawAssSsaTranslation(
+        source: String,
+        translated: String
+    ): Result<Unit> = runCatching {
+        val sourceLines = source.lines()
+        val translatedLines = translated.lines()
+        if (sourceLines.size != translatedLines.size) {
+            throw IllegalStateException("Raw ASS/SSA translation changed line count.")
+        }
+        val format = AssSsaEventFormat.standardDialogue()
+        sourceLines.zip(translatedLines).forEachIndexed { index, (sourceLine, translatedLine) ->
+            val sourceRecord = AssSsaEventRecord.parseDialogueLine(sourceLine, format)
+            if (sourceRecord == null) {
+                if (sourceLine != translatedLine) {
+                    throw IllegalStateException("Raw ASS/SSA translation changed non-event line ${index + 1}.")
+                }
+                return@forEachIndexed
+            }
+            val translatedRecord = AssSsaEventRecord.parseDialogueLine(translatedLine, format)
+                ?: throw IllegalStateException("Raw ASS/SSA translation broke event line ${index + 1}.")
+            if (sourceRecord.prefix != translatedRecord.prefix) {
+                throw IllegalStateException("Raw ASS/SSA translation changed event prefix on line ${index + 1}.")
+            }
+            sourceRecord.values.forEachIndexed { fieldIndex, sourceValue ->
+                if (fieldIndex != format.textIndex && sourceValue != translatedRecord.values.getOrNull(fieldIndex)) {
+                    val fieldName = format.fields.getOrNull(fieldIndex).orEmpty()
+                    throw IllegalStateException("Raw ASS/SSA translation changed $fieldName on line ${index + 1}.")
+                }
+            }
+            validateRawAssSsaTextSyntax(
+                source = sourceRecord.text,
+                translated = translatedRecord.text,
+                lineNumber = index + 1
+            )
+        }
+    }
+
+    private fun validateRawAssSsaTextSyntax(
+        source: String,
+        translated: String,
+        lineNumber: Int
+    ) {
+        val sourceTokens = AssSsaTextTokenizer.tokenize(source)
+        val translatedTokens = AssSsaTextTokenizer.tokenize(translated)
+        if (sourceTokens.protectedRawSequence() != translatedTokens.protectedRawSequence()) {
+            throw IllegalStateException("Raw ASS/SSA translation changed protected syntax on line $lineNumber.")
+        }
+        val introducedRawSyntax = RAW_ASS_TRANSLATION_SYNTAX_PATTERN.findAll(translated)
+            .map { it.value }
+            .filterNot { syntax -> RAW_ASS_TRANSLATION_SYNTAX_PATTERN.findAll(source).any { it.value == syntax } }
+            .toList()
+        if (introducedRawSyntax.isNotEmpty()) {
+            throw IllegalStateException("Raw ASS/SSA translation introduced ASS syntax on line $lineNumber.")
+        }
+    }
+
+    private fun List<AssSsaTextToken>.protectedRawSequence(): List<String> {
+        return mapNotNull { token ->
+            when (token) {
+                is AssSsaTextToken.OverrideBlock,
+                is AssSsaTextToken.LineBreak,
+                is AssSsaTextToken.HardSpace,
+                is AssSsaTextToken.Drawing,
+                is AssSsaTextToken.Malformed -> token.raw
+                is AssSsaTextToken.Text -> null
+            }
+        }
     }
 
     private fun geminiCompatibilitySettings(apiKey: String): SubtitleTranslationSettings {

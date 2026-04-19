@@ -13,7 +13,9 @@ internal class AssSsaTranslatingSampleSink(
     private val downstream: AssSsaSampleSink,
     private val scope: CoroutineScope,
     private val isEnabled: () -> Boolean,
-    private val translate: suspend (List<AssSsaProtectedTranslationUnit>) -> Map<String, String>
+    private val useSystemPromptTranslation: () -> Boolean,
+    private val translate: suspend (List<AssSsaProtectedTranslationUnit>) -> Map<String, String>,
+    private val translateRawAssSsa: suspend (String) -> String
 ) : AssSsaSampleSink {
     private val trackFormats = linkedMapOf<Int, AssSsaEventFormat>()
 
@@ -35,6 +37,20 @@ internal class AssSsaTranslatingSampleSink(
             .toList()
         if (records.isEmpty()) {
             downstream.onSubtitleSample(trackId, timeUs, data)
+            return
+        }
+
+        if (useSystemPromptTranslation()) {
+            scope.launch {
+                val translatedSample = runCatching {
+                    translateRawAssSsa(text)
+                }.getOrDefault(text)
+                downstream.onSubtitleSample(
+                    trackId = trackId,
+                    timeUs = timeUs,
+                    data = translatedSample.toByteArray()
+                )
+            }
             return
         }
 
