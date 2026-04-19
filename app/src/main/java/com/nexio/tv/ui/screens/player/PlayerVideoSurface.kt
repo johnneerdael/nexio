@@ -128,6 +128,7 @@ internal fun PlayerVideoSurface(
             }
             if (assSsaRenderOverlayProvider != null) {
                 assSsaOverlayView = playerView.ensureAssSsaRenderOverlay()
+                assSsaRenderOverlayProvider.invoke { assSsaOverlayView }
             }
 
             val plan = buildPlayerViewMutationPlan(lastAppliedState, renderState)

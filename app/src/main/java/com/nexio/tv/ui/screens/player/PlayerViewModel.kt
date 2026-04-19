@@ -116,7 +116,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     internal fun setAssSsaRenderOverlayViewProvider(provider: (() -> AssSsaRenderOverlayView?)?) {
-        controller.assSsaOverlayViewProvider = provider
+        controller.setAssSsaRenderOverlayViewProvider(provider)
     }
 
     fun startInitialPlaybackIfNeeded() {
