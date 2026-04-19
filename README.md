@@ -95,6 +95,8 @@ Highlights include:
 
 Important caveat: **TrueHD should not be treated as fully reliable or production-stable today.**
 
+ASS/SSA subtitles use a protected translation pipeline: NEXIO tokenizes ASS structure, translates only visible language text, validates placeholders, reconstructs ASS events, and renders through libass/assrender. Generic Media3 cue translation is disabled for ASS/SSA to preserve positioning, movement, drawing, and karaoke semantics.
+
 ### Deep Trakt integration
 NEXIO treats Trakt as a real system layer, not a decorative add-on.
 
