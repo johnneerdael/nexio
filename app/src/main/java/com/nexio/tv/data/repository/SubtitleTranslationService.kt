@@ -164,17 +164,34 @@ class SubtitleTranslationService @Inject constructor(
             )
 
             if (!translatedFile.exists() || translatedFile.length() == 0L) {
-                val translatedBlocks = translateBlocks(
-                    blocks = document.translatableBlocks,
-                    targetLanguageCode = normalizedTarget,
-                    sourceLanguageCode = sourceLanguageCode,
-                    settings = normalizedSettings
-                )
+                val renderedSubtitle = if (document.format == TimedTextFormat.ASS ||
+                    document.format == TimedTextFormat.SSA
+                ) {
+                    val protectedTranslations = mutableMapOf<String, String>()
+                    AssSsaTranslationBatchPlanner.plan(document.assSsaProtectedUnits())
+                        .forEach { batch ->
+                            protectedTranslations += translateProtectedAssSsaUnits(
+                                units = batch.units,
+                                targetLanguageCode = normalizedTarget,
+                                sourceLanguageCode = sourceLanguageCode,
+                                settings = normalizedSettings
+                            ).getOrThrow()
+                        }
+                    document.renderAssSsaProtected(protectedTranslations)
+                } else {
+                    val translatedBlocks = translateBlocks(
+                        blocks = document.translatableBlocks,
+                        targetLanguageCode = normalizedTarget,
+                        sourceLanguageCode = sourceLanguageCode,
+                        settings = normalizedSettings
+                    )
+                    document.render(translatedBlocks)
+                }
                 translatedFile.parentFile?.mkdirs()
                 // Write + fsync so the file URI we hand back to the player is
                 // safe to read immediately. Without this, Media3 can race the
                 // pending write and stall on a partially-written file.
-                val payload = document.render(translatedBlocks).toByteArray(StandardCharsets.UTF_8)
+                val payload = renderedSubtitle.toByteArray(StandardCharsets.UTF_8)
                 java.io.FileOutputStream(translatedFile).use { fos ->
                     fos.write(payload)
                     fos.flush()

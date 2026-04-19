@@ -146,4 +146,35 @@ class AssSsaTimedTextDocumentTest {
             parsed.render(mapOf(0 to "Hallo"))
         )
     }
+
+    @Test
+    fun phraseModeKeepsInlineStylePlaceholderAroundTranslatedEquivalent() {
+        val document = TimedTextDocument.parse(
+            raw = """
+                [Events]
+                Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+                Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,I am {\i1}not{\i0} amused.\NReally.
+            """.trimIndent(),
+            url = "file:///tmp/subtitle.ass"
+        )!!
+
+        val units = document.assSsaProtectedUnits()
+
+        assertEquals(
+            listOf("I am ⟦ASS_000⟧not⟦ASS_001⟧ amused.⟦LB_002⟧Really."),
+            units.map { it.protectedText }
+        )
+        assertEquals(
+            """
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Ik ben {\i1}niet{\i0} geamuseerd.\NEcht niet.
+            """.trimIndent() + "\n",
+            document.renderAssSsaProtected(
+                mapOf(
+                    "ass_0" to "Ik ben ⟦ASS_000⟧niet⟦ASS_001⟧ geamuseerd.⟦LB_002⟧Echt niet."
+                )
+            )
+        )
+    }
 }

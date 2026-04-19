@@ -85,6 +85,29 @@ internal data class AssSsaDialogueBlock(
             prefix + fieldsBeforeText.joinToString(",") + "," + text
         }
     }
+
+    fun toProtectedTranslationUnit(id: String): AssSsaProtectedTranslationUnit {
+        return AssSsaProtectedTranslationUnit.fromTokens(
+            id = id,
+            tokens = AssSsaTextTokenizer.tokenize(rawText())
+        )
+    }
+
+    fun renderProtected(translatedProtectedText: String?): String {
+        if (translatedProtectedText.isNullOrBlank()) return render(emptyMap())
+        val translatedText = toProtectedTranslationUnit("render")
+            .reconstruct(translatedProtectedText)
+            .getOrElse { return render(emptyMap()) }
+        return if (fieldsBeforeText.isEmpty()) {
+            prefix + translatedText
+        } else {
+            prefix + fieldsBeforeText.joinToString(",") + "," + translatedText
+        }
+    }
+
+    private fun rawText(): String {
+        return textSegments.joinToString("") { segment -> segment.render(emptyMap()) }
+    }
 }
 
 internal sealed interface AssSsaTextSegment {

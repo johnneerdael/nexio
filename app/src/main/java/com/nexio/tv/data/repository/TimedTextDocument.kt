@@ -54,6 +54,30 @@ internal data class TimedTextDocument(
         return blocks.joinToString(separator) { it.render(translations) }.trim() + "\n"
     }
 
+    fun assSsaProtectedUnits(): List<AssSsaProtectedTranslationUnit> {
+        if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) return emptyList()
+        return blocks
+            .filterIsInstance<AssSsaDialogueBlock>()
+            .mapIndexed { index, block ->
+                block.toProtectedTranslationUnit("ass_$index")
+            }
+    }
+
+    fun renderAssSsaProtected(translations: Map<String, String>): String {
+        if (format != TimedTextFormat.ASS && format != TimedTextFormat.SSA) {
+            return render(emptyMap())
+        }
+        var dialogueIndex = 0
+        return blocks.joinToString("\n") { block ->
+            if (block is AssSsaDialogueBlock) {
+                val id = "ass_${dialogueIndex++}"
+                block.renderProtected(translations[id])
+            } else {
+                block.render(emptyMap())
+            }
+        }.trim() + "\n"
+    }
+
     companion object {
         fun parse(raw: String, url: String): TimedTextDocument? {
             val normalized = raw
