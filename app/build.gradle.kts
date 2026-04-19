@@ -9,6 +9,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.net.URI
+import java.time.Instant
 import java.util.Properties
 
 fun parseBooleanProperty(value: String?): Boolean {
@@ -68,8 +72,227 @@ val useMedia3Source = parseBooleanProperty(
 val playPublishTaskRequested = gradle.startParameter.taskNames.any { taskName ->
     taskName.endsWith("bundlePlayRelease") || taskName.endsWith(":app:bundlePlayRelease")
 }
+
+val animeIdMapOutput = layout.projectDirectory.file("src/main/assets/anime/anime-id-map.json")
+val animeIdMapSources = mapOf(
+    "fribbAnimeList" to "https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-full.json",
+    "traktAnimeMovies" to "https://github.com/rensetsu/db.trakt.extended-anitrakt/releases/download/latest/movies_ex.json",
+    "kitsuImdb" to "https://raw.githubusercontent.com/TheBeastLT/stremio-kitsu-anime/bbf149474f610885629b95b1b9ce4408c3c1353d/static/data/imdb_mapping.json"
+)
+
+fun positiveId(value: Any?): String? {
+    return when (value) {
+        null -> null
+        is Boolean -> null
+        is Number -> value.toLong().takeIf { it > 0L }?.toString()
+        else -> value.toString().trim().takeIf { it.all(Char::isDigit) }?.toLongOrNull()?.takeIf { it > 0L }?.toString()
+    }
+}
+
+fun normalizedString(value: Any?): String? =
+    value?.toString()?.trim()?.takeIf { it.isNotBlank() }
+
+fun normalizedImdb(value: Any?): String? =
+    normalizedString(value)?.takeIf { it.startsWith("tt") }
+
+fun mediaTypeFromAnimeListType(value: String?): String {
+    return when (value?.trim()?.lowercase()) {
+        "movie", "film" -> "movie"
+        else -> "series"
+    }
+}
+
+fun sortedJsonMap(map: Map<String, Any>): LinkedHashMap<String, Any> {
+    fun keySort(value: String): Pair<Int, String> =
+        value.toLongOrNull()?.let { 0 to it.toString().padStart(20, '0') } ?: (1 to value)
+
+    return linkedMapOf<String, Any>().also { sorted ->
+        map.keys.sortedWith(compareBy({ keySort(it).first }, { keySort(it).second })).forEach { key ->
+            sorted[key] = map.getValue(key)
+        }
+    }
+}
+
+fun sortedRecord(record: Map<String, String>): LinkedHashMap<String, String> {
+    val order = listOf("kitsu", "mal", "anilist", "anidb", "tmdb", "tvdb", "imdb", "mediaType", "sourceType")
+    return linkedMapOf<String, String>().also { sorted ->
+        order.forEach { key -> record[key]?.let { sorted[key] = it } }
+    }
+}
+
+fun addIndex(index: MutableMap<String, String>, key: String?, kitsuId: String) {
+    if (!key.isNullOrBlank() && !index.containsKey(key)) {
+        index[key] = kitsuId
+    }
+}
+
+fun indexAnimeRecord(
+    indexes: Map<String, MutableMap<String, String>>,
+    record: Map<String, String>
+) {
+    val kitsuId = record["kitsu"] ?: return
+    indexes.getValue("byKitsu")[kitsuId] = kitsuId
+    addIndex(indexes.getValue("byMal"), record["mal"], kitsuId)
+    addIndex(indexes.getValue("byAnilist"), record["anilist"], kitsuId)
+    addIndex(indexes.getValue("byAnidb"), record["anidb"], kitsuId)
+    addIndex(indexes.getValue("byTvdb"), record["tvdb"], kitsuId)
+    addIndex(indexes.getValue("byImdb"), record["imdb"], kitsuId)
+    record["tmdb"]?.let { tmdbId ->
+        if (record["mediaType"] == "movie") {
+            addIndex(indexes.getValue("byTmdbMovie"), tmdbId, kitsuId)
+        } else {
+            addIndex(indexes.getValue("byTmdbSeries"), tmdbId, kitsuId)
+        }
+    }
+}
+
+fun normalizeFribbAnimeRecord(raw: Map<*, *>): LinkedHashMap<String, String> {
+    val record = linkedMapOf<String, String>()
+    positiveId(raw["mal_id"])?.let { record["mal"] = it }
+    positiveId(raw["kitsu_id"])?.let { record["kitsu"] = it }
+    positiveId(raw["anidb_id"])?.let { record["anidb"] = it }
+    positiveId(raw["anilist_id"])?.let { record["anilist"] = it }
+    positiveId(raw["themoviedb_id"])?.let { record["tmdb"] = it }
+    positiveId(raw["tvdb_id"])?.let { record["tvdb"] = it }
+    normalizedImdb(raw["imdb_id"])?.let { record["imdb"] = it }
+    val sourceType = normalizedString(raw["type"])
+    record["mediaType"] = mediaTypeFromAnimeListType(sourceType)
+    sourceType?.let { record["sourceType"] = it }
+    return sortedRecord(record)
+}
+
+fun buildAnimeIdMapAsset(
+    fribbRecords: List<*>,
+    traktAnimeMovieRecords: List<*>,
+    kitsuImdbRecords: Map<*, *>,
+    generatedAt: String
+): LinkedHashMap<String, Any> {
+    val recordsByKitsu = linkedMapOf<String, Map<String, String>>()
+    val indexes = mapOf(
+        "byKitsu" to linkedMapOf<String, String>(),
+        "byMal" to linkedMapOf(),
+        "byAnilist" to linkedMapOf(),
+        "byAnidb" to linkedMapOf(),
+        "byTvdb" to linkedMapOf(),
+        "byTmdbMovie" to linkedMapOf(),
+        "byTmdbSeries" to linkedMapOf(),
+        "byImdb" to linkedMapOf()
+    )
+
+    fribbRecords.filterIsInstance<Map<*, *>>().forEach { raw ->
+        val record = normalizeFribbAnimeRecord(raw)
+        val kitsuId = record["kitsu"] ?: return@forEach
+        recordsByKitsu[kitsuId] = sortedRecord(recordsByKitsu[kitsuId].orEmpty() + record)
+        indexAnimeRecord(indexes, recordsByKitsu.getValue(kitsuId))
+    }
+
+    kitsuImdbRecords.forEach { (rawKitsuId, rawImdbId) ->
+        val kitsuId = positiveId(rawKitsuId) ?: return@forEach
+        val imdbId = normalizedImdb(rawImdbId) ?: return@forEach
+        val record = sortedRecord(recordsByKitsu[kitsuId].orEmpty() + mapOf("kitsu" to kitsuId, "imdb" to imdbId, "mediaType" to "series"))
+        recordsByKitsu[kitsuId] = record
+        indexes.getValue("byKitsu")[kitsuId] = kitsuId
+        indexes.getValue("byImdb").putIfAbsent(imdbId, kitsuId)
+    }
+
+    traktAnimeMovieRecords.filterIsInstance<Map<*, *>>().forEach { raw ->
+        val malId = positiveId((raw["myanimelist"] as? Map<*, *>)?.get("id")) ?: return@forEach
+        val kitsuId = indexes.getValue("byMal")[malId] ?: return@forEach
+        val externals = raw["externals"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val additions = linkedMapOf("kitsu" to kitsuId, "mal" to malId, "mediaType" to "movie")
+        positiveId(externals["tmdb"])?.let { tmdbId ->
+            additions["tmdb"] = tmdbId
+            indexes.getValue("byTmdbMovie")[tmdbId] = kitsuId
+        }
+        normalizedImdb(externals["imdb"])?.let { imdbId ->
+            additions["imdb"] = imdbId
+            indexes.getValue("byImdb")[imdbId] = kitsuId
+        }
+        recordsByKitsu[kitsuId] = sortedRecord(recordsByKitsu[kitsuId].orEmpty() + additions)
+        indexes.getValue("byKitsu")[kitsuId] = kitsuId
+    }
+
+    val counts = linkedMapOf<String, Any>(
+        "recordsByKitsu" to recordsByKitsu.size
+    )
+    indexes.forEach { (name, values) -> counts[name] = values.size }
+
+    return linkedMapOf(
+        "schemaVersion" to 1,
+        "generatedAt" to generatedAt,
+        "sources" to animeIdMapSources,
+        "counts" to counts,
+        "recordsByKitsu" to sortedJsonMap(recordsByKitsu.mapValues { it.value })
+    ).also { asset ->
+        indexes.forEach { (name, values) ->
+            asset[name] = sortedJsonMap(values)
+        }
+    }
+}
+
+fun fetchJson(url: String): Any {
+    val connection = URI(url).toURL().openConnection()
+    connection.setRequestProperty("User-Agent", "Nexio anime-id-map Gradle generator")
+    return connection.getInputStream().use { stream ->
+        JsonSlurper().parse(stream)
+    }
+}
+
+fun sameAnimeIdMapContent(existing: Any?, generated: Map<String, Any>): Boolean {
+    val existingMap = existing as? Map<*, *> ?: return false
+    return existingMap.filterKeys { it != "generatedAt" } == generated.filterKeys { it != "generatedAt" }
+}
+
+val generateAnimeIdMap by tasks.registering {
+    group = "build"
+    description = "Download anime ID mappings and generate the bundled indexed Android asset."
+    outputs.file(animeIdMapOutput)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val fribbRecords = fetchJson(animeIdMapSources.getValue("fribbAnimeList")) as? List<*>
+            ?: error("Fribb anime-list response was not a JSON array")
+        val traktAnimeMovieRecords = fetchJson(animeIdMapSources.getValue("traktAnimeMovies")) as? List<*>
+            ?: error("Trakt anime movie response was not a JSON array")
+        val kitsuImdbRecords = fetchJson(animeIdMapSources.getValue("kitsuImdb")) as? Map<*, *>
+            ?: error("Kitsu IMDb response was not a JSON object")
+
+        val outputFile = animeIdMapOutput.asFile
+        val existingAsset = outputFile.takeIf { it.exists() }?.let { JsonSlurper().parse(it) }
+        val existingGeneratedAt = (existingAsset as? Map<*, *>)?.get("generatedAt") as? String
+        val provisionalAsset = buildAnimeIdMapAsset(
+            fribbRecords = fribbRecords,
+            traktAnimeMovieRecords = traktAnimeMovieRecords,
+            kitsuImdbRecords = kitsuImdbRecords,
+            generatedAt = existingGeneratedAt ?: Instant.now().toString()
+        )
+
+        if (sameAnimeIdMapContent(existingAsset, provisionalAsset)) {
+            println("Anime ID map is unchanged: ${outputFile.relativeTo(projectDir)}")
+            println(JsonOutput.prettyPrint(JsonOutput.toJson(provisionalAsset["counts"])))
+            return@doLast
+        }
+
+        val asset = if (existingGeneratedAt == null) {
+            provisionalAsset
+        } else {
+            buildAnimeIdMapAsset(
+                fribbRecords = fribbRecords,
+                traktAnimeMovieRecords = traktAnimeMovieRecords,
+                kitsuImdbRecords = kitsuImdbRecords,
+                generatedAt = Instant.now().toString()
+            )
+        }
+        outputFile.parentFile.mkdirs()
+        outputFile.writeText(JsonOutput.toJson(asset) + "\n")
+        println("Generated ${outputFile.relativeTo(projectDir)}")
+        println(JsonOutput.prettyPrint(JsonOutput.toJson(asset["counts"])))
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
+    dependsOn(generateAnimeIdMap)
     from("src/main/assets")
     into(filteredMainAssetsDir)
     exclude("trailer-helper/runtime/**")
