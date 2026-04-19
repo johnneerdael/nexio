@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
@@ -87,6 +88,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
     private val snapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
+    private val persistedSnapshotReady = MutableStateFlow(false)
     private val refreshMutex = Mutex()
     private var lastRefreshRequestMs = 0L
     private val minRefreshIntervalMs = 30_000L
@@ -113,6 +115,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             scope.launch {
                 manager.profileSwitched.collectLatest { profileId ->
                     markProfileAwaitingLiveReset(profileId)
+                    persistedSnapshotReady.value = false
                     loadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
                 }
             }
@@ -224,27 +227,33 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
-        val profileId = activeProfileId()
-        val persisted = snapshotStore.read(profileId)
-        if (persisted == null) {
-            if (clearWhenMissing) {
-                rawSnapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
-                snapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
-                lastRefreshRequestMs = 0L
-                cancelReemitScheduling()
+        try {
+            val profileId = activeProfileId()
+            val persisted = snapshotStore.read(profileId)
+            if (persisted == null) {
+                if (clearWhenMissing) {
+                    rawSnapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
+                    snapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
+                    lastRefreshRequestMs = 0L
+                    cancelReemitScheduling()
+                }
+                return
             }
-            return
+            val normalized = sanitizeSnapshot(persisted)
+            val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
+            rawSnapshotState.value = owned
+            snapshotState.value = owned
+            lastRefreshRequestMs = 0L
+            handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
+        } finally {
+            persistedSnapshotReady.value = true
         }
-        val normalized = sanitizeSnapshot(persisted)
-        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
-        rawSnapshotState.value = owned
-        snapshotState.value = owned
-        lastRefreshRequestMs = 0L
-        handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
     }
 
     fun observeSnapshot(): Flow<ProfileOwnedContinueWatchingSnapshot> {
-        return snapshotState.onStart {
+        return combine(snapshotState, persistedSnapshotReady) { snapshot, ready ->
+            snapshot.takeIf { ready }
+        }.filterNotNull().onStart {
             scope.launch {
                 runCatching { ensureFresh(force = false) }
                     .onFailure { error ->
