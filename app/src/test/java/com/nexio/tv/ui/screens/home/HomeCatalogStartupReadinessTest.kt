@@ -173,6 +173,35 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `configured home descriptors use cached mdblist custom catalog title when list option is absent`() {
+        val descriptors = buildConfiguredHomeCatalogDescriptors(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(),
+            traktSnapshot = TraktDiscoverySnapshot(),
+            simklPrefs = SimklCatalogPreferences(),
+            mdbPrefs = MDBListCatalogPreferences(
+                selectedTopListKeys = setOf("top:jordipc/oscars-2026-the-98th-academy-awards"),
+                catalogOrder = listOf("top:jordipc/oscars-2026-the-98th-academy-awards")
+            ),
+            mdbSnapshot = MDBListDiscoverySnapshot(
+                customListCatalogs = listOf(
+                    customCatalog(
+                        key = "top:jordipc/oscars-2026-the-98th-academy-awards",
+                        type = ContentType.MOVIE,
+                        title = "Oscars 2026 | The 98th Academy Awards (Movies)"
+                    )
+                )
+            )
+        )
+
+        assertEquals(
+            listOf("Oscars 2026 | The 98th Academy Awards"),
+            descriptors.map { it.catalogName }
+        )
+    }
+
+    @Test
     fun `loading only rows are excluded from persistable home snapshots`() {
         val hydrated = CatalogRow(
             addonId = "cinemeta",
@@ -927,11 +956,15 @@ class HomeCatalogStartupReadinessTest {
         )
     }
 
-    private fun customCatalog(key: String, type: ContentType): MDBListCustomCatalog {
+    private fun customCatalog(
+        key: String,
+        type: ContentType,
+        title: String = key
+    ): MDBListCustomCatalog {
         return MDBListCustomCatalog(
             key = key,
             catalogId = "catalog_${key.substringAfter(':')}",
-            catalogName = key,
+            catalogName = title,
             type = type,
             items = listOf(
                 MetaPreview(

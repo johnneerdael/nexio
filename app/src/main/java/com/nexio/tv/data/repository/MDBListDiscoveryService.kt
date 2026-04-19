@@ -264,7 +264,20 @@ class MDBListDiscoveryService @Inject constructor(
         apiKey: String,
         option: MDBListListOption
     ): List<MDBListCustomCatalog> {
-        val resolvedListIds = resolveItemListIds(apiKey = apiKey, option = option)
+        val detailBody = requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+        val detailOptions = detailBody
+            ?.let(::parseJsonArray)
+            ?.let { parseListOptions(it, isPersonal = option.isPersonal) }
+            .orEmpty()
+        val resolvedListIds = if (option.itemListIds.isNotEmpty()) {
+            option.itemListIds
+        } else {
+            detailBody?.let(::parseResolvedListIds).orEmpty()
+        }
+        val displayTitle = firstNonBlank(
+            detailOptions.firstOrNull()?.title,
+            option.title
+        )
         val payloads = listOfNotNull(
             *resolvedListIds
                 .mapNotNull { resolvedId ->
@@ -279,7 +292,7 @@ class MDBListDiscoveryService @Inject constructor(
                     )
                 }
                 .toTypedArray(),
-            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}"),
+            detailBody,
             requestAbsoluteBody("https://mdblist.com/lists/${option.owner}/${option.listId}/json")
         )
 
@@ -309,7 +322,7 @@ class MDBListDiscoveryService @Inject constructor(
             catalogs += MDBListCustomCatalog(
                 key = option.key,
                 catalogId = "${catalogBase}_movies",
-                catalogName = "${option.title} (Movies)",
+                catalogName = "$displayTitle (Movies)",
                 type = ContentType.MOVIE,
                 items = movies
             )
@@ -318,7 +331,7 @@ class MDBListDiscoveryService @Inject constructor(
             catalogs += MDBListCustomCatalog(
                 key = option.key,
                 catalogId = "${catalogBase}_shows",
-                catalogName = "${option.title} (Shows)",
+                catalogName = "$displayTitle (Shows)",
                 type = ContentType.SERIES,
                 items = shows
             )
@@ -372,16 +385,6 @@ class MDBListDiscoveryService @Inject constructor(
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
             null
         }
-    }
-
-    private suspend fun resolveItemListIds(apiKey: String, option: MDBListListOption): List<String> {
-        if (option.itemListIds.isNotEmpty()) {
-            return option.itemListIds
-        }
-
-        val detailBody = requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
-            ?: return emptyList()
-        return parseResolvedListIds(detailBody)
     }
 
     private suspend fun requestAbsoluteBody(url: String): String? {
