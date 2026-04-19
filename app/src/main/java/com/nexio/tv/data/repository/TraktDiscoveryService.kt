@@ -62,7 +62,8 @@ data class TraktPopularListOption(
     val catalogIdBase: String,
     val title: String,
     val itemCount: Int,
-    val source: TraktListSource = TraktListSource.POPULAR
+    val source: TraktListSource = TraktListSource.POPULAR,
+    val alternateKeys: List<String> = emptyList()
 )
 
 enum class TraktListSource {
@@ -545,9 +546,13 @@ class TraktDiscoveryService @Inject constructor(
         } ?: return emptyList()
         if (!response.isSuccessful) return emptyList()
 
+        val authState = traktAuthService.getCurrentAuthState()
+        val ownerKey = authState.userSlug?.takeIf { it.isNotBlank() }
+            ?: authState.username?.takeIf { it.isNotBlank() }
+            ?: ME_PATH
         return response.body().orEmpty()
             .filter { it.type.equals("personal", ignoreCase = true) }
-            .mapNotNull { dto -> mapPersonalListOption(dto) }
+            .mapNotNull { dto -> mapPersonalListOption(dto, ownerKey) }
     }
 
     private fun mergeTraktListOptions(
@@ -568,18 +573,23 @@ class TraktDiscoveryService @Inject constructor(
     ): List<TraktCustomListCatalog> {
         if (selectedKeys.isEmpty()) return emptyList()
 
-        val byKey = options.associateBy { it.key }
+        val byKey = options.flatMap { option ->
+            (listOf(option.key) + option.alternateKeys).map { key -> key to option }
+        }.toMap()
         return selectedKeys.flatMap { key ->
             val option = byKey[key] ?: parseListKeyFallback(key)
             if (option != null) {
-                fetchPopularListCatalog(option)
+                fetchPopularListCatalog(option, selectedKey = key)
             } else {
                 emptyList()
             }
         }
     }
 
-    private suspend fun fetchPopularListCatalog(option: TraktPopularListOption): List<TraktCustomListCatalog> {
+    private suspend fun fetchPopularListCatalog(
+        option: TraktPopularListOption,
+        selectedKey: String = option.key
+    ): List<TraktCustomListCatalog> {
         val movieItems = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getUserListItems(
                 authorization = authHeader,
@@ -597,14 +607,33 @@ class TraktDiscoveryService @Inject constructor(
                 type = "shows"
             )
         }?.takeIf { it.isSuccessful }?.body().orEmpty()
+        val seasonItems = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getUserListItems(
+                authorization = authHeader,
+                id = option.userId,
+                listId = option.listId,
+                type = "seasons"
+            )
+        }?.takeIf { it.isSuccessful }?.body().orEmpty()
+        val episodeItems = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getUserListItems(
+                authorization = authHeader,
+                id = option.userId,
+                listId = option.listId,
+                type = "episodes"
+            )
+        }?.takeIf { it.isSuccessful }?.body().orEmpty()
 
         val movies = movieItems.mapNotNull { mapListMovieItem(it) }.take(maxItemsPerRail)
-        val shows = showItems.mapNotNull { mapListShowItem(it) }.take(maxItemsPerRail)
+        val shows = (showItems + seasonItems + episodeItems)
+            .mapNotNull { mapListShowItem(it) }
+            .distinctBy { it.id }
+            .take(maxItemsPerRail)
 
         val rows = mutableListOf<TraktCustomListCatalog>()
         if (movies.isNotEmpty()) {
             rows += TraktCustomListCatalog(
-                key = option.key,
+                key = selectedKey,
                 catalogId = "${option.catalogIdBase}_movies",
                 catalogName = "${option.title} (Movies)",
                 type = ContentType.MOVIE,
@@ -613,7 +642,7 @@ class TraktDiscoveryService @Inject constructor(
         }
         if (shows.isNotEmpty()) {
             rows += TraktCustomListCatalog(
-                key = option.key,
+                key = selectedKey,
                 catalogId = "${option.catalogIdBase}_shows",
                 catalogName = "${option.title} (Shows)",
                 type = ContentType.SERIES,
@@ -776,11 +805,13 @@ class TraktDiscoveryService @Inject constructor(
         )
     }
 
-    private fun mapPersonalListOption(dto: TraktListSummaryDto): TraktPopularListOption? {
+    private fun mapPersonalListOption(dto: TraktListSummaryDto, ownerKey: String): TraktPopularListOption? {
         val listId = dto.ids?.slug
             ?: dto.ids?.trakt?.toString()
             ?: return null
-        val key = "$ME_PATH/$listId"
+        val keyOwner = ownerKey.ifBlank { ME_PATH }
+        val key = "$keyOwner/$listId"
+        val meAlias = "$ME_PATH/$listId"
         return TraktPopularListOption(
             key = key,
             userId = ME_PATH,
@@ -788,7 +819,8 @@ class TraktDiscoveryService @Inject constructor(
             catalogIdBase = "trakt_list_${slugify(key)}",
             title = dto.name?.takeIf { it.isNotBlank() } ?: listId,
             itemCount = dto.itemCount ?: 0,
-            source = TraktListSource.PERSONAL
+            source = TraktListSource.PERSONAL,
+            alternateKeys = if (key == meAlias) emptyList() else listOf(meAlias)
         )
     }
 

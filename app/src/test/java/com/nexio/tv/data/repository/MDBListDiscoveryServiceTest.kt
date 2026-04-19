@@ -64,12 +64,86 @@ class MDBListDiscoveryServiceTest {
             )
         }
 
+        val service = buildService(
+            api = api,
+            selectedTopListKeys = setOf("top:jordipc/oscars-2026-the-98th-academy-awards")
+        )
+
+        service.ensureFresh(force = true)
+
+        val snapshot = service.observeSnapshot(autoRefreshOnStart = false).first()
+        val customCatalog = snapshot.customListCatalogs.single()
+        assertEquals("Oscars 2026 | The 98th Academy Awards (Movies)", customCatalog.catalogName)
+    }
+
+    @Test
+    fun `numeric fallback selected list uses MDBList id endpoint`() = runTest {
+        val api = mockk<MDBListApi>()
+        coEvery { api.getRaw(relativeUrl = any(), apiKey = "api-key") } answers {
+            successBody(
+                when (firstArg<String>()) {
+                    "lists/user", "my/lists", "lists/me", "lists/top", "top/lists" -> "[]"
+                    "lists/jordipc/140566" -> ""
+                    "lists/140566" -> """
+                        [
+                          {
+                            "id": 140566,
+                            "user_name": "jordipc",
+                            "name": "Anime",
+                            "slug": "anime",
+                            "mediatype": "show",
+                            "items": 30
+                          }
+                        ]
+                    """.trimIndent()
+                    else -> "[]"
+                }
+            )
+        }
+        coEvery { api.getRawWithQuery(relativeUrl = any(), query = any()) } answers {
+            successBody(
+                when (firstArg<String>()) {
+                    "lists/140566/items" -> """
+                        {
+                          "shows": [
+                            {
+                              "title": "Sample Anime",
+                              "imdb_id": "tt7654321",
+                              "mediatype": "show",
+                              "year": 2025
+                            }
+                          ]
+                        }
+                    """.trimIndent()
+                    else -> ""
+                }
+            )
+        }
+
+        val service = buildService(
+            api = api,
+            selectedTopListKeys = setOf("top:jordipc/140566")
+        )
+
+        service.ensureFresh(force = true)
+
+        val customCatalog = service.observeSnapshot(autoRefreshOnStart = false)
+            .first()
+            .customListCatalogs
+            .single()
+        assertEquals("Anime (Shows)", customCatalog.catalogName)
+    }
+
+    private fun buildService(
+        api: MDBListApi,
+        selectedTopListKeys: Set<String>
+    ): MDBListDiscoveryService {
         val dataStore = mockk<MDBListSettingsDataStore>()
         every { dataStore.settings } returns flowOf(MDBListSettings(enabled = true, apiKey = "api-key"))
         every { dataStore.catalogPreferences } returns flowOf(
             MDBListCatalogPreferences(
-                selectedTopListKeys = setOf("top:jordipc/oscars-2026-the-98th-academy-awards"),
-                catalogOrder = listOf("top:jordipc/oscars-2026-the-98th-academy-awards")
+                selectedTopListKeys = selectedTopListKeys,
+                catalogOrder = selectedTopListKeys.toList()
             )
         )
         every { dataStore.sanitizeCatalogOrder(any(), any()) } answers {
@@ -85,7 +159,7 @@ class MDBListDiscoveryServiceTest {
         val debugSettings = mockk<DebugSettingsDataStore>()
         every { debugSettings.diskFirstHomeStartupEnabled } returns flowOf(false)
 
-        val service = MDBListDiscoveryService(
+        return MDBListDiscoveryService(
             mdbListApi = api,
             mdbListSettingsDataStore = dataStore,
             posterRatingsUrlResolver = posterResolver,
@@ -93,12 +167,6 @@ class MDBListDiscoveryServiceTest {
             debugSettingsDataStore = debugSettings,
             profileManager = testProfileManager()
         )
-
-        service.ensureFresh(force = true)
-
-        val snapshot = service.observeSnapshot(autoRefreshOnStart = false).first()
-        val customCatalog = snapshot.customListCatalogs.single()
-        assertEquals("Oscars 2026 | The 98th Academy Awards (Movies)", customCatalog.catalogName)
     }
 
     private fun successBody(body: String): Response<okhttp3.ResponseBody> {
