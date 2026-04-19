@@ -120,6 +120,12 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
+    fun assSsaPipelineEnablesLegacyTextDecodingForTrackSelectionCompatibility() {
+        assertTrue(shouldEnableLegacyTextDecodingForAssSsaPipeline(assSsaRenderActive = true))
+        assertFalse(shouldEnableLegacyTextDecodingForAssSsaPipeline(assSsaRenderActive = false))
+    }
+
+    @Test
     fun overlayProviderNullStillStartsAssSsaPipeline() {
         val decision = resolveAssSsaPipelineOverlayDecision(
             requestedUseAssSsaPipeline = true,

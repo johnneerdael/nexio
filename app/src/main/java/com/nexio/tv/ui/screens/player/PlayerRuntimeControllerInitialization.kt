@@ -1616,14 +1616,18 @@ private class SubtitleOffsetRenderersFactory(
         extensionRendererMode: Int,
         out: ArrayList<Renderer>
     ) {
+        val textRenderer = TextRenderer(
+            output,
+            outputLooper,
+            androidx.media3.exoplayer.text.SubtitleDecoderFactory.DEFAULT,
+            cueGroupSubtitleTranslator
+        )
+        if (shouldEnableLegacyTextDecodingForAssSsaPipeline(assSsaRenderControllerProvider() != null)) {
+            textRenderer.experimentalSetLegacyDecodingEnabled(true)
+        }
         out.add(
             SubtitleOffsetRenderer(
-                TextRenderer(
-                    output,
-                    outputLooper,
-                    androidx.media3.exoplayer.text.SubtitleDecoderFactory.DEFAULT,
-                    cueGroupSubtitleTranslator
-                ),
+                textRenderer,
                 subtitleDelayUsProvider
             )
         )
@@ -1861,6 +1865,12 @@ internal fun shouldRunEmbeddedAssSsaStartupProbe(
     return nativeAssSsaAvailable &&
         pipelineOverrideForCurrentStream == null &&
         shouldProbeEmbeddedAssSsaBeforePlayerInit(url)
+}
+
+internal fun shouldEnableLegacyTextDecodingForAssSsaPipeline(
+    assSsaRenderActive: Boolean
+): Boolean {
+    return assSsaRenderActive
 }
 
 private fun shouldProbeEmbeddedAssSsaBeforePlayerInit(url: String): Boolean {
