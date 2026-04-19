@@ -228,6 +228,9 @@ class MainActivity : ComponentActivity() {
 
         @Volatile
         private var cachedMainUiPrefs: MainUiPrefs? = null
+
+        @Volatile
+        private var processProfileSelectionGatePassed: Boolean = false
     }
 
     @Inject
@@ -496,9 +499,14 @@ class MainActivity : ComponentActivity() {
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 
                     // Profile selection gating (D-02, UI-01, UI-02)
-                    var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
+                    var hasPassedProfileSelectionGate by rememberSaveable {
+                        mutableStateOf(processProfileSelectionGatePassed)
+                    }
                     val profiles by profileManager.profiles.collectAsState()
-                    val shouldShowProfileSelection = !hasSelectedProfileThisSession && profiles.size > 1
+                    val shouldShowProfileSelection = shouldShowStartupProfileSelection(
+                        hasPassedProfileSelectionGate = hasPassedProfileSelectionGate,
+                        profileCount = profiles.size
+                    )
                     // Capture composition-local value at composable scope for use in LaunchedEffect
                     val contentFocusRequesterForGating = LocalContentFocusRequester.current
                     val profileSelectionScope = rememberCoroutineScope()
@@ -510,7 +518,8 @@ class MainActivity : ComponentActivity() {
                                     val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
                                     profileManager.setActiveProfile(profileId)
                                     val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
-                                    hasSelectedProfileThisSession = true
+                                    processProfileSelectionGatePassed = true
+                                    hasPassedProfileSelectionGate = true
                                     if (beforeLocale != afterLocale) {
                                         recreate()
                                     }
@@ -521,8 +530,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // Restore focus to content after profile selection exits (Pitfall 1)
-                    LaunchedEffect(hasSelectedProfileThisSession) {
-                        if (hasSelectedProfileThisSession) {
+                    LaunchedEffect(hasPassedProfileSelectionGate) {
+                        if (hasPassedProfileSelectionGate) {
                             repeat(2) { withFrameNanos { } }
                             runCatching { contentFocusRequesterForGating.requestFocus() }
                         }
@@ -974,7 +983,8 @@ class MainActivity : ComponentActivity() {
                                 profiles = profiles,
                                 activeProfileId = profileManager.activeProfileId.collectAsState().value,
                                 onSwitchProfile = { profileId ->
-                                    hasSelectedProfileThisSession = false
+                                    processProfileSelectionGatePassed = true
+                                    hasPassedProfileSelectionGate = true
                                     switchProfileAndApplyLocale(profileId)
                                 }
                             )
@@ -1007,7 +1017,8 @@ class MainActivity : ComponentActivity() {
                                 profiles = profiles,
                                 activeProfileId = profileManager.activeProfileId.collectAsState().value,
                                 onSwitchProfile = { profileId ->
-                                    hasSelectedProfileThisSession = false
+                                    processProfileSelectionGatePassed = true
+                                    hasPassedProfileSelectionGate = true
                                     switchProfileAndApplyLocale(profileId)
                                 }
                             )
