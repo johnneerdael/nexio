@@ -82,6 +82,7 @@ private enum class IntegrationSettingsSection {
     Debrid,
     Trakt,
     Simkl,
+    Kitsu,
     TheIntroDb,
     Tmdb,
     Tvdb,
@@ -218,6 +219,7 @@ fun SettingsScreen(
     val integrationDebridFocusRequester = remember { FocusRequester() }
     val integrationTraktFocusRequester = remember { FocusRequester() }
     val integrationSimklFocusRequester = remember { FocusRequester() }
+    val integrationKitsuFocusRequester = remember { FocusRequester() }
     val integrationTheIntroDbFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationTvdbFocusRequester = remember { FocusRequester() }
@@ -412,6 +414,7 @@ fun SettingsScreen(
                             debridFocusRequester = integrationDebridFocusRequester,
                             traktFocusRequester = integrationTraktFocusRequester,
                             simklFocusRequester = integrationSimklFocusRequester,
+                            kitsuFocusRequester = integrationKitsuFocusRequester,
                             theIntroDbFocusRequester = integrationTheIntroDbFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             tvdbFocusRequester = integrationTvdbFocusRequester,
@@ -644,6 +647,7 @@ private fun IntegrationSettingsContent(
     debridFocusRequester: FocusRequester,
     traktFocusRequester: FocusRequester,
     simklFocusRequester: FocusRequester,
+    kitsuFocusRequester: FocusRequester,
     theIntroDbFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
     tvdbFocusRequester: FocusRequester,
@@ -684,6 +688,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Debrid -> debridFocusRequester
             IntegrationSettingsSection.Trakt -> traktFocusRequester
             IntegrationSettingsSection.Simkl -> simklFocusRequester
+            IntegrationSettingsSection.Kitsu -> kitsuFocusRequester
             IntegrationSettingsSection.TheIntroDb -> theIntroDbFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.Tvdb -> tvdbFocusRequester
@@ -739,6 +744,13 @@ private fun IntegrationSettingsContent(
                                 title = stringResource(R.string.simkl_title),
                                 subtitle = stringResource(R.string.settings_simkl_subtitle),
                                 onClick = { onSelectSection(IntegrationSettingsSection.Simkl) }
+                            )
+                        }
+                        item(key = "integration_hub_kitsu") {
+                            SettingsActionRow(
+                                title = "Kitsu",
+                                subtitle = "Authenticate anime metadata requests.",
+                                onClick = { onSelectSection(IntegrationSettingsSection.Kitsu) }
                             )
                         }
                         if (isPrimaryProfile) {
@@ -833,6 +845,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Simkl -> {
             SimklSettingsContent(
                 initialFocusRequester = simklFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.Kitsu -> {
+            KitsuSettingsContent(
+                initialFocusRequester = kitsuFocusRequester
             )
         }
 

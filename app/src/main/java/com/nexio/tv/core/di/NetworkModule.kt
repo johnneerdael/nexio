@@ -16,6 +16,8 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransport
 import com.nexio.tv.data.repository.benchmark.DirectDiscardBenchmarkTransport
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
+import com.nexio.tv.data.remote.api.KitsuApi
+import com.nexio.tv.data.remote.api.KitsuAuthApi
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.OkHttpCustomImdbClient
 import com.nexio.tv.data.remote.api.OmdbApi
@@ -352,6 +354,26 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("kitsu")
+    fun provideKitsuRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://kitsu.io/api/edge/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    @Named("kitsuOauth")
+    fun provideKitsuOauthRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://kitsu.io/api/oauth/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
     @Named("trakt")
     fun provideTraktRetrofit(
         @Named("trakt") okHttpClient: OkHttpClient,
@@ -397,6 +419,16 @@ object NetworkModule {
     @Singleton
     fun provideTvdbApi(@Named("tvdb") retrofit: Retrofit): TvdbApi =
         retrofit.create(TvdbApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideKitsuApi(@Named("kitsu") retrofit: Retrofit): KitsuApi =
+        retrofit.create(KitsuApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideKitsuAuthApi(@Named("kitsuOauth") retrofit: Retrofit): KitsuAuthApi =
+        retrofit.create(KitsuAuthApi::class.java)
 
     @Provides
     @Singleton

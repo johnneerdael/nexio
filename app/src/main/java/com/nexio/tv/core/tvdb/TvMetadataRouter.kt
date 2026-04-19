@@ -1,6 +1,9 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.anime.ContentMediaKind
+import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -24,11 +27,14 @@ class TvMetadataRouter @Inject constructor(
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val credentialHealth: TvdbCredentialHealth,
-    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
+    private val kitsuMetadataService: KitsuMetadataService? = null
 ) {
     suspend fun fetchEnrichment(
         request: TvMetadataRequest
     ): TvMetadataDecision<TvMetadataEnrichment> {
+        tryFetchKitsuEnrichment(request)?.let { return it }
+
         if (!request.contentType.isTv()) {
             return fetchTmdbEnrichment(request, diagnostics = emptyList(), reason = TvMetadataDecisionReason.TVDB_INACTIVE)
         }
@@ -95,6 +101,8 @@ class TvMetadataRouter @Inject constructor(
     suspend fun fetchEpisodeEnrichment(
         request: TvMetadataRequest
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
+        tryFetchKitsuEpisodeEnrichment(request)?.let { return it }
+
         if (!request.contentType.isTv()) {
             return fetchTmdbEpisodeEnrichment(request, diagnostics = emptyList(), reason = TvMetadataDecisionReason.TVDB_INACTIVE)
         }
@@ -221,6 +229,47 @@ class TvMetadataRouter @Inject constructor(
             diagnostics = diagnostics
         )
     }
+
+    private suspend fun tryFetchKitsuEnrichment(
+        request: TvMetadataRequest
+    ): TvMetadataDecision<TvMetadataEnrichment>? {
+        val animeId = firstAnimeId(request) ?: return null
+        val mediaKind = request.contentType.toAnimeMediaKind()
+        val enrichment = kitsuMetadataService?.fetchEnrichment(animeId, mediaKind) ?: return null
+        return TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = enrichment,
+            diagnostics = listOf(
+                diagnostic(TvMetadataDecisionReason.KITSU_SUCCESS, animeId, provider = TvProvider.KITSU)
+            )
+        )
+    }
+
+    private suspend fun tryFetchKitsuEpisodeEnrichment(
+        request: TvMetadataRequest
+    ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>>? {
+        val animeId = firstAnimeId(request) ?: return null
+        val mediaKind = request.contentType.toAnimeMediaKind()
+        val episodes = kitsuMetadataService?.fetchEpisodeEnrichment(animeId, mediaKind, request.seasonNumbers).orEmpty()
+        if (episodes.isEmpty()) return null
+        return TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = episodes,
+            diagnostics = listOf(
+                diagnostic(TvMetadataDecisionReason.KITSU_SUCCESS, animeId, provider = TvProvider.KITSU)
+            )
+        )
+    }
+
+    private fun firstAnimeId(request: TvMetadataRequest): String? {
+        val candidates = listOf(request.contentId, request.fallbackContentId)
+        return candidates.firstOrNull { AnimeStremioId.parse(it) != null }
+    }
+
+    private fun ContentType.toAnimeMediaKind(): ContentMediaKind =
+        if (this == ContentType.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
 
     private suspend fun fetchTmdbEpisodeEnrichment(
         request: TvMetadataRequest,
