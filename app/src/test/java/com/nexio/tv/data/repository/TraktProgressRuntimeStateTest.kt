@@ -60,11 +60,11 @@ class TraktProgressRuntimeStateTest {
     }
 
     @Test
-    fun `show continue watching validates enough watched shows to match Trakt web progress`() {
+    fun `show continue watching limits progress validation to recent watched shows`() {
         val source = source()
 
-        assertTrue(source.contains("private val nextUpValidationVisibleCandidateLimit = 200"))
-        assertTrue(source.contains("private val nextUpValidationBudget = 200"))
+        assertTrue(source.contains("private val nextUpValidationVisibleCandidateLimit = 30"))
+        assertTrue(source.contains("private val nextUpValidationBudget = 30"))
     }
 
     @Test
