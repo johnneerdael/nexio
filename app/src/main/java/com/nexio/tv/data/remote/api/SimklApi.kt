@@ -12,6 +12,7 @@ import com.nexio.tv.data.remote.dto.simkl.SimklPlaybackItemDto
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklUserSettingsResponseDto
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -43,30 +44,30 @@ interface SimklApi {
     ): Response<SimklLastActivitiesResponseDto>
 
     @GET("sync/all-items/{type}/{status}")
-    suspend fun getAllItemsByStatus(
+    suspend fun getAllItemsByStatusRaw(
         @Header("Authorization") authorization: String,
         @Path("type") type: String,
         @Path("status") status: String,
         @Query("date_from") dateFrom: String? = null,
         @Query("extended") extended: String? = null,
         @Query("episode_watched_at") episodeWatchedAt: String? = null
-    ): Response<List<SimklLibraryItemDto>>
+    ): Response<ResponseBody>
 
     @GET("sync/all-items/{type}/")
-    suspend fun getAllItemsByType(
+    suspend fun getAllItemsByTypeRaw(
         @Header("Authorization") authorization: String,
         @Path("type") type: String,
         @Query("date_from") dateFrom: String? = null,
         @Query("extended") extended: String? = null,
         @Query("episode_watched_at") episodeWatchedAt: String? = null
-    ): Response<List<SimklLibraryItemDto>>
+    ): Response<ResponseBody>
 
     @GET("sync/all-items/")
-    suspend fun getAllItems(
+    suspend fun getAllItemsRaw(
         @Header("Authorization") authorization: String,
         @Query("date_from") dateFrom: String? = null,
         @Query("extended") extended: String? = null
-    ): Response<List<SimklLibraryItemDto>>
+    ): Response<ResponseBody>
 
     @GET("sync/playback/{type}")
     suspend fun getPlayback(

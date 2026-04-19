@@ -14,6 +14,8 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.repository.MetaRepository
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -30,6 +32,32 @@ import org.junit.Test
 import retrofit2.Response
 
 class SimklLibraryServiceTest {
+    @Test
+    fun `parseSimklLibraryItemsPayload accepts object wrapped all-items response`() {
+        val items = parseSimklLibraryItemsPayload(
+            """
+            {
+              "movies": [
+                {
+                  "status": "plantowatch",
+                  "movie": {
+                    "title": "Inception",
+                    "year": 2010,
+                    "ids": { "imdb": "tt1375666", "tmdb": "27205" }
+                  }
+                }
+              ],
+              "shows": [],
+              "anime": []
+            }
+            """.trimIndent(),
+            Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+        )
+
+        assertEquals(1, items.size)
+        assertEquals("Inception", items.single().movie?.title)
+        assertEquals("tt1375666", items.single().movie?.ids?.imdb)
+    }
 
     @Test
     fun `service restores persisted SIMKL library snapshot on init`() = runTest {
