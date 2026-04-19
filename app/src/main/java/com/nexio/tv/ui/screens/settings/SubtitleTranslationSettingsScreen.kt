@@ -176,6 +176,17 @@ fun SubtitleTranslationSettingsContent(
                         }
                     )
                 }
+
+                item(key = "subtitle_translation_subrip_system_prompt") {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.subtitle_translation_subrip_system_prompt_title),
+                        subtitle = stringResource(R.string.subtitle_translation_subrip_system_prompt_subtitle),
+                        checked = uiState.subRipSystemPromptEnabled,
+                        onToggle = {
+                            viewModel.setSubRipSystemPromptEnabled(!uiState.subRipSystemPromptEnabled)
+                        }
+                    )
+                }
             }
         }
     }

@@ -46,6 +46,8 @@ internal fun PlayerRuntimeController.clearAiTranslationStateSilently() {
     aiTranslationSelectionGeneration += 1L
     aiSubtitleTranslationJob?.cancel()
     aiSubtitleTranslationJob = null
+    aiSubtitleErrorDismissJob?.cancel()
+    aiSubtitleErrorDismissJob = null
     _uiState.update {
         it.copy(
             aiSubtitlesEnabled = false,
@@ -79,6 +81,17 @@ internal fun PlayerRuntimeController.enableAiSubtitles() {
         return
     }
 
+    if (!shouldAllowBuiltInAiSubtitleEnable(
+            selectedAddonSubtitlePresent = _uiState.value.selectedAddonSubtitle != null,
+            selectedSubtitleTrackIndex = _uiState.value.selectedSubtitleTrackIndex,
+            currentCueGroupHasCues = currentCueGroup.cues.isNotEmpty(),
+            currentCueGroupIsTextOnly = currentBuiltInCueGroupIsTextOnly()
+        )
+    ) {
+        showTransientAiSubtitleError(context.getString(R.string.subtitle_ai_translate_unsupported_builtin))
+        return
+    }
+
     _uiState.update {
         it.copy(
             aiSubtitlesEnabled = true,
@@ -102,6 +115,8 @@ internal fun PlayerRuntimeController.disableAiSubtitles() {
     aiTranslationSelectionGeneration += 1L
     aiSubtitleTranslationJob?.cancel()
     aiSubtitleTranslationJob = null
+    aiSubtitleErrorDismissJob?.cancel()
+    aiSubtitleErrorDismissJob = null
 
     val selectedAddonSubtitle = _uiState.value.selectedAddonSubtitle
     _uiState.update {
@@ -144,7 +159,12 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
 
     val targetLanguage = _uiState.value.subtitleStyle.preferredLanguage
     aiSubtitleTranslationJob = scope.launch {
-        if (addonSubtitleSupportsOverlay(PlayerSubtitleUtils.mimeTypeFromUrl(sourceSubtitle.url))) {
+        val sourceMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(sourceSubtitle.url)
+        if (shouldUseAddonOverlayTranslation(
+                mimeType = sourceMimeType,
+                subRipSystemPromptEnabled = subtitleTranslationSettings.subRipSystemPromptEnabled
+            )
+        ) {
             val overlayResult = translateAndActivateAddonOverlayCues(
                 sourceSubtitle = sourceSubtitle,
                 targetLanguage = targetLanguage,
@@ -260,6 +280,15 @@ private fun supportsAiTranslation(subtitle: Subtitle): Boolean {
         MimeTypes.TEXT_SSA -> true
         else -> false
     }
+}
+
+internal fun shouldUseAddonOverlayTranslation(
+    mimeType: String?,
+    subRipSystemPromptEnabled: Boolean
+): Boolean {
+    val resolvedMimeType = mimeType ?: return false
+    return addonSubtitleSupportsOverlay(resolvedMimeType) &&
+        !(mimeType == MimeTypes.APPLICATION_SUBRIP && subRipSystemPromptEnabled)
 }
 
 internal fun subtitleSupportsAiTranslationForTest(url: String): Boolean {

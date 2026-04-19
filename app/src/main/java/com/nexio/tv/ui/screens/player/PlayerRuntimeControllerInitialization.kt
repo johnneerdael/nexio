@@ -124,49 +124,10 @@ internal fun resolveAssSsaPipelineOverlayDecision(
     )
 }
 
-internal fun shouldRetryAssSsaPipelineWhenOverlayAvailable(
-    overrideForCurrentStream: Boolean?,
-    activePlayerUsesAssSsaRenderer: Boolean,
-    switchInFlight: Boolean,
-    fallbackHandled: Boolean,
-    overlayAvailable: Boolean
-): Boolean {
-    return overlayAvailable &&
-        overrideForCurrentStream == true &&
-        !activePlayerUsesAssSsaRenderer &&
-        !switchInFlight &&
-        !fallbackHandled
-}
-
 internal fun PlayerRuntimeController.setAssSsaRenderOverlayViewProvider(
     provider: (() -> AssSsaRenderOverlayView?)?
 ) {
     assSsaOverlayViewProvider = provider
-    val overlayAvailable = provider?.invoke() != null
-    if (!shouldRetryAssSsaPipelineWhenOverlayAvailable(
-            overrideForCurrentStream = assSsaPipelineOverrideForCurrentStream,
-            activePlayerUsesAssSsaRenderer = activePlayerUsesAssSsaRenderer,
-            switchInFlight = assSsaPipelineSwitchInFlight,
-            fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream,
-            overlayAvailable = overlayAvailable
-        )
-    ) {
-        return
-    }
-
-    val player = _exoPlayer ?: return
-    val resumePosition = player.currentPosition.takeIf { it > 0L }
-    assSsaPipelineSwitchInFlight = true
-    _uiState.update { state ->
-        state.copy(
-            pendingSeekPosition = resumePosition ?: state.pendingSeekPosition,
-            showLoadingOverlay = state.loadingOverlayEnabled
-        )
-    }
-    scope.launch {
-        releasePlayer()
-        initializePlayer(currentStreamUrl, currentHeaders)
-    }
 }
 
 internal fun shouldEnableAssSsaSampleTranslation(

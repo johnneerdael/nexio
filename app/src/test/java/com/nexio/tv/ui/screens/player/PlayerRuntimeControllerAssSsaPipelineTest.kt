@@ -99,28 +99,6 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun overlayAvailabilityRetriesPendingAssSsaPipeline() {
-        assertTrue(
-            shouldRetryAssSsaPipelineWhenOverlayAvailable(
-                overrideForCurrentStream = true,
-                activePlayerUsesAssSsaRenderer = false,
-                switchInFlight = false,
-                fallbackHandled = false,
-                overlayAvailable = true
-            )
-        )
-        assertFalse(
-            shouldRetryAssSsaPipelineWhenOverlayAvailable(
-                overrideForCurrentStream = true,
-                activePlayerUsesAssSsaRenderer = false,
-                switchInFlight = false,
-                fallbackHandled = true,
-                overlayAvailable = true
-            )
-        )
-    }
-
-    @Test
     fun assSsaTranslationSinkIsOnlyEnabledWhenAiTranslationIsConfigured() {
         assertEquals(
             false,

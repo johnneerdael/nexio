@@ -35,6 +35,7 @@ private const val DEFAULT_RETRY_DELAY_MS = 1_000L
 private const val MAX_RETRY_DELAY_MS = 8_000L
 private val RAW_ASS_TRANSLATION_SYNTAX_PATTERN =
     Regex("""\\(?![Nnh])(?:[A-Za-z]+\d*|\d+[A-Za-z]+)""")
+private val RAW_SUBRIP_TAG_PATTERN = Regex("""<[^>\n]+>""")
 
 internal fun subtitleTranslationCueCacheKey(
     text: String,
@@ -58,7 +59,20 @@ internal fun subtitleTranslationDiskCacheKey(
     targetLanguage: String,
     settings: SubtitleTranslationSettings
 ): String {
-    return sha256("file|$sourceUrl|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|v2")
+    return sha256(
+        "file|$sourceUrl|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|" +
+            "assRaw=${settings.assSsaSystemPromptEnabled}|srtRaw=${settings.subRipSystemPromptEnabled}|v3"
+    )
+}
+
+private data class RawSubRipCue(
+    val number: String,
+    val timestamp: String,
+    val textLines: List<String>,
+    val raw: String
+) {
+    val tags: List<String>
+        get() = RAW_SUBRIP_TAG_PATTERN.findAll(textLines.joinToString("\n")).map { it.value }.toList()
 }
 
 internal enum class SubtitleTranslationProviderError {
@@ -133,6 +147,12 @@ class SubtitleTranslationService @Inject constructor(
             minSplitEntries = 100,
             maxParallelRequests = 1
         )
+        val RAW_SUBRIP_SYSTEM_PROMPT_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
+            maxEntries = 50,
+            maxChars = 15_000,
+            minSplitEntries = 1,
+            maxParallelRequests = 1
+        )
     }
 
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
@@ -166,7 +186,16 @@ class SubtitleTranslationService @Inject constructor(
             )
 
             if (!translatedFile.exists() || translatedFile.length() == 0L) {
-                val renderedSubtitle = if (document.format == TimedTextFormat.ASS ||
+                val renderedSubtitle = if (document.format == TimedTextFormat.SRT &&
+                    normalizedSettings.subRipSystemPromptEnabled
+                ) {
+                    translateRawSubRipText(
+                        text = sourceText,
+                        targetLanguageCode = normalizedTarget,
+                        sourceLanguageCode = sourceLanguageCode,
+                        settings = normalizedSettings
+                    ).getOrThrow()
+                } else if (document.format == TimedTextFormat.ASS ||
                     document.format == TimedTextFormat.SSA
                 ) {
                     val protectedTranslations = mutableMapOf<String, String>()
@@ -401,6 +430,45 @@ class SubtitleTranslationService @Inject constructor(
         }
     }
 
+    internal suspend fun translateRawSubRipText(
+        text: String,
+        targetLanguageCode: String,
+        sourceLanguageCode: String?,
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig = RAW_SUBRIP_SYSTEM_PROMPT_CHUNK_CONFIG
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val normalizedTarget = targetLanguageCode.trim().ifBlank {
+                throw IllegalArgumentException("Target language is required.")
+            }
+            val normalizedSettings = settings.copy(apiKey = settings.apiKey.trim())
+            if (normalizedSettings.apiKey.isBlank()) {
+                throw IllegalArgumentException("Subtitle translation API key is missing.")
+            }
+            if (text.isBlank()) {
+                return@runCatching text
+            }
+
+            val cues = parseRawSubRipCues(text)
+            if (cues.isEmpty()) {
+                return@runCatching text
+            }
+            val targetLanguageName = displayLanguage(normalizedTarget)
+            val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
+            chunkRawSubRipCues(cues, chunkConfig)
+                .joinToString("\n\n") { batch ->
+                    requestRawSubRipBatchAdaptive(
+                        cues = batch,
+                        targetLanguageName = targetLanguageName,
+                        sourceLanguageName = sourceLanguageName,
+                        settings = normalizedSettings,
+                        chunkConfig = chunkConfig
+                    ).trim()
+                }
+                .trim() + "\n"
+        }
+    }
+
     private suspend fun downloadSubtitleText(url: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(url)
@@ -502,6 +570,125 @@ class SubtitleTranslationService @Inject constructor(
         }
 
         return result
+    }
+
+    private fun parseRawSubRipCues(text: String): List<RawSubRipCue> {
+        val normalized = text
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .trim()
+        if (normalized.isBlank()) return emptyList()
+
+        return normalized
+            .split(Regex("\n{2,}"))
+            .mapNotNull { block ->
+                val lines = block.lines()
+                val timestampIndex = lines.indexOfFirst { line -> "-->" in line }
+                if (timestampIndex <= 0 || timestampIndex >= lines.lastIndex) {
+                    null
+                } else {
+                    RawSubRipCue(
+                        number = lines.first(),
+                        timestamp = lines[timestampIndex],
+                        textLines = lines.drop(timestampIndex + 1),
+                        raw = block
+                    )
+                }
+            }
+    }
+
+    private fun renderRawSubRipCues(cues: List<RawSubRipCue>): String {
+        return cues.joinToString("\n\n") { cue -> cue.raw }.trim() + "\n"
+    }
+
+    private fun chunkRawSubRipCues(
+        cues: List<RawSubRipCue>,
+        chunkConfig: SubtitleTranslationChunkConfig
+    ): List<List<RawSubRipCue>> {
+        val result = mutableListOf<List<RawSubRipCue>>()
+        var current = mutableListOf<RawSubRipCue>()
+        var currentChars = 0
+
+        for (cue in cues) {
+            val nextChars = currentChars + cue.raw.length
+            if (current.isNotEmpty() && (current.size >= chunkConfig.maxEntries || nextChars > chunkConfig.maxChars)) {
+                result += current.toList()
+                current = mutableListOf()
+                currentChars = 0
+            }
+            current += cue
+            currentChars += cue.raw.length
+        }
+
+        if (current.isNotEmpty()) {
+            result += current.toList()
+        }
+
+        return result
+    }
+
+    private fun requestRawSubRipBatchAdaptive(
+        cues: List<RawSubRipCue>,
+        targetLanguageName: String,
+        sourceLanguageName: String,
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig
+    ): String {
+        return runCatching {
+            requestRawSubRipBatch(
+                cues = cues,
+                targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
+                settings = settings
+            )
+        }.getOrElse { error ->
+            if (error is SubtitleTranslationProviderException) {
+                throw error
+            }
+            if (cues.size <= chunkConfig.minSplitEntries || cues.size <= 1) {
+                throw error
+            }
+            val midpoint = cues.size / 2
+            listOf(
+                requestRawSubRipBatchAdaptive(
+                    cues = cues.take(midpoint),
+                    targetLanguageName = targetLanguageName,
+                    sourceLanguageName = sourceLanguageName,
+                    settings = settings,
+                    chunkConfig = chunkConfig
+                ),
+                requestRawSubRipBatchAdaptive(
+                    cues = cues.drop(midpoint),
+                    targetLanguageName = targetLanguageName,
+                    sourceLanguageName = sourceLanguageName,
+                    settings = settings,
+                    chunkConfig = chunkConfig
+                )
+            ).joinToString("\n\n") { it.trim() }
+        }
+    }
+
+    private fun requestRawSubRipBatch(
+        cues: List<RawSubRipCue>,
+        targetLanguageName: String,
+        sourceLanguageName: String,
+        settings: SubtitleTranslationSettings
+    ): String {
+        val source = renderRawSubRipCues(cues)
+        val userPayload = buildRawSubRipUserPayload(source, targetLanguageName)
+        val response = executeRawTranslationRequest(
+            systemPrompt = buildRawSubRipSystemPrompt(targetLanguageName),
+            userPayload = userPayload,
+            sourceLanguageName = sourceLanguageName,
+            targetLanguageName = targetLanguageName,
+            settings = settings
+        ) ?: throw IllegalStateException("Subtitle translation provider did not return raw SRT text.")
+        val translated = sanitizeRawSubtitleResponse(response)
+        validateRawSubRipTranslation(
+            source = cues,
+            translated = translated
+        ).getOrThrow()
+        return translated
     }
 
     private fun requestChunkTranslationAdaptive(
@@ -1199,6 +1386,144 @@ class SubtitleTranslationService @Inject constructor(
         """.trimIndent()
     }
 
+    private fun buildRawSubRipUserPayload(
+        rawSubRip: String,
+        targetLanguageName: String
+    ): String {
+        val firstLine = rawSubRip.lineSequence().firstOrNull().orEmpty()
+        return """
+            TARGET LANGUAGE: $targetLanguageName
+            FIRST OUTPUT LINE MUST BE EXACTLY: $firstLine
+            Translate the raw SRT batch below. Return translated SRT only.
+            Do not add any line before the first cue number.
+
+            ${rawSubRip.trim()}
+        """.trimIndent()
+    }
+
+    private fun buildRawSubRipSystemPrompt(targetLanguageName: String): String {
+        return """
+            You are SRT_TRANSLATION_ENGINE.
+
+            Your task is to translate raw SRT subtitle content into $targetLanguageName while preserving valid SRT format exactly.
+
+            OUTPUT RULE
+            Return only the translated SRT content.
+            Do not return explanations, comments, summaries, Markdown, code fences, JSON, warnings, or notes.
+            Do not write any preface such as "Here is", "Here's", "Translated SRT", or "Below".
+            The first output line must be the first cue number from the input batch.
+            The first character of the response must be that cue number's first digit.
+
+            CORE RULE
+            Translate only human-readable subtitle text.
+            Preserve all SRT structure and formatting exactly.
+
+            SRT STRUCTURE TO PRESERVE
+            Each SRT cue may contain:
+            1. cue number
+            2. timestamp line
+            3. one or more subtitle text lines
+            4. blank line separator
+
+            You must preserve:
+            - every cue number exactly
+            - cue order exactly
+            - every timestamp line exactly
+            - all blank lines between cues
+            - all cue separators
+            - all non-dialogue structure
+            - all formatting tags
+            - all metadata or cue settings
+            - all URLs, codes, filenames, handles, hashtags, and IDs
+
+            Never add, remove, merge, split, renumber, or reorder cues.
+            Never change timestamps.
+            Never change the number of cues.
+            Never change a cue number.
+            Never remove a blank line between cues.
+
+            CUE FRAGMENT RULE
+            Some sentences are intentionally split across multiple cue blocks.
+            Translate each cue block independently and keep its translated fragment inside the same cue.
+            Do not repair a sentence by moving words into an earlier or later cue.
+            Do not combine adjacent sentence fragments into one cue.
+
+            TIMESTAMP LINES
+            Timestamp lines contain "-->" and must be copied exactly.
+            Never alter start time, end time, milliseconds, commas or periods, the --> arrow, spaces around the arrow, coordinates, cue settings, or trailing timestamp metadata.
+
+            FORMATTING TAGS
+            Preserve all tags exactly.
+            Preserve common SRT tags such as <i>, </i>, <b>, </b>, <u>, </u>, <s>, </s>, <font color="...">, </font>, <br>, and <br/>.
+            Preserve any unknown HTML/XML-like tag exactly.
+            Never translate, rewrite, remove, duplicate, normalize, or invent tags.
+            Never change tag names, attributes, colors, quotes, angle brackets, slashes, or equals signs.
+            Color names inside tag attributes are code, not language. Never translate attribute values such as "yellow", "blue", "red", "green", "white", or "black".
+            Translate only visible human text outside tags.
+
+            TAG PLACEMENT
+            Keep tags in the same relative order.
+            Preserve tag multiplicity.
+            If the same tags appear on two subtitle text lines, keep both tagged lines.
+            Do not collapse two tagged lines into one tagged line.
+            For each subtitle text line, preserve that line's tag sequence on that same line.
+
+            DIALOGUE MARKERS AND SPEAKERS
+            Preserve dialogue dashes and speaker labels.
+            Dialogue dashes are punctuation, not protected text.
+            For lines that start with "-", "–", or "—", preserve the dash and translate the dialogue after the dash.
+            For two-speaker lines, translate both speakers independently.
+            Synthetic speaker labels are structure, not dialogue.
+            Preserve labels like "- Speaker 1:" and "- Speaker 2:" exactly, including the English word "Speaker".
+            Translate only the dialogue after those labels.
+            Never output localized forms such as "- Spreker 1:" or "- Spreker 2:".
+            Preserve every speaker name or label exactly.
+
+            TRANSLATION STYLE
+            Translate naturally for subtitles.
+            Use concise spoken language.
+            Preserve meaning, tone, emotion, register, humor, intent, and character voice.
+            Do not translate word-for-word when a natural subtitle translation is better.
+            Translate idioms and common subtitle phrases into idiomatic target-language subtitles.
+            For Dutch, use natural Netherlands Dutch such as "Kom op" for "Come on" and "Kijk uit" for "Watch it" when context fits.
+            Do not summarize, add information, omit meaning, censor, or explain jokes.
+
+            LINE BREAKS
+            Preserve the existing number of subtitle text lines in every cue exactly.
+            If a cue has two subtitle text lines, output two subtitle text lines.
+            If a cue has three subtitle text lines, output three subtitle text lines.
+            Never collapse multiple subtitle text lines into one line.
+            Never split one subtitle text line into multiple lines.
+            Do not move text between cues.
+            Do not split one cue into multiple cues.
+            Do not merge multiple cues.
+            Structure preservation has priority over natural line wrapping.
+            Translate line-by-line.
+            Each source subtitle text line maps to exactly one output subtitle text line.
+            If a source text line is an unnatural fragment, output an unnatural translated fragment rather than combining it with the next line.
+
+            MUSIC, SOUNDS, AND CAPTIONS
+            Translate meaningful sound or caption descriptions while preserving brackets, parentheses, music symbols, names inside descriptions, and formatting around descriptions.
+
+            FAIL-SAFE
+            If a line is clearly SRT structure, copy it exactly.
+            If unsure whether something is subtitle text or structure, preserve it unchanged.
+            If a cue is malformed, translate only obvious subtitle text and preserve everything else.
+            If safe translation is impossible, return the original cue unchanged.
+
+            VALIDATION TARGET
+            Your output is automatically rejected unless all of these are true:
+            1. Cue count equals input cue count.
+            2. Cue numbers equal input cue numbers in the same order.
+            3. Timestamp lines equal input timestamp lines exactly.
+            4. Each cue has the same number of subtitle text lines as the input cue.
+            5. Every HTML/XML-like tag token appears exactly as in the input cue.
+            6. Speaker labels such as "NARRATOR:", "[JAKE]:", "- Speaker 1:", and "- Speaker 2:" remain unchanged.
+
+            Return only the translated SRT.
+        """.trimIndent()
+    }
+
     private fun parseProtectedAssSsaResponse(
         responseText: String,
         units: List<AssSsaProtectedTranslationUnit>
@@ -1231,6 +1556,10 @@ class SubtitleTranslationService @Inject constructor(
     }
 
     private fun sanitizeRawAssSsaResponse(responseText: String): String {
+        return sanitizeRawSubtitleResponse(responseText)
+    }
+
+    private fun sanitizeRawSubtitleResponse(responseText: String): String {
         val trimmed = responseText.trim()
         val unfenced = if (trimmed.startsWith("```")) {
             trimmed
@@ -1243,6 +1572,30 @@ class SubtitleTranslationService @Inject constructor(
         return unfenced
             .replace("\r\n", "\n")
             .replace('\r', '\n')
+    }
+
+    private fun validateRawSubRipTranslation(
+        source: List<RawSubRipCue>,
+        translated: String
+    ): Result<Unit> = runCatching {
+        val translatedCues = parseRawSubRipCues(translated)
+        if (translatedCues.size != source.size) {
+            throw IllegalStateException("Raw SRT translation changed cue count.")
+        }
+        source.zip(translatedCues).forEach { (sourceCue, translatedCue) ->
+            if (translatedCue.number != sourceCue.number) {
+                throw IllegalStateException("Raw SRT translation changed cue number ${sourceCue.number}.")
+            }
+            if (translatedCue.timestamp != sourceCue.timestamp) {
+                throw IllegalStateException("Raw SRT translation changed timestamp for cue ${sourceCue.number}.")
+            }
+            if (translatedCue.textLines.size != sourceCue.textLines.size) {
+                throw IllegalStateException("Raw SRT translation changed text line count for cue ${sourceCue.number}.")
+            }
+            if (translatedCue.tags != sourceCue.tags) {
+                throw IllegalStateException("Raw SRT translation changed tag sequence for cue ${sourceCue.number}.")
+            }
+        }
     }
 
     private fun validateRawAssSsaTranslation(

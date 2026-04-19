@@ -1,7 +1,11 @@
 package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.R
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
+
+private const val AI_SUBTITLE_UNSUPPORTED_ERROR_MS = 2_000L
 
 internal fun PlayerRuntimeController.currentBuiltInCueTexts(): List<String> {
     return currentCueGroup.cues.mapNotNull { cue ->
@@ -23,6 +27,40 @@ internal fun PlayerRuntimeController.shouldUseBuiltInAiTranslation(): Boolean {
     return state.aiSubtitlesEnabled &&
         state.selectedAddonSubtitle == null &&
         state.selectedSubtitleTrackIndex >= 0
+}
+
+internal fun shouldAllowBuiltInAiSubtitleEnable(
+    selectedAddonSubtitlePresent: Boolean,
+    selectedSubtitleTrackIndex: Int,
+    currentCueGroupHasCues: Boolean,
+    currentCueGroupIsTextOnly: Boolean
+): Boolean {
+    if (selectedAddonSubtitlePresent || selectedSubtitleTrackIndex < 0) return true
+    if (!currentCueGroupHasCues) return true
+    return currentCueGroupIsTextOnly
+}
+
+internal fun PlayerRuntimeController.showTransientAiSubtitleError(message: String) {
+    aiSubtitleErrorDismissJob?.cancel()
+    _uiState.update {
+        it.copy(
+            aiSubtitlesEnabled = false,
+            isAiSubtitleTranslating = false,
+            useBuiltInAiSubtitleOverlay = false,
+            translatedBuiltInCues = emptyList(),
+            aiSubtitleError = message
+        )
+    }
+    aiSubtitleErrorDismissJob = scope.launch {
+        delay(AI_SUBTITLE_UNSUPPORTED_ERROR_MS)
+        _uiState.update { state ->
+            if (state.aiSubtitleError == message) {
+                state.copy(aiSubtitleError = null)
+            } else {
+                state
+            }
+        }
+    }
 }
 
 internal fun PlayerRuntimeController.refreshBuiltInAiOverlayState() {
@@ -63,12 +101,7 @@ internal fun PlayerRuntimeController.handleBuiltInCueGroupUpdate() {
     }
 
     if (!currentBuiltInCueGroupIsTextOnly()) {
-        _uiState.update {
-            it.copy(
-                isAiSubtitleTranslating = false,
-                aiSubtitleError = context.getString(R.string.subtitle_ai_translate_unsupported_builtin)
-            )
-        }
+        showTransientAiSubtitleError(context.getString(R.string.subtitle_ai_translate_unsupported_builtin))
         return
     }
 

@@ -18,6 +18,28 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     }
 
     @Test
+    fun `subrip system prompt mode bypasses addon overlay translation`() {
+        assertFalse(
+            shouldUseAddonOverlayTranslation(
+                mimeType = MimeTypes.APPLICATION_SUBRIP,
+                subRipSystemPromptEnabled = true
+            )
+        )
+        assertTrue(
+            shouldUseAddonOverlayTranslation(
+                mimeType = MimeTypes.APPLICATION_SUBRIP,
+                subRipSystemPromptEnabled = false
+            )
+        )
+        assertTrue(
+            shouldUseAddonOverlayTranslation(
+                mimeType = MimeTypes.TEXT_VTT,
+                subRipSystemPromptEnabled = true
+            )
+        )
+    }
+
+    @Test
     fun `ass and ssa urls route to text ssa and bypass overlay`() {
         assertEquals(
             MimeTypes.TEXT_SSA,

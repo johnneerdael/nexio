@@ -54,7 +54,8 @@ internal fun normalizeSubtitleTranslationSettings(
     apiKey: String?,
     model: String?,
     baseUrl: String?,
-    assSsaSystemPromptEnabled: Boolean = false
+    assSsaSystemPromptEnabled: Boolean = false,
+    subRipSystemPromptEnabled: Boolean = false
 ): SubtitleTranslationSettings {
     val trimmedApiKey = apiKey?.trim().orEmpty()
     val trimmedProvider = providerName?.trim().orEmpty()
@@ -70,7 +71,8 @@ internal fun normalizeSubtitleTranslationSettings(
         apiKey = trimmedApiKey,
         model = model?.trim()?.takeIf(String::isNotBlank) ?: defaults.model,
         baseUrl = baseUrl?.trim()?.trimEnd('/')?.takeIf(String::isNotBlank) ?: defaults.baseUrl,
-        assSsaSystemPromptEnabled = assSsaSystemPromptEnabled
+        assSsaSystemPromptEnabled = assSsaSystemPromptEnabled,
+        subRipSystemPromptEnabled = subRipSystemPromptEnabled
     )
 }
 
@@ -97,6 +99,7 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
     private val modelKey = stringPreferencesKey("subtitle_translation_model")
     private val baseUrlKey = stringPreferencesKey("subtitle_translation_base_url")
     private val assSsaSystemPromptEnabledKey = booleanPreferencesKey("subtitle_translation_ass_ssa_system_prompt_enabled")
+    private val subRipSystemPromptEnabledKey = booleanPreferencesKey("subtitle_translation_subrip_system_prompt_enabled")
 
     val settings: Flow<SubtitleTranslationSettings> = dataStore.data.map { prefs ->
         normalizeSubtitleTranslationSettings(
@@ -105,7 +108,8 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
             apiKey = prefs[apiKeyKey],
             model = prefs[modelKey],
             baseUrl = prefs[baseUrlKey],
-            assSsaSystemPromptEnabled = prefs[assSsaSystemPromptEnabledKey] ?: false
+            assSsaSystemPromptEnabled = prefs[assSsaSystemPromptEnabledKey] ?: false,
+            subRipSystemPromptEnabled = prefs[subRipSystemPromptEnabledKey] ?: false
         )
     }
 
@@ -142,6 +146,12 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
     suspend fun setAssSsaSystemPromptEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[assSsaSystemPromptEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSubRipSystemPromptEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[subRipSystemPromptEnabledKey] = enabled
         }
     }
 
