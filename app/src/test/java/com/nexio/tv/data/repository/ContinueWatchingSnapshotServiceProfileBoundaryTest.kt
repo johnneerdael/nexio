@@ -11,6 +11,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -43,6 +44,55 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         )
 
         assertEquals(true, owned.isOwnedBy(2))
+    }
+
+    @Test
+    fun `observing snapshot waits for persisted active profile snapshot before emitting default empty`() = runTest {
+        val activeProfileId = MutableStateFlow(1)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val persisted = ContinueWatchingSnapshot(
+            resumeItems = listOf(sampleProgress("tt-persisted")),
+            updatedAtMs = 50L
+        )
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(1) } answers {
+                Thread.sleep(200L)
+                persisted
+            }
+        }
+        val service = ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { allProgress } returns MutableStateFlow(emptyList())
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(false)
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                every { state } returns MutableStateFlow(
+                    EffectiveTrackingProviderState(traktAuthenticated = true)
+                )
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metaRepository = mockk<MetaRepository>(relaxed = true),
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager
+        )
+
+        val firstSnapshot = service.observeSnapshot().first()
+
+        assertEquals(1, firstSnapshot.profileId)
+        assertEquals(
+            "tt-persisted",
+            firstSnapshot.snapshot.resumeItems.single().contentId
+        )
     }
 
     @Test
