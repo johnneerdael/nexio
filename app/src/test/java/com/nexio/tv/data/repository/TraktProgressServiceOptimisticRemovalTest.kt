@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
 import com.nexio.tv.domain.model.WatchProgress
@@ -8,7 +7,6 @@ import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
@@ -16,9 +14,6 @@ class TraktProgressServiceOptimisticRemovalTest {
 
     @Test
     fun `applyOptimisticRemoval removes episode from shared episode progress snapshot immediately`() {
-        val debugSettings = mockk<DebugSettingsDataStore>(relaxed = true) {
-            every { diskFirstHomeStartupEnabled } returns flowOf(false)
-        }
         val traktAuthService = mockk<TraktAuthService>(relaxed = true) {
             every { currentTraktProfileId() } returns 1
         }
@@ -26,8 +21,7 @@ class TraktProgressServiceOptimisticRemovalTest {
             traktApi = mockk<TraktApi>(relaxed = true),
             traktAuthService = traktAuthService,
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
-            metaRepository = mockk<MetaRepository>(relaxed = true),
-            debugSettingsDataStore = debugSettings
+            metaRepository = mockk<MetaRepository>(relaxed = true)
         )
 
         val contentId = "tt1190634"

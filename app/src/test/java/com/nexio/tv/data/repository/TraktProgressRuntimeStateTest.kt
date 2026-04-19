@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.domain.model.WatchProgress
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,6 +39,57 @@ class TraktProgressRuntimeStateTest {
         assertTrue(!source.contains("continueWatchingWindowDays"))
     }
 
+    @Test
+    fun `progress refresh is not startup gated`() {
+        val source = source()
+
+        assertFalse(source.contains("diskFirstHomeStartupEnabled"))
+        assertFalse(source.contains("isStartupRefreshGated"))
+        assertFalse(source.contains("refreshNowImmediate: deferred by startup gate"))
+    }
+
+    @Test
+    fun `episode history prefers highest episode when season mark timestamps match`() {
+        val earlyEpisode = historyProgress(season = 12, episode = 2, lastWatched = 1_000L)
+        val seasonFinale = historyProgress(season = 12, episode = 24, lastWatched = 1_000L)
+
+        assertTrue(shouldPreferEpisodeHistoryEntry(existing = earlyEpisode, candidate = seasonFinale))
+        assertFalse(shouldPreferEpisodeHistoryEntry(existing = seasonFinale, candidate = earlyEpisode))
+    }
+
+    @Test
+    fun `episode history prefers newer timestamp before episode coordinates`() {
+        val oldFinale = historyProgress(season = 12, episode = 24, lastWatched = 1_000L)
+        val newerEarlierEpisode = historyProgress(season = 12, episode = 3, lastWatched = 2_000L)
+
+        assertTrue(shouldPreferEpisodeHistoryEntry(existing = oldFinale, candidate = newerEarlierEpisode))
+        assertFalse(shouldPreferEpisodeHistoryEntry(existing = newerEarlierEpisode, candidate = oldFinale))
+    }
+
     private fun source(): String =
         File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
+
+    private fun historyProgress(
+        season: Int,
+        episode: Int,
+        lastWatched: Long
+    ): WatchProgress {
+        return WatchProgress(
+            contentId = "tt6103712",
+            contentType = "series",
+            name = "Australian Survivor",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = "tt6103712:$season:$episode",
+            season = season,
+            episode = episode,
+            episodeTitle = null,
+            position = 1L,
+            duration = 1L,
+            lastWatched = lastWatched,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY
+        )
+    }
 }

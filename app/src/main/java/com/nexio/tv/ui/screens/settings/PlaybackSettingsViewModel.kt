@@ -229,6 +229,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setEnableBufferLogs(enabled)
     }
 
+    suspend fun setTraktScrobbleApiLoggingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setTraktScrobbleApiLoggingEnabled(enabled)
+    }
+
     suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
         debugSettingsDataStore.setStreamDiagnosticsEnabled(enabled)
     }

@@ -57,6 +57,17 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
+    fun `trakt scrobble api logging defaults off and persists`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        assertEquals(false, dataStore.playerSettings.first().traktScrobbleApiLoggingEnabled)
+
+        dataStore.setTraktScrobbleApiLoggingEnabled(true)
+
+        assertEquals(true, dataStore.playerSettings.first().traktScrobbleApiLoggingEnabled)
+    }
+
+    @Test
     fun `mpv hardware decode mode defaults to auto safe and persists direct selection`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 

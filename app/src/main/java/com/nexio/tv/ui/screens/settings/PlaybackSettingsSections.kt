@@ -154,6 +154,7 @@ internal fun PlaybackSettingsSections(
     dolbyVisionDiagnosticsEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
+    onSetTraktScrobbleApiLoggingEnabled: (Boolean) -> Unit,
     onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
     onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
     onSetDiskSpoolDiagnosticsEnabled: (Boolean) -> Unit,
@@ -545,6 +546,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_buffer_subtitle),
                     isChecked = playerSettings.enableBufferLogs,
                     onCheckedChange = onSetEnableBufferLogs,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_trakt_scrobble_api") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.History,
+                    title = stringResource(R.string.playback_logging_trakt_scrobble_title),
+                    subtitle = stringResource(R.string.playback_logging_trakt_scrobble_subtitle),
+                    isChecked = playerSettings.traktScrobbleApiLoggingEnabled,
+                    onCheckedChange = onSetTraktScrobbleApiLoggingEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

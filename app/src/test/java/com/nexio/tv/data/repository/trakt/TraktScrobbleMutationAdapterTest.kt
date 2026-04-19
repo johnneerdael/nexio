@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
@@ -13,6 +15,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,7 +51,8 @@ class TraktScrobbleMutationAdapterTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktProgressService = traktProgressService,
-            watchingNowStateController = controller
+            watchingNowStateController = controller,
+            playerSettingsDataStore = playerSettingsStore()
         )
         controller.publish(
             TraktWatchingNowStateController.Snapshot(
@@ -83,7 +87,8 @@ class TraktScrobbleMutationAdapterTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktProgressService = traktProgressService,
-            watchingNowStateController = controller
+            watchingNowStateController = controller,
+            playerSettingsDataStore = playerSettingsStore()
         )
         val envelope = TraktScrobbleMutationAdapter.buildCheckinEnvelope(
             item = movieItem("Arrival"),
@@ -109,4 +114,12 @@ class TraktScrobbleMutationAdapterTest {
         year = 2025,
         ids = TraktIdsDto(imdb = "tt1234567")
     )
+
+    private fun playerSettingsStore(
+        settings: PlayerSettings = PlayerSettings()
+    ): PlayerSettingsDataStore {
+        return mockk<PlayerSettingsDataStore> {
+            every { playerSettings } returns flowOf(settings)
+        }
+    }
 }

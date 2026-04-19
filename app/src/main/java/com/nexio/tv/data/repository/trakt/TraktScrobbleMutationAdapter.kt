@@ -1,7 +1,9 @@
 package com.nexio.tv.data.repository.trakt
 
+import android.util.Log
 import com.google.gson.JsonObject
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCheckinRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
@@ -24,6 +26,8 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import kotlinx.coroutines.flow.first
+import retrofit2.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,7 +36,8 @@ class TraktScrobbleMutationAdapter @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
     private val traktProgressService: TraktProgressService,
-    private val watchingNowStateController: TraktWatchingNowStateController
+    private val watchingNowStateController: TraktWatchingNowStateController,
+    private val playerSettingsDataStore: PlayerSettingsDataStore
 ) : TraktMutationAdapter {
 
     override val adapterKey: String = ADAPTER_KEY
@@ -68,10 +73,23 @@ class TraktScrobbleMutationAdapter @Inject constructor(
     }
 
     private suspend fun executeCheckin(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+        val requestBody = envelope.buildCheckinRequestBody()
         val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val logApi = isScrobbleApiLoggingEnabled()
+        if (logApi) {
+            logTraktScrobbleRequest(
+                endpoint = "POST /checkin",
+                envelope = envelope,
+                body = requestBody
+            )
+        }
         val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.checkin(authHeader, envelope.buildCheckinRequestBody())
-        } ?: return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
+            traktApi.checkin(authHeader, requestBody)
+        } ?: run {
+            if (logApi) logTraktScrobbleNoResponse("POST /checkin", envelope)
+            return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
+        }
+        if (logApi) logTraktScrobbleResponse("POST /checkin", envelope, response)
 
         return if (response.isSuccessful || response.code() == 409) {
             TraktMutationExecutionResult.Success(httpStatusCode = response.code())
@@ -87,13 +105,27 @@ class TraktScrobbleMutationAdapter @Inject constructor(
     private suspend fun executeScrobble(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val requestBody = envelope.buildScrobbleRequestBody()
         val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val action = envelope.scrobbleAction()
+        val endpoint = "POST /scrobble/$action"
+        val logApi = isScrobbleApiLoggingEnabled()
+        if (logApi) {
+            logTraktScrobbleRequest(
+                endpoint = endpoint,
+                envelope = envelope,
+                body = requestBody
+            )
+        }
         val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            when (envelope.scrobbleAction()) {
+            when (action) {
                 "start" -> traktApi.scrobbleStart(authHeader, requestBody)
                 "pause" -> traktApi.scrobblePause(authHeader, requestBody)
                 else -> traktApi.scrobbleStop(authHeader, requestBody)
             }
-        } ?: return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
+        } ?: run {
+            if (logApi) logTraktScrobbleNoResponse(endpoint, envelope)
+            return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
+        }
+        if (logApi) logTraktScrobbleResponse(endpoint, envelope, response)
 
         return if (response.isSuccessful || response.code() == 409) {
             TraktMutationExecutionResult.Success(httpStatusCode = response.code())
@@ -106,7 +138,55 @@ class TraktScrobbleMutationAdapter @Inject constructor(
         }
     }
 
+    private suspend fun isScrobbleApiLoggingEnabled(): Boolean {
+        return runCatching {
+            playerSettingsDataStore.playerSettings.first().traktScrobbleApiLoggingEnabled
+        }.getOrDefault(false)
+    }
+
+    private fun logTraktScrobbleRequest(
+        endpoint: String,
+        envelope: TraktMutationEnvelope,
+        body: Any
+    ) {
+        Log.i(
+            LOG_TAG,
+            "request endpoint=$endpoint profile=${envelope.profileId} " +
+                "kind=${envelope.mutationKind} collapseKey=${envelope.collapseKey} body=${body.toString().boundedForLog()}"
+        )
+    }
+
+    private fun logTraktScrobbleNoResponse(endpoint: String, envelope: TraktMutationEnvelope) {
+        Log.w(
+            LOG_TAG,
+            "response endpoint=$endpoint profile=${envelope.profileId} kind=${envelope.mutationKind} result=no_response"
+        )
+    }
+
+    private fun logTraktScrobbleResponse(
+        endpoint: String,
+        envelope: TraktMutationEnvelope,
+        response: Response<*>
+    ) {
+        val responseText = response.body()?.toString()
+            ?: response.errorBody()?.string()
+            ?: "<empty>"
+        Log.i(
+            LOG_TAG,
+            "response endpoint=$endpoint profile=${envelope.profileId} kind=${envelope.mutationKind} " +
+                "http=${response.code()} successful=${response.isSuccessful} body=${responseText.boundedForLog()}"
+        )
+    }
+
+    private fun String.boundedForLog(maxLength: Int = 1_500): String {
+        return replace('\n', ' ').replace('\r', ' ')
+            .let { value ->
+                if (value.length <= maxLength) value else value.take(maxLength) + "...<truncated>"
+            }
+    }
+
     companion object {
+        private const val LOG_TAG = "TraktScrobbleApi"
         private const val PAYLOAD_ITEM_TYPE = "itemType"
         private const val PAYLOAD_TITLE = "title"
         private const val PAYLOAD_YEAR = "year"

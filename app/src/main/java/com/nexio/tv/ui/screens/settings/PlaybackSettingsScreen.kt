@@ -376,6 +376,9 @@ internal fun PlaybackSettingsContent(
                 onSetEnableBufferLogs = { enabled ->
                     coroutineScope.launch { viewModel.setEnableBufferLogs(enabled) }
                 },
+                onSetTraktScrobbleApiLoggingEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setTraktScrobbleApiLoggingEnabled(enabled) }
+                },
                 onSetStreamDiagnosticsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStreamDiagnosticsEnabled(enabled) }
                 },

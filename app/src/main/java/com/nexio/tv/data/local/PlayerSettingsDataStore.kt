@@ -202,6 +202,8 @@ data class PlayerSettings(
     val fireOsIecSuperviseAudioDelayEnabled: Boolean = false,
     // Debug: verbose IEC packer logs for ADB troubleshooting.
     val fireOsIecVerboseLoggingEnabled: Boolean = false,
+    // Debug: emit Trakt scrobble/check-in write requests and responses to logcat.
+    val traktScrobbleApiLoggingEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
     // Experimental: force DV5 streams to FFmpeg software decode for tone mapping on non-DV displays.
@@ -576,6 +578,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val parallelChunkSizeMbKey = intPreferencesKey("parallel_chunk_size_mb")
     private val addonSubtitleStartupModeKey = stringPreferencesKey("addon_subtitle_startup_mode")
     private val enableBufferLogsKey = booleanPreferencesKey("enable_buffer_logs")
+    private val traktScrobbleApiLoggingEnabledKey = booleanPreferencesKey("trakt_scrobble_api_logging_enabled")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -915,6 +918,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 addonSubtitleStartupMode = parseAddonSubtitleStartupMode(prefs[addonSubtitleStartupModeKey]),
                 enableBufferLogs = prefs[enableBufferLogsKey] ?: false,
+                traktScrobbleApiLoggingEnabled = prefs[traktScrobbleApiLoggingEnabledKey] ?: false,
                 subtitleStyle = SubtitleStyleSettings(
                     preferredLanguage = normalizeSelectableLanguageCode(
                         prefs[subtitlePreferredLanguageKey] ?: "en"
@@ -1080,6 +1084,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setEnableBufferLogs(enabled: Boolean) {
         store().edit { prefs ->
             prefs[enableBufferLogsKey] = enabled
+        }
+    }
+
+    suspend fun setTraktScrobbleApiLoggingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[traktScrobbleApiLoggingEnabledKey] = enabled
         }
     }
 
