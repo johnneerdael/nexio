@@ -852,7 +852,6 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setBufferBackBufferDurationMs(settings.playback.bufferNetwork.backBufferDurationMs)
         playerSettingsDataStore.setEnableBufferLogs(settings.playback.bufferNetwork.enableBufferLogs)
 
-        traktSettingsDataStore.setContinueWatchingDaysCap(settings.trakt.continueWatchingDaysCap)
         traktSettingsDataStore.setCatalogPreferences(
             enabledCatalogs = settings.trakt.catalogEnabledSet.toSet(),
             catalogOrder = settings.trakt.catalogOrder,

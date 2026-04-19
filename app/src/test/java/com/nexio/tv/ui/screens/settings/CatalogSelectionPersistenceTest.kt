@@ -60,7 +60,6 @@ class CatalogSelectionPersistenceTest {
         } returns flowOf(TraktAuthState(accessToken = "token", refreshToken = "refresh"))
 
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
-        every { traktSettingsDataStore.continueWatchingDaysCap } returns flowOf(60)
         every {
             traktSettingsDataStore.catalogPreferences
         } returns flowOf(TraktCatalogPreferences())

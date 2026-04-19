@@ -499,8 +499,6 @@
   <string name="trakt_token_refreshes">Trakt-Zugriffstoken wird in %1$s aktualisiert</string>
   <string name="trakt_login_instruction">Klicke auf Anmelden, um die Authentifizierung des Trakt-Geräts zu starten. Hier erscheint ein QR-Code.</string>
   <string name="trakt_missing_credentials">Fehlende TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
-  <string name="trakt_continue_watching_window">Zeitraum für Weiter ansehen</string>
-  <string name="trakt_continue_watching_subtitle">Trakt-Verlauf, der für Weiter ansehen berücksichtigt wird</string>
   <string name="trakt_cached_label">Zwischengespeichert</string>
   <string name="trakt_stat_movies">Filme</string>
   <string name="trakt_stat_shows">Serien</string>
@@ -512,12 +510,8 @@
   <string name="trakt_login">Login</string>
   <string name="trakt_retry">Wiederholen</string>
   <string name="trakt_back">Zurück</string>
-  <string name="trakt_cw_window_title">Zeitraum für Weiter ansehen</string>
-  <string name="trakt_cw_window_subtitle">Wähle aus, aus welchem Zeitraum Trakt-Aktivitäten bei Weiter ansehen angezeigt werden sollen.</string>
   <string name="trakt_show_unaired">Noch nicht ausgestrahlte Episoden anzeigen</string>
   <string name="trakt_hide_unaired">Noch nicht ausgestrahlte Episoden ausblenden</string>
-  <string name="trakt_all_history">Gesamter Verlauf</string>
-  <string name="trakt_days_format">%1$d Tage</string>
   <string name="debug_title">Fehlerbehebung</string>
   <string name="debug_subtitle">Entwicklertools und Feature-Flags (nur Debug-Builds)</string>
   <string name="debug_section_popup">Popup-/Dialogtests</string>

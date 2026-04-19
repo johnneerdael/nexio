@@ -20,7 +20,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,7 +48,6 @@ data class TraktUiState(
     val verificationUrl: String? = null,
     val pollIntervalSeconds: Int = 5,
     val deviceCodeExpiresAtMillis: Long? = null,
-    val continueWatchingDaysCap: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
     val connectedStats: TraktProgressService.TraktCachedStats? = null,
     val watchingNowActive: Boolean = false,
     val watchingNowTitle: String? = null,
@@ -91,19 +89,6 @@ class TraktViewModel @Inject constructor(
         observeAuthState()
         observeDiscovery()
         observeWatchingNow()
-    }
-
-    fun onContinueWatchingDaysCapSelected(days: Int) {
-        viewModelScope.launch {
-            traktSettingsDataStore.setContinueWatchingDaysCap(days)
-            traktProgressService.refreshNow()
-            _uiState.update {
-                it.copy(
-                    continueWatchingDaysCap = days,
-                    statusMessage = "Continue watching window updated"
-                )
-            }
-        }
     }
 
     fun onConnectClick() {
@@ -202,15 +187,9 @@ class TraktViewModel @Inject constructor(
 
     private fun observeSettings() {
         viewModelScope.launch {
-            combine(
-                traktSettingsDataStore.continueWatchingDaysCap,
-                traktSettingsDataStore.catalogPreferences
-            ) { daysCap, catalogPreferences ->
-                daysCap to catalogPreferences
-            }.collectLatest { (daysCap, catalogPreferences) ->
+            traktSettingsDataStore.catalogPreferences.collectLatest { catalogPreferences ->
                 _uiState.update {
                     it.copy(
-                        continueWatchingDaysCap = daysCap,
                         catalogPreferences = catalogPreferences
                     )
                 }

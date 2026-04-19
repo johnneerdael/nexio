@@ -499,8 +499,6 @@
   <string name="trakt_token_refreshes">Trakt 访问令牌将在 %1$s 后刷新</string>
   <string name="trakt_login_instruction">按“登录”开始 Trakt 设备授权。此处将出现一个二维码。</string>
   <string name="trakt_missing_credentials">local.properties 中缺少 TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET。</string>
-  <string name="trakt_continue_watching_window">“继续观看”的时间窗口</string>
-  <string name="trakt_continue_watching_subtitle">包含在“继续观看”栏目中的 Trakt 历史记录时长</string>
   <string name="trakt_cached_label">已缓存</string>
   <string name="trakt_stat_movies">电影</string>
   <string name="trakt_stat_shows">剧集</string>
@@ -512,12 +510,8 @@
   <string name="trakt_login">登录</string>
   <string name="trakt_retry">重试</string>
   <string name="trakt_back">返回</string>
-  <string name="trakt_cw_window_title">“继续观看”的时间窗口</string>
-  <string name="trakt_cw_window_subtitle">选择多长时间内的 Trakt 历史记录应该显示在“继续观看”中。</string>
   <string name="trakt_show_unaired">显示未播出的剧集</string>
   <string name="trakt_hide_unaired">隐藏未播出的剧集</string>
-  <string name="trakt_all_history">全部历史记录</string>
-  <string name="trakt_days_format">%1$d 天</string>
   <string name="debug_title">调试</string>
   <string name="debug_subtitle">开发人员工具和实验性功能（仅限 Debug 版本）</string>
   <string name="debug_section_popup">弹窗/对话框测试</string>

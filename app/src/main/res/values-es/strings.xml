@@ -307,8 +307,6 @@
   <string name="trakt_token_refreshes">El token de acceso de Trakt se actualiza en %1$s</string>
   <string name="trakt_login_instruction">Presiona Iniciar sesión para comenzar la autenticación del dispositivo en Trakt. Un código QR aparecerá aquí.</string>
   <string name="trakt_missing_credentials">Falta TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET en local.properties.</string>
-  <string name="trakt_continue_watching_window">Periodo de Continuar viendo</string>
-  <string name="trakt_continue_watching_subtitle">Historial de Trakt considerado para Continuar viendo</string>
   <string name="trakt_cached_label">En caché</string>
   <string name="trakt_stat_movies">Películas</string>
   <string name="trakt_stat_shows">Series</string>
@@ -320,12 +318,8 @@
   <string name="trakt_login">Iniciar sesión</string>
   <string name="trakt_retry">Reintentar</string>
   <string name="trakt_back">Atrás</string>
-  <string name="trakt_cw_window_title">Periodo de Continuar viendo</string>
-  <string name="trakt_cw_window_subtitle">Elige el periodo de actividad de Trakt que debe aparecer en Continuar viendo.</string>
   <string name="trakt_show_unaired">Mostrar episodios sin emitir</string>
   <string name="trakt_hide_unaired">Ocultar episodios sin emitir</string>
-  <string name="trakt_all_history">Todo el historial</string>
-  <string name="trakt_days_format">%1$d días</string>
   <string name="debug_title">Depuración</string>
   <string name="debug_subtitle">Herramientas de desarrollador y opciones experimentales (solo para debug)</string>
   <string name="debug_section_popup">Prueba de diálogos/popups</string>

@@ -825,8 +825,6 @@
     <string name="trakt_token_refreshes">Trakt access token refreshes in %1$s</string>
     <string name="trakt_login_instruction">Press Login to start Trakt device authentication. A QR code will appear here.</string>
     <string name="trakt_missing_credentials">Missing TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
-    <string name="trakt_continue_watching_window">Continue Watching Window</string>
-    <string name="trakt_continue_watching_subtitle">Trakt history considered for continue watching</string>
     <string name="trakt_cached_label">Cached</string>
     <string name="trakt_stat_movies">Movies</string>
     <string name="trakt_stat_shows">Shows</string>
@@ -874,12 +872,8 @@
     <string name="action_sync_now">Sync now</string>
     <string name="trakt_sync_now_subtitle">Refresh Trakt stats and discovery rails now.</string>
     <string name="trakt_back">Back</string>
-    <string name="trakt_cw_window_title">Continue Watching Window</string>
-    <string name="trakt_cw_window_subtitle">Choose how much Trakt activity should appear in continue watching.</string>
     <string name="trakt_show_unaired">Show unaired episodes</string>
     <string name="trakt_hide_unaired">Hide unaired episodes</string>
-    <string name="trakt_all_history">All history</string>
-    <string name="trakt_days_format">%1$d days</string>
 
     <!-- DebugSettingsScreen -->
     <string name="debug_title">Debug</string>

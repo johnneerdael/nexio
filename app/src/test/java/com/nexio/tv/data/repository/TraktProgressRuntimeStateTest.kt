@@ -27,6 +27,16 @@ class TraktProgressRuntimeStateTest {
         assertTrue(source.contains("hasLoadedRemoteProgress.value = false"))
     }
 
+    @Test
+    fun `continue watching playback fetches are not age windowed`() {
+        val source = source()
+
+        assertTrue(source.contains("val inProgressMovies = getPlayback(\"movies\", force = force)"))
+        assertTrue(source.contains("val inProgressEpisodes = getPlayback(\"episodes\", force = force)"))
+        assertTrue(!source.contains("recentWatchWindowMs"))
+        assertTrue(!source.contains("continueWatchingWindowDays"))
+    }
+
     private fun source(): String =
         File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
 }

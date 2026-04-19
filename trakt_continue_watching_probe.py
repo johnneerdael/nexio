@@ -252,7 +252,7 @@ def main() -> int:
     parser.add_argument("--client-secret")
     parser.add_argument("--redirect-uri")
     parser.add_argument("--token-file", default=str(DEFAULT_TOKEN_FILE))
-    parser.add_argument("--days-cap", default="60", help="Integer days or 'all'")
+    parser.add_argument("--days-cap", default="all", help="Integer days or 'all'")
     parser.add_argument("--preview-limit", type=int, default=15)
     args = parser.parse_args()
 

@@ -501,8 +501,6 @@
   <string name="trakt_token_refreshes">Trakt-toegangstoken wordt vernieuwd over %1$s</string>
   <string name="trakt_login_instruction">Druk op Inloggen om Trakt-apparaatauthenticatie te starten. Hier verschijnt een QR-code.</string>
   <string name="trakt_missing_credentials">TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET ontbreekt in local.properties.</string>
-  <string name="trakt_continue_watching_window">Verder kijken venster</string>
-  <string name="trakt_continue_watching_subtitle">Trakt-geschiedenis overwogen om verder te kijken</string>
   <string name="trakt_cached_label">In cache opgeslagen</string>
   <string name="trakt_stat_movies">Films</string>
   <string name="trakt_stat_shows">Series</string>
@@ -514,12 +512,8 @@
   <string name="trakt_login">Inloggen</string>
   <string name="trakt_retry">Opnieuw proberen</string>
   <string name="trakt_back">Terug</string>
-  <string name="trakt_cw_window_title">Verder kijken venster</string>
-  <string name="trakt_cw_window_subtitle">Kies hoelang Trakt-activiteit moet verschijnen bij Verder kijken.</string>
   <string name="trakt_show_unaired">Toon niet-uitgezonden afleveringen</string>
   <string name="trakt_hide_unaired">Verberg niet-uitgezonden afleveringen</string>
-  <string name="trakt_all_history">Alle geschiedenis</string>
-  <string name="trakt_days_format">%1$d dagen</string>
   <string name="debug_title">Foutopsporing</string>
   <string name="debug_subtitle">Ontwikkelaarstools en functievlaggen (alleen debug-builds)</string>
   <string name="debug_section_popup">Pop-up-/dialoogtests</string>

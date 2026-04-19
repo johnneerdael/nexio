@@ -310,8 +310,6 @@
   <string name="trakt_token_refreshes">Le jeton d\'accès Trakt se rafraîchit dans %1$s</string>
   <string name="trakt_login_instruction">Appuie sur Connexion pour démarrer l\'authentification Trakt. Un QR code apparaîtra ici.</string>
   <string name="trakt_missing_credentials">TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET manquants dans local.properties.</string>
-  <string name="trakt_continue_watching_window">Période "Reprendre le visionnage"</string>
-  <string name="trakt_continue_watching_subtitle">Historique Trakt pris en compte pour "Reprendre le visionnage"</string>
   <string name="trakt_cached_label">En cache</string>
   <string name="trakt_stat_movies">Films</string>
   <string name="trakt_stat_shows">Séries</string>
@@ -323,12 +321,8 @@
   <string name="trakt_login">Connexion</string>
   <string name="trakt_retry">Réessayer</string>
   <string name="trakt_back">Retour</string>
-  <string name="trakt_cw_window_title">Période "Reprendre le visionnage"</string>
-  <string name="trakt_cw_window_subtitle">Choisis la période d\'activité Trakt à afficher dans "Reprendre le visionnage".</string>
   <string name="trakt_show_unaired">Afficher les épisodes non diffusés</string>
   <string name="trakt_hide_unaired">Masquer les épisodes non diffusés</string>
-  <string name="trakt_all_history">Tout l\'historique</string>
-  <string name="trakt_days_format">%1$d jours</string>
   <string name="debug_title">Débogage</string>
   <string name="debug_subtitle">Outils développeur et options expérimentales (builds debug uniquement)</string>
   <string name="debug_section_popup">Test de popup / boîte de dialogue</string>
