@@ -17,6 +17,16 @@ TMDB and TheTVDB enrichment are enabled by default. Nexio uses built-in metadata
 
 Optional custom API keys remain supported. When a custom key is saved, Nexio uses it before the built-in key. Removing the custom key returns the app to built-in access.
 
+## Anime metadata IDs
+
+Nexio can enrich anime metadata from Kitsu when a title has a Kitsu-backed ID in the bundled anime map. Direct `kitsu:{id}` IDs are resolved as Kitsu anime IDs. `mal:{id}`, `anilist:{id}`, `anidb:{id}`, `tmdb:{id}`, `tvdb:{id}`, `tt...`, and `imdb:{id}` IDs are resolved through `anime/anime-id-map.json` before Kitsu is called.
+
+TMDB, TheTVDB, and IMDb IDs still fall back to the normal TMDB/TheTVDB metadata routes when the bundled anime map has no matching Kitsu ID. TMDB lookups use separate movie and series indexes to avoid cross-media collisions.
+
+## Kitsu authentication
+
+Kitsu login is optional for public metadata. When connected, Nexio uses Kitsu OAuth password grant to obtain access and refresh tokens. Username is stored only for display, tokens are stored through the account secret sync contract, and the password is never saved after the login exchange.
+
 ## MDBList ratings and list inputs
 
 - MDBList helps Nexio surface extra ratings and list-oriented inputs where those signals are supported.

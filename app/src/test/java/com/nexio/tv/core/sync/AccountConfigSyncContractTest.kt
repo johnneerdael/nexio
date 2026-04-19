@@ -20,6 +20,7 @@ import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.KitsuAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
@@ -63,6 +64,15 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountConfigSyncContractTest {
+    @Test
+    fun `account sync contract includes kitsu auth settings and secrets`() {
+        val contract = File("supabase/account_settings_sync.sql").readText()
+
+        assertTrue(contract.contains("\"kitsuAuth\""))
+        assertTrue(contract.contains("'kitsu_access_token'"))
+        assertTrue(contract.contains("'kitsu_refresh_token'"))
+        assertFalse(contract.contains("'kitsu_password'"))
+    }
 
     @Test
     fun `subtitle translation sync defaults use OpenRouter free route`() {
@@ -122,6 +132,15 @@ class AccountConfigSyncContractTest {
                 ),
                 gemini = GeminiSyncSettings(enabled = true),
                 posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = true),
+                kitsuAuth = KitsuAuthSyncSettings(
+                    enabled = true,
+                    connected = true,
+                    username = "kitsu-user",
+                    accessTokenSecretRef = "kitsu_access_token",
+                    refreshTokenSecretRef = "kitsu_refresh_token",
+                    expiresAtEpochSeconds = 1234L,
+                    includeNsfw = true
+                ),
                 traktAuth = TraktAuthSyncSettings(connected = true, username = "trakt-user", userSlug = "trakt-slug"),
                 simklAuth = SimklAuthSyncSettings(connected = true, username = "simkl-user", accountId = 51, accountType = "vip")
             ),

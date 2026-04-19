@@ -12,6 +12,7 @@ import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.KitsuAuthDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -61,6 +62,7 @@ import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.KitsuAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.LayoutSettings
 import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
@@ -146,6 +148,9 @@ private const val TRAKT_REFRESH_SECRET_TYPE = "trakt_refresh_token"
 private const val TRAKT_SECRET_REF = "integration:trakt"
 private const val SIMKL_ACCESS_SECRET_TYPE = "simkl_access_token"
 private const val SIMKL_SECRET_REF = "integration:simkl"
+private const val KITSU_ACCESS_SECRET_TYPE = "kitsu_access_token"
+private const val KITSU_REFRESH_SECRET_TYPE = "kitsu_refresh_token"
+private const val KITSU_SECRET_REF = "integration:kitsu"
 
 internal fun selectSubtitleTranslationApiKeySecret(
     genericTranslationKey: String?,
@@ -190,6 +195,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val realDebridAuthDataStore: RealDebridAuthDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val simklAuthDataStore: SimklAuthDataStore,
+    private val kitsuAuthDataStore: KitsuAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
@@ -507,6 +513,7 @@ class AccountSettingsSyncService @Inject constructor(
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
         val traktAuth = traktAuthDataStore.stateForProfile(defaultProfileId).first()
         val simklAuth = simklAuthDataStore.stateForProfile(defaultProfileId).first()
+        val kitsuAuth = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
 
         return buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
@@ -590,6 +597,15 @@ class AccountSettingsSyncService @Inject constructor(
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.rpdbEnabled,
                     topPostersEnabled = posterRatings.topPostersEnabled
+                ),
+                kitsuAuth = KitsuAuthSyncSettings(
+                    enabled = kitsuAuth.isAuthenticated,
+                    connected = kitsuAuth.isAuthenticated,
+                    username = kitsuAuth.username.orEmpty(),
+                    accessTokenSecretRef = KITSU_ACCESS_SECRET_TYPE,
+                    refreshTokenSecretRef = KITSU_REFRESH_SECRET_TYPE,
+                    expiresAtEpochSeconds = kitsuAuth.expiresAtEpochSeconds,
+                    includeNsfw = false
                 ),
                 traktAuth = TraktAuthSyncSettings(
                     connected = traktAuth.isAuthenticated,

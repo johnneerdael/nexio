@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -1306,8 +1307,9 @@ class MetaDetailsViewModel @Inject constructor(
         val settings = tmdbSettingsDataStore.settings.first()
         val tmdbContentType = resolveTmdbContentType(meta)
         val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
+        val hasAnimeId = AnimeStremioId.parse(meta.id) != null || AnimeStremioId.parse(itemId) != null
         val tvdbLanguage = currentTvdbLanguageTag()
-        val tvEnrichment = if (isTvContent) {
+        val tvEnrichment = if (isTvContent || hasAnimeId) {
             tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(
                     contentId = meta.id,
@@ -1338,14 +1340,18 @@ class MetaDetailsViewModel @Inject constructor(
                 null
             }
         } else {
-            if (!settings.isActive) return meta
-            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
-                ?: tmdbService.ensureTmdbId(itemId, itemType)
-                ?: return meta
-            tmdbMetadataService.fetchEnrichment(
-                tmdbId = tmdbId,
-                contentType = tmdbContentType
-            )
+            if (hasAnimeId && tvEnrichment != null) {
+                null
+            } else {
+                if (!settings.isActive) return meta
+                val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
+                    ?: tmdbService.ensureTmdbId(itemId, itemType)
+                    ?: return meta
+                tmdbMetadataService.fetchEnrichment(
+                    tmdbId = tmdbId,
+                    contentType = tmdbContentType
+                )
+            }
         }
 
         var updated = meta

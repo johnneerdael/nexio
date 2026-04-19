@@ -2,7 +2,8 @@ package com.nexio.tv.core.tvdb
 
 enum class TvProvider {
     TVDB,
-    TMDB
+    TMDB,
+    KITSU
 }
 
 enum class TvMetadataDecisionReason(val eventName: String) {
@@ -11,6 +12,7 @@ enum class TvMetadataDecisionReason(val eventName: String) {
     TVDB_FALLBACK_TMDB("tvdb_fallback_tmdb"),
     TVDB_IDENTITY_MISSING("tvdb_identity_missing"),
     TVDB_RECORD_MISSING("tvdb_record_missing"),
+    KITSU_SUCCESS("kitsu_success"),
     TMDB_TV_SKIPPED("tmdb_tv_skipped"),
     POSTER_RATINGS_OVERRIDE("poster_ratings_override"),
     TVDB_SEASON_TYPE_PRESENT("tvdb_season_type_present"),
