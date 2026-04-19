@@ -53,7 +53,7 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
-        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
             flowOf(NetworkResult.Error("metadata unavailable"))
 
@@ -77,7 +77,7 @@ class TraktLibraryServiceTest {
             listOf("tt1234567", "tmdb:321"),
             service.observeAllItems().first().map { it.id }
         )
-        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
     }
 
     @Test
@@ -93,9 +93,9 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } returns null
+        every { snapshotStore.read(any()) } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -133,7 +133,7 @@ class TraktLibraryServiceTest {
         service.refreshNow()
         advanceUntilIdle()
 
-        verify(atLeast = 1) { snapshotStore.write(any()) }
+        verify(atLeast = 1) { snapshotStore.write(any(), any()) }
         assertEquals(listOf(TraktLibraryService.WATCHLIST_KEY), service.observeListTabs().first().map { it.key })
     }
 
@@ -152,15 +152,15 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers {
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers {
             assertTrue(runBlocking { service.observeListTabs().first().isEmpty() })
             assertTrue(runBlocking { service.observeAllItems().first().isEmpty() })
             assertTrue(runBlocking { service.observeHasCache().first().not() })
             persistedSnapshot = firstArg()
         }
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -214,10 +214,10 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
             flowOf(NetworkResult.Error("metadata unavailable"))
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returns null
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returns null
 
         val service = TraktLibraryService(
             traktApi = traktApi,
@@ -251,8 +251,8 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers { persistedSnapshot = firstArg() }
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
 
         val service = TraktLibraryService(
@@ -275,9 +275,9 @@ class TraktLibraryServiceTest {
 
         val tabs = service.observeListTabs().first()
         assertTrue(tabs.any { it.key.startsWith("personal:pending:") && it.title == "Queued List" })
-        verify(atLeast = 1) { snapshotStore.write(any()) }
+        verify(atLeast = 1) { snapshotStore.write(any(), any()) }
         coVerify(exactly = 1) { traktMutationOutboxCoordinator.enqueueAndDrain(any()) }
-        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
     }
 
     @Test
@@ -293,8 +293,8 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers { persistedSnapshot = firstArg() }
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
 
         val service = TraktLibraryService(
@@ -347,8 +347,8 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers { persistedSnapshot = firstArg() }
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
 
         val service = TraktLibraryService(
@@ -402,8 +402,8 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers { persistedSnapshot = firstArg() }
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
 
         val service = TraktLibraryService(
@@ -444,9 +444,9 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returns null
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers { persistedSnapshot = firstArg() }
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returns null
 
         val service = TraktLibraryService(
             traktApi = traktApi,
@@ -489,8 +489,8 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } answers { persistedSnapshot }
-        every { snapshotStore.write(any()) } answers {
+        every { snapshotStore.read(any()) } answers { persistedSnapshot }
+        every { snapshotStore.write(any(), any()) } answers {
             assertEquals(
                 listOf("tt1234567", "tmdb:321"),
                 runBlocking { service.observeAllItems().first().map { it.id } }
@@ -499,7 +499,7 @@ class TraktLibraryServiceTest {
         }
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
             flowOf(NetworkResult.Error("metadata unavailable"))
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -551,7 +551,7 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
         val service = TraktLibraryService(
@@ -579,7 +579,7 @@ class TraktLibraryServiceTest {
             service.observeAllItems().first().map { it.id }
         )
         assertTrue(service.observeHasCache().first())
-        verify(exactly = 0) { snapshotStore.clear() }
+        verify(exactly = 0) { snapshotStore.clear(any()) }
     }
 
     @Test
@@ -595,7 +595,7 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
         val service = TraktLibraryService(
@@ -615,7 +615,7 @@ class TraktLibraryServiceTest {
             listOf(TraktLibraryService.WATCHLIST_KEY, "personal:123"),
             service.observeListTabs().first().map { it.key }
         )
-        verify(exactly = 0) { snapshotStore.clear() }
+        verify(exactly = 0) { snapshotStore.clear(any()) }
 
         traktAuthState.value = true
         advanceUntilIdle()
@@ -625,7 +625,7 @@ class TraktLibraryServiceTest {
             listOf("tt1234567", "tmdb:321"),
             service.observeAllItems().first().map { it.id }
         )
-        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
     }
 
     @Test
@@ -641,9 +641,9 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } returns null
+        every { snapshotStore.read(any()) } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -716,7 +716,7 @@ class TraktLibraryServiceTest {
         service.refreshNow()
         advanceUntilIdle()
 
-        coVerify(exactly = 5) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+        coVerify(exactly = 5) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
 
         val tabs = service.observeListTabs().first()
         val items = service.observeAllItems().first()
@@ -749,9 +749,9 @@ class TraktLibraryServiceTest {
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
-        every { snapshotStore.read() } returns null
+        every { snapshotStore.read(any()) } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -801,7 +801,7 @@ class TraktLibraryServiceTest {
         service.refreshNow()
         advanceUntilIdle()
 
-        coVerify(exactly = 3) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+        coVerify(exactly = 3) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
 
         val item = service.observeAllItems().first().single()
 

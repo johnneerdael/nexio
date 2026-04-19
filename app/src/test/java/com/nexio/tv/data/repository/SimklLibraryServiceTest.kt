@@ -36,7 +36,7 @@ class SimklLibraryServiceTest {
         val authDataStore = mockk<com.nexio.tv.data.local.SimklAuthDataStore>()
         everyAuth(authDataStore, true)
         val snapshotStore = mockk<SimklLibrarySnapshotStore>()
-        every { snapshotStore.read() } returns SimklLibrarySnapshotStore.Snapshot(
+        every { snapshotStore.read(any()) } returns SimklLibrarySnapshotStore.Snapshot(
             listTabs = listOf(
                 com.nexio.tv.domain.model.LibraryListTab(
                     key = SimklLibraryService.WATCHLIST_KEY,
@@ -89,14 +89,14 @@ class SimklLibraryServiceTest {
         everyAuth(authDataStore, true)
         val remote = mockk<SimklTrackingRemoteDataSource>()
         val snapshotStore = mockk<SimklLibrarySnapshotStore>(relaxed = true) {
-            every { read() } returns null
+            every { read(any()) } returns null
         }
-        coEvery { remote.getLastActivities() } returns Response.success(
+        coEvery { remote.getLastActivities(any()) } returns Response.success(
             SimklLastActivitiesResponseDto(
                 movies = SimklActivityBucketDto(all = "2026-04-12T00:00:00Z")
             )
         )
-        coEvery { remote.getAllItems(dateFrom = null, extended = "full") } returns Response.success(
+        coEvery { remote.getAllItems(dateFrom = null, extended = "full", session = any()) } returns Response.success(
             listOf(
                 SimklLibraryItemDto(
                     status = "plantowatch",
@@ -127,7 +127,7 @@ class SimklLibraryServiceTest {
         assertEquals("Inception", items.first().name)
         assertTrue(memberships.contains(SimklLibraryService.WATCHLIST_KEY))
         assertTrue(tabs.any { it.key == SimklLibraryService.WATCHLIST_KEY && it.title == "SIMKL Watchlist" })
-        verify(exactly = 1) { snapshotStore.write(any()) }
+        verify(exactly = 1) { snapshotStore.write(any(), any()) }
     }
 
     @Test
@@ -135,6 +135,7 @@ class SimklLibraryServiceTest {
         val authDataStore = mockk<com.nexio.tv.data.local.SimklAuthDataStore>()
         everyAuth(authDataStore, true)
         val remote = mockk<SimklTrackingRemoteDataSource>()
+        stubEmptyRefresh(remote)
         coEvery { remote.getAllItemsByStatus(any(), any(), any(), any(), any()) } returns Response.success(emptyList())
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         coEvery { outbox.enqueueAndDrain(any()) } throws IllegalStateException("boom")
@@ -169,6 +170,7 @@ class SimklLibraryServiceTest {
         val authDataStore = mockk<com.nexio.tv.data.local.SimklAuthDataStore>()
         everyAuth(authDataStore, true)
         val remote = mockk<SimklTrackingRemoteDataSource>()
+        stubEmptyRefresh(remote)
         coEvery { remote.getAllItemsByStatus(any(), any(), any(), any(), any()) } returns Response.success(emptyList())
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopeSlot = slot<TraktMutationEnvelope>()
@@ -202,6 +204,7 @@ class SimklLibraryServiceTest {
         val authDataStore = mockk<com.nexio.tv.data.local.SimklAuthDataStore>()
         everyAuth(authDataStore, true)
         val remote = mockk<SimklTrackingRemoteDataSource>()
+        stubEmptyRefresh(remote)
         coEvery { remote.getAllItemsByStatus(any(), any(), any(), any(), any()) } returns Response.success(emptyList())
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         coEvery { outbox.enqueueAndDrain(any()) } answers { firstArg() }
@@ -237,6 +240,23 @@ class SimklLibraryServiceTest {
         val authDataStore = mockk<com.nexio.tv.data.local.SimklAuthDataStore>()
         everyAuth(authDataStore, true)
         val remote = mockk<SimklTrackingRemoteDataSource>()
+        coEvery { remote.getLastActivities(any()) } returns Response.success(
+            SimklLastActivitiesResponseDto(
+                movies = SimklActivityBucketDto(all = "2026-04-12T00:00:00Z")
+            )
+        )
+        coEvery { remote.getAllItems(dateFrom = null, extended = "full", session = any()) } returns Response.success(
+            listOf(
+                SimklLibraryItemDto(
+                    status = "plantowatch",
+                    movie = SimklMediaRefDto(
+                        title = "Inception",
+                        year = 2010,
+                        ids = SimklIdsDto(imdb = "tt1375666", tmdb = "27205")
+                    )
+                )
+            )
+        )
         coEvery {
             remote.getAllItemsByStatus(
                 type = "movies",
@@ -299,6 +319,16 @@ class SimklLibraryServiceTest {
         )
         every { authDataStore.state } returns state
         every { authDataStore.isEffectivelyAuthenticated } returns state.map { it.isAuthenticated }
+        every { authDataStore.stateForProfile(any()) } returns state
+    }
+
+    private fun stubEmptyRefresh(remote: SimklTrackingRemoteDataSource) {
+        coEvery { remote.getLastActivities(any()) } returns Response.success(
+            SimklLastActivitiesResponseDto(
+                movies = SimklActivityBucketDto(all = "2026-04-12T00:00:00Z")
+            )
+        )
+        coEvery { remote.getAllItems(dateFrom = null, extended = "full", session = any()) } returns Response.success(emptyList())
     }
 
     private fun metaRepository(): MetaRepository {

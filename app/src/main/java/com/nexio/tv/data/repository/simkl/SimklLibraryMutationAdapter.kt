@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklHistoryRemoveRequestDto
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.SimklLibraryService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
@@ -11,6 +12,7 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -32,8 +34,8 @@ class SimklLibraryMutationAdapter @Inject constructor(
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val response = when (envelope.mutationKind) {
-            MUTATION_KIND_ADD_TO_LIST -> remote.addToList(envelope.addBody())
-            MUTATION_KIND_REMOVE -> remote.removeFromHistoryAndLists(envelope.removeBody())
+            MUTATION_KIND_ADD_TO_LIST -> remote.addToList(envelope.addBody(), envelope.session())
+            MUTATION_KIND_REMOVE -> remote.removeFromHistoryAndLists(envelope.removeBody(), envelope.session())
             else -> null
         } ?: return TraktMutationExecutionResult.Failure(httpStatusCode = 400, reason = "Unsupported SIMKL library mutation ${envelope.mutationKind}")
 
@@ -49,14 +51,17 @@ class SimklLibraryMutationAdapter @Inject constructor(
     }
 
     override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
-        libraryServiceProvider.get().refreshNow(force = true)
+        libraryServiceProvider.get().refreshProfile(profileId = envelope.profileId, force = true)
     }
 
     override suspend fun rollbackToServerTruth(
         envelope: TraktMutationEnvelope,
         failure: TraktMutationSettlement.TerminalFailure
     ) {
-        libraryServiceProvider.get().rollbackQueuedLibraryMutation(envelope.rollbackState())
+        libraryServiceProvider.get().rollbackQueuedLibraryMutation(
+            rollbackState = envelope.rollbackState(),
+            profileId = envelope.profileId
+        )
     }
 
     companion object {
@@ -69,9 +74,11 @@ class SimklLibraryMutationAdapter @Inject constructor(
         fun buildAddToListEnvelope(
             listKey: String,
             body: SimklAddToListRequestDto,
-            rollbackState: SimklLibraryService.LibraryRollbackState
+            rollbackState: SimklLibraryService.LibraryRollbackState,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_ADD_TO_LIST,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -83,9 +90,11 @@ class SimklLibraryMutationAdapter @Inject constructor(
 
         fun buildRemoveEnvelope(
             body: SimklHistoryRemoveRequestDto,
-            rollbackState: SimklLibraryService.LibraryRollbackState
+            rollbackState: SimklLibraryService.LibraryRollbackState,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
@@ -106,6 +115,12 @@ class SimklLibraryMutationAdapter @Inject constructor(
                 rollbackPayload ?: JsonObject(),
                 SimklLibraryService.LibraryRollbackState::class.java
             ) ?: SimklLibraryService.LibraryRollbackState()
+
+        private fun TraktMutationEnvelope.session(): TrackingAuthSession =
+            TrackingAuthSession(
+                provider = TrackingProvider.SIMKL,
+                profileId = profileId
+            )
     }
 }
 

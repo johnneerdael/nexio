@@ -75,19 +75,16 @@ class TraktLibrarySnapshotStore private constructor(
     private val profileManager: ProfileManager
         get() = injectedProfileManager ?: error("ProfileManager unavailable")
 
-    private fun injectedPrefsName(): String =
-        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
-
-    private fun prefsName(): String =
+    private fun prefsName(profileId: Int = activeProfileId()): String =
         if (injectedProfileManager != null) {
-            injectedPrefsName()
+            profilePrefsName(BASE_PREFS_NAME, profileId)
         } else {
-            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+            profilePrefsName(BASE_PREFS_NAME, profileId)
         }
 
-    fun read(): Snapshot? {
+    fun read(profileId: Int = activeProfileId()): Snapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decodeSnapshot(raw)?.also { snapshot ->
                 logDebug(
@@ -99,13 +96,13 @@ class TraktLibrarySnapshotStore private constructor(
             }
         }.onFailure { error ->
             logWarning("Failed to restore Trakt library snapshot", error)
-            clear()
+            clear(profileId)
         }.getOrNull()
     }
 
-    fun write(snapshot: Snapshot) {
+    fun write(snapshot: Snapshot, profileId: Int = activeProfileId()) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
@@ -127,9 +124,9 @@ class TraktLibrarySnapshotStore private constructor(
         }
     }
 
-    fun clear() {
+    fun clear(profileId: Int = activeProfileId()) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
             logDebug("clear success")
         }.onFailure { error ->
