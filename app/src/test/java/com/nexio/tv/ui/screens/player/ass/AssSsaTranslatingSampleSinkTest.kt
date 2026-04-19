@@ -61,6 +61,46 @@ class AssSsaTranslatingSampleSinkTest {
         )
     }
 
+    @Test
+    fun fallsBackToOriginalSampleWhenProviderThrows() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = { throw IllegalStateException("provider down") }
+        )
+        val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello".toByteArray()
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 1_000_000L, data = sample)
+
+        assertEquals(
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello",
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
+    fun preserveOnlyDrawingSampleIsNotSentToProvider() = runTest {
+        var providerCalls = 0
+        val downstream = RecordingAssSsaSampleSink()
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            translate = {
+                providerCalls += 1
+                emptyMap()
+            }
+        )
+        val sample = "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\p1}m 0 0 l 100 0{\\p0}".toByteArray()
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 1_000_000L, data = sample)
+
+        assertEquals(0, providerCalls)
+        assertEquals(sample.decodeToString(), downstream.samples.single().decodeToString())
+    }
+
     private class RecordingAssSsaSampleSink : AssSsaSampleSink {
         val samples = mutableListOf<ByteArray>()
 

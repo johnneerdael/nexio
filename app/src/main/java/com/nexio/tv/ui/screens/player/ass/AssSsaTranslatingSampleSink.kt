@@ -4,6 +4,7 @@ import androidx.media3.common.Format
 import com.nexio.tv.data.repository.AssSsaEventFormat
 import com.nexio.tv.data.repository.AssSsaEventRecord
 import com.nexio.tv.data.repository.AssSsaProtectedTranslationUnit
+import com.nexio.tv.data.repository.AssSsaRisk
 import com.nexio.tv.data.repository.AssSsaTextTokenizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -44,8 +45,15 @@ internal class AssSsaTranslatingSampleSink(
             )
         }
         scope.launch {
+            val translatableUnits = unitsById
+                .map { it.second }
+                .filter { it.risk != AssSsaRisk.PreserveOnly && it.protectedText.isNotBlank() }
+            if (translatableUnits.isEmpty()) {
+                downstream.onSubtitleSample(trackId, timeUs, data)
+                return@launch
+            }
             val translated = runCatching {
-                translate(unitsById.map { it.second })
+                translate(translatableUnits)
             }.getOrDefault(emptyMap())
             val translatedLines = records.mapIndexed { index, record ->
                 val unitId = "evt_$index"
