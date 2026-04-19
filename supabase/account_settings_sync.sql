@@ -28,6 +28,8 @@ begin
         'realdebrid_access_token',
         'realdebrid_refresh_token',
         'simkl_access_token',
+        'kitsu_access_token',
+        'kitsu_refresh_token',
         'trakt_access_token',
         'trakt_refresh_token'
       ));
@@ -52,6 +54,8 @@ begin
         'realdebrid_access_token',
         'realdebrid_refresh_token',
         'simkl_access_token',
+        'kitsu_access_token',
+        'kitsu_refresh_token',
         'trakt_access_token',
         'trakt_refresh_token'
       )),
@@ -313,6 +317,8 @@ begin
     'realdebrid_access_token',
     'realdebrid_refresh_token',
     'simkl_access_token',
+    'kitsu_access_token',
+    'kitsu_refresh_token',
     'trakt_access_token',
     'trakt_refresh_token'
   ) then
@@ -359,6 +365,8 @@ begin
     'realdebrid_access_token',
     'realdebrid_refresh_token',
     'simkl_access_token',
+    'kitsu_access_token',
+    'kitsu_refresh_token',
     'trakt_access_token',
     'trakt_refresh_token'
   ) then
@@ -402,6 +410,8 @@ begin
     'realdebrid_access_token',
     'realdebrid_refresh_token',
     'simkl_access_token',
+    'kitsu_access_token',
+    'kitsu_refresh_token',
     'trakt_access_token',
     'trakt_refresh_token'
   ) then
@@ -449,6 +459,8 @@ begin
     'realdebrid_access_token',
     'realdebrid_refresh_token',
     'simkl_access_token',
+    'kitsu_access_token',
+    'kitsu_refresh_token',
     'trakt_access_token',
     'trakt_refresh_token'
   ) then
@@ -495,6 +507,8 @@ begin
     'realdebrid_access_token',
     'realdebrid_refresh_token',
     'simkl_access_token',
+    'kitsu_access_token',
+    'kitsu_refresh_token',
     'trakt_access_token',
     'trakt_refresh_token'
   ) then
@@ -538,6 +552,8 @@ begin
     'realdebrid_access_token',
     'realdebrid_refresh_token',
     'simkl_access_token',
+    'kitsu_access_token',
+    'kitsu_refresh_token',
     'trakt_access_token',
     'trakt_refresh_token'
   ) then
@@ -636,6 +652,15 @@ as $$
       "posterRatings": {
         "rpdbEnabled": false,
         "topPostersEnabled": false
+      },
+      "kitsuAuth": {
+        "enabled": false,
+        "connected": false,
+        "username": "",
+        "accessTokenSecretRef": null,
+        "refreshTokenSecretRef": null,
+        "expiresAtEpochSeconds": null,
+        "includeNsfw": false
       },
       "simklAuth": {
         "connected": false,
@@ -746,6 +771,8 @@ begin
           || coalesce(v_payload#>'{integrations,gemini}', '{}'::jsonb),
         'posterRatings', coalesce(v_defaults#>'{integrations,posterRatings}', '{}'::jsonb)
           || coalesce(v_payload#>'{integrations,posterRatings}', '{}'::jsonb),
+        'kitsuAuth', coalesce(v_defaults#>'{integrations,kitsuAuth}', '{}'::jsonb)
+          || coalesce(v_payload#>'{integrations,kitsuAuth}', '{}'::jsonb),
         'simklAuth', coalesce(v_defaults#>'{integrations,simklAuth}', '{}'::jsonb)
           || coalesce(v_payload#>'{integrations,simklAuth}', '{}'::jsonb),
         'traktAuth', coalesce(v_defaults#>'{integrations,traktAuth}', '{}'::jsonb)
@@ -815,6 +842,8 @@ begin
         || coalesce(v_payload#>'{integrations,gemini}', '{}'::jsonb),
       'posterRatings', coalesce(v_defaults#>'{integrations,posterRatings}', '{}'::jsonb)
         || coalesce(v_payload#>'{integrations,posterRatings}', '{}'::jsonb),
+      'kitsuAuth', coalesce(v_defaults#>'{integrations,kitsuAuth}', '{}'::jsonb)
+        || coalesce(v_payload#>'{integrations,kitsuAuth}', '{}'::jsonb),
       'simklAuth', coalesce(v_defaults#>'{integrations,simklAuth}', '{}'::jsonb)
         || coalesce(v_payload#>'{integrations,simklAuth}', '{}'::jsonb),
       'traktAuth', coalesce(v_defaults#>'{integrations,traktAuth}', '{}'::jsonb)
