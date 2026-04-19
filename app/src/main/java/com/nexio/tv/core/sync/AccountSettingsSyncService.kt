@@ -62,6 +62,7 @@ import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.LayoutSettings
+import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackGeneralSettings
@@ -77,6 +78,7 @@ import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
+import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.core.profile.ProfileManager
@@ -216,6 +218,8 @@ class AccountSettingsSyncService @Inject constructor(
 
     @Volatile
     private var lastAppliedRemoteRevision: Long = 0L
+    private var lastRemoteTraktPinnedListOptions: List<TraktPinnedListOptionSync> = emptyList()
+    private var lastRemoteMDBListPinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList()
 
     init {
         observeLocalChanges()
@@ -609,10 +613,12 @@ class AccountSettingsSyncService @Inject constructor(
             traktCatalogEnabledSet = traktCatalogPrefs?.enabledCatalogs?.toList() ?: emptyList(),
             traktCatalogOrder = traktCatalogPrefs?.catalogOrder ?: emptyList(),
             traktSelectedPopularListKeys = traktCatalogPrefs?.selectedPopularListKeys?.toList() ?: emptyList(),
+            traktPinnedListOptions = lastRemoteTraktPinnedListOptions,
             simklCatalogEnabledSet = simklCatalogPrefs?.enabledCatalogs?.toList() ?: emptyList(),
             simklCatalogOrder = simklCatalogPrefs?.catalogOrder ?: emptyList(),
             mdbListHiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
             mdbListSelectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
+            mdbListPinnedTopListOptions = lastRemoteMDBListPinnedTopListOptions,
             mdbListCatalogOrder = mdbListPrefs.catalogOrder,
             trackingProvider = playerSettings?.trackingProvider ?: TrackingProvider.TRAKT,
             formatter = playerSettings?.syncedFormatterTemplate?.let { formatter ->
@@ -640,6 +646,9 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applySharedAccountConfigSyncSettings(settings: AccountConfigSyncPayload) {
+        lastRemoteTraktPinnedListOptions = settings.catalogs.trakt.pinnedListOptions
+        lastRemoteMDBListPinnedTopListOptions = settings.catalogs.mdblist.pinnedTopListOptions
+
         if (isDefaultLegacyActive()) {
             layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
             layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)

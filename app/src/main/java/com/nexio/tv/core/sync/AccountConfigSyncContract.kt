@@ -28,6 +28,8 @@ import com.nexio.tv.data.remote.supabase.SimklCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
+import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
@@ -199,10 +201,12 @@ internal fun buildAccountConfigSyncPayload(
     traktCatalogEnabledSet: List<String>,
     traktCatalogOrder: List<String>,
     traktSelectedPopularListKeys: List<String>,
+    traktPinnedListOptions: List<TraktPinnedListOptionSync> = emptyList(),
     simklCatalogEnabledSet: List<String>,
     simklCatalogOrder: List<String>,
     mdbListHiddenPersonalListKeys: List<String>,
     mdbListSelectedTopListKeys: List<String>,
+    mdbListPinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList(),
     mdbListCatalogOrder: List<String>,
     trackingProvider: TrackingProvider,
     formatter: FormatterSyncSettings
@@ -224,7 +228,8 @@ internal fun buildAccountConfigSyncPayload(
             trakt = TraktCatalogSyncSettings(
                 catalogEnabledSet = traktCatalogEnabledSet,
                 catalogOrder = traktCatalogOrder,
-                selectedPopularListKeys = traktSelectedPopularListKeys
+                selectedPopularListKeys = traktSelectedPopularListKeys,
+                pinnedListOptions = traktPinnedListOptions
             ),
             simkl = SimklCatalogSyncSettings(
                 catalogEnabledSet = simklCatalogEnabledSet,
@@ -233,6 +238,7 @@ internal fun buildAccountConfigSyncPayload(
             mdblist = MDBListCatalogSyncSettings(
                 hiddenPersonalListKeys = mdbListHiddenPersonalListKeys,
                 selectedTopListKeys = mdbListSelectedTopListKeys,
+                pinnedTopListOptions = mdbListPinnedTopListOptions,
                 catalogOrder = mdbListCatalogOrder
             )
         ),

@@ -126,7 +126,8 @@ data class HomeCatalogSyncSettings(
 data class TraktCatalogSyncSettings(
     val catalogEnabledSet: List<String> = emptyList(),
     val catalogOrder: List<String> = emptyList(),
-    val selectedPopularListKeys: List<String> = emptyList()
+    val selectedPopularListKeys: List<String> = emptyList(),
+    val pinnedListOptions: List<TraktPinnedListOptionSync> = emptyList()
 )
 
 @Serializable
@@ -139,7 +140,28 @@ data class SimklCatalogSyncSettings(
 data class MDBListCatalogSyncSettings(
     val hiddenPersonalListKeys: List<String> = emptyList(),
     val selectedTopListKeys: List<String> = emptyList(),
+    val pinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList(),
     val catalogOrder: List<String> = emptyList()
+)
+
+@Serializable
+data class TraktPinnedListOptionSync(
+    val key: String = "",
+    val userId: String = "",
+    val listId: String = "",
+    val catalogIdBase: String = "",
+    val title: String = "",
+    val itemCount: Int = 0
+)
+
+@Serializable
+data class MDBListPinnedListOptionSync(
+    val key: String = "",
+    val owner: String = "",
+    val listId: String = "",
+    val title: String = "",
+    val itemCount: Int = 0,
+    val isPersonal: Boolean = false
 )
 
 @Serializable

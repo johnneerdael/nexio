@@ -3,6 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
@@ -85,8 +86,8 @@ class MDBListDiscoverySnapshotStore private constructor(
     private fun decode(raw: String): MDBListDiscoverySnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val canonical = MDBListDiscoverySnapshot(
-            personalLists = decodeArray(root, "personalLists"),
-            topLists = decodeArray(root, "topLists"),
+            personalLists = decodeListOptions(root, "personalLists", isPersonal = true),
+            topLists = decodeListOptions(root, "topLists", isPersonal = false),
             customListCatalogs = decodeArray(root, "customListCatalogs"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
@@ -108,5 +109,72 @@ class MDBListDiscoverySnapshotStore private constructor(
         val array = root.getAsJsonArray(key) ?: return emptyList()
         val type = object : TypeToken<List<T>>() {}.type
         return gson.fromJson<List<T>>(array, type) ?: emptyList()
+    }
+
+    private fun decodeListOptions(
+        root: JsonObject,
+        key: String,
+        isPersonal: Boolean
+    ): List<MDBListListOption> {
+        val array = root.getAsJsonArray(key) ?: return emptyList()
+        val prefix = if (isPersonal) "personal" else "top"
+        return array.mapNotNull { element ->
+            val obj = element.asJsonObjectOrNull() ?: return@mapNotNull null
+            val rawKey = obj.cleanString("key")
+            val payload = rawKey.substringAfter(':', missingDelimiterValue = rawKey)
+            val owner = obj.cleanString("owner").ifBlank {
+                payload.substringBefore('/').trim()
+            }.ifBlank {
+                "mdblist"
+            }
+            val listId = obj.cleanString("listId").ifBlank {
+                payload.substringAfter('/', missingDelimiterValue = "").trim()
+            }
+            val normalizedKey = rawKey.ifBlank {
+                if (owner.isNotBlank() && listId.isNotBlank()) "$prefix:$owner/$listId" else ""
+            }
+            if (normalizedKey.isBlank() || listId.isBlank()) {
+                return@mapNotNull null
+            }
+
+            MDBListListOption(
+                key = normalizedKey,
+                owner = owner,
+                listId = listId,
+                itemListIds = decodeStringList(obj, "itemListIds"),
+                title = obj.cleanString("title").ifBlank { "$owner/$listId" },
+                itemCount = obj.cleanInt("itemCount"),
+                isPersonal = isPersonal
+            )
+        }
+    }
+
+    private fun decodeStringList(root: JsonObject, key: String): List<String> {
+        val array = root.getAsJsonArray(key) ?: return emptyList()
+        return array.mapNotNull { element ->
+            element.cleanString()
+        }.filter { it.isNotBlank() }
+    }
+
+    private fun JsonElement.asJsonObjectOrNull(): JsonObject? =
+        takeIf { it.isJsonObject }?.asJsonObject
+
+    private fun JsonObject.cleanString(key: String): String {
+        val value = get(key) ?: return ""
+        return value.cleanString()
+    }
+
+    private fun JsonElement.cleanString(): String {
+        if (isJsonNull) return ""
+        return runCatching { asString.trim() }
+            .getOrDefault("")
+            .takeUnless { it == "undefined" || it == "null" }
+            ?: ""
+    }
+
+    private fun JsonObject.cleanInt(key: String): Int {
+        val value = get(key) ?: return 0
+        if (value.isJsonNull) return 0
+        return runCatching { value.asInt }.getOrDefault(0).coerceAtLeast(0)
     }
 }
