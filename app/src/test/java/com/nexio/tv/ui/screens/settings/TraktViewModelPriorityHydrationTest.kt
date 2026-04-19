@@ -14,6 +14,7 @@ import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +40,14 @@ class TraktViewModelPriorityHydrationTest {
     @Before fun setUp() { Dispatchers.setMain(dispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
 
-    private fun buildViewModel(notifier: CatalogPriorityHydrationNotifier): TraktViewModel {
+    private fun buildViewModel(
+        notifier: CatalogPriorityHydrationNotifier,
+        discoveryServiceOverride: TraktDiscoveryService? = null
+    ): TraktViewModel {
         val authService = mockk<TraktAuthService>(relaxed = true)
         val authDataStore = mockk<TraktAuthDataStore>()
         val progressService = mockk<TraktProgressService>(relaxed = true)
-        val discoveryService = mockk<TraktDiscoveryService>(relaxed = true)
+        val discoveryService = discoveryServiceOverride ?: mockk<TraktDiscoveryService>(relaxed = true)
         val scrobbleService = mockk<TraktScrobbleService>(relaxed = true)
         val settingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
@@ -120,5 +124,19 @@ class TraktViewModelPriorityHydrationTest {
 
         assertTrue("Notifier should NOT fire when deselecting a popular list", events.isEmpty())
         job.cancel()
+    }
+
+    @Test
+    fun `onCatalogManagementOpened forces discovery refresh so personal lists are current`() = runTest(dispatcher) {
+        val notifier = CatalogPriorityHydrationNotifier()
+        val discoveryService = mockk<TraktDiscoveryService>(relaxed = true)
+        val viewModel = buildViewModel(notifier = notifier, discoveryServiceOverride = discoveryService)
+
+        viewModel.onCatalogManagementOpened()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            discoveryService.ensureFresh(force = true, profileId = 1)
+        }
     }
 }

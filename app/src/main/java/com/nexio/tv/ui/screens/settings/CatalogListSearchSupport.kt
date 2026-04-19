@@ -19,6 +19,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.R
 import com.nexio.tv.data.repository.MDBListListOption
+import com.nexio.tv.data.repository.TraktListSource
 import com.nexio.tv.data.repository.TraktPopularListOption
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -46,6 +47,15 @@ internal fun filterMDBListTopLists(
         option.title.lowercase().contains(normalizedQuery) ||
             option.owner.lowercase().contains(normalizedQuery) ||
             option.listId.lowercase().contains(normalizedQuery)
+    }
+}
+
+@Composable
+internal fun traktListSourceLabel(source: TraktListSource): String {
+    return when (source) {
+        TraktListSource.PERSONAL -> stringResource(R.string.trakt_list_source_personal)
+        TraktListSource.POPULAR,
+        TraktListSource.SEARCH -> stringResource(R.string.trakt_list_source_community)
     }
 }
 
