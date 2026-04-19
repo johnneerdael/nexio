@@ -546,7 +546,7 @@
   <string name="trakt_catalog_popular_movies_subtitle">Películas con mayor popularidad a largo plazo.</string>
   <string name="mdblist_top_list_badge">Lista destacada</string>
   <string name="poster_ratings_rpdb_dialog_title">Clave API de RPDB</string>
-  <string name="trakt_catalogs_dialog_subtitle">Activa o desactiva los catálogos integrados de Trakt. Selecciona listas populares para añadir filas personalizadas.</string>
+  <string name="trakt_catalogs_dialog_subtitle">Activa filas de catálogo de Trakt en Inicio. Añade tus listas o listas de la comunidad como filas personalizadas.</string>
   <string name="trakt_catalog_recommended_shows_subtitle">Recomendaciones personalizadas de series de Trakt.</string>
   <string name="poster_ratings_rpdb_dialog_subtitle">Introduce tu clave API de RPDB para validar y activar los pósters valorados</string>
   <string name="poster_ratings_top_invalid_api_key">Clave API de TOPPosters no válida</string>
@@ -559,7 +559,7 @@
   <string name="appearance_font">Fuente de la app</string>
   <string name="playback_resolution_matching_sub">Permite cambios en el modo de pantalla para ajustarse a la resolución de vídeo.</string>
   <string name="trakt_catalogs_updated">Configuración de catálogos de Trakt actualizada</string>
-  <string name="trakt_popular_lists_subtitle">Selecciona listas para añadirlas como catálogos personalizados de Trakt en el Inicio.</string>
+  <string name="trakt_popular_lists_subtitle">Activa tus listas de Trakt o listas de la comunidad como filas de catálogo en Inicio.</string>
   <string name="appearance_font_dialog_title">Elegir fuente</string>
   <string name="tmdb_dialog_placeholder">Introduce la clave API de TMDB</string>
   <string name="poster_ratings_top_api_key_subtitle">Obligatoria cuando TOPPosters está activado</string>
@@ -638,7 +638,7 @@
   <string name="sub_forced_lang">Forzado</string>
   <string name="trakt_catalog_calendar_subtitle">Próximos episodios de tu calendario de Trakt.</string>
   <string name="poster_ratings_top_dialog_placeholder">Introduce la clave API de TOPPosters</string>
-  <string name="trakt_popular_lists_title">Listas populares</string>
+  <string name="trakt_popular_lists_title">Listas de Trakt</string>
     <string name="tmdb_api_key_subtitle">Clave TMDB personalizada opcional. Nexio funciona con acceso integrado a metadatos cuando está vacía.</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - Compatibilidad de audio experimental</string>
   <string name="animeskip_dialog_subtitle">Crea tu Client ID en anime-skip.com/account/settings</string>
@@ -654,8 +654,10 @@
   <string name="streams_filter_wrong_episodes_sub">Oculta streams cuyos números de temporada o episodio no coincidan con el episodio solicitado.</string>
   <string name="streams_filter_wrong_movie_year_title">Filtrar año incorrecto (películas)</string>
   <string name="streams_filter_wrong_movie_year_sub">Oculta streams de películas cuyo año no coincide con el año solicitado en el título.</string>
-  <string name="trakt_popular_lists_search_hint">Buscar listas populares</string>
-  <string name="trakt_popular_lists_empty">Aún no hay listas populares disponibles. Sincroniza Trakt e inténtalo de nuevo.</string>
+  <string name="trakt_popular_lists_search_hint">Buscar listas de Trakt</string>
+  <string name="trakt_popular_lists_empty">Aún no se encontraron listas de Trakt. Crea una lista en Trakt o inténtalo más tarde.</string>
+  <string name="trakt_list_source_personal">Tu lista</string>
+  <string name="trakt_list_source_community">Lista de la comunidad</string>
   <string name="trakt_popular_lists_no_search_results">Ninguna lista popular coincide con tu búsqueda.</string>
 
   <string name="app_name">NEXIO</string>
