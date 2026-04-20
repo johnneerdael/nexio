@@ -126,7 +126,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun negativeProbeEnablesAssReadyPipelineForProgressiveMkvFallback() {
+    fun negativeProbeOnlyEnablesAssReadyPipelineForKnownMkvOrWebmFilename() {
         assertTrue(
             shouldEnableAssSsaPipelineForProgressiveFallback(
                 url = "https://example.test/proxy",
@@ -134,6 +134,12 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
             )
         )
         assertTrue(
+            shouldEnableAssSsaPipelineForProgressiveFallback(
+                url = "https://example.test/proxy",
+                filename = "episode.webm"
+            )
+        )
+        assertFalse(
             shouldEnableAssSsaPipelineForProgressiveFallback(
                 url = "https://example.test/proxy",
                 filename = null
@@ -154,14 +160,36 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun overlayProviderNullStillStartsAssSsaPipeline() {
+    fun overlayProviderNullWaitsForRetryWithoutClaimingAssSsaPipelineActive() {
         val decision = resolveAssSsaPipelineOverlayDecision(
             requestedUseAssSsaPipeline = true,
             overlayAttached = false
         )
 
-        assertTrue(decision.useAssSsaPipeline)
+        assertFalse(decision.useAssSsaPipeline)
         assertFalse(decision.disableOverrideForCurrentStream)
+    }
+
+    @Test
+    fun overlayAvailabilityRetriesPendingAssSsaPipeline() {
+        assertTrue(
+            shouldRetryAssSsaPipelineWhenOverlayAvailable(
+                overrideForCurrentStream = true,
+                activePlayerUsesAssSsaRenderer = false,
+                switchInFlight = false,
+                fallbackHandled = false,
+                overlayAvailable = true
+            )
+        )
+        assertFalse(
+            shouldRetryAssSsaPipelineWhenOverlayAvailable(
+                overrideForCurrentStream = true,
+                activePlayerUsesAssSsaRenderer = false,
+                switchInFlight = false,
+                fallbackHandled = true,
+                overlayAvailable = true
+            )
+        )
     }
 
     @Test
