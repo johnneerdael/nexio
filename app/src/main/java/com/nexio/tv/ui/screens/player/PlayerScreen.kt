@@ -430,14 +430,13 @@ fun PlayerScreen(
                 if (panelOrDialogOpen) return@onKeyEvent false
 
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_LEFT,
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (!uiState.showControls) {
-                                viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
-                                return@onKeyEvent true
-                            }
-                        }
+                    if (PlayerSeekKeyPolicy.shouldCommitPreviewSeekOnKeyUp(
+                            keyCode = keyEvent.nativeKeyEvent.keyCode,
+                            controlsVisible = uiState.showControls
+                        )
+                    ) {
+                        viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
+                        return@onKeyEvent true
                     }
                     return@onKeyEvent false
                 }
@@ -470,22 +469,15 @@ fun PlayerScreen(
                             }
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT,
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (!uiState.showControls) {
-                                val repeatCount = keyEvent.nativeKeyEvent.repeatCount
-                                val deltaMs = when {
-                                    repeatCount >= 30 -> 120_000L
-                                    repeatCount >= 15 -> 60_000L
-                                    repeatCount >= 8 -> 30_000L
-                                    repeatCount >= 3 -> 15_000L
-                                    else -> 10_000L
-                                }
-                                val signedDeltaMs =
-                                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                                        -deltaMs
-                                    } else {
-                                        deltaMs
-                                    }
+                        KeyEvent.KEYCODE_DPAD_RIGHT,
+                        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+                        KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                            val keyCode = keyEvent.nativeKeyEvent.keyCode
+                            if (PlayerSeekKeyPolicy.isMediaSeekKey(keyCode) || !uiState.showControls) {
+                                val signedDeltaMs = PlayerSeekKeyPolicy.previewSeekDeltaMs(
+                                    keyCode = keyCode,
+                                    repeatCount = keyEvent.nativeKeyEvent.repeatCount
+                                ) ?: return@onKeyEvent false
                                 viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(signedDeltaMs))
                                 true
                             } else {
@@ -535,14 +527,6 @@ fun PlayerScreen(
                             if (!uiState.isPlaying) {
                                 viewModel.onEvent(PlayerEvent.OnPlayPause)
                             }
-                            true
-                        }
-                        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                            viewModel.onEvent(PlayerEvent.OnSeekForward)
-                            true
-                        }
-                        KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                            viewModel.onEvent(PlayerEvent.OnSeekBackward)
                             true
                         }
                         else -> false
