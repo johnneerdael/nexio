@@ -293,6 +293,48 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     @Test
+    fun `autoplay fallback list preserves non dv candidate outside cap`() {
+        val fallback = selectAutoplayFallbackCandidatesForTesting(
+            selectedKey = "dv-1",
+            fallbackCandidates = listOf(
+                scenarioCard(
+                    "dv-1",
+                    "rd",
+                    visualTags = listOf("DV"),
+                    quality = "WEB-DL",
+                    filename = "Movie.2160p.WEB-DL.DV.mkv"
+                ),
+                scenarioCard(
+                    "dv-2",
+                    "pm",
+                    visualTags = listOf("DV"),
+                    quality = "WEB-DL",
+                    filename = "Movie.2160p.WEB-DL.DV.mkv"
+                ),
+                scenarioCard(
+                    "dv-3",
+                    "rd",
+                    visualTags = listOf("DV"),
+                    quality = "WEB-DL",
+                    filename = "Movie.2160p.WEB-DL.DV.mkv"
+                ),
+                scenarioCard(
+                    "hdr-1",
+                    "pm",
+                    visualTags = listOf("HDR10"),
+                    quality = "WEB-DL",
+                    filename = "Movie.2160p.WEB-DL.HDR.mkv"
+                )
+            ),
+            maxFallbackCandidates = 3
+        )
+
+        assertTrue(
+            fallback.any { it.stream.wrappedOriginalStreamKey == "hdr-1" }
+        )
+    }
+
+    @Test
     fun `missing runtime disables bitrate based early finish`() {
         val winners = List(3) { index ->
             remuxWinner(

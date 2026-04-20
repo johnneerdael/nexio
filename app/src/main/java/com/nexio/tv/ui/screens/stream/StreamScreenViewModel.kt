@@ -1166,12 +1166,10 @@ class StreamScreenViewModel @Inject constructor(
                 val normalized = tag.lowercase()
                 normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
             },
-            autoPlayFallbackCandidates = fallbackCandidates
-                .filter { candidate ->
-                    val candidateKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
-                    candidateKey != selectedKey
-                }
-                .take(MAX_FALLBACK_CANDIDATES)
+            autoPlayFallbackCandidates = selectAutoplayFallbackCandidates(
+                selectedKey = selectedKey,
+                fallbackCandidates = fallbackCandidates
+            )
                 .map { candidate ->
                     AutoPlayStreamAlternative(
                         streamKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey,
@@ -1332,6 +1330,40 @@ private data class PendingOrganizeRequest(
     val addonStreamGroups: List<AddonStreams>,
     val isFinalPass: Boolean = false
 )
+
+internal fun selectAutoplayFallbackCandidatesForTesting(
+    selectedKey: String?,
+    fallbackCandidates: List<StreamCardModel>,
+    maxFallbackCandidates: Int = MAX_FALLBACK_CANDIDATES
+): List<StreamCardModel> {
+    return selectAutoplayFallbackCandidates(
+        selectedKey = selectedKey,
+        fallbackCandidates = fallbackCandidates,
+        maxFallbackCandidates = maxFallbackCandidates
+    )
+}
+
+private fun selectAutoplayFallbackCandidates(
+    selectedKey: String?,
+    fallbackCandidates: List<StreamCardModel>,
+    maxFallbackCandidates: Int = MAX_FALLBACK_CANDIDATES
+): List<StreamCardModel> {
+    val candidates = fallbackCandidates.filter { candidate ->
+        val candidateKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
+        candidateKey != selectedKey
+    }
+    val nonDv = candidates.filterNot { it.isDolbyVisionCandidateForAutoplay() }
+    return (candidates.take(maxFallbackCandidates) + nonDv.take(1)).distinctBy {
+        it.stream.wrappedOriginalStreamKey ?: it.parsed.exactDuplicateKey
+    }
+}
+
+private fun StreamCardModel.isDolbyVisionCandidateForAutoplay(): Boolean {
+    return parsed.visualTags.any { tag ->
+        val normalized = tag.lowercase()
+        normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+    }
+}
 
 internal class ShadowAutoPlayReplayCoordinator(
     private val scorer: BenchmarkAwareStreamScorer
