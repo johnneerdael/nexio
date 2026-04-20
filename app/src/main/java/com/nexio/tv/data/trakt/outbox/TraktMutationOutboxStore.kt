@@ -74,7 +74,7 @@ class TraktMutationOutboxStore private constructor(
             if (root == null || root.schemaVersion() > SCHEMA_VERSION) {
                 return@withLock TraktMutationOutboxSnapshot()
             }
-            deserializeSnapshot(root.getAsJsonObject(JSON_SNAPSHOT))
+            deserializeSnapshot(root.objectOrNull(JSON_SNAPSHOT))
         }
     }
 
@@ -99,12 +99,14 @@ class TraktMutationOutboxStore private constructor(
     }
 
     private fun JsonObject.schemaVersion(): Int {
-        return get(JSON_SCHEMA_VERSION)?.takeIf { it.isJsonPrimitive }?.asInt ?: 0
+        return runCatching {
+            get(JSON_SCHEMA_VERSION)?.takeIf { it.isJsonPrimitive }?.asInt
+        }.getOrNull() ?: 0
     }
 
     private fun deserializeSnapshot(snapshotJson: JsonObject?): TraktMutationOutboxSnapshot {
         if (snapshotJson == null) return TraktMutationOutboxSnapshot()
-        val items = snapshotJson.getAsJsonArray(JSON_ITEMS)
+        val items = snapshotJson.arrayOrNull(JSON_ITEMS)
             ?.mapNotNull(::deserializeEnvelope)
             .orEmpty()
         return TraktMutationOutboxSnapshot(
@@ -120,7 +122,27 @@ class TraktMutationOutboxStore private constructor(
             val obj = element.asJsonObject
             gson.fromJson(obj, TraktMutationEnvelope::class.java)
                 .copy(profileId = obj.intOrNull("profileId") ?: 1)
+                .sanitizedOrNull()
         }.getOrNull()
+    }
+
+    private fun TraktMutationEnvelope.sanitizedOrNull(): TraktMutationEnvelope? {
+        val cleanId = (id as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanAdapterKey = (adapterKey as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanMutationKind = (mutationKind as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanPriority = (priority as TraktMutationPriorityBucket?) ?: return null
+        val cleanState = (state as TraktMutationLifecycleState?) ?: return null
+
+        return copy(
+            id = cleanId,
+            profileId = profileId.coerceAtLeast(1),
+            adapterKey = cleanAdapterKey,
+            mutationKind = cleanMutationKind,
+            priority = cleanPriority,
+            payload = (payload as JsonObject?) ?: JsonObject(),
+            metadata = (metadata as JsonObject?) ?: JsonObject(),
+            state = cleanState
+        )
     }
 
     private fun TraktMutationOutboxSnapshot.toJson(): JsonObject {
@@ -140,6 +162,18 @@ class TraktMutationOutboxStore private constructor(
     private fun JsonObject.intOrNull(key: String): Int? {
         return runCatching {
             get(key)?.takeIf { !it.isJsonNull }?.asInt
+        }.getOrNull()
+    }
+
+    private fun JsonObject.objectOrNull(key: String): JsonObject? {
+        return runCatching {
+            get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+        }.getOrNull()
+    }
+
+    private fun JsonObject.arrayOrNull(key: String): JsonArray? {
+        return runCatching {
+            get(key)?.takeIf { it.isJsonArray }?.asJsonArray
         }.getOrNull()
     }
 
