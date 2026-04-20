@@ -26,7 +26,7 @@ class KitsuMetadataServiceTest {
         val service = KitsuMetadataService(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.MAL, "5114"), ContentMediaKind.SERIES) } returns "3936"
-        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.providerAuthenticated() } returns true
         coEvery { auth.validAccessToken() } returns null
         coEvery { api.getAnime(null, "3936", "categories,mediaRelationships.destination") } returns Response.success(
             KitsuResourceResponse(
@@ -69,7 +69,7 @@ class KitsuMetadataServiceTest {
         val service = KitsuMetadataService(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
-        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.providerAuthenticated() } returns true
         coEvery { auth.validAccessToken() } returns null
         coEvery { api.getAnimeEpisodes(null, "1", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
@@ -226,7 +226,7 @@ class KitsuMetadataServiceTest {
         val service = KitsuMetadataService(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "3936"
-        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.providerAuthenticated() } returns true
         coEvery { auth.validAccessToken() } returns "access-token"
         coEvery { api.getAnime("Bearer access-token", "3936", any()) } returns Response.success(
             KitsuResourceResponse(data = KitsuAnimeResource(id = "3936", attributes = KitsuAnimeAttributes(canonicalTitle = "Title")))
@@ -240,7 +240,7 @@ class KitsuMetadataServiceTest {
     @Test
     fun `returns null when id is not anime`() = runTest {
         val auth = mockk<KitsuAuthService>()
-        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.providerAuthenticated() } returns true
         val service = KitsuMetadataService(mockk(relaxed = true), mockk(relaxed = true), auth)
 
         assertNull(service.fetchEnrichment("trakt:123", ContentMediaKind.SERIES))
@@ -250,10 +250,24 @@ class KitsuMetadataServiceTest {
     fun `returns null when provider is disabled`() = runTest {
         val api = mockk<KitsuApi>(relaxed = true)
         val auth = mockk<KitsuAuthService>()
-        coEvery { auth.providerEnabled() } returns false
+        coEvery { auth.providerAuthenticated() } returns false
         val service = KitsuMetadataService(api, mockk(relaxed = true), auth)
 
         assertNull(service.fetchEnrichment("mal:5114", ContentMediaKind.SERIES))
+        coVerify(exactly = 0) { api.getAnime(any(), any(), any()) }
+    }
+
+    @Test
+    fun `mapped anime ids do not call kitsu when provider is enabled but unauthenticated`() = runTest {
+        val api = mockk<KitsuApi>(relaxed = true)
+        val mapper = mockk<AnimeIdMappingService>(relaxed = true)
+        val auth = mockk<KitsuAuthService>()
+        val service = KitsuMetadataService(api, mapper, auth)
+
+        coEvery { auth.providerAuthenticated() } returns false
+
+        assertNull(service.fetchEnrichment("tmdb:31911", ContentMediaKind.SERIES))
+        coVerify(exactly = 0) { mapper.resolveKitsuId(any(), any()) }
         coVerify(exactly = 0) { api.getAnime(any(), any(), any()) }
     }
 }
