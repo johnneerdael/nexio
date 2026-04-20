@@ -11,9 +11,11 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
@@ -1562,7 +1564,6 @@ class MetaDetailsViewModel @Inject constructor(
         if (!settings.useEpisodes || !isTvContent) return targetMeta
 
         val seasonNumbers = targetMeta.videos.mapNotNull { it.season }.distinct()
-        if (seasonNumbers.isEmpty()) return targetMeta
 
         val episodeDecision = tvMetadataRouter.fetchEpisodeEnrichment(
             TvMetadataRequest(
@@ -1575,6 +1576,16 @@ class MetaDetailsViewModel @Inject constructor(
         )
         val episodeMap = episodeDecision.value.orEmpty()
         if (episodeMap.isEmpty()) return targetMeta
+
+        if (targetMeta.videos.isEmpty() && episodeDecision.provider == TvProvider.KITSU) {
+            return targetMeta.copy(
+                videos = buildKitsuEpisodeVideos(
+                    seriesId = targetMeta.id,
+                    episodeLabel = context.getString(R.string.episodes_episode),
+                    episodeMap = episodeMap
+                )
+            )
+        }
 
         return targetMeta.copy(
             videos = targetMeta.videos.map { video ->
@@ -1616,25 +1627,16 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun resolveTmdbContentType(meta: Meta): ContentType {
-        val fromRoute = parseApiTypeToContentType(itemType)
+        val fromRoute = parseDetailApiTypeToContentType(itemType)
         if (fromRoute != null) return fromRoute
 
-        val fromMetaApi = parseApiTypeToContentType(meta.apiType)
+        val fromMetaApi = parseDetailApiTypeToContentType(meta.apiType)
         if (fromMetaApi != null) return fromMetaApi
 
         return when (meta.type) {
             ContentType.SERIES, ContentType.TV -> ContentType.SERIES
             ContentType.MOVIE -> ContentType.MOVIE
             else -> ContentType.MOVIE
-        }
-    }
-
-    private fun parseApiTypeToContentType(apiType: String?): ContentType? {
-        val normalized = apiType?.trim()?.lowercase().orEmpty()
-        return when (normalized) {
-            "movie", "film" -> ContentType.MOVIE
-            "series", "tv", "show", "tvshow" -> ContentType.SERIES
-            else -> null
         }
     }
 
@@ -1725,7 +1727,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun preloadTitleTrailerAvailability(meta: Meta) {
         viewModelScope.launch {
-            val isTvContent = parseApiTypeToContentType(meta.apiType) == ContentType.SERIES
+            val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
             val tmdbId = if (isTvContent) null else runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
             }.getOrNull()
@@ -1761,7 +1763,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun preloadAllSeasonMediaAvailability(meta: Meta) {
-        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+        if (parseDetailApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
         meta.videos
             .mapNotNull { it.season }
             .distinct()
@@ -1771,7 +1773,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun preloadSeasonMediaAvailability(season: Int, forceRefresh: Boolean = false) {
         val meta = _uiState.value.meta ?: return
-        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+        if (parseDetailApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
         if (!forceRefresh && _uiState.value.seasonMediaAvailabilityBySeason.containsKey(season)) return
         if (!loadingSeasonAvailability.add(season)) return
 
@@ -1804,7 +1806,7 @@ class MetaDetailsViewModel @Inject constructor(
         forceRefresh: Boolean = false
     ): SeasonMediaActionAvailability {
         val meta = _uiState.value.meta ?: return SeasonMediaActionAvailability()
-        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) {
+        if (parseDetailApiTypeToContentType(meta.apiType) != ContentType.SERIES) {
             return SeasonMediaActionAvailability()
         }
 
@@ -2434,7 +2436,7 @@ class MetaDetailsViewModel @Inject constructor(
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
 
-            val isTvContent = parseApiTypeToContentType(meta.apiType) == ContentType.SERIES
+            val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
             val tmdbId = if (isTvContent) null else runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
             }.getOrNull()
@@ -2446,7 +2448,7 @@ class MetaDetailsViewModel @Inject constructor(
                 type = meta.apiType,
                 seasonNumber = if (
                     useSelectedSeasonForSeries &&
-                    parseApiTypeToContentType(meta.apiType) == ContentType.SERIES
+                    parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
                 ) {
                     selectedSeason
                 } else {
@@ -2466,7 +2468,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
                         isTrailerLoading = false,
-                        selectedSeasonHasPlayableTrailerMedia = if (parseApiTypeToContentType(meta.apiType) == ContentType.SERIES) {
+                        selectedSeasonHasPlayableTrailerMedia = if (parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES) {
                             state.seasonMediaAvailabilityBySeason[selectedSeason]?.hasTrailerOrTeaser == true
                         } else {
                             baseState.titleHasPlayableTrailerMedia
@@ -2507,7 +2509,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun fetchSeasonRecap(playWhenReady: Boolean = false) {
         val meta = _uiState.value.meta ?: return
-        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+        if (parseDetailApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
 
         trailerFetchJob?.cancel()
         trailerFetchJob = viewModelScope.launch {
@@ -2585,7 +2587,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun fetchSeasonTrailer(playWhenReady: Boolean = false) {
         val meta = _uiState.value.meta ?: return
-        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+        if (parseDetailApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
 
         trailerFetchJob?.cancel()
         trailerFetchJob = viewModelScope.launch {
@@ -2974,4 +2976,41 @@ class MetaDetailsViewModel @Inject constructor(
             }
         }
     }
+}
+
+internal fun parseDetailApiTypeToContentType(apiType: String?): ContentType? {
+    val normalized = apiType?.trim()?.lowercase().orEmpty()
+    return when (normalized) {
+        "movie", "film" -> ContentType.MOVIE
+        "series", "tv", "show", "tvshow", "anime" -> ContentType.SERIES
+        else -> null
+    }
+}
+
+internal fun buildKitsuEpisodeVideos(
+    seriesId: String,
+    episodeLabel: String,
+    episodeMap: Map<Pair<Int, Int>, TvEpisodeMetadata>
+): List<Video> {
+    return episodeMap.entries
+        .sortedWith(
+            compareBy<Map.Entry<Pair<Int, Int>, TvEpisodeMetadata>> { it.key.first }
+                .thenBy { it.key.second }
+        )
+        .map { (key, episode) ->
+            val seasonNumber = episode.seasonNumber ?: key.first
+            val episodeNumber = episode.episodeNumber ?: key.second
+            Video(
+                id = "$seriesId:$seasonNumber:$episodeNumber",
+                title = episode.title ?: "$episodeLabel $episodeNumber",
+                released = episode.airDate,
+                thumbnail = episode.thumbnail,
+                streams = emptyList(),
+                season = seasonNumber,
+                episode = episodeNumber,
+                overview = episode.overview,
+                runtime = episode.runtimeMinutes,
+                tvdbEpisodeOrder = episode.tvdbEpisodeOrder
+            )
+        }
 }

@@ -63,6 +63,37 @@ class TvMetadataRouterKitsuTest {
     }
 
     @Test
+    fun `anime id uses kitsu for season episodes`() = runTest {
+        val kitsu = mockk<KitsuMetadataService>()
+        val tvdbIdentity = mockk<TvdbIdentityService>(relaxed = true)
+        val tvdbMetadata = mockk<TvdbMetadataService>(relaxed = true)
+        val router = router(kitsu, tvdbIdentity, tvdbMetadata)
+        coEvery { kitsu.fetchSeasonEpisodes("kitsu:1", ContentMediaKind.SERIES, 1) } returns listOf(
+            TvSeasonEpisode(
+                episodeNumber = 1,
+                airDate = "1998-04-03",
+                metadata = TvEpisodeMetadata(
+                    seasonNumber = 1,
+                    episodeNumber = 1,
+                    title = "Asteroid Blues"
+                )
+            )
+        )
+
+        val decision = router.fetchSeasonEpisodes(
+            contentId = "kitsu:1",
+            fallbackContentId = null,
+            seasonNumber = 1,
+            language = "en-US"
+        )
+
+        assertEquals(TvProvider.KITSU, decision.provider)
+        assertEquals("Asteroid Blues", decision.value?.first()?.metadata?.title)
+        coVerify(exactly = 0) { tvdbIdentity.resolveSeriesByRemoteId(any(), any()) }
+        coVerify(exactly = 0) { tvdbMetadata.fetchSeasonEpisodes(any(), any(), any()) }
+    }
+
+    @Test
     fun `non anime id keeps tvdb route`() = runTest {
         val kitsu = mockk<KitsuMetadataService>()
         val tvdbIdentity = mockk<TvdbIdentityService>()
