@@ -19,11 +19,13 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -232,6 +234,67 @@ class MetaDetailsTvdbProviderRoutingTest {
 
         coVerify(exactly = 1) { tvMetadataRouter.fetchEpisodeEnrichment(any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any(), any()) }
+    }
+
+    @Test
+    fun `series detail becomes visible before episode metadata hydration completes`() = runTest(dispatcher) {
+        val episodeHydrationStarted = CompletableDeferred<Unit>()
+        val allowEpisodeHydration = CompletableDeferred<Unit>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = 121361,
+                localizedTitle = "TVDB Title"
+            )
+        )
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } coAnswers {
+            episodeHydrationStarted.complete(Unit)
+            allowEpisodeHydration.await()
+            TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:9001",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        title = "Nederlandse Pilot",
+                        overview = "Nederlandse afleveringstekst"
+                    )
+                )
+            )
+        }
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildSeriesMeta(),
+            tvMetadataRouter = tvMetadataRouter,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useCredits = false,
+                useProductions = false,
+                useNetworks = false,
+                useEpisodes = true,
+                useMoreLikeThis = false,
+                useReviews = false,
+                useCollections = false
+            )
+        )
+
+        runCurrent()
+
+        assertEquals(true, episodeHydrationStarted.isCompleted)
+        assertEquals(false, viewModel.uiState.value.isLoading)
+        assertEquals("TVDB Title", viewModel.uiState.value.meta?.name)
+        assertEquals("Original Episode", viewModel.uiState.value.episodesForSeason.single().title)
+
+        allowEpisodeHydration.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("Nederlandse Pilot", viewModel.uiState.value.episodesForSeason.single().title)
+        assertEquals("Nederlandse afleveringstekst", viewModel.uiState.value.episodesForSeason.single().overview)
     }
 
     private fun buildSeriesMeta(): Meta {

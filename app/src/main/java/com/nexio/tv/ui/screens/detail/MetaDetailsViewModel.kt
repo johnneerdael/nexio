@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -155,6 +156,15 @@ private data class TraktReviewsPageResult(
     val hasMore: Boolean = false
 )
 
+private data class DetailMetadataEnrichment(
+    val meta: Meta,
+    val tvEnrichment: TvMetadataEnrichment?,
+    val tvdbLanguage: String,
+    val tmdbContentType: ContentType,
+    val isTvContent: Boolean,
+    val settings: TmdbSettings
+)
+
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -197,6 +207,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var moreLikeThisJob: Job? = null
     private var reviewsJob: Job? = null
     private var collectionJob: Job? = null
+    private var episodeMetadataJob: Job? = null
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
     private var idleTimerJob: Job? = null
@@ -570,6 +581,7 @@ class MetaDetailsViewModel @Inject constructor(
             isPlayButtonFocused = false
             idleTimerJob?.cancel()
             trailerFetchJob?.cancel()
+            episodeMetadataJob?.cancel()
             loadingSeasonAvailability.clear()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
@@ -767,10 +779,44 @@ class MetaDetailsViewModel @Inject constructor(
         // Start recommendations fetch early so it can run in parallel with enrichment.
         loadMoreLikeThisAsync(meta)
         loadReviewsAsync(meta)
-        val enriched = enrichMeta(meta)
-        applyMeta(enriched)
-        loadEpisodeRatingsAsync(enriched)
-        loadMDBListRatings(enriched)
+        val enrichment = enrichMeta(meta, includeEpisodeMetadata = false)
+        applyMeta(enrichment.meta)
+        loadEpisodeMetadataAsync(enrichment)
+        loadEpisodeRatingsAsync(enrichment.meta)
+        loadMDBListRatings(enrichment.meta)
+    }
+
+    private fun loadEpisodeMetadataAsync(enrichment: DetailMetadataEnrichment) {
+        episodeMetadataJob?.cancel()
+        if (!enrichment.isTvContent || !enrichment.settings.useEpisodes) return
+
+        val expectedMetaId = enrichment.meta.id
+        episodeMetadataJob = viewModelScope.launch {
+            try {
+                val currentMeta = _uiState.value.meta?.takeIf { it.id == expectedMetaId } ?: return@launch
+                val updated = applyTvEpisodeEnrichment(
+                    targetMeta = currentMeta,
+                    tvEnrichment = enrichment.tvEnrichment,
+                    tmdbContentType = enrichment.tmdbContentType,
+                    tvdbLanguage = enrichment.tvdbLanguage,
+                    settings = enrichment.settings,
+                    isTvContent = enrichment.isTvContent
+                )
+
+                _uiState.update { state ->
+                    val stateMeta = state.meta ?: return@update state
+                    if (stateMeta.id != expectedMetaId || stateMeta.videos == updated.videos) {
+                        state
+                    } else {
+                        state.withRefreshedMeta(updated)
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to hydrate episode metadata for $expectedMetaId: ${error.message}", error)
+            }
+        }
     }
 
     private fun loadMoreLikeThisAsync(meta: Meta) {
@@ -1303,11 +1349,20 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun enrichMeta(meta: Meta): Meta {
+    private suspend fun enrichMeta(
+        meta: Meta,
+        includeEpisodeMetadata: Boolean = true
+    ): DetailMetadataEnrichment {
         val settings = tmdbSettingsDataStore.settings.first()
         val tmdbContentType = resolveTmdbContentType(meta)
         val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
-        val hasAnimeId = AnimeStremioId.parse(meta.id) != null || AnimeStremioId.parse(itemId) != null
+        val parsedAnimeIds = listOfNotNull(
+            AnimeStremioId.parse(meta.id),
+            AnimeStremioId.parse(itemId)
+        )
+        val hasAnimeId = parsedAnimeIds.any { animeId ->
+            animeId.source != AnimeIdSource.IMDB || tmdbContentType != ContentType.MOVIE
+        }
         val tvdbLanguage = currentTvdbLanguageTag()
         val tvEnrichment = if (isTvContent || hasAnimeId) {
             tvMetadataRouter.fetchEnrichment(
@@ -1321,6 +1376,17 @@ class MetaDetailsViewModel @Inject constructor(
         } else {
             null
         }
+        fun result(updatedMeta: Meta): DetailMetadataEnrichment {
+            return DetailMetadataEnrichment(
+                meta = updatedMeta,
+                tvEnrichment = tvEnrichment,
+                tvdbLanguage = tvdbLanguage,
+                tmdbContentType = tmdbContentType,
+                isTvContent = isTvContent,
+                settings = settings
+            )
+        }
+
         val tmdbEnrichment = if (isTvContent) {
             val tmdbId = tvEnrichment?.remoteIds
                 ?.get("tmdb")
@@ -1343,10 +1409,10 @@ class MetaDetailsViewModel @Inject constructor(
             if (hasAnimeId && tvEnrichment != null) {
                 null
             } else {
-                if (!settings.isActive) return meta
+                if (!settings.isActive) return result(meta)
                 val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
                     ?: tmdbService.ensureTmdbId(itemId, itemType)
-                    ?: return meta
+                    ?: return result(meta)
                 tmdbMetadataService.fetchEnrichment(
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
@@ -1450,49 +1516,71 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         // Group: Episodes (titles, overviews, thumbnails, runtime)
-        if (settings.useEpisodes && isTvContent) {
-            val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
-            val episodeDecision = tvMetadataRouter.fetchEpisodeEnrichment(
-                TvMetadataRequest(
-                    contentId = meta.id,
-                    fallbackContentId = itemId,
-                    contentType = tmdbContentType,
-                    language = tvdbLanguage,
-                    seasonNumbers = seasonNumbers
-                )
+        if (includeEpisodeMetadata) {
+            updated = applyTvEpisodeEnrichment(
+                targetMeta = updated,
+                tvEnrichment = tvEnrichment,
+                tmdbContentType = tmdbContentType,
+                tvdbLanguage = tvdbLanguage,
+                settings = settings,
+                isTvContent = isTvContent
             )
-            val episodeMap = episodeDecision.value.orEmpty()
-            if (episodeMap.isNotEmpty()) {
-                updated = updated.copy(
-                    videos = meta.videos.map { video ->
-                        val season = video.season
-                        val episode = video.episode
-                        val key = if (season != null && episode != null) season to episode else null
-                        val ep = key?.let { episodeMap[it] }
-
-                        video.copy(
-                            title = ep?.title ?: video.title,
-                            overview = ep?.overview ?: video.overview,
-                            released = ep?.airDate ?: video.released,
-                            localReleaseInfo = if (tvEnrichment != null && ep?.airDate != null) {
-                                formatTvdbEpisodeLocalReleaseInfo(ep.airDate, tvEnrichment) ?: video.localReleaseInfo
-                            } else {
-                                video.localReleaseInfo
-                            },
-                            thumbnail = ep?.thumbnail ?: video.thumbnail,
-                            runtime = ep?.runtimeMinutes ?: video.runtime,
-                            tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
-                        )
-                    }
-                )
-            }
         }
 
         if (tmdbEnrichment?.collectionId != null) {
             loadCollectionAsync(tmdbEnrichment.collectionId, tmdbEnrichment.collectionName, settings)
         }
 
-        return updated
+        return result(updated)
+    }
+
+    private suspend fun applyTvEpisodeEnrichment(
+        targetMeta: Meta,
+        tvEnrichment: TvMetadataEnrichment?,
+        tmdbContentType: ContentType,
+        tvdbLanguage: String,
+        settings: TmdbSettings,
+        isTvContent: Boolean
+    ): Meta {
+        if (!settings.useEpisodes || !isTvContent) return targetMeta
+
+        val seasonNumbers = targetMeta.videos.mapNotNull { it.season }.distinct()
+        if (seasonNumbers.isEmpty()) return targetMeta
+
+        val episodeDecision = tvMetadataRouter.fetchEpisodeEnrichment(
+            TvMetadataRequest(
+                contentId = targetMeta.id,
+                fallbackContentId = itemId,
+                contentType = tmdbContentType,
+                language = tvdbLanguage,
+                seasonNumbers = seasonNumbers
+            )
+        )
+        val episodeMap = episodeDecision.value.orEmpty()
+        if (episodeMap.isEmpty()) return targetMeta
+
+        return targetMeta.copy(
+            videos = targetMeta.videos.map { video ->
+                val season = video.season
+                val episode = video.episode
+                val key = if (season != null && episode != null) season to episode else null
+                val ep = key?.let { episodeMap[it] }
+
+                video.copy(
+                    title = ep?.title ?: video.title,
+                    overview = ep?.overview ?: video.overview,
+                    released = ep?.airDate ?: video.released,
+                    localReleaseInfo = if (tvEnrichment != null && ep?.airDate != null) {
+                        formatTvdbEpisodeLocalReleaseInfo(ep.airDate, tvEnrichment) ?: video.localReleaseInfo
+                    } else {
+                        video.localReleaseInfo
+                    },
+                    thumbnail = ep?.thumbnail ?: video.thumbnail,
+                    runtime = ep?.runtimeMinutes ?: video.runtime,
+                    tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
+                )
+            }
+        )
     }
 
     private fun shouldSupplementTvdbDetailWithTmdb(
