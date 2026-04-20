@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.SearchHistoryDataStore
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.repository.AddonRepository
@@ -58,6 +59,7 @@ class SearchViewModel @Inject constructor(
         const val DISCOVER_SHOW_MORE_BATCH = 50
         const val SUGGESTION_DEBOUNCE_MS = 150L
         const val MAX_SUGGESTIONS = 8
+        val SEARCH_ALLOWED_TYPES: Set<ContentType> = setOf(ContentType.MOVIE, ContentType.SERIES)
     }
 
     init {
@@ -222,6 +224,7 @@ class SearchViewModel @Inject constructor(
                             if (result is NetworkResult.Success && _uiState.value.query.trim() == query) {
                                 var added = false
                                 result.data.items.forEach { item ->
+                                    if (item.type !in SEARCH_ALLOWED_TYPES) return@forEach
                                     if (collectedNames.add(item.name)) added = true
                                 }
                                 // Push updated suggestions immediately as each addon responds
@@ -380,7 +383,8 @@ class SearchViewModel @Inject constructor(
                         type = catalog.apiType,
                         catalogId = catalog.id
                     )
-                    catalogsMap[key] = result.data
+                    val filteredItems = result.data.items.filter { it.type in SEARCH_ALLOWED_TYPES }
+                    catalogsMap[key] = result.data.copy(items = filteredItems)
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     scheduleCatalogRowsUpdate()
                 }
@@ -442,7 +446,8 @@ class SearchViewModel @Inject constructor(
                             .map { "${it.apiType}:${it.id}" }
                             .toHashSet()
                         val newUniqueItems = result.data.items.filter { item ->
-                            "${item.apiType}:${item.id}" !in existingIds
+                            item.type in SEARCH_ALLOWED_TYPES &&
+                                "${item.apiType}:${item.id}" !in existingIds
                         }
                         val mergedItems = currentRow.items + newUniqueItems
                         val hasMore = if (newUniqueItems.isEmpty()) false else result.data.hasMore
@@ -743,7 +748,7 @@ class SearchViewModel @Inject constructor(
         val allSearchTargets = addons.flatMap { addon ->
             addon.catalogs
                 .filter { catalog ->
-                    catalog.supportsExtra("search")
+                    catalog.type in SEARCH_ALLOWED_TYPES && catalog.supportsExtra("search")
                 }
                 .map { catalog -> addon to catalog }
         }
