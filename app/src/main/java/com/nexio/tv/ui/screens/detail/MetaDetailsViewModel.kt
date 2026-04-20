@@ -49,6 +49,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.AddonRepository
@@ -1433,9 +1434,9 @@ class MetaDetailsViewModel @Inject constructor(
         val localReleaseInfo = tvEnrichment?.let(::formatTvdbDetailLocalReleaseInfo)
         val rating = tvEnrichment?.rating ?: tmdbEnrichment?.rating
         val ratingSource = when {
-            tvEnrichment?.rating != null -> tvEnrichment.ratingSource
-            tmdbEnrichment?.rating != null -> tmdbEnrichment.ratingSource
-            else -> updated.ratingSource
+            tvEnrichment?.rating != null -> tvEnrichment.ratingSource.orDefault()
+            tmdbEnrichment?.rating != null -> tmdbEnrichment.ratingSource.orDefault(com.nexio.tv.domain.model.TitleRatingSource.TMDB)
+            else -> updated.ratingSource.orDefault()
         }
         val runtimeMinutes = tvEnrichment?.runtimeMinutes ?: tmdbEnrichment?.runtimeMinutes
         val ageRating = tvEnrichment?.ageRating ?: tmdbEnrichment?.ageRating
@@ -1461,7 +1462,7 @@ class MetaDetailsViewModel @Inject constructor(
             }
             updated = updated.copy(
                 imdbRating = rating?.toFloat() ?: updated.imdbRating,
-                ratingSource = if (rating != null) ratingSource else updated.ratingSource
+                ratingSource = if (rating != null) ratingSource else updated.ratingSource.orDefault()
             )
         }
 

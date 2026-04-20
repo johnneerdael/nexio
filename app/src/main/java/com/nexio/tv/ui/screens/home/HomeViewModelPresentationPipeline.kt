@@ -16,6 +16,7 @@ import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -667,7 +668,11 @@ internal fun mergeFocusedItemEnrichment(
                 name = providerEnrichment.localizedTitle ?: merged.name,
                 description = providerEnrichment.description ?: merged.description,
                 imdbRating = providerEnrichment.rating?.toFloat() ?: merged.imdbRating,
-                ratingSource = if (providerEnrichment.rating != null) providerEnrichment.ratingSource else merged.ratingSource,
+                ratingSource = if (providerEnrichment.rating != null) {
+                    providerEnrichment.ratingSource.orDefault()
+                } else {
+                    merged.ratingSource.orDefault()
+                },
                 genres = if (providerEnrichment.genres.isNotEmpty()) providerEnrichment.genres else merged.genres
             )
         }
@@ -902,7 +907,7 @@ private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {
             poster = poster,
             releaseInfo = releaseInfo,
             rating = rating,
-            ratingSource = ratingSource,
+            ratingSource = ratingSource.orDefault(com.nexio.tv.domain.model.TitleRatingSource.TMDB),
             runtimeMinutes = runtimeMinutes,
         ageRating = ageRating,
         countries = countries,

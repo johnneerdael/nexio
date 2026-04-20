@@ -15,6 +15,8 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.orDefault
 import java.lang.reflect.Type
 import java.time.Duration
 import java.time.Instant
@@ -816,6 +818,7 @@ internal fun mergeTmdbEnrichmentCollections(
     val safeNetworks = readCompaniesFromJson(valueObj, "networks")
         .ifEmpty { parsed.networks }
     return parsed.copy(
+        ratingSource = parsed.ratingSource.orDefault(TitleRatingSource.TMDB),
         directorMembers = safeDirectorMembers,
         writerMembers = safeWriterMembers,
         castMembers = safeCastMembers,

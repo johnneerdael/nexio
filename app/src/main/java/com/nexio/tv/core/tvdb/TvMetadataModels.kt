@@ -32,7 +32,7 @@ data class TvMetadataEnrichment(
     val poster: String? = null,
     val releaseInfo: String? = null,
     val rating: Double? = null,
-    val ratingSource: TitleRatingSource = TitleRatingSource.IMDB,
+    val ratingSource: TitleRatingSource? = TitleRatingSource.IMDB,
     val runtimeMinutes: Int? = null,
     val ageRating: String? = null,
     val countries: List<String>? = null,

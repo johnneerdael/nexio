@@ -56,6 +56,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.NextToWatch
+import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.material.icons.Icons
@@ -620,7 +621,7 @@ private fun MetaInfoRow(
     }
     val imdbRating = if (hideImdbRating) null else meta.imdbRating
     val shouldShowImdbRating = imdbRating != null
-    val ratingBadge = remember(meta.ratingSource) { titleRatingBadge(meta.ratingSource) }
+    val ratingBadge = remember(meta.ratingSource) { titleRatingBadge(meta.ratingSource.orDefault()) }
     val ratingModel = remember(context, ratingBadge.logoRes) {
         ImageRequest.Builder(context)
             .data(ratingBadge.logoRes)

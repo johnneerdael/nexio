@@ -26,6 +26,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.mergeFallback
+import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -543,7 +544,7 @@ internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadata
         releaseInfo = enrichment.releaseInfo ?: releaseInfo,
         runtime = (enrichment.runtimeMinutes ?: enrichment.averageRuntimeMinutes)?.toString() ?: runtime,
         imdbRating = enrichment.rating?.toFloat() ?: imdbRating,
-        ratingSource = if (enrichment.rating != null) enrichment.ratingSource else ratingSource,
+        ratingSource = if (enrichment.rating != null) enrichment.ratingSource.orDefault() else ratingSource.orDefault(),
         background = enrichment.backdrop ?: background,
         logo = enrichment.logo ?: logo,
         poster = enrichment.poster ?: poster
