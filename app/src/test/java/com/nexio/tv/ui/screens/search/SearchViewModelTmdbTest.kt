@@ -25,6 +25,7 @@ import com.nexio.tv.testutil.playerSettingsDataStoreForTest
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.searchHistoryDataStoreForTest
 import com.nexio.tv.testutil.testProfileManager
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -116,6 +117,26 @@ class SearchViewModelTmdbTest {
         assertNull(state.error)
     }
 
+    @Test
+    fun `submitted search does not publish stale TMDB results after query changes`() = runTest(dispatcher) {
+        val tmdbSearch = CompletableDeferred<List<TmdbMediaResult>>()
+        val viewModel = createViewModel(
+            addonRepository = FakeAddonRepository(listOf(searchableAddon())),
+            catalogRepository = FakeCatalogRepository(addonRow = addonCatalogRow()),
+            tmdbDiscoveryService = FakeTmdbDiscoveryClient(movieSearchDeferred = tmdbSearch).createService()
+        )
+
+        viewModel.onEvent(SearchEvent.QueryChanged("matrix"))
+        viewModel.onEvent(SearchEvent.SubmitSearch)
+        testScheduler.runCurrent()
+
+        viewModel.onEvent(SearchEvent.QueryChanged("matrixx"))
+        tmdbSearch.complete(listOf(tmdbMediaResult(id = 603, title = "The Matrix")))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(emptyList<CatalogRow>(), viewModel.uiState.value.catalogRows)
+    }
+
     private fun TestScope.createViewModel(
         addonRepository: AddonRepository = FakeAddonRepository(emptyList()),
         catalogRepository: CatalogRepository = FakeCatalogRepository(),
@@ -202,6 +223,7 @@ class SearchViewModelTmdbTest {
     private class FakeTmdbDiscoveryClient(
         private val movieSearch: List<TmdbMediaResult> = emptyList(),
         private val tvSearch: List<TmdbMediaResult> = emptyList(),
+        private val movieSearchDeferred: CompletableDeferred<List<TmdbMediaResult>>? = null,
         private val throwCredential: Boolean = false
     ) : TmdbDiscoveryClient {
         override suspend fun credential(): MetadataProviderCredential {
@@ -212,7 +234,7 @@ class SearchViewModelTmdbTest {
         override suspend fun searchMovies(
             query: String,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = movieSearch
+        ): List<TmdbMediaResult> = movieSearchDeferred?.await() ?: movieSearch
 
         override suspend fun searchTv(
             query: String,
