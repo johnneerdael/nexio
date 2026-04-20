@@ -50,13 +50,15 @@ internal fun CatalogPlan.toPersistedSyntheticCatalogGroups(): List<PersistedSynt
 }
 
 internal fun SyntheticHomeCatalogStore.Snapshot.tmdbGroupsMatchingPreferences(
-    prefs: TmdbCatalogPreferences
+    prefs: TmdbCatalogPreferences,
+    preferencesObserved: Boolean = true
 ): List<PersistedSyntheticCatalogGroup> {
     return tmdbGroupsMatchPreferences(
         groups = tmdbGroups,
         includeAdult = tmdbIncludeAdult,
         hideUnreleasedDigital = tmdbHideUnreleasedDigital,
-        prefs = prefs
+        prefs = prefs,
+        preferencesObserved = preferencesObserved
     )
 }
 
@@ -64,8 +66,10 @@ internal fun tmdbGroupsMatchPreferences(
     groups: List<PersistedSyntheticCatalogGroup>,
     includeAdult: Boolean?,
     hideUnreleasedDigital: Boolean?,
-    prefs: TmdbCatalogPreferences
+    prefs: TmdbCatalogPreferences,
+    preferencesObserved: Boolean = true
 ): List<PersistedSyntheticCatalogGroup> {
+    if (!preferencesObserved) return emptyList()
     val sanitized = prefs.sanitized()
     return if (
         includeAdult == sanitized.includeAdult &&

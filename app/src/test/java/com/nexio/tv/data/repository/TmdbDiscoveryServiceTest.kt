@@ -104,6 +104,12 @@ class TmdbDiscoveryServiceTest {
 
     @Test
     fun `missing TMDB credential returns empty search and empty catalog snapshot`() = runTest {
+        val preferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = true,
+            hideUnreleasedDigital = false
+        )
         val service = FakeTmdbDiscoveryClient(
             credential = MetadataProviderCredential("", source = MetadataCredentialSource.MISSING),
             movieSearch = listOf(mediaResult(id = 603, title = "The Matrix")),
@@ -111,11 +117,44 @@ class TmdbDiscoveryServiceTest {
             catalogResults = mapOf(TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Movie")))
         ).createService()
 
-        val searchRows = service.search("matrix", TmdbCatalogPreferences())
-        val snapshot = service.refreshCatalogs(TmdbCatalogPreferences(), force = true)
+        val searchRows = service.search("matrix", preferences)
+        val snapshot = service.refreshCatalogs(preferences, force = true)
 
         assertTrue(searchRows.isEmpty())
-        assertEquals(TmdbDiscoverySnapshot(), snapshot)
+        assertTrue(snapshot.rowsByCatalog.isEmpty())
+        assertTrue(snapshot.updatedAtMs > 0L)
+        assertEquals(true, snapshot.includeAdult)
+        assertEquals(false, snapshot.hideUnreleasedDigital)
+        assertEquals(
+            setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            snapshot.catalogIdsWithCurrentPreferences
+        )
+    }
+
+    @Test
+    fun `missing TMDB credential clears a previously populated catalog snapshot`() = runTest {
+        val client = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending"))
+            )
+        )
+        val service = client.createService()
+        val preferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        service.refreshCatalogs(preferences, force = true)
+        client.credential = MetadataProviderCredential("", source = MetadataCredentialSource.MISSING)
+
+        val snapshot = service.refreshCatalogs(preferences, force = true)
+
+        assertTrue(snapshot.rowsByCatalog.isEmpty())
+        assertEquals(false, snapshot.includeAdult)
+        assertEquals(true, snapshot.hideUnreleasedDigital)
+        assertEquals(setOf(TmdbCatalogIds.TRENDING_MOVIES), snapshot.catalogIdsWithCurrentPreferences)
+        assertEquals(snapshot, service.observeSnapshot().first())
     }
 
     @Test
@@ -268,7 +307,7 @@ class TmdbDiscoveryServiceTest {
     }
 
     private class FakeTmdbDiscoveryClient(
-        private val credential: MetadataProviderCredential = MetadataProviderCredential(
+        var credential: MetadataProviderCredential = MetadataProviderCredential(
             "key",
             source = MetadataCredentialSource.BUILT_IN
         ),

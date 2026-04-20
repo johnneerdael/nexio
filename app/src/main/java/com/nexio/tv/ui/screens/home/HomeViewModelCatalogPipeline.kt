@@ -1289,7 +1289,8 @@ private fun HomeViewModel.persistedTmdbSyntheticGroupsMatchingPreferences(
         groups = persistedTmdbSyntheticGroups,
         includeAdult = persistedTmdbSyntheticIncludeAdult,
         hideUnreleasedDigital = persistedTmdbSyntheticHideUnreleasedDigital,
-        prefs = prefs
+        prefs = prefs,
+        preferencesObserved = tmdbCatalogPreferencesObserved
     )
 }
 
@@ -2555,10 +2556,12 @@ private fun currentTmdbCatalogIds(
 ): Set<String> {
     return buildSet {
         addAll(tmdbSnapshot.currentRowsFor(tmdbPrefs).filterValues { row -> row.items.isNotEmpty() }.keys)
-        currentSyntheticTmdbGroups.filterTmdbGroupsEnabledUnder(tmdbPrefs).forEach { group ->
-            if (group.rows.any { row -> row.items.isNotEmpty() }) {
-                add(group.orderKey)
-                group.rows.forEach { row -> add(row.catalogId) }
+        if (shouldPreserveExistingTmdbGroupsDuringRefresh(tmdbPrefs.sanitized(), tmdbSnapshot)) {
+            currentSyntheticTmdbGroups.filterTmdbGroupsEnabledUnder(tmdbPrefs).forEach { group ->
+                if (group.rows.any { row -> row.items.isNotEmpty() }) {
+                    add(group.orderKey)
+                    group.rows.forEach { row -> add(row.catalogId) }
+                }
             }
         }
     }

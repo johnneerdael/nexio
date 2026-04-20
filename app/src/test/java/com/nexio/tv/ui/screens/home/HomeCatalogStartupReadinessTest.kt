@@ -1220,6 +1220,72 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `current authoritative empty tmdb snapshot removes old persisted tmdb rows from restored snapshot`() {
+        val tmdbItem = samplePreview("tmdb:1", ContentType.MOVIE, "Stale TMDB Movie")
+        val restored = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem))),
+            fullCatalogRows = listOf(tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem))),
+            heroItems = listOf(tmdbItem),
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val currentEmptySnapshot = TmdbDiscoverySnapshot(
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        val filtered = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = restored,
+            tmdbPrefs = prefs,
+            tmdbSnapshot = currentEmptySnapshot,
+            currentSyntheticTmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES))
+        )
+
+        assertTrue(filtered.catalogRows.isEmpty())
+        assertTrue(filtered.fullCatalogRows.isEmpty())
+        assertTrue(filtered.heroItems.isEmpty())
+        assertTrue(filtered.orderedGroupKeys.isEmpty())
+    }
+
+    @Test
+    fun `persisted tmdb rows are not current before catalog preferences are observed`() {
+        val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES)),
+            tmdbIncludeAdult = false,
+            tmdbHideUnreleasedDigital = true
+        )
+        val defaultEnabledPrefs = TmdbCatalogPreferences()
+        val disabledPrefs = defaultEnabledPrefs.copy(enabledCatalogs = emptySet())
+
+        assertTrue(
+            persistedSnapshot.tmdbGroupsMatchingPreferences(
+                prefs = defaultEnabledPrefs,
+                preferencesObserved = false
+            ).isEmpty()
+        )
+        assertTrue(
+            persistedSnapshot.tmdbGroupsMatchingPreferences(
+                prefs = disabledPrefs,
+                preferencesObserved = true
+            ).isEmpty()
+        )
+        assertEquals(
+            listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            persistedSnapshot.tmdbGroupsMatchingPreferences(
+                prefs = defaultEnabledPrefs,
+                preferencesObserved = true
+            ).map { it.orderKey }
+        )
+    }
+
+    @Test
     fun `serialized trakt refresh skips service when only up next is enabled`() {
         val prefs = TraktCatalogPreferences(
             enabledCatalogs = setOf(TraktCatalogIds.UP_NEXT),
