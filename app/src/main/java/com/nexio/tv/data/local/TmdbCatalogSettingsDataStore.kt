@@ -51,6 +51,12 @@ data class TmdbCatalogPreferences(
     val includeAdult: Boolean = false,
     val hideUnreleasedDigital: Boolean = true
 ) {
+    fun enabledCatalogIds(): Set<String> {
+        val sanitized = sanitized()
+        return sanitized.catalogOrder
+            .filterTo(linkedSetOf()) { it in sanitized.enabledCatalogs }
+    }
+
     fun sanitized(): TmdbCatalogPreferences {
         val known = TmdbCatalogIds.BUILT_IN_ORDER.toSet()
         val sanitizedEnabled = enabledCatalogs.filterTo(linkedSetOf()) { it in known }

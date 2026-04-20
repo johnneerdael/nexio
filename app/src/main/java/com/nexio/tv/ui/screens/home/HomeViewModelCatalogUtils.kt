@@ -399,9 +399,7 @@ internal fun buildPublishableConfiguredMDBListOrderKeys(
 }
 
 internal fun buildExpectedConfiguredTmdbOrderKeys(prefs: TmdbCatalogPreferences): List<String> {
-    val orderedEnabled = prefs.catalogOrder.filter { it in prefs.enabledCatalogs }
-    val remainingEnabled = prefs.enabledCatalogs.filterNot { it in orderedEnabled }
-    return (orderedEnabled + remainingEnabled).distinct()
+    return prefs.enabledCatalogIds().toList()
 }
 
 internal fun buildPublishableConfiguredTmdbOrderKeys(

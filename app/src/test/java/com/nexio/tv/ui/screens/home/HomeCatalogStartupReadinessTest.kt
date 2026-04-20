@@ -1004,6 +1004,76 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `persisted tmdb rows for disabled catalogs are not current groups`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            tmdbGroups = listOf(
+                tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES),
+                tmdbGroup(TmdbCatalogIds.POPULAR_MOVIES)
+            ),
+            tmdbIncludeAdult = false,
+            tmdbHideUnreleasedDigital = true
+        )
+
+        val currentGroups = persistedSnapshot.tmdbGroupsMatchingPreferences(prefs)
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), currentGroups.map { it.orderKey })
+    }
+
+    @Test
+    fun `restored merged home snapshot removes disabled tmdb rows even when tmdb snapshot still has them`() {
+        val trendingItem = samplePreview("tmdb:1", ContentType.MOVIE, "Trending TMDB Movie")
+        val popularItem = samplePreview("tmdb:2", ContentType.MOVIE, "Popular TMDB Movie")
+        val restored = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(
+                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(trendingItem)),
+                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(popularItem))
+            ),
+            fullCatalogRows = listOf(
+                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(trendingItem)),
+                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(popularItem))
+            ),
+            heroItems = listOf(trendingItem, popularItem),
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        val currentPreferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val currentTmdbSnapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(trendingItem)),
+                TmdbCatalogIds.POPULAR_MOVIES to tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(popularItem))
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(
+                TmdbCatalogIds.TRENDING_MOVIES,
+                TmdbCatalogIds.POPULAR_MOVIES
+            )
+        )
+
+        val filtered = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = restored,
+            tmdbPrefs = currentPreferences,
+            tmdbSnapshot = currentTmdbSnapshot
+        )
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.catalogRows.map { it.catalogId })
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.fullCatalogRows.map { it.catalogId })
+        assertEquals(listOf("tmdb:1"), filtered.heroItems.map { it.id })
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), filtered.orderedGroupKeys)
+    }
+
+    @Test
     fun `restored merged home snapshot removes tmdb rows without current source provenance`() {
         val tmdbItem = samplePreview("tmdb:1", ContentType.MOVIE, "Stale TMDB Movie")
         val addonItem = samplePreview("tt0000001", ContentType.MOVIE, "Addon Movie")
@@ -1047,6 +1117,54 @@ class HomeCatalogStartupReadinessTest {
         assertEquals(listOf("cinemeta"), filtered.catalogRows.map { it.addonId })
         assertEquals(listOf("cinemeta"), filtered.fullCatalogRows.map { it.addonId })
         assertEquals(listOf("tt0000001"), filtered.heroItems.map { it.id })
+        assertEquals(listOf("cinemeta_movie_popular"), filtered.orderedGroupKeys)
+    }
+
+    @Test
+    fun `restored merged home snapshot removes stale tmdb hero sharing id with retained addon row`() {
+        val sharedId = "tt0000001"
+        val staleTmdbItem = samplePreview(sharedId, ContentType.MOVIE, "Stale TMDB Movie")
+        val addonItem = samplePreview(sharedId, ContentType.MOVIE, "Addon Movie")
+        val restored = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(
+                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(staleTmdbItem)),
+                addonRow("cinemeta", "popular", listOf(addonItem))
+            ),
+            fullCatalogRows = listOf(
+                tmdbRow(TmdbCatalogIds.POPULAR_MOVIES, listOf(staleTmdbItem)),
+                addonRow("cinemeta", "popular", listOf(addonItem))
+            ),
+            heroItems = listOf(staleTmdbItem),
+            orderedGroupKeys = listOf(TmdbCatalogIds.POPULAR_MOVIES, "cinemeta_movie_popular")
+        )
+        val currentPreferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val currentTmdbSnapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    TmdbCatalogIds.TRENDING_MOVIES,
+                    listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Current TMDB Movie"))
+                )
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        val filtered = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = restored,
+            tmdbPrefs = currentPreferences,
+            tmdbSnapshot = currentTmdbSnapshot
+        )
+
+        assertEquals(listOf("cinemeta"), filtered.catalogRows.map { it.addonId })
+        assertEquals(listOf("cinemeta"), filtered.fullCatalogRows.map { it.addonId })
+        assertTrue(filtered.heroItems.isEmpty())
         assertEquals(listOf("cinemeta_movie_popular"), filtered.orderedGroupKeys)
     }
 

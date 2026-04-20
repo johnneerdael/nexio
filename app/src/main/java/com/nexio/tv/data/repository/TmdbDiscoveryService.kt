@@ -193,6 +193,11 @@ class TmdbDiscoveryService @Inject constructor(
             ?.map { it.trim() }
             ?.filter { it.isNotEmpty() }
             ?.toSet()
+        val previous = snapshot.value
+        val previousCurrentRows = previous.currentRowsFor(sanitized)
+        if (!force && requestedCatalogIds != null && requestedCatalogIds.all { it in previousCurrentRows }) {
+            return@coroutineScope previous
+        }
         val enabledCatalogs = sanitized.catalogOrder
             .filter { it in sanitized.enabledCatalogs }
             .filter { requestedCatalogIds == null || it in requestedCatalogIds }
@@ -207,13 +212,12 @@ class TmdbDiscoveryService @Inject constructor(
             .mapNotNull { (catalogId, row) -> row?.let { catalogId to it } }
             .toMap()
 
-        val previous = snapshot.value
         val rows = if (catalogIds == null) {
             refreshedRows
         } else {
-            previous.currentRowsFor(sanitized) + refreshedRows
+            previousCurrentRows + refreshedRows
         }
-        val previousCurrentCatalogIds = previous.currentRowsFor(sanitized).keys
+        val previousCurrentCatalogIds = previousCurrentRows.keys
         val catalogIdsWithCurrentPreferences = if (catalogIds == null) {
             refreshedRows.keys
         } else {
