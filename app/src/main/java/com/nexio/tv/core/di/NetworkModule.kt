@@ -12,6 +12,8 @@ import com.nexio.tv.data.remote.api.ArmApi
 import com.nexio.tv.data.remote.CustomImdbClient
 import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
+import com.nexio.tv.data.remote.api.ImdbSearchService
+import com.nexio.tv.data.remote.api.OkHttpImdbSearchService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransport
 import com.nexio.tv.data.repository.benchmark.DirectDiscardBenchmarkTransport
 import com.nexio.tv.data.remote.api.TraktApi
@@ -682,5 +684,12 @@ object NetworkModule {
     @Singleton
     fun provideTopPostersApi(@Named("topPosters") retrofit: Retrofit): TopPostersApi =
         retrofit.create(TopPostersApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideImdbSearchService(
+        okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): ImdbSearchService = OkHttpImdbSearchService(okHttpClient = okHttpClient, moshi = moshi)
 
 }
