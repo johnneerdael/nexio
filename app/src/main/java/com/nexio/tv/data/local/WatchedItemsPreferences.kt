@@ -21,14 +21,16 @@ private val Context.watchedItemsDataStore: DataStore<Preferences> by preferences
 )
 
 @Singleton
-class WatchedItemsPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+class WatchedItemsPreferences internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.watchedItemsDataStore)
+
     companion object {
         private const val TAG = "WatchedItemsPrefs"
     }
 
-    private val dataStore = context.watchedItemsDataStore
     private fun store() = dataStore
 
     private val gson = Gson()
@@ -37,7 +39,7 @@ class WatchedItemsPreferences @Inject constructor(
     private val allItems: Flow<List<WatchedItem>> = dataStore.data.map { preferences ->
         val raw = preferences[watchedItemsKey] ?: emptySet()
         raw.mapNotNull { json ->
-            runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
+            decodeWatchedItem(json)
         }
     }
 
@@ -63,15 +65,14 @@ class WatchedItemsPreferences @Inject constructor(
         store().edit { preferences ->
             val current = preferences[watchedItemsKey] ?: emptySet()
             val filtered = current.filterNot { json ->
-                runCatching {
-                    gson.fromJson(json, WatchedItem::class.java)
-                }.getOrNull()?.let { existing ->
+                decodeWatchedItem(json)?.let { existing ->
                     existing.contentId == item.contentId &&
                         existing.season == item.season &&
                         existing.episode == item.episode
                 } ?: false
             }
-            preferences[watchedItemsKey] = filtered.toSet() + gson.toJson(item)
+            val sanitized = item.sanitizedOrNull() ?: return@edit
+            preferences[watchedItemsKey] = filtered.toSet() + gson.toJson(sanitized)
         }
     }
 
@@ -79,9 +80,7 @@ class WatchedItemsPreferences @Inject constructor(
         store().edit { preferences ->
             val current = preferences[watchedItemsKey] ?: emptySet()
             val filtered = current.filterNot { json ->
-                runCatching {
-                    gson.fromJson(json, WatchedItem::class.java)
-                }.getOrNull()?.let { existing ->
+                decodeWatchedItem(json)?.let { existing ->
                     existing.contentId == contentId &&
                         existing.season == season &&
                         existing.episode == episode
@@ -99,11 +98,11 @@ class WatchedItemsPreferences @Inject constructor(
         store().edit { preferences ->
             val current = preferences[watchedItemsKey] ?: emptySet()
             val localItems = current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
+                decodeWatchedItem(json)
             }
             val localKeys = localItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
 
-            val newItems = remoteItems.filter { remote ->
+            val newItems = remoteItems.mapNotNull { it.sanitizedOrNull() }.filter { remote ->
                 Triple(remote.contentId, remote.season, remote.episode) !in localKeys
             }
 
@@ -121,12 +120,30 @@ class WatchedItemsPreferences @Inject constructor(
                 return@edit
             }
             val deduped = linkedMapOf<Triple<String, Int?, Int?>, WatchedItem>()
-            remoteItems.forEach { item ->
+            remoteItems.mapNotNull { it.sanitizedOrNull() }.forEach { item ->
                 deduped[Triple(item.contentId, item.season, item.episode)] = item
             }
             preferences[watchedItemsKey] = deduped.values
                 .map { gson.toJson(it) }
                 .toSet()
         }
+    }
+
+    private fun decodeWatchedItem(json: String): WatchedItem? {
+        return runCatching { gson.fromJson(json, WatchedItem::class.java) }
+            .getOrNull()
+            ?.sanitizedOrNull()
+    }
+
+    private fun WatchedItem.sanitizedOrNull(): WatchedItem? {
+        val cleanContentId = (contentId as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanContentType = (contentType as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanTitle = (title as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        if (watchedAt <= 0L) return null
+        return copy(
+            contentId = cleanContentId,
+            contentType = cleanContentType,
+            title = cleanTitle
+        )
     }
 }
