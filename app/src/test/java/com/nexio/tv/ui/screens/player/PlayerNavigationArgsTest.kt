@@ -1,7 +1,9 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.ui.navigation.Screen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class PlayerNavigationArgsTest {
@@ -42,5 +44,30 @@ class PlayerNavigationArgsTest {
         assertEquals(12.5f, args.resumeProgressPercent)
         assertEquals(42L, args.resumeLastWatchedMs)
         assertEquals("trakt_playback", args.resumeSource)
+    }
+
+    @Test
+    fun `player route carries direct addon urls without percent encoded path separators`() {
+        val streamUrl = "https://45-4.download.real-debrid.com/d/RCFFKFRWG3THS/Avatar.Fire.and.Ash.2025.MULTi.VF2.2160p.HDR.DV.WEB-DL.Dolby.Atmos.7.1.H265-Slay3R.mkv?token=a%2Fb%3D"
+        val route = Screen.Player.createRoute(
+            streamUrl = streamUrl,
+            title = "Direct Addon"
+        )
+        val streamUrlSegment = route.removePrefix("player/").substringBefore("/")
+
+        assertFalse(streamUrlSegment.contains("%2F", ignoreCase = true))
+        assertFalse(streamUrlSegment.contains("/"))
+
+        val args = PlayerNavigationArgs.from(
+            SavedStateHandle(
+                mapOf(
+                    "streamUrl" to streamUrlSegment,
+                    "title" to "Direct%20Addon"
+                )
+            )
+        )
+
+        assertEquals(streamUrl, args.streamUrl)
+        assertEquals("Direct Addon", args.title)
     }
 }
