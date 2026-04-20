@@ -6,6 +6,7 @@ import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -135,7 +136,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
         val tmdbPrefs = tmdbCatalogSettingsDataStore.catalogPreferences.first()
-        runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false) }
+        if (normalizedKeys.any(::isTmdbFeedKey)) {
+            runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false) }
+        }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
 
@@ -201,7 +204,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
         val tmdbPrefs = tmdbCatalogSettingsDataStore.catalogPreferences.first()
-        runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false) }
+        if (isTmdbFeedKey(normalizedKey)) {
+            runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false) }
+        }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
 
@@ -470,6 +475,11 @@ class AndroidTvFeedCatalogService @Inject constructor(
 
     private fun buildContinueWatchingItems(snapshot: ContinueWatchingSnapshot): List<MetaPreview> {
         return buildContinueWatchingItemsForAndroidTvFeed(snapshot)
+    }
+
+    private fun isTmdbFeedKey(key: String): Boolean {
+        return key.startsWith("tmdb_") &&
+            TmdbCatalogIds.BUILT_IN_ORDER.any { catalogId -> key.endsWith("_$catalogId") }
     }
 }
 
