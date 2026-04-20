@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.Video
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,7 @@ class MDBListRepository @Inject constructor(
 
     private enum class ProviderType(val apiValue: String) {
         TRAKT("trakt"),
+        IMDB("imdb"),
         TMDB("tmdb"),
         LETTERBOXD("letterboxd"),
         TOMATOES("tomatoes"),
@@ -142,22 +144,30 @@ class MDBListRepository @Inject constructor(
     }
 
     suspend fun enrichPreview(preview: MetaPreview): MetaPreview {
-        if (preview.tomatoesRating != null) return preview
         val settings = settingsDataStore.settings.first()
-        if (!settings.enabled || !settings.showTomatoes) return preview
+        if (!settings.enabled) return preview
 
         val apiKey = settings.apiKey.trim()
         if (apiKey.isBlank()) return preview
+
+        val needsImdb = settings.showImdb
+        val needsTomatoes = preview.tomatoesRating == null && settings.showTomatoes
+        if (!needsImdb && !needsTomatoes) return preview
 
         val result = getRatingsForMeta(
             meta = preview.toRatingsMeta(),
             fallbackItemId = preview.id,
             fallbackItemType = preview.apiType,
             apiKey = apiKey,
-            providers = listOf(ProviderType.TOMATOES)
+            providers = buildList {
+                if (needsImdb) add(ProviderType.IMDB)
+                if (needsTomatoes) add(ProviderType.TOMATOES)
+            }
         ) ?: return preview
 
         return preview.copy(
+            imdbRating = result.ratings.imdb?.toFloat() ?: preview.imdbRating,
+            ratingSource = if (result.ratings.imdb != null) TitleRatingSource.IMDB else preview.ratingSource,
             tomatoesRating = result.ratings.tomatoes ?: preview.tomatoesRating
         )
     }
@@ -228,7 +238,7 @@ class MDBListRepository @Inject constructor(
 
         val ratings = MDBListRatings(
             trakt = results[ProviderType.TRAKT],
-            imdb = null,
+            imdb = results[ProviderType.IMDB],
             tmdb = results[ProviderType.TMDB],
             letterboxd = results[ProviderType.LETTERBOXD],
             tomatoes = results[ProviderType.TOMATOES],
@@ -348,6 +358,7 @@ class MDBListRepository @Inject constructor(
 
     private fun enabledProviders(settings: MDBListSettings): List<ProviderType> = buildList {
         if (settings.showTrakt) add(ProviderType.TRAKT)
+        if (settings.showImdb) add(ProviderType.IMDB)
         if (settings.showTmdb) add(ProviderType.TMDB)
         if (settings.showLetterboxd) add(ProviderType.LETTERBOXD)
         if (settings.showTomatoes) add(ProviderType.TOMATOES)
