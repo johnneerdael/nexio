@@ -8,8 +8,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
 import javax.inject.Inject
@@ -41,6 +43,12 @@ interface CustomImdbClient {
         apiKey: String,
         tconst: String
     ): Map<Pair<Int, Int>, Double>
+
+    suspend fun fetchTitleRatings(
+        baseUrl: String,
+        apiKey: String,
+        identifiers: List<String>
+    ): Map<String, Double>
 }
 
 @Singleton
@@ -49,6 +57,8 @@ class OkHttpCustomImdbClient @Inject constructor(
     private val moshi: Moshi
 ) : CustomImdbClient {
     private val ratingWithEpisodesAdapter = moshi.adapter(RatingWithEpisodes::class.java)
+    private val bulkRatingsRequestAdapter = moshi.adapter(BulkRatingsRequest::class.java)
+    private val bulkRatingsResponseAdapter = moshi.adapter(BulkRatingsResponse::class.java)
     internal var delayMs: suspend (Long) -> Unit = { delay(it) }
 
     override suspend fun validate(baseUrl: String, apiKey: String): Boolean {
@@ -118,6 +128,49 @@ class OkHttpCustomImdbClient @Inject constructor(
         }
     }
 
+    override suspend fun fetchTitleRatings(
+        baseUrl: String,
+        apiKey: String,
+        identifiers: List<String>
+    ): Map<String, Double> {
+        val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
+        val normalizedIdentifiers = identifiers
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        if (normalizedBaseUrl.isBlank() || apiKey.isBlank() || normalizedIdentifiers.isEmpty()) return emptyMap()
+
+        val body = bulkRatingsRequestAdapter
+            .toJson(BulkRatingsRequest(normalizedIdentifiers))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(buildCustomImdbUrl(normalizedBaseUrl, "ratings/bulk"))
+            .header("X-API-Key", apiKey.trim())
+            .post(body)
+            .build()
+
+        return executeWithRateLimitRetry(
+            request = request,
+            onFailure = { emptyMap() }
+        ) { response ->
+            if (!response.isSuccessful) {
+                Log.w(
+                    CUSTOM_IMDB_CLIENT_TAG,
+                    "Custom IMDb bulk ratings request failed with HTTP ${response.code}"
+                )
+                return@executeWithRateLimitRetry emptyMap()
+            }
+
+            val payload = response.body?.string().orEmpty()
+            val parsed = bulkRatingsResponseAdapter.fromJson(payload) ?: return@executeWithRateLimitRetry emptyMap()
+            parsed.results.mapNotNull { rating ->
+                val tconst = rating.tconst.trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val value = rating.averageRating?.takeIf { it > 0.0 } ?: return@mapNotNull null
+                tconst to value
+            }.toMap()
+        }
+    }
+
     private suspend fun <T> executeWithRateLimitRetry(
         request: Request,
         onFailure: (IOException) -> T,
@@ -167,6 +220,17 @@ data class RatingDto(
     val tconst: String,
     @Json(name = "averageRating") val averageRating: Double? = null,
     @Json(name = "numVotes") val numVotes: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class BulkRatingsRequest(
+    val identifiers: List<String>
+)
+
+@JsonClass(generateAdapter = true)
+data class BulkRatingsResponse(
+    val results: List<RatingDto> = emptyList(),
+    val missing: List<String> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

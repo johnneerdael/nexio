@@ -142,6 +142,54 @@ class CustomImdbClientTest {
     }
 
     @Test
+    fun `fetchTitleRatings posts bulk identifiers and maps ratings`() = runTest {
+        var capturedPath = ""
+        var capturedMethod = ""
+        var capturedRequestBody: String? = null
+        val client = OkHttpCustomImdbClient(
+            okHttpClient = okHttpClient { chain ->
+                capturedPath = chain.request().url.encodedPath
+                capturedMethod = chain.request().method
+                capturedRequestBody = chain.request().body?.readUtf8()
+                jsonResponse(
+                    chain,
+                    """
+                    {
+                      "results": [
+                        { "tconst": "tt32459853", "averageRating": 7.8, "numVotes": 1500 },
+                        { "tconst": "tt0944947", "averageRating": 9.2, "numVotes": 2300000 },
+                        { "tconst": "tt0000000", "averageRating": 0.0, "numVotes": 1 }
+                      ],
+                      "missing": ["Hello, world!"]
+                    }
+                    """.trimIndent()
+                )
+            },
+            moshi = Moshi.Builder().build()
+        )
+
+        val result = client.fetchTitleRatings(
+            baseUrl = "https://ratings.example.com/custom",
+            apiKey = "secret-key",
+            identifiers = listOf("Hello, world!", "tt32459853", "tt0944947")
+        )
+
+        assertEquals("/custom/v1/ratings/bulk", capturedPath)
+        assertEquals("POST", capturedMethod)
+        assertEquals(
+            """{"identifiers":["Hello, world!","tt32459853","tt0944947"]}""",
+            capturedRequestBody
+        )
+        assertEquals(
+            mapOf(
+                "tt32459853" to 7.8,
+                "tt0944947" to 9.2
+            ),
+            result
+        )
+    }
+
+    @Test
     fun `fetchEpisodeRatings reuses version path when base url already ends in v1`() = runTest {
         var capturedPath = ""
         val client = OkHttpCustomImdbClient(
