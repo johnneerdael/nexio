@@ -56,7 +56,8 @@ class SyntheticHomeCatalogStore private constructor(
     data class Snapshot(
         val traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val simklGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
-        val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+        val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     )
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
@@ -83,6 +84,7 @@ class SyntheticHomeCatalogStore private constructor(
                 add("traktGroups", encodeGroups(snapshot.traktGroups))
                 add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
+                add("tmdbGroups", encodeGroups(snapshot.tmdbGroups))
             }
             prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
@@ -112,7 +114,8 @@ class SyntheticHomeCatalogStore private constructor(
         return Snapshot(
             traktGroups = decodeGroups(root.getAsJsonArray("traktGroups")),
             simklGroups = decodeGroups(root.getAsJsonArray("simklGroups")),
-            mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups"))
+            mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups")),
+            tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups"))
         )
     }
 

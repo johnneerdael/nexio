@@ -7,11 +7,15 @@ import com.nexio.tv.core.sync.normalizePublicAddonBaseUrl
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogIds
+import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.data.repository.tmdbCatalogTitle
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -22,9 +26,11 @@ import kotlinx.coroutines.Job
 internal const val TRAKT_HOME_ADDON_ID = "trakt"
 internal const val SIMKL_HOME_ADDON_ID = "simkl"
 internal const val MDBLIST_HOME_ADDON_ID = "mdblist"
+internal const val TMDB_HOME_ADDON_ID = "tmdb"
 private const val TRAKT_HOME_KEY_PREFIX = "trakt_"
 private const val SIMKL_HOME_KEY_PREFIX = "simkl_"
 private const val MDBLIST_HOME_KEY_PREFIX = "mdblist_"
+private const val TMDB_HOME_KEY_PREFIX = "tmdb_"
 
 internal data class ConfiguredHomeCatalogDescriptor(
     val orderKey: String,
@@ -62,6 +68,7 @@ internal fun homeCatalogGlobalKey(row: CatalogRow): String {
         TRAKT_HOME_ADDON_ID -> if (row.catalogId.startsWith(TRAKT_HOME_KEY_PREFIX)) row.catalogId else "$TRAKT_HOME_KEY_PREFIX${row.catalogId}"
         SIMKL_HOME_ADDON_ID -> if (row.catalogId.startsWith(SIMKL_HOME_KEY_PREFIX)) row.catalogId else "$SIMKL_HOME_KEY_PREFIX${row.catalogId}"
         MDBLIST_HOME_ADDON_ID -> if (row.catalogId.startsWith(MDBLIST_HOME_KEY_PREFIX)) row.catalogId else "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
+        TMDB_HOME_ADDON_ID -> if (row.catalogId.startsWith(TMDB_HOME_KEY_PREFIX)) row.catalogId else "$TMDB_HOME_KEY_PREFIX${row.catalogId}"
         else -> "${row.addonId}_${row.apiType}_${row.catalogId}"
     }
 }
@@ -91,6 +98,8 @@ internal fun buildConfiguredHomeCatalogDescriptors(
     simklPrefs: SimklCatalogPreferences,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot,
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): List<ConfiguredHomeCatalogDescriptor> {
     val descriptorsByKey = linkedMapOf<String, ConfiguredHomeCatalogDescriptor>()
@@ -149,6 +158,26 @@ internal fun buildConfiguredHomeCatalogDescriptors(
                     ?: humanizeCatalogKey(key),
                 type = ContentType.UNKNOWN,
                 rawType = "catalog"
+            )
+        }
+
+    buildExpectedConfiguredTmdbOrderKeys(tmdbPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+        .forEach { key ->
+            val row = tmdbSnapshot.rowsByCatalog[key]
+            val type = row?.type ?: tmdbCatalogContentType(key)
+            descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
+                orderKey = key,
+                addonId = TMDB_HOME_ADDON_ID,
+                addonName = "TMDB",
+                addonBaseUrl = "https://api.themoviedb.org/3",
+                catalogId = key,
+                catalogName = existingTitle(key)
+                    ?: row?.catalogName?.takeIf { it.isNotBlank() }
+                    ?: tmdbCatalogTitle(key)
+                    ?: humanizeCatalogKey(key),
+                type = type,
+                rawType = type.toApiString("catalog")
             )
         }
 
@@ -228,7 +257,8 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
     traktPrefs: TraktCatalogPreferences,
     simklPrefs: SimklCatalogPreferences,
     mdbPrefs: MDBListCatalogPreferences,
-    mdbSnapshot: MDBListDiscoverySnapshot
+    mdbSnapshot: MDBListDiscoverySnapshot,
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
 ): List<String> {
     val traktKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
@@ -236,8 +266,10 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val mdbKeys = buildExpectedConfiguredMDBListOrderKeys(mdbPrefs, mdbSnapshot)
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+    val tmdbKeys = buildExpectedConfiguredTmdbOrderKeys(tmdbPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
-    return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
+    return (traktKeys + simklKeys + mdbKeys + tmdbKeys + addonKeys).distinct()
 }
 
 internal fun buildPublishableConfiguredHomeOrderKeys(
@@ -250,7 +282,9 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
     simklPrefs: SimklCatalogPreferences,
     simklSnapshot: SimklDiscoverySnapshot,
     mdbPrefs: MDBListCatalogPreferences,
-    mdbSnapshot: MDBListDiscoverySnapshot
+    mdbSnapshot: MDBListDiscoverySnapshot,
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot()
 ): List<String> {
     val traktKeys = buildPublishableConfiguredTraktOrderKeys(
         prefs = traktPrefs,
@@ -265,9 +299,13 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
         prefs = mdbPrefs,
         snapshot = mdbSnapshot
     ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+    val tmdbKeys = buildPublishableConfiguredTmdbOrderKeys(
+        prefs = tmdbPrefs,
+        snapshot = tmdbSnapshot
+    ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
         .filter { it in availableAddonOrderKeys }
-    return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
+    return (traktKeys + simklKeys + mdbKeys + tmdbKeys + addonKeys).distinct()
 }
 
 internal fun buildExpectedConfiguredTraktOrderKeys(
@@ -359,6 +397,20 @@ internal fun buildPublishableConfiguredMDBListOrderKeys(
     }
 }
 
+internal fun buildExpectedConfiguredTmdbOrderKeys(prefs: TmdbCatalogPreferences): List<String> {
+    val orderedEnabled = prefs.catalogOrder.filter { it in prefs.enabledCatalogs }
+    val remainingEnabled = prefs.enabledCatalogs.filterNot { it in orderedEnabled }
+    return (orderedEnabled + remainingEnabled).distinct()
+}
+
+internal fun buildPublishableConfiguredTmdbOrderKeys(
+    prefs: TmdbCatalogPreferences,
+    snapshot: TmdbDiscoverySnapshot
+): List<String> {
+    val available = snapshot.rowsByCatalog.filterValues { it.items.isNotEmpty() }.keys
+    return buildExpectedConfiguredTmdbOrderKeys(prefs).filter { it in available }
+}
+
 internal fun buildExpectedConfiguredAddonOrderKeys(
     addons: List<Addon>,
     disabledHomeCatalogKeys: Set<String>
@@ -404,7 +456,10 @@ internal fun areConfiguredHomeSourceCachesReady(
     simklSnapshot: SimklDiscoverySnapshot,
     mdbExpectedOrderKeys: List<String>,
     mdbPrefs: MDBListCatalogPreferences,
-    mdbSnapshot: MDBListDiscoverySnapshot
+    mdbSnapshot: MDBListDiscoverySnapshot,
+    tmdbExpectedOrderKeys: List<String> = emptyList(),
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot()
 ): Boolean {
     val addonsReady = addonExpectedOrderKeys.all { it in availableAddonOrderKeys }
     val traktReady = if (traktExpectedOrderKeys.isEmpty()) {
@@ -422,7 +477,12 @@ internal fun areConfiguredHomeSourceCachesReady(
     } else {
         !shouldRefreshMDBListDiscoveryForState(mdbPrefs, mdbSnapshot)
     }
-    return addonsReady && traktReady && simklReady && mdbReady
+    val tmdbReady = if (tmdbExpectedOrderKeys.isEmpty()) {
+        true
+    } else {
+        !shouldRefreshTmdbDiscoveryForState(tmdbPrefs, tmdbSnapshot)
+    }
+    return addonsReady && traktReady && simklReady && mdbReady && tmdbReady
 }
 
 internal fun areConfiguredHomePublishSourcesReady(
@@ -433,13 +493,27 @@ internal fun areConfiguredHomePublishSourcesReady(
     simklExpectedOrderKeys: List<String>,
     simklObserved: Boolean,
     mdbExpectedOrderKeys: List<String>,
-    mdbObserved: Boolean
+    mdbObserved: Boolean,
+    tmdbExpectedOrderKeys: List<String> = emptyList(),
+    tmdbObserved: Boolean = true
 ): Boolean {
     val addonsReady = addonExpectedOrderKeys.all { it in availableAddonOrderKeys }
     val traktReady = traktExpectedOrderKeys.isEmpty() || traktObserved
     val simklReady = simklExpectedOrderKeys.isEmpty() || simklObserved
     val mdbReady = mdbExpectedOrderKeys.isEmpty() || mdbObserved
-    return addonsReady && traktReady && simklReady && mdbReady
+    val tmdbReady = tmdbExpectedOrderKeys.isEmpty() || tmdbObserved
+    return addonsReady && traktReady && simklReady && mdbReady && tmdbReady
+}
+
+internal fun shouldRefreshTmdbDiscoveryForState(
+    prefs: TmdbCatalogPreferences,
+    snapshot: TmdbDiscoverySnapshot
+): Boolean {
+    if (buildExpectedConfiguredTmdbOrderKeys(prefs).isEmpty()) return false
+    if (snapshot.updatedAtMs <= 0L) return true
+    return buildExpectedConfiguredTmdbOrderKeys(prefs).any { key ->
+        snapshot.rowsByCatalog[key]?.items.isNullOrEmpty()
+    }
 }
 
 internal fun shouldRefreshSimklDiscoveryForState(
@@ -652,6 +726,22 @@ private fun simklCatalogContentTypeForDescriptor(key: String): ContentType {
         SimklCatalogIds.MOVIE_TRENDING_MONTH,
         SimklCatalogIds.DVD_RELEASES -> ContentType.MOVIE
         else -> ContentType.SERIES
+    }
+}
+
+private fun tmdbCatalogContentType(key: String): ContentType {
+    return when (key) {
+        TmdbCatalogIds.TRENDING_MOVIES,
+        TmdbCatalogIds.LATEST_RELEASES_MOVIES,
+        TmdbCatalogIds.POPULAR_MOVIES,
+        TmdbCatalogIds.YEAR_MOVIES,
+        TmdbCatalogIds.LANGUAGE_MOVIES -> ContentType.MOVIE
+        TmdbCatalogIds.TRENDING_SERIES,
+        TmdbCatalogIds.LATEST_RELEASES_SERIES,
+        TmdbCatalogIds.POPULAR_SERIES,
+        TmdbCatalogIds.YEAR_SERIES,
+        TmdbCatalogIds.LANGUAGE_SERIES -> ContentType.SERIES
+        else -> ContentType.UNKNOWN
     }
 }
 

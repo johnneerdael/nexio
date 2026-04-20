@@ -3,12 +3,14 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
@@ -58,6 +60,8 @@ internal fun buildConfiguredCatalogPlan(
     simklSnapshot: SimklDiscoverySnapshot,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot,
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): CatalogPlan {
     val expectedOrderKeys = buildExpectedConfiguredHomeOrderKeys(
@@ -66,7 +70,8 @@ internal fun buildConfiguredCatalogPlan(
         traktPrefs = traktPrefs,
         simklPrefs = simklPrefs,
         mdbPrefs = mdbPrefs,
-        mdbSnapshot = mdbSnapshot
+        mdbSnapshot = mdbSnapshot,
+        tmdbPrefs = tmdbPrefs
     )
     val publishableOrderKeys = buildPublishableConfiguredHomeOrderKeys(
         addons = addons,
@@ -78,7 +83,9 @@ internal fun buildConfiguredCatalogPlan(
         simklPrefs = simklPrefs,
         simklSnapshot = simklSnapshot,
         mdbPrefs = mdbPrefs,
-        mdbSnapshot = mdbSnapshot
+        mdbSnapshot = mdbSnapshot,
+        tmdbPrefs = tmdbPrefs,
+        tmdbSnapshot = tmdbSnapshot
     )
     val descriptors = buildConfiguredHomeCatalogDescriptors(
         addons = addons,
@@ -89,6 +96,8 @@ internal fun buildConfiguredCatalogPlan(
         simklPrefs = simklPrefs,
         mdbPrefs = mdbPrefs,
         mdbSnapshot = mdbSnapshot,
+        tmdbPrefs = tmdbPrefs,
+        tmdbSnapshot = tmdbSnapshot,
         existingRowsByOrderKey = existingRowsByOrderKey
     )
     val descriptorByKey = descriptors.associateBy { it.orderKey }
@@ -109,6 +118,10 @@ internal fun buildConfiguredCatalogPlan(
                 key = key,
                 snapshot = mdbSnapshot
             )
+            TMDB_HOME_ADDON_ID -> tmdbSnapshot.rowsByCatalog[key]
+                ?.takeIf { row -> row.items.isNotEmpty() }
+                ?.let(::listOf)
+                .orEmpty()
             else -> emptyList()
         }
         PlannedCatalogRail(
