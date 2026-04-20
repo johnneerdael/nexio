@@ -51,6 +51,7 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.components.LoadingIndicator
+import com.nexio.tv.ui.screens.detail.titleRatingBadge
 import com.nexio.tv.ui.theme.NexioColors
 
 private const val MODERN_HOME_HERO_LOG_TAG = "ModernHomeHero"
@@ -276,9 +277,10 @@ private fun HeroTitleContent(
                 .build()
         }
     }
-    val imdbLogoModel = remember(context) {
+    val ratingBadge = remember(preview.ratingSource) { titleRatingBadge(preview.ratingSource) }
+    val ratingLogoModel = remember(context, ratingBadge.logoRes) {
         ImageRequest.Builder(context)
-            .data(com.nexio.tv.R.raw.imdb_logo_2016)
+            .data(ratingBadge.logoRes)
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
@@ -386,8 +388,8 @@ private fun HeroTitleContent(
                             horizontalArrangement = Arrangement.spacedBy(imdbMetaSpacing)
                         ) {
                             AsyncImage(
-                                model = imdbLogoModel,
-                                contentDescription = stringResource(R.string.cd_imdb_rating),
+                                model = ratingLogoModel,
+                                contentDescription = ratingBadge.contentDescription,
                                 modifier = Modifier.size(30.dp * metaScale),
                                 contentScale = ContentScale.Fit
                             )

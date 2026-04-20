@@ -50,6 +50,7 @@ internal fun com.nexio.tv.domain.model.MetaPreview.toHomeHeroPreview(): HeroPrev
         contentTypeText = null,
         yearText = releaseInfo,
         imdbText = imdbRating?.let { String.format("%.1f", it) },
+        ratingSource = ratingSource,
         tomatoesText = tomatoesRating?.let { "${it.toInt()}%" },
         genres = genres,
         poster = poster,

@@ -51,6 +51,7 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.ui.screens.detail.titleRatingBadge
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
@@ -294,15 +295,16 @@ private fun HeroCarouselSlide(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        val imdbModel = remember(context) {
+                        val ratingBadge = remember(item.ratingSource) { titleRatingBadge(item.ratingSource) }
+                        val ratingModel = remember(context, ratingBadge.logoRes) {
                             ImageRequest.Builder(context)
-                                .data(com.nexio.tv.R.raw.imdb_logo_2016)
+                                .data(ratingBadge.logoRes)
                                 .decoderFactory(SvgDecoder.Factory())
                                 .build()
                         }
                         AsyncImage(
-                            model = imdbModel,
-                            contentDescription = stringResource(R.string.cd_imdb_rating),
+                            model = ratingModel,
+                            contentDescription = ratingBadge.contentDescription,
                             modifier = Modifier.size(30.dp),
                             contentScale = ContentScale.Fit
                         )
