@@ -44,6 +44,10 @@ private object DefaultFfmpegStreamMetadataBackend : FfmpegStreamMetadataBackend 
 object FfmpegStreamMetadataProbe {
     private const val TAG = "FfmpegStreamMetadata"
     private const val MAX_CACHE_ENTRIES = 12
+    private const val LOG_CHUNK_SIZE = 3000
+    private const val PROBE_SIZE_BYTES = 10_000
+    private const val ANALYZE_DURATION_US = 10_000
+    private const val READ_WRITE_TIMEOUT_US = 5_000_000
 
     // The bundled FFmpeg network probe path is shared with DV/AFR probing and is not safe to
     // enter concurrently on every Android build.
@@ -61,6 +65,12 @@ object FfmpegStreamMetadataProbe {
     }
     @Volatile
     private var backend: FfmpegStreamMetadataBackend = DefaultFfmpegStreamMetadataBackend
+    @Volatile
+    private var diagnosticsEnabled: Boolean = false
+
+    fun setDiagnosticsEnabled(enabled: Boolean) {
+        diagnosticsEnabled = enabled
+    }
 
     internal fun setBackendForTesting(testBackend: FfmpegStreamMetadataBackend) {
         synchronized(nativeProbeLock) {
@@ -74,6 +84,7 @@ object FfmpegStreamMetadataProbe {
             backend = DefaultFfmpegStreamMetadataBackend
             cache.clear()
         }
+        diagnosticsEnabled = false
     }
 
     suspend fun probe(
@@ -87,24 +98,66 @@ object FfmpegStreamMetadataProbe {
         url: String,
         headers: Map<String, String> = emptyMap()
     ): FfmpegStreamMetadataProbeResult? {
+        val startedAtMs = System.currentTimeMillis()
+        val headerBlob = headers.toProbeHeaderBlob()
+        if (diagnosticsEnabled) {
+            Log.i(
+                TAG,
+                "FFMPEG_PROBE_START url=$url command=${buildProbeDebugCommand(url, headerBlob)}"
+            )
+        }
         return runCatching {
-            val headerBlob = headers.toProbeHeaderBlob()
             val key = ProbeKey(url = url, requestHeadersBlob = headerBlob)
             synchronized(nativeProbeLock) {
-                cache[key]?.let { return it }
-                val parsed = backend.probeStreamMetadataJson(url, headerBlob)
-                    ?.let(::parse)
+                cache[key]?.let { cached ->
+                    if (diagnosticsEnabled) {
+                        Log.i(
+                            TAG,
+                            "FFMPEG_PROBE_CACHE_HIT elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                                "url=$url streams=${cached.streams.size}"
+                        )
+                    }
+                    return cached
+                }
+                val rawJson = backend.probeStreamMetadataJson(url, headerBlob)
+                if (diagnosticsEnabled) {
+                    logChunked(
+                        prefix = "FFMPEG_PROBE_RAW_RESPONSE elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                            "url=$url bytes=${rawJson?.length ?: 0}",
+                        value = rawJson ?: "<null>"
+                    )
+                }
+                val parsed = rawJson?.let(::parse)
                 if (parsed == null || parsed.streams.isEmpty()) {
-                    Log.w(TAG, "FFmpeg stream metadata probe returned no streams")
+                    Log.w(
+                        TAG,
+                        "FFmpeg stream metadata probe returned no streams " +
+                            "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$url"
+                    )
                     return null
+                }
+                if (diagnosticsEnabled) {
+                    Log.i(
+                        TAG,
+                        "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                            "url=$url streams=${parsed.streams.size}"
+                    )
                 }
                 parsed.also { cache[key] = it }
             }
         }.getOrElse { error ->
-            Log.w(TAG, "FFmpeg stream metadata probe failed: ${error.message}")
+            Log.w(
+                TAG,
+                "FFmpeg stream metadata probe failed elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                    "url=$url error=${error.message}",
+                error
+            )
             null
         }
     }
+
+    internal fun debugProbeCommandForTesting(url: String, requestHeadersBlob: String?): String =
+        buildProbeDebugCommand(url, requestHeadersBlob)
 
     internal fun parseForTesting(json: String?): FfmpegStreamMetadataProbeResult {
         return parse(json) ?: FfmpegStreamMetadataProbeResult(emptyList())
@@ -136,6 +189,38 @@ object FfmpegStreamMetadataProbe {
         }.getOrNull() ?: return null
         return FfmpegStreamMetadataProbeResult(streams)
     }
+
+    private fun buildProbeDebugCommand(url: String, requestHeadersBlob: String?): String {
+        val headersArg = requestHeadersBlob
+            ?.takeIf { it.isNotBlank() }
+            ?.let { " -headers ${it.shellQuoteForLog()}" }
+            .orEmpty()
+        return "ffprobe -v error -rw_timeout $READ_WRITE_TIMEOUT_US " +
+            "-probesize $PROBE_SIZE_BYTES -analyzeduration $ANALYZE_DURATION_US" +
+            headersArg +
+            " -select_streams v:0,s " +
+            "-show_entries stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate:" +
+            "stream_side_data=side_data_type,dv_profile -of json ${url.shellQuoteForLog()}"
+    }
+
+    private fun logChunked(prefix: String, value: String) {
+        if (value.length <= LOG_CHUNK_SIZE) {
+            Log.i(TAG, "$prefix raw=$value")
+            return
+        }
+
+        var chunkIndex = 0
+        var offset = 0
+        while (offset < value.length) {
+            val end = (offset + LOG_CHUNK_SIZE).coerceAtMost(value.length)
+            Log.i(
+                TAG,
+                "$prefix chunk=$chunkIndex range=$offset..$end raw=${value.substring(offset, end)}"
+            )
+            chunkIndex += 1
+            offset = end
+        }
+    }
 }
 
 private data class ProbeKey(
@@ -164,6 +249,12 @@ private fun Map<String, String>.toProbeHeaderBlob(): String? {
         "$key: $value"
     }
 }
+
+private fun String.shellQuoteForLog(): String =
+    "'" + replace("\\", "\\\\")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("'", "'\"'\"'") + "'"
 
 private fun JsonElement.asStringOrNull(): String? {
     return runCatching { asString }.getOrNull()
