@@ -65,7 +65,6 @@ import android.view.KeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.tv.material3.Border
@@ -957,17 +956,6 @@ private fun StreamCard(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onPreviewKeyEvent { event ->
-                if (
-                    event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
-                    isStreamCardSelectKey(event.nativeKeyEvent.keyCode)
-                ) {
-                    onClick()
-                    true
-                } else {
-                    false
-                }
-            }
             .then(if (onUpKey != null) Modifier.onKeyEvent { event ->
                 if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && event.key == Key.DirectionUp) {
                     onUpKey(); true
@@ -1061,13 +1049,6 @@ private fun StreamCard(
             }
         }
     }
-}
-
-private fun isStreamCardSelectKey(keyCode: Int): Boolean {
-    return keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-        keyCode == KeyEvent.KEYCODE_ENTER ||
-        keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
-        keyCode == KeyEvent.KEYCODE_BUTTON_A
 }
 
 @Composable
