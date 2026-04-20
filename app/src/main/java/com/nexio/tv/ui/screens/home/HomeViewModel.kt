@@ -30,6 +30,8 @@ import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TrailerSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
@@ -40,6 +42,7 @@ import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
+import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
@@ -84,6 +87,7 @@ class HomeViewModel @Inject constructor(
     internal val metaRepository: MetaRepository,
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    internal val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
     internal val simklSettingsDataStore: SimklSettingsDataStore,
@@ -96,6 +100,7 @@ class HomeViewModel @Inject constructor(
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val simklDiscoveryService: SimklDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
+    internal val tmdbDiscoveryService: TmdbDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
     internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
@@ -149,6 +154,8 @@ class HomeViewModel @Inject constructor(
             "mdblist_pref_change",
             "mdblist_settings_change",
             "mdblist_settings_disabled",
+            "tmdb_discovery",
+            "tmdb_pref_change",
             "window_closed",
             "observe_disabled_home_catalogs",
             "observe_installed_addons"
@@ -222,9 +229,13 @@ class HomeViewModel @Inject constructor(
     internal var persistedMDBListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
         com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
+    internal var tmdbDiscoverySnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot =
+        com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
+    internal var tmdbCatalogPreferences: TmdbCatalogPreferences = TmdbCatalogPreferences()
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
@@ -278,6 +289,10 @@ class HomeViewModel @Inject constructor(
     internal var simklDiscoveryObserved: Boolean = false
     @Volatile
     internal var mdbListDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var tmdbDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var tmdbCatalogPreferencesObserved: Boolean = false
     @Volatile
     internal var lastForegroundRefreshMs: Long = 0L
     @Volatile
@@ -353,6 +368,8 @@ class HomeViewModel @Inject constructor(
         observeSimklDiscovery()
         observeMDBListCatalogPreferences()
         observeMDBListDiscovery()
+        observeTmdbCatalogPreferences()
+        observeTmdbDiscovery()
         observeAccountSyncRefresh()
         observePriorityHydration()
         loadContinueWatching()
@@ -400,6 +417,7 @@ class HomeViewModel @Inject constructor(
                     persistedTraktSyntheticGroups = emptyList()
                     persistedSimklSyntheticGroups = emptyList()
                     persistedMDBListSyntheticGroups = emptyList()
+                    persistedTmdbSyntheticGroups = emptyList()
                     watchProgressRepository.invalidateLocalizedMetadata()
                     continueWatchingSnapshotService.invalidateLocalizedMetadata()
                     logStartupPerf("metadata_language_changed")
@@ -559,6 +577,10 @@ class HomeViewModel @Inject constructor(
     private fun observeMDBListCatalogPreferences() = observeMDBListCatalogPreferencesPipeline()
 
     private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
+
+    private fun observeTmdbCatalogPreferences() = observeTmdbCatalogPreferencesPipeline()
+
+    private fun observeTmdbDiscovery() = observeTmdbDiscoveryPipeline()
 
     private fun observeAccountSyncRefresh() = observeAccountSyncRefreshPipeline()
 
