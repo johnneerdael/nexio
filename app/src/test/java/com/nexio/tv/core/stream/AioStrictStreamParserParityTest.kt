@@ -93,6 +93,22 @@ class AioStrictStreamParserParityTest {
     }
 
     @Test
+    fun `stream parser treats direct real debrid download urls as cached debrid streams`() {
+        val stream = stream(
+            filename = "Shoplyfter.26.04.18.Madi.Laine.XXX.1080p.HEVC.x265.PRT.mkv",
+            description = "614 MB 1080p",
+            name = "Debrid",
+            url = "https://41-4.download.real-debrid.com/d/example/video.mkv"
+        )
+
+        val parsed = AioStrictStreamParser.parse(stream)
+
+        assertEquals("RD", parsed.serviceId)
+        assertEquals(true, parsed.isCached)
+        assertEquals(StreamTransportKind.CACHED, parsed.transportKind)
+    }
+
+    @Test
     fun `stream parser trusts wrapped provider id over debrid text matches`() {
         val stream = stream(
             filename = "Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv",
@@ -199,13 +215,14 @@ class AioStrictStreamParserParityTest {
         description: String,
         name: String? = null,
         preset: AddonParserPreset = AddonParserPreset.GENERIC,
-        wrappedProviderId: String? = null
+        wrappedProviderId: String? = null,
+        url: String = "https://example.com/video.mkv"
     ): Stream {
         return Stream(
             name = name,
             title = null,
             description = description,
-            url = "https://example.com/video.mkv",
+            url = url,
             ytId = null,
             infoHash = null,
             fileIdx = null,
