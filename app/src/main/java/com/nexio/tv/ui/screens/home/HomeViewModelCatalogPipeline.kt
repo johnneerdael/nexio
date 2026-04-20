@@ -2512,19 +2512,38 @@ internal fun filterRestoredHomeSnapshotTmdbRows(
         return snapshot
     }
 
-    val removedTmdbKeys = (snapshot.fullCatalogRows.asSequence() + snapshot.catalogRows.asSequence())
+    val removedTmdbRows = (snapshot.fullCatalogRows.asSequence() + snapshot.catalogRows.asSequence())
         .filterNot(::isRetained)
+        .filter { row -> row.addonId == TMDB_RAIL_ADDON_ID }
+        .toList()
+    val removedTmdbKeys = removedTmdbRows
+        .asSequence()
         .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) }
+        .toSet()
+    val removedTmdbItemKeys = removedTmdbRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
     val retainedItemKeys = filteredFullRows
         .asSequence()
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
+    val retainedCurrentTmdbItemKeys = filteredFullRows
+        .asSequence()
+        .filter { row -> row.addonId == TMDB_RAIL_ADDON_ID }
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
     return snapshot.copy(
         catalogRows = filteredDisplayRows,
         fullCatalogRows = filteredFullRows,
-        heroItems = snapshot.heroItems.filter { item -> "${item.apiType}:${item.id}" in retainedItemKeys },
+        heroItems = snapshot.heroItems.filter { item ->
+            val key = "${item.apiType}:${item.id}"
+            key in retainedItemKeys &&
+                (key !in removedTmdbItemKeys || key in retainedCurrentTmdbItemKeys)
+        },
         orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedTmdbKeys }
     )
 }
@@ -2536,7 +2555,7 @@ private fun currentTmdbCatalogIds(
 ): Set<String> {
     return buildSet {
         addAll(tmdbSnapshot.currentRowsFor(tmdbPrefs).filterValues { row -> row.items.isNotEmpty() }.keys)
-        currentSyntheticTmdbGroups.forEach { group ->
+        currentSyntheticTmdbGroups.filterTmdbGroupsEnabledUnder(tmdbPrefs).forEach { group ->
             if (group.rows.any { row -> row.items.isNotEmpty() }) {
                 add(group.orderKey)
                 group.rows.forEach { row -> add(row.catalogId) }

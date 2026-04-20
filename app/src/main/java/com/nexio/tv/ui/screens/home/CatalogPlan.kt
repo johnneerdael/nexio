@@ -52,15 +52,12 @@ internal fun CatalogPlan.toPersistedSyntheticCatalogGroups(): List<PersistedSynt
 internal fun SyntheticHomeCatalogStore.Snapshot.tmdbGroupsMatchingPreferences(
     prefs: TmdbCatalogPreferences
 ): List<PersistedSyntheticCatalogGroup> {
-    return if (hasTmdbPreferenceProvenanceMatching(prefs)) tmdbGroups else emptyList()
-}
-
-internal fun SyntheticHomeCatalogStore.Snapshot.hasTmdbPreferenceProvenanceMatching(
-    prefs: TmdbCatalogPreferences
-): Boolean {
-    val sanitized = prefs.sanitized()
-    return tmdbIncludeAdult == sanitized.includeAdult &&
-        tmdbHideUnreleasedDigital == sanitized.hideUnreleasedDigital
+    return tmdbGroupsMatchPreferences(
+        groups = tmdbGroups,
+        includeAdult = tmdbIncludeAdult,
+        hideUnreleasedDigital = tmdbHideUnreleasedDigital,
+        prefs = prefs
+    )
 }
 
 internal fun tmdbGroupsMatchPreferences(
@@ -74,7 +71,7 @@ internal fun tmdbGroupsMatchPreferences(
         includeAdult == sanitized.includeAdult &&
         hideUnreleasedDigital == sanitized.hideUnreleasedDigital
     ) {
-        groups
+        groups.filterTmdbGroupsEnabledUnder(sanitized)
     } else {
         emptyList()
     }
@@ -86,13 +83,26 @@ internal fun resolveEffectiveTmdbSyntheticGroups(
     prefs: TmdbCatalogPreferences,
     snapshot: TmdbDiscoverySnapshot
 ): List<PersistedSyntheticCatalogGroup> {
-    if (renewedTmdbGroups.isNotEmpty()) return renewedTmdbGroups
+    val sanitized = prefs.sanitized()
+    val currentRenewedGroups = renewedTmdbGroups.filterTmdbGroupsEnabledUnder(sanitized)
+    if (currentRenewedGroups.isNotEmpty()) return currentRenewedGroups
     val existingCurrentGroups = existingSnapshot.tmdbGroupsMatchingPreferences(prefs)
     if (existingCurrentGroups.isEmpty()) return emptyList()
-    return if (shouldPreserveExistingTmdbGroupsDuringRefresh(prefs, snapshot)) {
+    return if (shouldPreserveExistingTmdbGroupsDuringRefresh(sanitized, snapshot)) {
         existingCurrentGroups
     } else {
         emptyList()
+    }
+}
+
+internal fun List<PersistedSyntheticCatalogGroup>.filterTmdbGroupsEnabledUnder(
+    prefs: TmdbCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    val enabledCatalogIds = prefs.enabledCatalogIds()
+    return mapNotNull { group ->
+        if (group.orderKey !in enabledCatalogIds) return@mapNotNull null
+        val enabledRows = group.rows.filter { row -> row.catalogId in enabledCatalogIds }
+        if (enabledRows.isEmpty()) null else group.copy(rows = enabledRows)
     }
 }
 

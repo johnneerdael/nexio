@@ -22,7 +22,10 @@ data class TmdbDiscoverySnapshot(
 
     fun currentRowsFor(preferences: TmdbCatalogPreferences): Map<String, CatalogRow> {
         if (!matchesPreferences(preferences)) return emptyMap()
-        return rowsByCatalog.filterKeys { key -> key in catalogIdsWithCurrentPreferences }
+        val enabledCatalogIds = preferences.enabledCatalogIds()
+        return rowsByCatalog.filterKeys { key ->
+            key in catalogIdsWithCurrentPreferences && key in enabledCatalogIds
+        }
     }
 }
 

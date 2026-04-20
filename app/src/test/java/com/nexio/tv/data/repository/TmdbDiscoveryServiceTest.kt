@@ -148,7 +148,69 @@ class TmdbDiscoveryServiceTest {
     }
 
     @Test
-    fun `subset catalog refresh fetches only selected enabled ids and preserves unrelated rows`() = runTest {
+    fun `currentRowsFor excludes disabled catalog ids even when snapshot has current provenance`() {
+        val enabledPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        val sanitized = enabledPrefs.sanitized()
+        val snapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to catalogRow(TmdbCatalogIds.TRENDING_MOVIES),
+                TmdbCatalogIds.POPULAR_MOVIES to catalogRow(TmdbCatalogIds.POPULAR_MOVIES)
+            ),
+            updatedAtMs = 123L,
+            includeAdult = sanitized.includeAdult,
+            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
+            catalogIdsWithCurrentPreferences = setOf(
+                TmdbCatalogIds.TRENDING_MOVIES,
+                TmdbCatalogIds.POPULAR_MOVIES
+            )
+        )
+
+        val currentRows = snapshot.currentRowsFor(
+            enabledPrefs.copy(enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES))
+        )
+
+        assertEquals(setOf(TmdbCatalogIds.TRENDING_MOVIES), currentRows.keys)
+    }
+
+    @Test
+    fun `subset catalog refresh fetches missing selected enabled ids and preserves unrelated rows`() = runTest {
+        val client = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending")),
+                TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 2, title = "Popular"))
+            )
+        )
+        val service = client.createService()
+        val initialPreferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        val currentPreferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        val initial = service.refreshCatalogs(initialPreferences, force = true)
+        client.requestedCatalogIds.clear()
+
+        val refreshed = service.refreshCatalogs(
+            preferences = currentPreferences,
+            force = false,
+            catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), client.requestedCatalogIds)
+        assertEquals(initial.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES), refreshed.rowsByCatalog[TmdbCatalogIds.POPULAR_MOVIES])
+        assertEquals(
+            setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            refreshed.rowsByCatalog.keys
+        )
+    }
+
+    @Test
+    fun `subset catalog refresh skips fetch when requested ids are already current`() = runTest {
         val client = FakeTmdbDiscoveryClient(
             catalogResults = mapOf(
                 TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending")),
@@ -169,12 +231,9 @@ class TmdbDiscoveryServiceTest {
             catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
-        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), client.requestedCatalogIds)
-        assertEquals(initial.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES), refreshed.rowsByCatalog[TmdbCatalogIds.POPULAR_MOVIES])
-        assertEquals(
-            setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            refreshed.rowsByCatalog.keys
-        )
+        assertTrue(client.requestedCatalogIds.isEmpty())
+        assertEquals(initial.rowsByCatalog, refreshed.rowsByCatalog)
+        assertEquals(initial.catalogIdsWithCurrentPreferences, refreshed.catalogIdsWithCurrentPreferences)
     }
 
     @Test
@@ -246,6 +305,20 @@ class TmdbDiscoveryServiceTest {
         }
 
         fun createService(): TmdbDiscoveryService = TmdbDiscoveryService(client = this)
+    }
+
+    private fun catalogRow(catalogId: String): com.nexio.tv.domain.model.CatalogRow {
+        return com.nexio.tv.domain.model.CatalogRow(
+            addonId = "tmdb",
+            addonName = "TMDB",
+            addonBaseUrl = "https://api.themoviedb.org/3",
+            catalogId = catalogId,
+            catalogName = catalogId,
+            type = ContentType.MOVIE,
+            items = emptyList(),
+            hasMore = false,
+            supportsSkip = false
+        )
     }
 
     private fun mediaResult(
