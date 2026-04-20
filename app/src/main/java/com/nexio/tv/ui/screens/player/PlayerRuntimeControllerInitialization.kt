@@ -694,7 +694,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             sourceLanguageCode = null,
                             settings = subtitleTranslationSettings
                         ).getOrThrow()
-                    }
+                    },
+                    diagnosticsLogger = subtitleTranslationService.diagnosticsLogger
                 )
             }
             assSsaRenderController = assController
