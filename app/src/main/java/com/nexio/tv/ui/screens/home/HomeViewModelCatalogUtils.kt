@@ -21,6 +21,7 @@ import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.TmdbSettings
 import kotlinx.coroutines.Job
 
 internal const val TRAKT_HOME_ADDON_ID = "trakt"
@@ -526,10 +527,18 @@ internal fun shouldRefreshTmdbDiscoveryForState(
     if (expectedKeys.isEmpty()) return false
     if (snapshot.updatedAtMs <= 0L) return true
     if (!snapshot.matchesPreferences(prefs)) return true
-    val currentRows = snapshot.currentRowsFor(prefs)
     return expectedKeys.any { key ->
-        currentRows[key]?.items.isNullOrEmpty()
+        key !in snapshot.catalogIdsWithCurrentPreferences
     }
+}
+
+internal fun shouldForceTmdbDiscoveryRefreshForCredentialChange(
+    previous: TmdbSettings,
+    current: TmdbSettings,
+    prefs: TmdbCatalogPreferences
+): Boolean {
+    if (prefs.enabledCatalogIds().isEmpty()) return false
+    return previous.apiKey.trim() != current.apiKey.trim()
 }
 
 internal fun shouldRefreshSimklDiscoveryForState(

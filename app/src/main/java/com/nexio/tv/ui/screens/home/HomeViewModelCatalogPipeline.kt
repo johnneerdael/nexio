@@ -190,6 +190,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     tmdbDiscoverySnapshot = com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
     tmdbDiscoveryRefreshInProgress = false
     tmdbCatalogPreferencesObserved = false
+    tmdbCredentialRefreshPending = false
     inMemoryHomeSnapshot = null
     pendingRestoredCatalogSnapshot = null
     pendingHomeSnapshotPersist = null
@@ -703,6 +704,7 @@ internal fun HomeViewModel.observeTmdbCatalogPreferencesPipeline() {
             tmdbCatalogPreferencesObserved = true
             tmdbCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_tmdb_prefs")
+            refreshTmdbDiscoveryForPendingCredentialChangePipeline("tmdb_credential_change")
             if (shouldRefreshTmdbDiscoveryForState(prefs, tmdbDiscoverySnapshot) &&
                 !shouldSuppressProfileSwitchRefresh("tmdb_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
@@ -775,11 +777,37 @@ internal fun HomeViewModel.observeTmdbSettingsPipeline() {
         tmdbSettingsDataStore.settings
             .distinctUntilChanged()
             .collectLatest { settings ->
+                val previousSettings = currentTmdbSettings
                 currentTmdbSettings = settings
+                if (shouldForceTmdbDiscoveryRefreshForCredentialChange(
+                        previous = previousSettings,
+                        current = settings,
+                        prefs = tmdbCatalogPreferences
+                    )
+                ) {
+                    tmdbCredentialRefreshPending = true
+                    refreshTmdbDiscoveryForPendingCredentialChangePipeline("tmdb_credential_change")
+                } else if (previousSettings.apiKey.trim() != settings.apiKey.trim()) {
+                    tmdbCredentialRefreshPending = true
+                }
                 scheduleUpdateCatalogRows()
                 enrichContinueWatchingWithCurrentSettings()
             }
     }
+}
+
+internal suspend fun HomeViewModel.refreshTmdbDiscoveryForPendingCredentialChangePipeline(reason: String) {
+    if (!tmdbCredentialRefreshPending) return
+    if (tmdbCatalogPreferences.enabledCatalogIds().isEmpty()) return
+    if (shouldSuppressProfileSwitchRefresh(reason)) return
+    if (!isNonPlaybackHomeWorkAllowed()) return
+
+    tmdbCredentialRefreshPending = false
+    startupRefreshPending = true
+    runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbCatalogPreferences, force = true) }
+        .onFailure { error ->
+            Log.w(HomeViewModel.TAG, "Failed to refresh TMDB discovery after credential change", error)
+        }
 }
 
 internal fun HomeViewModel.observeInstalledAddonsPipeline() {

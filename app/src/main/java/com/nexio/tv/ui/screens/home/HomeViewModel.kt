@@ -299,6 +299,8 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var tmdbCatalogPreferencesObserved: Boolean = false
     @Volatile
+    internal var tmdbCredentialRefreshPending: Boolean = false
+    @Volatile
     internal var lastForegroundRefreshMs: Long = 0L
     @Volatile
     internal var startupPerfTelemetryEnabled: Boolean = false
