@@ -22,15 +22,6 @@ private val sensitiveQueryKeys = setOf(
     "username"
 )
 
-private val publicConfiguredPathHosts = setOf(
-    "top-streaming.stream"
-)
-
-private val uuidSegmentPattern = Regex(
-    "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-    RegexOption.IGNORE_CASE
-)
-
 data class ParsedAddonSyncEntry(
     val publicBaseUrl: String,
     val manifestUrl: String,
@@ -115,41 +106,14 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
 
     val parsed = URL(candidate)
     val transport = splitAddonTransportUrl(candidate)
-    val pathSegments = parsed.path.split('/').filter { it.isNotBlank() }
-    val hasManifestPath = pathSegments.lastOrNull()?.equals("manifest.json", ignoreCase = true) == true
-    // The encoded-config / secret segment normally sits one before the
-    // trailing /manifest.json. After [normalizeAddonInstallUrl] strips the
-    // manifest suffix the secret moves to be the last segment, so we have
-    // to look at the right slot in both shapes — otherwise the matcher
-    // misses every stored URL that has been through canonicalization, and
-    // addons whose config is baked into the path (e.g. OpenSubtitles Pro)
-    // get duplicated on every config change.
-    val pathSecretSegment = when {
-        hasManifestPath -> pathSegments.getOrNull(pathSegments.lastIndex - 1)
-        pathSegments.isNotEmpty() -> pathSegments.last()
-        else -> null
-    }
-    val hasPublicConfiguredPath = pathSecretSegment?.let { segment ->
-        parsed.host.lowercase() in publicConfiguredPathHosts && isUuidLikeSegment(segment)
-    } == true
-    val hasPathSecret = pathSecretSegment?.let { segment ->
-        !hasPublicConfiguredPath && looksSensitivePathSegment(segment)
-    } == true
-    val publicPathSegments = if (hasPathSecret) {
-        if (hasManifestPath) {
-            pathSegments.dropLast(2) + "manifest.json"
-        } else {
-            pathSegments.dropLast(1)
-        }
-    } else {
-        pathSegments
-    }
-    val publicPath = if (publicPathSegments.isEmpty()) "/manifest.json" else "/${publicPathSegments.joinToString("/")}"
-    val publicBasePath = publicPath
-        .removePrefix("/")
-        .removeSuffix("manifest.json")
-        .trimEnd('/')
-    val publicBaseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}/$publicBasePath".trimEnd('/')
+    val suffixPath = URL("https://suffix.invalid${transport.suffix}").path
+    val pathSecretSegment = suffixPath
+        .takeUnless { it.equals("/manifest.json", ignoreCase = true) }
+        ?.replace(Regex("/manifest\\.json$", RegexOption.IGNORE_CASE), "")
+        ?.removePrefix("/")
+        ?.takeIf { it.isNotBlank() }
+    val hasPathSecret = pathSecretSegment != null
+    val publicBaseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}"
 
     val publicQueryParams = linkedMapOf<String, String>()
     val secretParams = linkedMapOf<String, String>()
@@ -283,16 +247,6 @@ private data class TransportParts(
     val baseUrl: String,
     val suffix: String
 )
-
-private fun looksSensitivePathSegment(segment: String): Boolean {
-    val value = segment.trim()
-    if (value.length < 16) return false
-    return value.all { it.isLetterOrDigit() || it in "._~+=-" }
-}
-
-private fun isUuidLikeSegment(segment: String): Boolean {
-    return uuidSegmentPattern.matches(segment.trim())
-}
 
 private fun portSuffix(url: URL): String {
     return when (val port = url.port) {
