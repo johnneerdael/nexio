@@ -313,8 +313,8 @@
     <string name="playback_logging_buffer_subtitle">Emit periodic playback buffer, cache, disk spool, and Dolby Vision diagnostics to logcat.</string>
     <string name="playback_logging_trakt_scrobble_title">Enable Trakt Scrobble API Logs</string>
     <string name="playback_logging_trakt_scrobble_subtitle">Emit Trakt scrobble and check-in request summaries plus HTTP responses to logcat for ADB troubleshooting.</string>
-    <string name="playback_logging_iec_title">Enable Logs for Native AudioSink/IEC Packer</string>
-    <string name="playback_logging_iec_subtitle">Emit verbose native Kodi AudioSink and IEC packer diagnostics to logcat for ADB troubleshooting.</string>
+    <string name="playback_logging_iec_title">Enable Native Passthrough Audio Logs</string>
+    <string name="playback_logging_iec_subtitle">Emit Media3 AudioSink, AudioTrack, and IEC packer diagnostics to logcat for ADB troubleshooting.</string>
     <string name="playback_logging_stream_title">Enable Stream Fetching Performance Logs</string>
     <string name="playback_logging_stream_subtitle">Emit detailed stream fetch timing and filtering diagnostics to logcat.</string>
     <string name="playback_logging_startup_perf_title">Enable Startup Frame Telemetry</string>
