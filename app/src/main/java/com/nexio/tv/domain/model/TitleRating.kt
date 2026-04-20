@@ -15,3 +15,6 @@ fun Float.toTitleRating(source: TitleRatingSource): TitleRating =
 
 fun Double.toTitleRating(source: TitleRatingSource): TitleRating =
     TitleRating(value = this, source = source)
+
+fun TitleRatingSource?.orDefault(defaultSource: TitleRatingSource = TitleRatingSource.IMDB): TitleRatingSource =
+    this ?: defaultSource

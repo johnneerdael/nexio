@@ -12,6 +12,8 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.orDefault
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -443,7 +445,7 @@ class TvMetadataRouter @Inject constructor(
             poster = poster,
             releaseInfo = releaseInfo,
             rating = rating,
-            ratingSource = ratingSource,
+            ratingSource = ratingSource.orDefault(TitleRatingSource.TMDB),
             runtimeMinutes = runtimeMinutes,
             ageRating = ageRating,
             countries = countries,

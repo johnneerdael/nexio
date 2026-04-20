@@ -16,6 +16,7 @@ import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.Video
+import com.nexio.tv.domain.model.orDefault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -167,7 +168,7 @@ class MDBListRepository @Inject constructor(
 
         return preview.copy(
             imdbRating = result.ratings.imdb?.toFloat() ?: preview.imdbRating,
-            ratingSource = if (result.ratings.imdb != null) TitleRatingSource.IMDB else preview.ratingSource,
+            ratingSource = if (result.ratings.imdb != null) TitleRatingSource.IMDB else preview.ratingSource.orDefault(),
             tomatoesRating = result.ratings.tomatoes ?: preview.tomatoesRating
         )
     }

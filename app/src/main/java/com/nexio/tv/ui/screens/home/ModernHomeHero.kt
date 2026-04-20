@@ -53,6 +53,7 @@ import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.screens.detail.titleRatingBadge
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.domain.model.orDefault
 
 private const val MODERN_HOME_HERO_LOG_TAG = "ModernHomeHero"
 
@@ -277,7 +278,7 @@ private fun HeroTitleContent(
                 .build()
         }
     }
-    val ratingBadge = remember(preview.ratingSource) { titleRatingBadge(preview.ratingSource) }
+    val ratingBadge = remember(preview.ratingSource) { titleRatingBadge(preview.ratingSource.orDefault()) }
     val ratingLogoModel = remember(context, ratingBadge.logoRes) {
         ImageRequest.Builder(context)
             .data(ratingBadge.logoRes)

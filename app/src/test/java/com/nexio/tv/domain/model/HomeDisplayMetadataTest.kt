@@ -1,5 +1,6 @@
 package com.nexio.tv.domain.model
 
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -84,5 +85,38 @@ class HomeDisplayMetadataTest {
 
         assertEquals(TitleRatingSource.TMDB, displayMetadata.ratingSource)
         assertEquals(TitleRatingSource.TMDB, roundTripped.ratingSource)
+    }
+
+    @Test
+    fun `legacy preview without rating source can be hashed and converted`() {
+        val preview = Gson().fromJson(
+            """
+            {
+              "id": "tt123",
+              "type": "MOVIE",
+              "rawType": "movie",
+              "name": "Movie",
+              "poster": null,
+              "posterShape": "POSTER",
+              "background": null,
+              "logo": null,
+              "description": null,
+              "releaseInfo": "2025",
+              "runtime": null,
+              "imdbRating": 8.3,
+              "tomatoesRating": null,
+              "genres": [],
+              "trailerYtIds": [],
+              "language": null,
+              "posterProviderTag": null
+            }
+            """.trimIndent(),
+            MetaPreview::class.java
+        )
+
+        preview.hashCode()
+        val displayMetadata = preview.toHomeDisplayMetadata()
+
+        assertEquals(TitleRatingSource.IMDB, displayMetadata.ratingSource)
     }
 }

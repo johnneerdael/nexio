@@ -15,7 +15,7 @@ data class Meta(
     val description: String?,
     val releaseInfo: String?,
     val imdbRating: Float?,
-    val ratingSource: TitleRatingSource = TitleRatingSource.IMDB,
+    val ratingSource: TitleRatingSource? = TitleRatingSource.IMDB,
     val genres: List<String>,
     val runtime: String?,
     val director: List<String>,

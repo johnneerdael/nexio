@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
@@ -40,7 +41,7 @@ data class HeroPreview(
     val contentTypeText: String?,
     val yearText: String?,
     val imdbText: String?,
-    val ratingSource: TitleRatingSource = TitleRatingSource.IMDB,
+    val ratingSource: TitleRatingSource? = TitleRatingSource.IMDB,
     val tomatoesText: String?,
     val genres: List<String>,
     val poster: String?,
@@ -384,7 +385,7 @@ internal fun buildContinueWatchingItem(
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
                 imdbText = (item.episodeImdbRating ?: displayMetadata.imdbRating)
                     ?.let { String.format("%.1f", it) },
-                ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource,
+                ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
                 poster = displayMetadata.poster ?: item.progress.poster,
@@ -421,7 +422,7 @@ internal fun buildContinueWatchingItem(
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.info.releaseInfo),
                 imdbText = (item.info.imdbRating ?: displayMetadata.imdbRating)
                     ?.let { String.format("%.1f", it) },
-                ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource,
+                ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.info.genres.ifEmpty { displayMetadata.genres },
                 poster = displayMetadata.poster ?: item.info.poster,
@@ -578,7 +579,7 @@ internal fun buildCatalogItem(
         contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
         yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
         imdbText = (displayMetadata.imdbRating ?: item.imdbRating)?.let { String.format("%.1f", it) },
-        ratingSource = if (displayMetadata.imdbRating != null) displayMetadata.ratingSource else item.ratingSource,
+        ratingSource = if (displayMetadata.imdbRating != null) displayMetadata.ratingSource.orDefault() else item.ratingSource.orDefault(),
         tomatoesText = (displayMetadata.tomatoesRating ?: item.tomatoesRating)?.let(::formatPreviewTomatoesRating),
         genres = displayMetadata.genres.ifEmpty { item.genres }.take(3),
         poster = displayMetadata.poster ?: item.poster,

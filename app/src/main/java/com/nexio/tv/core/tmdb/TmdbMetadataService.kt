@@ -1041,7 +1041,7 @@ data class TmdbEnrichment(
     val castMembers: List<MetaCastMember>,
     val releaseInfo: String?,
     val rating: Double?,
-    val ratingSource: TitleRatingSource = TitleRatingSource.TMDB,
+    val ratingSource: TitleRatingSource? = TitleRatingSource.TMDB,
     val runtimeMinutes: Int?,
     val director: List<String>,
     val writer: List<String>,
