@@ -13,7 +13,85 @@ interface TmdbApi {
     suspend fun getConfiguration(
         @Query("api_key") apiKey: String
     ): Response<TmdbConfigurationResponse>
-    
+
+    @GET("search/movie")
+    suspend fun searchMovies(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("language") language: String? = null,
+        @Query("include_adult") includeAdult: Boolean = false,
+        @Query("page") page: Int = 1
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("search/tv")
+    suspend fun searchTv(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("language") language: String? = null,
+        @Query("include_adult") includeAdult: Boolean = false,
+        @Query("page") page: Int = 1
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("trending/movie/{time_window}")
+    suspend fun getTrendingMovies(
+        @Path("time_window") timeWindow: String = "week",
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("page") page: Int = 1
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("trending/tv/{time_window}")
+    suspend fun getTrendingTv(
+        @Path("time_window") timeWindow: String = "week",
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("page") page: Int = 1
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("movie/popular")
+    suspend fun getPopularMovies(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("region") region: String? = null
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("tv/popular")
+    suspend fun getPopularTv(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("page") page: Int = 1
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("discover/movie")
+    suspend fun discoverMovies(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("include_adult") includeAdult: Boolean = false,
+        @Query("include_video") includeVideo: Boolean = false,
+        @Query("page") page: Int = 1,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("primary_release_year") primaryReleaseYear: Int? = null,
+        @Query("primary_release_date.lte") primaryReleaseDateLte: String? = null,
+        @Query("release_date.lte") releaseDateLte: String? = null,
+        @Query("with_original_language") withOriginalLanguage: String? = null,
+        @Query("with_release_type") withReleaseType: String? = null,
+        @Query("region") region: String? = null
+    ): Response<TmdbPagedMediaResponse>
+
+    @GET("discover/tv")
+    suspend fun discoverTv(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("include_adult") includeAdult: Boolean = false,
+        @Query("include_null_first_air_dates") includeNullFirstAirDates: Boolean = false,
+        @Query("page") page: Int = 1,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("first_air_date_year") firstAirDateYear: Int? = null,
+        @Query("first_air_date.lte") firstAirDateLte: String? = null,
+        @Query("with_original_language") withOriginalLanguage: String? = null
+    ): Response<TmdbPagedMediaResponse>
+
     @GET("find/{external_id}")
     suspend fun findByExternalId(
         @Path("external_id") externalId: String,
@@ -238,6 +316,32 @@ data class TmdbExternalIdsResponse(
     @Json(name = "id") val id: Int,
     @Json(name = "imdb_id") val imdbId: String? = null,
     @Json(name = "tvdb_id") val tvdbId: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPagedMediaResponse(
+    @Json(name = "page") val page: Int? = null,
+    @Json(name = "total_pages") val totalPages: Int? = null,
+    @Json(name = "total_results") val totalResults: Int? = null,
+    @Json(name = "results") val results: List<TmdbMediaResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMediaResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "original_title") val originalTitle: String? = null,
+    @Json(name = "original_name") val originalName: String? = null,
+    @Json(name = "media_type") val mediaType: String? = null,
+    @Json(name = "original_language") val originalLanguage: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "backdrop_path") val backdropPath: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "first_air_date") val firstAirDate: String? = null,
+    @Json(name = "vote_average") val voteAverage: Double? = null,
+    @Json(name = "vote_count") val voteCount: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
