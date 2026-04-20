@@ -32,6 +32,7 @@ import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
 import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
+import com.nexio.tv.data.repository.benchmark.ShadowStreamDecision
 import com.nexio.tv.data.repository.benchmark.normalizedBenchmarkServiceKey
 import com.nexio.tv.data.repository.device.DeviceCapabilityRepository
 import com.nexio.tv.domain.model.AddonStreams
@@ -79,6 +80,7 @@ private const val AUTOPLAY_MIN_CANDIDATE_POOL = 5
 private const val AUTOPLAY_MIN_QUALITY_SCORE = 10
 private const val AUTOPLAY_EARLY_FINISH_FALLBACK_MS = 15_000L
 private const val MAX_FALLBACK_CANDIDATES = 5
+private const val DETERMINISTIC_AUTOPLAY_BLOCKED_RELEASE_MARKER = "1winstudio"
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -1055,7 +1057,7 @@ class StreamScreenViewModel @Inject constructor(
         val eligibleStreams = applyDeterministicOriginalLanguageGuard(
             originalLanguage = originalLanguage,
             streams = organizedStreams
-        )
+        ).filterNot { it.hasBlockedDeterministicAutoplayFilename() }
         if (eligibleStreams.isEmpty()) return null
 
         val event = benchmarkAwareStreamScorer.scoreWithManualCap(
@@ -1416,22 +1418,21 @@ internal suspend fun selectDeterministicAutoplayCandidate(
     maxCandidates: Int = DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT,
     isPlayable: suspend (StreamCardModel) -> Boolean
 ): DeterministicAutoplayCandidateSelection? {
-    val candidates = event.winners
-        .take(maxCandidates.coerceAtLeast(1))
+    val allowedCandidates = event.winners
         .mapNotNull { decision ->
-            eligibleStreams.firstOrNull { item ->
+            val item = eligibleStreams.firstOrNull { item ->
                 item.matchesShadowStreamKey(decision.streamKey)
-            }
+            } ?: return@mapNotNull null
+
+            item.takeUnless { it.hasBlockedDeterministicAutoplayFilename(decision) }
         }
+    val candidates = allowedCandidates.take(maxCandidates.coerceAtLeast(1))
 
     for (candidate in candidates) {
         if (!isPlayable(candidate)) continue
-        val fallbackItems = event.winners.mapNotNull { decision ->
-            eligibleStreams.firstOrNull { item -> item.matchesShadowStreamKey(decision.streamKey) }
-        }
         return DeterministicAutoplayCandidateSelection(
             selectedItem = candidate,
-            fallbackCandidateItems = fallbackItems
+            fallbackCandidateItems = allowedCandidates
         )
     }
 
@@ -1445,6 +1446,24 @@ private fun StreamCardModel.matchesShadowStreamKey(streamKey: String?): Boolean 
     val serviceId = parsed.serviceId
     if (serviceId != null && streamKey == "${parsed.exactDuplicateKey}|$serviceId") return true
     return false
+}
+
+private fun StreamCardModel.hasBlockedDeterministicAutoplayFilename(
+    decision: ShadowStreamDecision
+): Boolean {
+    if (hasBlockedDeterministicAutoplayFilename()) return true
+
+    return decision.parsed.filename
+        ?.contains(DETERMINISTIC_AUTOPLAY_BLOCKED_RELEASE_MARKER, ignoreCase = true) == true
+}
+
+private fun StreamCardModel.hasBlockedDeterministicAutoplayFilename(): Boolean {
+    return listOf(
+        parsed.filename,
+        stream.behaviorHints?.filename
+    ).any { filename ->
+        filename?.contains(DETERMINISTIC_AUTOPLAY_BLOCKED_RELEASE_MARKER, ignoreCase = true) == true
+    }
 }
 
 private object AutoplayPlaybackUrlPreflight {
