@@ -52,8 +52,8 @@ class TmdbService(
     // Cache: IMDB ID -> TMDB ID
     private val imdbToTmdbCache = ConcurrentHashMap<String, Int>()
     
-    // Cache: TMDB ID -> IMDB ID  
-    private val tmdbToImdbCache = ConcurrentHashMap<Int, String>()
+    // Cache: normalized media type + TMDB ID -> IMDB ID
+    private val tmdbToImdbCache = ConcurrentHashMap<String, String>()
 
     private val imdbToTmdbInFlight = ConcurrentHashMap<String, CompletableDeferred<Int?>>()
     private val tmdbToImdbInFlight = ConcurrentHashMap<String, CompletableDeferred<String?>>()
@@ -131,7 +131,7 @@ class TmdbService(
                 // Cache both directions
                 cacheMutex.withLock {
                     imdbToTmdbCache[imdbId] = found.id
-                    tmdbToImdbCache[found.id] = imdbId
+                    tmdbToImdbCache[tmdbToImdbCacheKey(found.id, normalizedType)] = imdbId
                 }
                 deferred.complete(found.id)
                 
@@ -159,13 +159,15 @@ class TmdbService(
      * @return The IMDB ID, or null if not found
      */
     suspend fun tmdbToImdb(tmdbId: Int, mediaType: String): String? = withContext(Dispatchers.IO) {
+        val normalizedType = normalizeMediaType(mediaType)
+        val cacheKey = tmdbToImdbCacheKey(tmdbId, normalizedType)
+
         // Check cache first
-        tmdbToImdbCache[tmdbId]?.let { cached ->
-            Log.d(TAG, "Cache hit: TMDB $tmdbId -> IMDB $cached")
+        tmdbToImdbCache[cacheKey]?.let { cached ->
+            Log.d(TAG, "Cache hit: TMDB $tmdbId (type: $normalizedType) -> IMDB $cached")
             return@withContext cached
         }
 
-        val normalizedType = normalizeMediaType(mediaType)
         val inFlightKey = "$normalizedType:$tmdbId"
 
         val apiKey = requireApiKey() ?: return@withContext null
@@ -207,7 +209,7 @@ class TmdbService(
                 
                 // Cache both directions
                 cacheMutex.withLock {
-                    tmdbToImdbCache[tmdbId] = imdbId
+                    tmdbToImdbCache[cacheKey] = imdbId
                     imdbToTmdbCache[imdbId] = tmdbId
                 }
                 deferred.complete(imdbId)
@@ -276,6 +278,10 @@ class TmdbService(
             else -> mediaType.lowercase()
         }
     }
+
+    private fun tmdbToImdbCacheKey(tmdbId: Int, normalizedMediaType: String): String {
+        return "$normalizedMediaType:$tmdbId"
+    }
     
     /**
      * Clear all caches
@@ -289,9 +295,10 @@ class TmdbService(
     /**
      * Pre-populate cache with known mappings
      */
-    fun preCacheMapping(imdbId: String, tmdbId: Int) {
+    fun preCacheMapping(imdbId: String, tmdbId: Int, mediaType: String = "movie") {
+        val normalizedType = normalizeMediaType(mediaType)
         imdbToTmdbCache[imdbId] = tmdbId
-        tmdbToImdbCache[tmdbId] = imdbId
+        tmdbToImdbCache[tmdbToImdbCacheKey(tmdbId, normalizedType)] = imdbId
     }
 
     private suspend fun requireApiKey(): String? {

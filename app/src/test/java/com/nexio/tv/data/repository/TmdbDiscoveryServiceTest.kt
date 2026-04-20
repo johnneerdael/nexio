@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -55,6 +56,8 @@ class TmdbDiscoveryServiceTest {
         assertEquals("TMDB Search", row.catalogName)
         assertEquals(ContentType.UNKNOWN, row.type)
         assertEquals("catalog", row.rawType)
+        assertFalse(row.hasMore)
+        assertFalse(row.supportsSkip)
         assertEquals("tt0133093", row.items[0].id)
         assertEquals(ContentType.MOVIE, row.items[0].type)
         assertEquals("https://image.tmdb.org/t/p/w1280/matrix-backdrop.jpg", row.items[0].poster)
@@ -95,8 +98,8 @@ class TmdbDiscoveryServiceTest {
         assertEquals(requestedCatalogs, client.requestedCatalogIds.toSet())
         assertEquals(requestedCatalogs, snapshot.rowsByCatalog.keys)
         val stockRow = snapshot.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES)
-        assertTrue(stockRow.hasMore)
-        assertTrue(stockRow.supportsSkip)
+        assertFalse(stockRow.hasMore)
+        assertFalse(stockRow.supportsSkip)
     }
 
     @Test
@@ -113,6 +116,17 @@ class TmdbDiscoveryServiceTest {
 
         assertTrue(searchRows.isEmpty())
         assertEquals(TmdbDiscoverySnapshot(), snapshot)
+    }
+
+    @Test
+    fun `mapped preview ID falls back to tmdb ID when IMDb ID is missing`() = runTest {
+        val service = FakeTmdbDiscoveryClient(
+            movieSearch = listOf(mediaResult(id = 999, title = "Unknown Movie"))
+        ).createService()
+
+        val rows = service.search("unknown", TmdbCatalogPreferences())
+
+        assertEquals("tmdb:999", rows.single().items.single().id)
     }
 
     @Test
