@@ -160,6 +160,7 @@ class TvMetadataRouter @Inject constructor(
             contentType = ContentType.SERIES,
             language = language
         )
+        tryFetchKitsuSeasonEpisodes(request, seasonNumber)?.let { return it }
 
         if (!tvdbSettingsDataStore.settings.first().isActive) {
             return fetchTmdbSeasonEpisodes(
@@ -200,6 +201,24 @@ class TvMetadataRouter @Inject constructor(
             seasonNumber = seasonNumber,
             diagnostics = recordMissingDiagnostics(contentId),
             reason = TvMetadataDecisionReason.TVDB_RECORD_MISSING
+        )
+    }
+
+    private suspend fun tryFetchKitsuSeasonEpisodes(
+        request: TvMetadataRequest,
+        seasonNumber: Int
+    ): TvMetadataDecision<List<TvSeasonEpisode>>? {
+        val animeId = firstAnimeId(request) ?: return null
+        val mediaKind = request.contentType.toAnimeMediaKind()
+        val episodes = kitsuMetadataService?.fetchSeasonEpisodes(animeId, mediaKind, seasonNumber).orEmpty()
+        if (episodes.isEmpty()) return null
+        return TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = episodes,
+            diagnostics = listOf(
+                diagnostic(TvMetadataDecisionReason.KITSU_SUCCESS, animeId, provider = TvProvider.KITSU)
+            )
         )
     }
 

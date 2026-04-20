@@ -39,7 +39,7 @@ fun MetaDto.toDomain(episodeLabel: String = "Episode"): Meta {
                     photo = castMember.photo?.takeIf { it.isNotBlank() }
                 )
             },
-        videos = videos?.map { it.toDomain(episodeLabel) } ?: emptyList(),
+        videos = videos?.map { it.toDomain(episodeLabel, type) } ?: emptyList(),
         productionCompanies = emptyList(),
         networks = emptyList(),
         ageRating = null,
@@ -65,9 +65,12 @@ private fun coerceStringList(value: Any?): List<String> {
     }
 }
 
-fun VideoDto.toDomain(episodeLabel: String = "Episode"): Video {
+fun VideoDto.toDomain(
+    episodeLabel: String = "Episode",
+    parentType: String? = null
+): Video {
     return Video(
-        id = id,
+        id = resolveVideoPlaybackId(parentType),
         title = name ?: title ?: "$episodeLabel ${episode ?: number ?: 0}",
         released = released,
         thumbnail = thumbnail,
@@ -76,6 +79,19 @@ fun VideoDto.toDomain(episodeLabel: String = "Episode"): Video {
         episode = episode ?: number,
         overview = overview ?: description
     )
+}
+
+private fun VideoDto.resolveVideoPlaybackId(parentType: String?): String {
+    val isSeries = parentType.equals("series", ignoreCase = true) ||
+        parentType.equals("tv", ignoreCase = true)
+    val imdb = imdbId?.trim()?.takeIf { it.startsWith("tt", ignoreCase = true) }
+    val seasonNumber = imdbSeason
+    val episodeNumber = imdbEpisode
+    return if (isSeries && imdb != null && seasonNumber != null && episodeNumber != null) {
+        "$imdb:$seasonNumber:$episodeNumber"
+    } else {
+        id
+    }
 }
 
 fun MetaLinkDto.toDomain(): MetaLink? {

@@ -5,6 +5,7 @@ import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuApi
 import com.nexio.tv.data.remote.api.KitsuCollectionResponse
 import com.nexio.tv.data.remote.api.KitsuImage
+import com.nexio.tv.data.remote.api.KitsuLinks
 import com.nexio.tv.data.remote.api.KitsuResourceResponse
 import com.nexio.tv.data.repository.KitsuAuthService
 import io.mockk.coEvery
@@ -94,6 +95,127 @@ class KitsuMetadataServiceTest {
         assertEquals("Asteroid Blues", episodes[1 to 1]?.title)
         assertEquals("1998-04-03", episodes[1 to 1]?.airDate)
         assertEquals("https://media.kitsu.io/e1.jpg", episodes[1 to 1]?.thumbnail)
+    }
+
+    @Test
+    fun `fetchEpisodeEnrichment follows kitsu episode pages`() = runTest {
+        val api = mockk<KitsuApi>()
+        val mapper = mockk<AnimeIdMappingService>()
+        val auth = mockk<KitsuAuthService>()
+        val service = KitsuMetadataService(api, mapper, auth)
+
+        coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
+        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnimeEpisodes(null, "1", 20, 0) } returns Response.success(
+            KitsuCollectionResponse(
+                data = listOf(
+                    KitsuAnimeResource(
+                        id = "episode-1",
+                        attributes = KitsuAnimeAttributes(
+                            canonicalTitle = "Asteroid Blues",
+                            number = 1,
+                            seasonNumber = 1
+                        )
+                    )
+                ),
+                links = KitsuLinks(next = "https://kitsu.io/api/edge/anime/1/episodes?page%5Boffset%5D=20")
+            )
+        )
+        coEvery { api.getAnimeEpisodes(null, "1", 20, 20) } returns Response.success(
+            KitsuCollectionResponse(
+                data = listOf(
+                    KitsuAnimeResource(
+                        id = "episode-21",
+                        attributes = KitsuAnimeAttributes(
+                            canonicalTitle = "Boogie Woogie Feng Shui",
+                            number = 21,
+                            seasonNumber = 1
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment("kitsu:1", ContentMediaKind.SERIES, listOf(1))
+
+        assertEquals("Asteroid Blues", episodes[1 to 1]?.title)
+        assertEquals("Boogie Woogie Feng Shui", episodes[1 to 21]?.title)
+        coVerify(exactly = 1) { api.getAnimeEpisodes(null, "1", 20, 0) }
+        coVerify(exactly = 1) { api.getAnimeEpisodes(null, "1", 20, 20) }
+    }
+
+    @Test
+    fun `fetchEpisodeEnrichment without season filter keeps all kitsu seasons`() = runTest {
+        val api = mockk<KitsuApi>()
+        val mapper = mockk<AnimeIdMappingService>()
+        val auth = mockk<KitsuAuthService>()
+        val service = KitsuMetadataService(api, mapper, auth)
+
+        coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
+        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnimeEpisodes(null, "1", 20, 0) } returns Response.success(
+            KitsuCollectionResponse(
+                data = listOf(
+                    KitsuAnimeResource(
+                        id = "episode-1",
+                        attributes = KitsuAnimeAttributes(
+                            canonicalTitle = "Season One",
+                            number = 1,
+                            seasonNumber = 1
+                        )
+                    ),
+                    KitsuAnimeResource(
+                        id = "episode-2",
+                        attributes = KitsuAnimeAttributes(
+                            canonicalTitle = "Season Two",
+                            number = 1,
+                            seasonNumber = 2
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment("kitsu:1", ContentMediaKind.SERIES, emptyList())
+
+        assertEquals("Season One", episodes[1 to 1]?.title)
+        assertEquals("Season Two", episodes[2 to 1]?.title)
+    }
+
+    @Test
+    fun `fetchSeasonEpisodes maps kitsu episodes for a season`() = runTest {
+        val api = mockk<KitsuApi>()
+        val mapper = mockk<AnimeIdMappingService>()
+        val auth = mockk<KitsuAuthService>()
+        val service = KitsuMetadataService(api, mapper, auth)
+
+        coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
+        coEvery { auth.providerEnabled() } returns true
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnimeEpisodes(null, "1", 20, 0) } returns Response.success(
+            KitsuCollectionResponse(
+                data = listOf(
+                    KitsuAnimeResource(
+                        id = "episode-1",
+                        attributes = KitsuAnimeAttributes(
+                            canonicalTitle = "Asteroid Blues",
+                            number = 1,
+                            seasonNumber = 1,
+                            airdate = "1998-04-03"
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchSeasonEpisodes("kitsu:1", ContentMediaKind.SERIES, 1)
+
+        assertEquals(1, episodes.size)
+        assertEquals(1, episodes.first().episodeNumber)
+        assertEquals("1998-04-03", episodes.first().airDate)
+        assertEquals("Asteroid Blues", episodes.first().metadata.title)
     }
 
     @Test

@@ -3,7 +3,9 @@ package com.nexio.tv.core.anime
 import android.util.Log
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.remote.api.KitsuApi
+import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.data.repository.KitsuAuthService
 import javax.inject.Inject
@@ -12,6 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "KitsuMetadata"
+private const val KITSU_EPISODE_PAGE_LIMIT = 20
+private const val KITSU_EPISODE_MAX_PAGES = 100
 
 @Singleton
 class KitsuMetadataService @Inject constructor(
@@ -59,22 +63,15 @@ class KitsuMetadataService @Inject constructor(
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext emptyMap()
         val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
         val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-        val response = runCatching {
-            api.getAnimeEpisodes(authorization, kitsuId)
-        }.onFailure {
-            Log.w(TAG, "Kitsu episode fetch failed id=$rawId reason=${it.javaClass.simpleName}")
-        }.getOrNull() ?: return@withContext emptyMap()
+        val episodes = fetchEpisodePages(authorization, kitsuId, rawId)
 
-        val acceptedSeasons = seasonNumbers.toSet().ifEmpty { setOf(1) }
-        response.takeIf { it.isSuccessful }
-            ?.body()
-            ?.data
-            .orEmpty()
+        val acceptedSeasons = seasonNumbers.toSet()
+        episodes
             .mapNotNull { episode ->
                 val attributes = episode.attributes ?: return@mapNotNull null
                 val season = attributes.seasonNumber ?: 1
                 val number = attributes.number ?: return@mapNotNull null
-                if (season !in acceptedSeasons) return@mapNotNull null
+                if (acceptedSeasons.isNotEmpty() && season !in acceptedSeasons) return@mapNotNull null
                 (season to number) to TvEpisodeMetadata(
                     providerEpisodeId = episode.id?.let { "kitsu:$it" },
                     seasonNumber = season,
@@ -87,6 +84,56 @@ class KitsuMetadataService @Inject constructor(
                 )
             }
             .toMap()
+    }
+
+    suspend fun fetchSeasonEpisodes(
+        rawId: String,
+        mediaKind: ContentMediaKind,
+        seasonNumber: Int
+    ): List<TvSeasonEpisode> {
+        val episodes = fetchEpisodeEnrichment(rawId, mediaKind, listOf(seasonNumber))
+        return episodes.values
+            .filter { episode -> episode.episodeNumber != null }
+            .sortedBy { episode -> episode.episodeNumber }
+            .map { episode ->
+                TvSeasonEpisode(
+                    episodeNumber = episode.episodeNumber,
+                    airDate = episode.airDate,
+                    metadata = episode
+                )
+            }
+    }
+
+    private suspend fun fetchEpisodePages(
+        authorization: String?,
+        kitsuId: String,
+        rawId: String
+    ): List<KitsuAnimeResource> {
+        val episodes = mutableListOf<KitsuAnimeResource>()
+        var offset = 0
+        var pageCount = 0
+        while (pageCount < KITSU_EPISODE_MAX_PAGES) {
+            val response = runCatching {
+                api.getAnimeEpisodes(
+                    authorization = authorization,
+                    id = kitsuId,
+                    limit = KITSU_EPISODE_PAGE_LIMIT,
+                    offset = offset
+                )
+            }.onFailure {
+                Log.w(TAG, "Kitsu episode fetch failed id=$rawId offset=$offset reason=${it.javaClass.simpleName}")
+            }.getOrNull() ?: break
+
+            if (!response.isSuccessful) break
+            val body = response.body() ?: break
+            val page = body.data.orEmpty()
+            episodes += page
+            if (body.links?.next.isNullOrBlank() || page.isEmpty()) break
+
+            offset += KITSU_EPISODE_PAGE_LIMIT
+            pageCount += 1
+        }
+        return episodes
     }
 }
 

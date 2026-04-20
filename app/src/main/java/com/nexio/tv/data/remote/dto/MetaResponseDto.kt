@@ -66,6 +66,9 @@ data class VideoDto(
     @Json(name = "episode") val episode: Int? = null,
     @Json(name = "number") val number: Int? = null,
     @Json(name = "overview") val overview: String? = null,
+    @Json(name = "imdb_id") val imdbId: String? = null,
+    @Json(name = "imdbSeason") val imdbSeason: Int? = null,
+    @Json(name = "imdbEpisode") val imdbEpisode: Int? = null,
     @Json(name = "description") val description: String? = null
 )
 
