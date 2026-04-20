@@ -69,9 +69,22 @@ class AccountConfigSyncContractTest {
         val contract = File("supabase/account_settings_sync.sql").readText()
 
         assertTrue(contract.contains("\"kitsuAuth\""))
+        assertTrue(contract.contains("\"includeNsfw\""))
         assertTrue(contract.contains("'kitsu_access_token'"))
         assertTrue(contract.contains("'kitsu_refresh_token'"))
         assertFalse(contract.contains("'kitsu_password'"))
+    }
+
+    @Test
+    fun `kitsu auth settings migration updates deployed canonical contract`() {
+        val migration = File("supabase/migrations/20260420013000_add_kitsu_auth_settings_sync.sql").readText()
+
+        assertTrue(migration.contains("account_settings_v2_default_payload"))
+        assertTrue(migration.contains("account_settings_extract_canonical_v2"))
+        assertTrue(migration.contains("\"kitsuAuth\""))
+        assertTrue(migration.contains("\"includeNsfw\""))
+        assertTrue(migration.contains("'kitsuAuth'"))
+        assertTrue(migration.contains("{integrations,kitsuAuth}"))
     }
 
     @Test
@@ -427,6 +440,7 @@ class AccountConfigSyncContractTest {
                 easyDebridSettings = MutableSharedFlow<Unit>(),
                 easyDebridAccountState = MutableSharedFlow<Unit>(),
                 realDebridState = MutableSharedFlow<Unit>(),
+                kitsuAuthState = MutableSharedFlow<Unit>(),
                 traktAuthState = MutableSharedFlow<Unit>(),
                 traktCatalogPreferences = MutableSharedFlow<Unit>(),
                 simklCatalogPreferences = MutableSharedFlow<Unit>(),
@@ -468,6 +482,7 @@ class AccountConfigSyncContractTest {
                 easyDebridSettings = MutableSharedFlow<Unit>(),
                 easyDebridAccountState = MutableSharedFlow<Unit>(),
                 realDebridState = MutableSharedFlow<Unit>(),
+                kitsuAuthState = MutableSharedFlow<Unit>(),
                 traktAuthState = MutableSharedFlow<Unit>(),
                 traktCatalogPreferences = MutableSharedFlow<Unit>(),
                 simklCatalogPreferences = MutableSharedFlow<Unit>(),
@@ -480,6 +495,48 @@ class AccountConfigSyncContractTest {
         advanceUntilIdle()
 
         assertEquals("integrations.tvdb", emission.await())
+    }
+
+    @Test
+    fun `observeAccountConfigSyncChangedPaths emits kitsu auth path label`() = runTest {
+        val kitsuAuthState = MutableSharedFlow<Unit>(replay = 1)
+
+        val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
+            observeAccountConfigSyncChangedPaths(
+                heroCatalogSelections = MutableSharedFlow<Unit>(),
+                homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
+                disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
+                tmdbSettings = MutableSharedFlow<Unit>(),
+                tvdbSettings = MutableSharedFlow<Unit>(),
+                mdbListSettings = MutableSharedFlow<Unit>(),
+                mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
+                omdbSettings = MutableSharedFlow<Unit>(),
+                theIntroDbSettings = MutableSharedFlow<Unit>(),
+                animeSkipEnabled = MutableSharedFlow<Unit>(),
+                animeSkipClientId = MutableSharedFlow<Unit>(),
+                subtitleTranslationSettings = MutableSharedFlow<Unit>(),
+                imdbSettings = MutableSharedFlow<Unit>(),
+                posterRatingsSettings = MutableSharedFlow<Unit>(),
+                premiumizeSettings = MutableSharedFlow<Unit>(),
+                premiumizeAccountState = MutableSharedFlow<Unit>(),
+                torBoxSettings = MutableSharedFlow<Unit>(),
+                torBoxAccountState = MutableSharedFlow<Unit>(),
+                easyDebridSettings = MutableSharedFlow<Unit>(),
+                easyDebridAccountState = MutableSharedFlow<Unit>(),
+                realDebridState = MutableSharedFlow<Unit>(),
+                kitsuAuthState = kitsuAuthState,
+                traktAuthState = MutableSharedFlow<Unit>(),
+                traktCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklAuthState = MutableSharedFlow<Unit>(),
+                playerSettings = MutableSharedFlow<Unit>()
+            ).first()
+        }
+
+        kitsuAuthState.emit(Unit)
+        advanceUntilIdle()
+
+        assertEquals("integrations.kitsuAuth", emission.await())
     }
 
     @Test
@@ -699,6 +756,7 @@ class AccountConfigSyncContractTest {
                 easyDebridSettings = easyDebridSettings,
                 easyDebridAccountState = easyDebridAccountState,
                 realDebridState = realDebridState,
+                kitsuAuthState = MutableSharedFlow<Unit>(),
                 traktAuthState = traktAuthState,
                 traktCatalogPreferences = traktCatalogPreferences,
                 simklCatalogPreferences = simklCatalogPreferences,
@@ -740,6 +798,7 @@ class AccountConfigSyncContractTest {
                 easyDebridSettings = MutableSharedFlow<Unit>(),
                 easyDebridAccountState = MutableSharedFlow<Unit>(),
                 realDebridState = MutableSharedFlow<Unit>(),
+                kitsuAuthState = MutableSharedFlow<Unit>(),
                 traktAuthState = MutableSharedFlow<Unit>(),
                 traktCatalogPreferences = MutableSharedFlow<Unit>(),
                 simklCatalogPreferences = MutableSharedFlow<Unit>(),

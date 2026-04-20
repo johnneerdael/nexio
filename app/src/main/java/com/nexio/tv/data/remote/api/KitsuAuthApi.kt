@@ -16,9 +16,7 @@ data class KitsuTokenRequest(
     @Json(name = "grant_type") val grantType: String,
     @Json(name = "username") val username: String? = null,
     @Json(name = "password") val password: String? = null,
-    @Json(name = "refresh_token") val refreshToken: String? = null,
-    @Json(name = "client_id") val clientId: String = "",
-    @Json(name = "client_secret") val clientSecret: String = ""
+    @Json(name = "refresh_token") val refreshToken: String? = null
 )
 
 @JsonClass(generateAdapter = true)

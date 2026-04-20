@@ -287,6 +287,7 @@ class AccountSettingsSyncService @Inject constructor(
                 easyDebridSettings = easyDebridSettingsDataStore.settings.drop(1).map { Unit },
                 easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
+                kitsuAuthState = kitsuAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit },
                 traktAuthState = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit },
                 // Default profile keeps these in the account contract; secondary
                 // profiles sync them through ProfileSettingsSyncService blobs.
