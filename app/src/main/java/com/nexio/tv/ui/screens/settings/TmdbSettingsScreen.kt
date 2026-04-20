@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
@@ -45,6 +47,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.R
+import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -71,6 +74,7 @@ fun TmdbSettingsContent(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val validating by viewModel.validating.collectAsStateWithLifecycle()
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showCatalogDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val missingApiKeyMsg = stringResource(R.string.tmdb_missing_api_key)
     val invalidApiKeyMsg = stringResource(R.string.tmdb_invalid_api_key)
@@ -114,6 +118,47 @@ fun TmdbSettingsContent(
                             Modifier.focusRequester(initialFocusRequester)
                         } else {
                             Modifier
+                        }
+                    )
+                }
+
+                item(key = "tmdb_catalogs") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.tmdb_catalogs_title),
+                        subtitle = stringResource(R.string.tmdb_catalogs_subtitle),
+                        value = stringResource(
+                            R.string.tmdb_catalogs_enabled_count,
+                            uiState.enabledCatalogKeys.size
+                        ),
+                        enabled = uiState.isActive,
+                        onClick = { showCatalogDialog = true }
+                    )
+                }
+
+                item(key = "tmdb_adult_content") {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.tmdb_adult_content_title),
+                        subtitle = stringResource(R.string.tmdb_adult_content_subtitle),
+                        checked = uiState.includeAdult,
+                        enabled = uiState.isActive,
+                        onToggle = {
+                            viewModel.onEvent(
+                                TmdbSettingsEvent.ToggleAdultContent(!uiState.includeAdult)
+                            )
+                        }
+                    )
+                }
+
+                item(key = "tmdb_digital_release_filter") {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.tmdb_digital_release_filter_title),
+                        subtitle = stringResource(R.string.tmdb_digital_release_filter_subtitle),
+                        checked = uiState.hideUnreleasedDigital,
+                        enabled = uiState.isActive,
+                        onToggle = {
+                            viewModel.onEvent(
+                                TmdbSettingsEvent.ToggleDigitalReleaseFilter(!uiState.hideUnreleasedDigital)
+                            )
                         }
                     )
                 }
@@ -242,6 +287,58 @@ fun TmdbSettingsContent(
             onDismiss = { showApiKeyDialog = false }
         )
     }
+
+    if (showCatalogDialog) {
+        NexioDialog(
+            onDismiss = { showCatalogDialog = false },
+            title = stringResource(R.string.tmdb_catalogs_title),
+            subtitle = stringResource(R.string.tmdb_catalogs_dialog_subtitle),
+            width = 900.dp,
+            suppressFirstKeyUp = false
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(
+                        items = uiState.catalogOrder,
+                        key = { it }
+                    ) { catalogId ->
+                        val enabled = catalogId in uiState.enabledCatalogKeys
+                        SettingsToggleRow(
+                            title = tmdbCatalogTitle(catalogId),
+                            subtitle = tmdbCatalogSubtitle(catalogId),
+                            checked = enabled,
+                            enabled = uiState.isActive,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    TmdbSettingsEvent.ToggleCatalog(catalogId, !enabled)
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { showCatalogDialog = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
+                        )
+                    ) {
+                        Text(stringResource(R.string.action_close))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -360,4 +457,38 @@ private fun maskApiKey(key: String, notSetLabel: String): String {
     val trimmed = key.trim()
     if (trimmed.isBlank()) return notSetLabel
     return if (trimmed.length <= 4) "••••" else "••••••${trimmed.takeLast(4)}"
+}
+
+@Composable
+private fun tmdbCatalogTitle(catalogId: String): String {
+    return when (catalogId) {
+        TmdbCatalogIds.TRENDING_MOVIES -> stringResource(R.string.tmdb_catalog_trending_movies)
+        TmdbCatalogIds.TRENDING_SERIES -> stringResource(R.string.tmdb_catalog_trending_series)
+        TmdbCatalogIds.LATEST_RELEASES_MOVIES -> stringResource(R.string.tmdb_catalog_latest_releases_movies)
+        TmdbCatalogIds.LATEST_RELEASES_SERIES -> stringResource(R.string.tmdb_catalog_latest_releases_series)
+        TmdbCatalogIds.POPULAR_MOVIES -> stringResource(R.string.tmdb_catalog_popular_movies)
+        TmdbCatalogIds.POPULAR_SERIES -> stringResource(R.string.tmdb_catalog_popular_series)
+        TmdbCatalogIds.YEAR_MOVIES -> stringResource(R.string.tmdb_catalog_movies_by_year)
+        TmdbCatalogIds.YEAR_SERIES -> stringResource(R.string.tmdb_catalog_series_by_year)
+        TmdbCatalogIds.LANGUAGE_MOVIES -> stringResource(R.string.tmdb_catalog_movies_by_language)
+        TmdbCatalogIds.LANGUAGE_SERIES -> stringResource(R.string.tmdb_catalog_series_by_language)
+        else -> catalogId
+    }
+}
+
+@Composable
+private fun tmdbCatalogSubtitle(catalogId: String): String {
+    return when (catalogId) {
+        TmdbCatalogIds.TRENDING_MOVIES -> stringResource(R.string.tmdb_catalog_trending_movies_subtitle)
+        TmdbCatalogIds.TRENDING_SERIES -> stringResource(R.string.tmdb_catalog_trending_series_subtitle)
+        TmdbCatalogIds.LATEST_RELEASES_MOVIES -> stringResource(R.string.tmdb_catalog_latest_releases_movies_subtitle)
+        TmdbCatalogIds.LATEST_RELEASES_SERIES -> stringResource(R.string.tmdb_catalog_latest_releases_series_subtitle)
+        TmdbCatalogIds.POPULAR_MOVIES -> stringResource(R.string.tmdb_catalog_popular_movies_subtitle)
+        TmdbCatalogIds.POPULAR_SERIES -> stringResource(R.string.tmdb_catalog_popular_series_subtitle)
+        TmdbCatalogIds.YEAR_MOVIES -> stringResource(R.string.tmdb_catalog_movies_by_year_subtitle)
+        TmdbCatalogIds.YEAR_SERIES -> stringResource(R.string.tmdb_catalog_series_by_year_subtitle)
+        TmdbCatalogIds.LANGUAGE_MOVIES -> stringResource(R.string.tmdb_catalog_movies_by_language_subtitle)
+        TmdbCatalogIds.LANGUAGE_SERIES -> stringResource(R.string.tmdb_catalog_series_by_language_subtitle)
+        else -> ""
+    }
 }
