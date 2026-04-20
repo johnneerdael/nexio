@@ -481,9 +481,10 @@ class AndroidTvFeedCatalogService @Inject constructor(
         snapshot: TmdbDiscoverySnapshot,
         prefs: TmdbCatalogPreferences
     ): List<CatalogRow> {
+        val currentRows = snapshot.currentRowsFor(prefs)
         return prefs.catalogOrder
             .filter { key -> key in prefs.enabledCatalogs }
-            .mapNotNull { key -> snapshot.rowsByCatalog[key] }
+            .mapNotNull { key -> currentRows[key] }
             .filter { row -> row.items.isNotEmpty() }
     }
 

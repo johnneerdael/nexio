@@ -103,6 +103,7 @@ internal fun buildConfiguredHomeCatalogDescriptors(
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): List<ConfiguredHomeCatalogDescriptor> {
     val descriptorsByKey = linkedMapOf<String, ConfiguredHomeCatalogDescriptor>()
+    val currentTmdbRows = tmdbSnapshot.currentRowsFor(tmdbPrefs)
 
     fun existingTitle(key: String): String? {
         return existingRowsByOrderKey[key]?.catalogName?.takeIf { it.isNotBlank() }
@@ -164,7 +165,7 @@ internal fun buildConfiguredHomeCatalogDescriptors(
     buildExpectedConfiguredTmdbOrderKeys(tmdbPrefs)
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
         .forEach { key ->
-            val row = tmdbSnapshot.rowsByCatalog[key]
+            val row = currentTmdbRows[key]
             val type = row?.type ?: tmdbCatalogContentType(key)
             descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
                 orderKey = key,
@@ -407,7 +408,7 @@ internal fun buildPublishableConfiguredTmdbOrderKeys(
     prefs: TmdbCatalogPreferences,
     snapshot: TmdbDiscoverySnapshot
 ): List<String> {
-    val available = snapshot.rowsByCatalog.filterValues { it.items.isNotEmpty() }.keys
+    val available = snapshot.currentRowsFor(prefs).filterValues { it.items.isNotEmpty() }.keys
     return buildExpectedConfiguredTmdbOrderKeys(prefs).filter { it in available }
 }
 
@@ -526,12 +527,10 @@ internal fun shouldRefreshTmdbDiscoveryForState(
     val expectedKeys = buildExpectedConfiguredTmdbOrderKeys(prefs)
     if (expectedKeys.isEmpty()) return false
     if (snapshot.updatedAtMs <= 0L) return true
-    val sanitized = prefs.sanitized()
-    if (snapshot.includeAdult != sanitized.includeAdult) return true
-    if (snapshot.hideUnreleasedDigital != sanitized.hideUnreleasedDigital) return true
+    if (!snapshot.matchesPreferences(prefs)) return true
+    val currentRows = snapshot.currentRowsFor(prefs)
     return expectedKeys.any { key ->
-        key !in snapshot.catalogIdsWithCurrentPreferences ||
-        snapshot.rowsByCatalog[key]?.items.isNullOrEmpty()
+        currentRows[key]?.items.isNullOrEmpty()
     }
 }
 

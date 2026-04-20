@@ -211,16 +211,9 @@ class TmdbDiscoveryService @Inject constructor(
         val rows = if (catalogIds == null) {
             refreshedRows
         } else {
-            previous.rowsByCatalog + refreshedRows
+            previous.currentRowsFor(sanitized) + refreshedRows
         }
-        val previousCurrentCatalogIds = if (
-            previous.includeAdult == sanitized.includeAdult &&
-            previous.hideUnreleasedDigital == sanitized.hideUnreleasedDigital
-        ) {
-            previous.catalogIdsWithCurrentPreferences
-        } else {
-            emptySet()
-        }
+        val previousCurrentCatalogIds = previous.currentRowsFor(sanitized).keys
         val catalogIdsWithCurrentPreferences = if (catalogIds == null) {
             refreshedRows.keys
         } else {

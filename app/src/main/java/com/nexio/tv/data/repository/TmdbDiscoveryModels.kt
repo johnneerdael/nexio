@@ -13,7 +13,18 @@ data class TmdbDiscoverySnapshot(
     val includeAdult: Boolean? = null,
     val hideUnreleasedDigital: Boolean? = null,
     val catalogIdsWithCurrentPreferences: Set<String> = emptySet()
-)
+) {
+    fun matchesPreferences(preferences: TmdbCatalogPreferences): Boolean {
+        val sanitized = preferences.sanitized()
+        return includeAdult == sanitized.includeAdult &&
+            hideUnreleasedDigital == sanitized.hideUnreleasedDigital
+    }
+
+    fun currentRowsFor(preferences: TmdbCatalogPreferences): Map<String, CatalogRow> {
+        if (!matchesPreferences(preferences)) return emptyMap()
+        return rowsByCatalog.filterKeys { key -> key in catalogIdsWithCurrentPreferences }
+    }
+}
 
 fun tmdbCatalogTitle(catalogId: String): String? {
     return when (catalogId) {

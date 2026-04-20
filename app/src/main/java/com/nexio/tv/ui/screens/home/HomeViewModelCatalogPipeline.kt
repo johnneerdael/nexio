@@ -114,11 +114,25 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
                 return@withContext
             }
 
+            val restoredSnapshot = filterRestoredHomeSnapshotTmdbRows(
+                snapshot = snapshot,
+                tmdbPrefs = tmdbCatalogPreferences,
+                tmdbSnapshot = tmdbDiscoverySnapshot,
+                currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+            )
+            if (
+                restoredSnapshot.catalogRows.isEmpty() &&
+                restoredSnapshot.fullCatalogRows.isEmpty() &&
+                restoredSnapshot.heroItems.isEmpty()
+            ) {
+                return@withContext
+            }
+
             hasPersistedCatalogSnapshot = true
             startupRefreshPending = true
             restoredCatalogSnapshotActive = true
-            inMemoryHomeSnapshot = snapshot
-            pendingRestoredCatalogSnapshot = snapshot
+            inMemoryHomeSnapshot = restoredSnapshot
+            pendingRestoredCatalogSnapshot = restoredSnapshot
             pendingHomeSnapshotPersist = null
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_merged_snapshot")
         }
@@ -2189,6 +2203,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         }
         val liveOrderedRows = combinedRows
 
+        val currentCachedTmdbCatalogIds = currentTmdbCatalogIds(
+            tmdbPrefs = tmdbPrefs,
+            tmdbSnapshot = effectiveTmdbSnapshot,
+            currentSyntheticTmdbGroups = currentPreferencePersistedTmdbSyntheticGroups
+        )
         val preservationState = CachedHomePreservationState(
             preserveAddonRows = hasPersistedCatalogSnapshot &&
                 (restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending || catalogsLoadInProgress),
@@ -2215,7 +2234,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             liveRows = liveOrderedRows,
             preservationState = preservationState,
             orderedGroupKeys = effectiveOrderKeys,
-            rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey
+            rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey,
+            currentTmdbCatalogIds = currentCachedTmdbCatalogIds
         )
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
@@ -2426,7 +2446,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ) {
-    val filteredSnapshot = snapshot.filterDisabledHomeCatalogRows(
+    val tmdbSafeSnapshot = filterRestoredHomeSnapshotTmdbRows(
+        snapshot = snapshot,
+        tmdbPrefs = tmdbCatalogPreferences,
+        tmdbSnapshot = tmdbDiscoverySnapshot,
+        currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+    )
+    val filteredSnapshot = tmdbSafeSnapshot.filterDisabledHomeCatalogRows(
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         isAddonRowDisabled = { row ->
             isCatalogDisabled(
@@ -2459,6 +2485,64 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         )
     }
     refreshTrailerMetadataAvailabilityPipeline(filteredSnapshot.catalogRows)
+}
+
+internal fun filterRestoredHomeSnapshotTmdbRows(
+    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot,
+    tmdbPrefs: TmdbCatalogPreferences,
+    tmdbSnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot,
+    currentSyntheticTmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+): com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot {
+    val currentTmdbCatalogIds = currentTmdbCatalogIds(
+        tmdbPrefs = tmdbPrefs,
+        tmdbSnapshot = tmdbSnapshot,
+        currentSyntheticTmdbGroups = currentSyntheticTmdbGroups
+    )
+
+    fun isRetained(row: CatalogRow): Boolean {
+        return row.addonId != TMDB_RAIL_ADDON_ID || row.catalogId in currentTmdbCatalogIds
+    }
+
+    val filteredFullRows = snapshot.fullCatalogRows.filter(::isRetained)
+    val filteredDisplayRows = snapshot.catalogRows.filter(::isRetained)
+    if (
+        filteredFullRows.size == snapshot.fullCatalogRows.size &&
+        filteredDisplayRows.size == snapshot.catalogRows.size
+    ) {
+        return snapshot
+    }
+
+    val removedTmdbKeys = (snapshot.fullCatalogRows.asSequence() + snapshot.catalogRows.asSequence())
+        .filterNot(::isRetained)
+        .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) }
+        .toSet()
+    val retainedItemKeys = filteredFullRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
+    return snapshot.copy(
+        catalogRows = filteredDisplayRows,
+        fullCatalogRows = filteredFullRows,
+        heroItems = snapshot.heroItems.filter { item -> "${item.apiType}:${item.id}" in retainedItemKeys },
+        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedTmdbKeys }
+    )
+}
+
+private fun currentTmdbCatalogIds(
+    tmdbPrefs: TmdbCatalogPreferences,
+    tmdbSnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot,
+    currentSyntheticTmdbGroups: List<PersistedSyntheticCatalogGroup>
+): Set<String> {
+    return buildSet {
+        addAll(tmdbSnapshot.currentRowsFor(tmdbPrefs).filterValues { row -> row.items.isNotEmpty() }.keys)
+        currentSyntheticTmdbGroups.forEach { group ->
+            if (group.rows.any { row -> row.items.isNotEmpty() }) {
+                add(group.orderKey)
+                group.rows.forEach { row -> add(row.catalogId) }
+            }
+        }
+    }
 }
 
 private fun com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot.filterDisabledHomeCatalogRows(
@@ -2548,6 +2632,12 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbListDiscoverySnapshot
     )
     val tmdbExpectedOrderKeys = buildExpectedConfiguredTmdbOrderKeys(tmdbCatalogPreferences)
+    val restoredSnapshot = filterRestoredHomeSnapshotTmdbRows(
+        snapshot = snapshot,
+        tmdbPrefs = tmdbCatalogPreferences,
+        tmdbSnapshot = tmdbDiscoverySnapshot,
+        currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+    )
     val catalogPlan = buildConfiguredCatalogPlan(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
@@ -2584,34 +2674,34 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         Log.d(
             HomeViewModel.TAG,
             "Persisted snapshot deferred reason=source_caches_not_ready requireSourceCachesReady=true " +
-                "snapshotKeys=${snapshot.orderedGroupKeys.size} expectedKeys=${expectedConfiguredOrderKeys.size}"
+                "snapshotKeys=${restoredSnapshot.orderedGroupKeys.size} expectedKeys=${expectedConfiguredOrderKeys.size}"
         )
-        pendingRestoredCatalogSnapshot = snapshot
+        pendingRestoredCatalogSnapshot = restoredSnapshot
         return false
     }
     val snapshotComplete = isConfiguredHomeSnapshotComplete(
-        snapshotOrderedGroupKeys = snapshot.orderedGroupKeys,
+        snapshotOrderedGroupKeys = restoredSnapshot.orderedGroupKeys,
         expectedConfiguredOrderKeys = publishableExpectedOrderKeys
     )
     if (publishableExpectedOrderKeys.isNotEmpty() && !snapshotComplete) {
-        val missingKeys = publishableExpectedOrderKeys.filterNot { it in snapshot.orderedGroupKeys.toSet() }
+        val missingKeys = publishableExpectedOrderKeys.filterNot { it in restoredSnapshot.orderedGroupKeys.toSet() }
         Log.d(
             HomeViewModel.TAG,
             "Persisted snapshot deferred reason=incomplete expected=${publishableExpectedOrderKeys.size} " +
-                "actual=${snapshot.orderedGroupKeys.size} missing=${missingKeys.joinToString(limit = 12)}"
+                "actual=${restoredSnapshot.orderedGroupKeys.size} missing=${missingKeys.joinToString(limit = 12)}"
         )
-        pendingRestoredCatalogSnapshot = snapshot
+        pendingRestoredCatalogSnapshot = restoredSnapshot
         return false
     }
     Log.d(
         HomeViewModel.TAG,
-        "Persisted snapshot applied orderedKeys=${snapshot.orderedGroupKeys.size} expected=${publishableExpectedOrderKeys.size} " +
-            "sourceCachesReady=$sourceCachesReady rows=${snapshot.catalogRows.size} fullRows=${snapshot.fullCatalogRows.size}"
+        "Persisted snapshot applied orderedKeys=${restoredSnapshot.orderedGroupKeys.size} expected=${publishableExpectedOrderKeys.size} " +
+            "sourceCachesReady=$sourceCachesReady rows=${restoredSnapshot.catalogRows.size} fullRows=${restoredSnapshot.fullCatalogRows.size}"
     )
-    inMemoryHomeSnapshot = snapshot
+    inMemoryHomeSnapshot = restoredSnapshot
     pendingRestoredCatalogSnapshot = null
     hasPersistedCatalogSnapshot = true
-    applyHomeSnapshotToUiPipeline(snapshot)
+    applyHomeSnapshotToUiPipeline(restoredSnapshot)
     return true
 }
 
@@ -2790,10 +2880,12 @@ private fun mergeCachedRowsWithLiveRows(
     liveRows: List<CatalogRow>,
     preservationState: CachedHomePreservationState,
     orderedGroupKeys: List<String>,
-    rowOrderKeyByGlobalKey: Map<String, String>
+    rowOrderKeyByGlobalKey: Map<String, String>,
+    currentTmdbCatalogIds: Set<String> = emptySet()
 ): List<CatalogRow> {
     fun canRetainCachedRow(row: CatalogRow): Boolean {
         if (!shouldPreserveCachedRow(row, preservationState)) return false
+        if (row.addonId == TMDB_RAIL_ADDON_ID && row.catalogId !in currentTmdbCatalogIds) return false
         return resolveMergedRowOrderKey(
             row = row,
             orderedGroupKeys = orderedGroupKeys,

@@ -102,10 +102,8 @@ internal fun shouldPreserveExistingTmdbGroupsDuringRefresh(
 ): Boolean {
     val expectedKeys = buildExpectedConfiguredTmdbOrderKeys(prefs)
     if (expectedKeys.isEmpty()) return false
-    val sanitized = prefs.sanitized()
     val snapshotHasCurrentPreferenceProvenance = snapshot.updatedAtMs > 0L &&
-        snapshot.includeAdult == sanitized.includeAdult &&
-        snapshot.hideUnreleasedDigital == sanitized.hideUnreleasedDigital
+        snapshot.matchesPreferences(prefs)
     if (!snapshotHasCurrentPreferenceProvenance) return true
     return expectedKeys.any { key -> key !in snapshot.catalogIdsWithCurrentPreferences }
 }
@@ -126,6 +124,7 @@ internal fun buildConfiguredCatalogPlan(
     tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): CatalogPlan {
+    val currentTmdbRows = tmdbSnapshot.currentRowsFor(tmdbPrefs)
     val expectedOrderKeys = buildExpectedConfiguredHomeOrderKeys(
         addons = addons,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
@@ -180,7 +179,7 @@ internal fun buildConfiguredCatalogPlan(
                 key = key,
                 snapshot = mdbSnapshot
             )
-            TMDB_HOME_ADDON_ID -> tmdbSnapshot.rowsByCatalog[key]
+            TMDB_HOME_ADDON_ID -> currentTmdbRows[key]
                 ?.takeIf { row -> row.items.isNotEmpty() }
                 ?.let(::listOf)
                 .orEmpty()
