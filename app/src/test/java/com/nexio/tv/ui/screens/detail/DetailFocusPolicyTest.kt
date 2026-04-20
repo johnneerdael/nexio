@@ -191,4 +191,98 @@ class DetailFocusPolicyTest {
             )
         )
     }
+
+    @Test
+    fun reclaimStaysDisabledWhenPlayNeverLanded() {
+        assertFalse(
+            shouldReclaimPlayFocus(
+                playEverFocused = false,
+                playIsFocused = false,
+                userHasNavigatedFromPlay = false,
+                hasPendingRestoreTarget = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = false
+            )
+        )
+    }
+
+    @Test
+    fun reclaimRunsWhenPlayLostFocusWithoutUserNavigation() {
+        assertTrue(
+            shouldReclaimPlayFocus(
+                playEverFocused = true,
+                playIsFocused = false,
+                userHasNavigatedFromPlay = false,
+                hasPendingRestoreTarget = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = false
+            )
+        )
+    }
+
+    @Test
+    fun reclaimDoesNotRunWhilePlayStillHoldsFocus() {
+        assertFalse(
+            shouldReclaimPlayFocus(
+                playEverFocused = true,
+                playIsFocused = true,
+                userHasNavigatedFromPlay = false,
+                hasPendingRestoreTarget = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = false
+            )
+        )
+    }
+
+    @Test
+    fun reclaimBacksOffOnceUserIntentionallyNavigatesAway() {
+        assertFalse(
+            shouldReclaimPlayFocus(
+                playEverFocused = true,
+                playIsFocused = false,
+                userHasNavigatedFromPlay = true,
+                hasPendingRestoreTarget = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = false
+            )
+        )
+    }
+
+    @Test
+    fun reclaimYieldsToExplicitPendingRestoreTargets() {
+        assertFalse(
+            shouldReclaimPlayFocus(
+                playEverFocused = true,
+                playIsFocused = false,
+                userHasNavigatedFromPlay = false,
+                hasPendingRestoreTarget = true,
+                isTrailerPlaying = false,
+                isTrailerLoading = false
+            )
+        )
+    }
+
+    @Test
+    fun reclaimYieldsDuringTrailerStartupAndPlayback() {
+        assertFalse(
+            shouldReclaimPlayFocus(
+                playEverFocused = true,
+                playIsFocused = false,
+                userHasNavigatedFromPlay = false,
+                hasPendingRestoreTarget = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = true
+            )
+        )
+        assertFalse(
+            shouldReclaimPlayFocus(
+                playEverFocused = true,
+                playIsFocused = false,
+                userHasNavigatedFromPlay = false,
+                hasPendingRestoreTarget = false,
+                isTrailerPlaying = true,
+                isTrailerLoading = false
+            )
+        )
+    }
 }

@@ -90,7 +90,8 @@ internal fun HeroContentSection(
     restorePlayFocusToken: Int = 0,
     onMoveDownRequested: (() -> Unit)? = null,
     onHeroActionFocused: (HeroAction) -> Unit = {},
-    onPlayFocusRestored: () -> Unit = {}
+    onPlayFocusRestored: () -> Unit = {},
+    onPlayFocusChanged: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -205,7 +206,8 @@ internal fun HeroContentSection(
                         restoreFocusToken = restorePlayFocusToken,
                         onMoveDownRequested = onMoveDownRequested,
                         onFocused = onHeroActionFocused,
-                        onFocusRestored = onPlayFocusRestored
+                        onFocusRestored = onPlayFocusRestored,
+                        onFocusChanged = onPlayFocusChanged
                     )
 
                     ActionIconButton(
@@ -314,20 +316,28 @@ private fun PlayButton(
     restoreFocusToken: Int = 0,
     onMoveDownRequested: (() -> Unit)? = null,
     onFocused: (HeroAction) -> Unit = {},
-    onFocusRestored: () -> Unit = {}
+    onFocusRestored: () -> Unit = {},
+    onFocusChanged: (Boolean) -> Unit = {}
 ) {
     var pendingFocusRestore by remember { mutableStateOf(false) }
+    var playIsFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(restoreFocusToken, focusRequester) {
         pendingFocusRestore = restoreFocusToken > 0
         if (restoreFocusToken > 0) {
-            focusRequester.requestFocusAfterFrames(reason = "play_button_restore_token=$restoreFocusToken")
+            focusRequester.requestFocusUntilFocused(
+                isFocused = { playIsFocused },
+                reason = "play_button_restore_token=$restoreFocusToken"
+            )
         }
     }
 
     LaunchedEffect(requestInitialFocus, focusRequester) {
         if (requestInitialFocus) {
-            focusRequester.requestFocusAfterFrames(reason = "initial_detail_focus")
+            focusRequester.requestFocusUntilFocused(
+                isFocused = { playIsFocused },
+                reason = "initial_detail_focus"
+            )
         }
     }
 
@@ -354,6 +364,11 @@ private fun PlayButton(
                 }
             }
             .onFocusChanged {
+                val wasFocused = playIsFocused
+                playIsFocused = it.isFocused
+                if (wasFocused != it.isFocused) {
+                    onFocusChanged(it.isFocused)
+                }
                 if (it.isFocused) {
                     detailFocusDebug("heroActionFocused action=${HeroAction.PLAY} restored=$pendingFocusRestore")
                     onFocused(HeroAction.PLAY)

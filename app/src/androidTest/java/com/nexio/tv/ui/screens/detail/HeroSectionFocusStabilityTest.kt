@@ -237,6 +237,39 @@ class HeroSectionFocusStabilityTest {
 
     @OptIn(ExperimentalTestApi::class)
     @Test
+    fun hero_play_focus_survives_late_focus_thief_after_initial_landing() {
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                HeroSectionLateThiefHarness()
+            }
+
+            // Let the initial focus land on Play.
+            repeat(30) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+            }
+            composeRule.onNodeWithText("Play").assertIsFocused()
+
+            // Let the thief effect run (it requests focus ~8 frames after composition).
+            repeat(30) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+            }
+
+            // Guard should have re-stolen focus back within the 1.5 s window.
+            repeat(90) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+            }
+            composeRule.onNodeWithText("Play").assertIsFocused()
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
     fun delayed_hero_focus_request_waits_until_target_is_composed() {
         composeRule.mainClock.autoAdvance = false
         try {
@@ -469,6 +502,83 @@ private fun HeroSectionScrollCorrectionHarness() {
 
             items((1..12).toList()) { index ->
                 Text(text = "Below item $index")
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroSectionLateThiefHarness() {
+    val playButtonFocusRequester = remember { FocusRequester() }
+    val thiefFocusRequester = remember { FocusRequester() }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    var playIsFocused by remember { mutableStateOf(false) }
+    var playEverFocused by remember { mutableStateOf(false) }
+    var userHasNavigatedFromPlay by remember { mutableStateOf(false) }
+
+    // Simulated focus thief — mimics a lazy-list section doing LaunchedEffect(Unit) { requestFocus() }.
+    LaunchedEffect(thiefFocusRequester) {
+        repeat(8) { withFrameNanos { } }
+        runCatching { thiefFocusRequester.requestFocus() }
+    }
+
+    // Mirror of the MetaDetailsScreen guard loop.
+    LaunchedEffect(playEverFocused, userHasNavigatedFromPlay) {
+        if (!playEverFocused) return@LaunchedEffect
+        repeat(90) {
+            if (
+                !shouldReclaimPlayFocus(
+                    playEverFocused = playEverFocused,
+                    playIsFocused = playIsFocused,
+                    userHasNavigatedFromPlay = userHasNavigatedFromPlay,
+                    hasPendingRestoreTarget = false,
+                    isTrailerPlaying = false,
+                    isTrailerLoading = false
+                )
+            ) {
+                if (userHasNavigatedFromPlay) return@LaunchedEffect
+                kotlinx.coroutines.delay(16)
+                return@repeat
+            }
+            runCatching { playButtonFocusRequester.requestFocus() }
+            kotlinx.coroutines.delay(32)
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState
+    ) {
+        item {
+            HeroContentSection(
+                meta = heroTestMeta(title = "Late Thief", director = "Sam Raimi"),
+                nextEpisode = null,
+                nextToWatch = null,
+                onPlayClick = {},
+                isInLibrary = false,
+                onToggleLibrary = {},
+                onLibraryLongPress = {},
+                trailerAvailable = false,
+                playButtonFocusRequester = playButtonFocusRequester,
+                requestInitialFocus = true,
+                onHeroActionFocused = { action ->
+                    if (action != HeroAction.PLAY) {
+                        userHasNavigatedFromPlay = true
+                    }
+                },
+                onPlayFocusChanged = { focused ->
+                    playIsFocused = focused
+                    if (focused) playEverFocused = true
+                }
+            )
+        }
+
+        item {
+            Button(
+                onClick = {},
+                modifier = Modifier.focusRequester(thiefFocusRequester)
+            ) {
+                Text("Thief")
             }
         }
     }

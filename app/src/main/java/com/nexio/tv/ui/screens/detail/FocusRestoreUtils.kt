@@ -57,6 +57,41 @@ suspend fun FocusRequester.requestFocusAfterFrames(
     }
 }
 
+/**
+ * Keeps requesting focus every few frames until [isFocused] returns true or [maxAttempts] is exhausted.
+ * Hardens against post-composition focus thieves (lazy-list sections requesting focus after initial landing).
+ * The caller is expected to track focus state via onFocusChanged and expose it through [isFocused].
+ */
+suspend fun FocusRequester.requestFocusUntilFocused(
+    isFocused: () -> Boolean,
+    initialFrames: Int = 2,
+    framesBetweenAttempts: Int = 2,
+    maxAttempts: Int = 20,
+    reason: String = "unspecified"
+) {
+    detailFocusDebug(
+        "requestFocusUntilFocused start reason=$reason maxAttempts=$maxAttempts initialFrames=$initialFrames"
+    )
+    repeat(initialFrames.coerceAtLeast(0)) {
+        withFrameNanos { }
+    }
+    val attempts = maxAttempts.coerceAtLeast(1)
+    repeat(attempts) { attempt ->
+        if (isFocused()) {
+            detailFocusDebug("requestFocusUntilFocused landed reason=$reason attempt=${attempt + 1}")
+            return
+        }
+        detailFocusDebug("requestFocusUntilFocused attempt=${attempt + 1}/$attempts reason=$reason")
+        runCatching { requestFocus() }
+        repeat(framesBetweenAttempts.coerceAtLeast(1)) {
+            withFrameNanos { }
+        }
+    }
+    detailFocusDebug(
+        "requestFocusUntilFocused exhausted reason=$reason finalFocused=${isFocused()}"
+    )
+}
+
 internal suspend fun moveFocusToLazyItem(
     listState: LazyListState,
     targetItemIndex: Int,
