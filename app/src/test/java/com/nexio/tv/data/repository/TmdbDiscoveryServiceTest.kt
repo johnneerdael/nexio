@@ -94,6 +94,9 @@ class TmdbDiscoveryServiceTest {
 
         assertEquals(requestedCatalogs, client.requestedCatalogIds.toSet())
         assertEquals(requestedCatalogs, snapshot.rowsByCatalog.keys)
+        val stockRow = snapshot.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES)
+        assertTrue(stockRow.hasMore)
+        assertTrue(stockRow.supportsSkip)
     }
 
     @Test

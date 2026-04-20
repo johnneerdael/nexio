@@ -224,8 +224,8 @@ class TmdbDiscoveryService @Inject constructor(
             catalogName = title,
             type = contentType,
             items = items,
-            hasMore = false,
-            supportsSkip = false
+            hasMore = true,
+            supportsSkip = true
         )
     }
 
