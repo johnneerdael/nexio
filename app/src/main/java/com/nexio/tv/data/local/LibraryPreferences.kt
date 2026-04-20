@@ -21,14 +21,16 @@ private val Context.libraryPreferencesDataStore: DataStore<Preferences> by prefe
 )
 
 @Singleton
-class LibraryPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+class LibraryPreferences internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.libraryPreferencesDataStore)
+
     companion object {
         private const val TAG = "LibraryPrefs"
     }
 
-    private val dataStore = context.libraryPreferencesDataStore
     private fun store() = dataStore
 
     private val gson = Gson()
@@ -37,7 +39,7 @@ class LibraryPreferences @Inject constructor(
     val libraryItems: Flow<List<SavedLibraryItem>> = dataStore.data.map { preferences ->
         val raw = preferences[libraryItemsKey] ?: emptySet()
         raw.mapNotNull { json ->
-            runCatching { gson.fromJson(json, SavedLibraryItem::class.java) }.getOrNull()
+            decodeSavedLibraryItem(json)
         }
     }
 
@@ -51,13 +53,16 @@ class LibraryPreferences @Inject constructor(
         store().edit { preferences ->
             val current = preferences[libraryItemsKey] ?: emptySet()
             val filtered = current.filterNot { json ->
-                runCatching {
-                    gson.fromJson(json, SavedLibraryItem::class.java)
-                }.getOrNull()?.let { saved ->
+                decodeSavedLibraryItem(json)?.let { saved ->
                     saved.id == item.id && saved.type.equals(item.type, ignoreCase = true)
                 } ?: false
             }
-            val itemWithTimestamp = if (item.addedAt == 0L) item.copy(addedAt = System.currentTimeMillis()) else item
+            val sanitizedItem = item.sanitizedOrNull() ?: return@edit
+            val itemWithTimestamp = if (sanitizedItem.addedAt == 0L) {
+                sanitizedItem.copy(addedAt = System.currentTimeMillis())
+            } else {
+                sanitizedItem
+            }
             preferences[libraryItemsKey] = filtered.toSet() + gson.toJson(itemWithTimestamp)
         }
     }
@@ -66,9 +71,7 @@ class LibraryPreferences @Inject constructor(
         store().edit { preferences ->
             val current = preferences[libraryItemsKey] ?: emptySet()
             val filtered = current.filterNot { json ->
-                runCatching {
-                    gson.fromJson(json, SavedLibraryItem::class.java)
-                }.getOrNull()?.let { saved ->
+                decodeSavedLibraryItem(json)?.let { saved ->
                     saved.id == itemId && saved.type.equals(itemType, ignoreCase = true)
                 } ?: false
             }
@@ -89,11 +92,32 @@ class LibraryPreferences @Inject constructor(
             }
             val dedupedRemote = linkedMapOf<Pair<String, String>, SavedLibraryItem>()
             remoteItems.forEach { item ->
-                dedupedRemote[item.id to item.type.lowercase()] = item
+                val sanitized = item.sanitizedOrNull() ?: return@forEach
+                dedupedRemote[sanitized.id to sanitized.type.lowercase()] = sanitized
             }
             preferences[libraryItemsKey] = dedupedRemote.values
                 .map { gson.toJson(it) }
                 .toSet()
         }
+    }
+
+    private fun decodeSavedLibraryItem(json: String): SavedLibraryItem? {
+        return runCatching { gson.fromJson(json, SavedLibraryItem::class.java) }
+            .getOrNull()
+            ?.sanitizedOrNull()
+    }
+
+    private fun SavedLibraryItem.sanitizedOrNull(): SavedLibraryItem? {
+        val cleanId = (id as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanType = (type as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val cleanName = (name as String?)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return copy(
+            id = cleanId,
+            type = cleanType,
+            name = cleanName,
+            posterShape = posterShape ?: com.nexio.tv.domain.model.PosterShape.POSTER,
+            genres = genres.orEmpty(),
+            addedAt = addedAt.coerceAtLeast(0L)
+        )
     }
 }

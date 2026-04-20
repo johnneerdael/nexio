@@ -5,12 +5,12 @@ data class SavedLibraryItem(
     val type: String,
     val name: String,
     val poster: String?,
-    val posterShape: PosterShape,
+    val posterShape: PosterShape? = PosterShape.POSTER,
     val background: String?,
     val description: String?,
     val releaseInfo: String?,
     val imdbRating: Float?,
-    val genres: List<String>,
+    val genres: List<String>? = emptyList(),
     val addonBaseUrl: String?,
     val addedAt: Long = 0L
 ) {
@@ -21,13 +21,13 @@ data class SavedLibraryItem(
             rawType = type,
             name = name,
             poster = poster,
-            posterShape = posterShape,
+            posterShape = posterShape ?: PosterShape.POSTER,
             background = background,
             logo = null,
             description = description,
             releaseInfo = releaseInfo,
             imdbRating = imdbRating,
-            genres = genres
+            genres = genres.orEmpty()
         )
     }
 }
