@@ -215,6 +215,58 @@ class FfmpegDolbyVisionProfileProbeTest {
         assertEquals("truehd", result.audioCodec)
     }
 
+    @Test
+    fun `metadata without dv profile falls back to legacy profile probe`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = object : NativeDolbyVisionProfileBackend {
+                override fun probe(url: String, requestHeadersBlob: String?): Int = 7
+
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    return """
+                        {
+                          "streams": [
+                            {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020"},
+                            {"codec_type":"audio","codec_name":"eac3"}
+                          ]
+                        }
+                    """.trimIndent()
+                }
+            }
+        )
+
+        val result = probe.probe(context, "https://example.com/dv-webdl.mkv", null, "dv-webdl.mkv")
+
+        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
+        assertEquals(7, result.profileNumber)
+        assertEquals("hevc", result.videoCodec)
+        assertEquals("eac3", result.audioCodec)
+    }
+
+    @Test
+    fun `metadata without dv profile remains not dolby vision when legacy probe finds no profile`() =
+        runBlocking {
+            val probe = FfmpegDolbyVisionProfileProbe(
+                backend = object : NativeDolbyVisionProfileBackend {
+                    override fun probe(url: String, requestHeadersBlob: String?): Int = -2
+
+                    override fun probeStreamMetadataJson(
+                        url: String,
+                        requestHeadersBlob: String?
+                    ): String? {
+                        return """{"streams":[{"codec_type":"video","codec_name":"h264"}]}"""
+                    }
+                }
+            )
+
+            val result = probe.probe(context, "https://example.com/sdr.mkv", null, "sdr.mkv")
+
+            assertEquals(DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION, result.status)
+            assertEquals(null, result.profileNumber)
+        }
+
     private fun fakeBackend(
         streamMetadataJson: String?
     ): NativeDolbyVisionProfileBackend {

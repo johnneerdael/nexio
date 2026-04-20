@@ -493,15 +493,42 @@ class FfmpegDolbyVisionProfileProbe(
             } else {
                 FfmpegStreamMetadataProbe.parse(backend.probeStreamMetadataJson(url, headerBlob))
             }
-            parseStreamMetadataProbeResult(
+            val parsedResult = parseStreamMetadataProbeResult(
                 metadata = metadata,
                 device = deviceSnapshot
-            ) ?: DolbyVisionProfileProbeResult.failed("ffprobe_probe_failed")
+            )
+            if ((parsedResult?.status == DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION ||
+                    parsedResult == null) &&
+                hasDolbyVisionProbeHint(filename = filename, url = url)
+            ) {
+                val legacyProfile = backend.probe(url, headerBlob)
+                if (legacyProfile >= 0) {
+                    return@runCatching DolbyVisionProfileProbeResult.detected(
+                        profileLabel = "dv_profile_$legacyProfile",
+                        profileNumber = legacyProfile,
+                        videoCodec = parsedResult?.videoCodec,
+                        audioCodec = parsedResult?.audioCodec,
+                        hdrType = parsedResult?.hdrType ?: "dolbyvision"
+                    )
+                }
+            }
+            parsedResult ?: DolbyVisionProfileProbeResult.failed("ffprobe_probe_failed")
         }.getOrElse { error ->
             Log.w(DV_AUTOPLAY_TAG, "FFmpeg Dolby Vision probe failed: ${error.message}")
             DolbyVisionProfileProbeResult.failed(error.message)
         }
     }
+}
+
+private fun hasDolbyVisionProbeHint(filename: String?, url: String?): Boolean {
+    val haystack = listOfNotNull(filename, url)
+        .joinToString(" ")
+        .lowercase(Locale.US)
+    val dvToken = Regex("""(^|[\s._\-\[\]()])dv($|[\s._\-\[\]()])""")
+    return dvToken.containsMatchIn(haystack) ||
+        haystack.contains("dovi") ||
+        haystack.contains("dolby.vision") ||
+        haystack.contains("dolby vision")
 }
 
 private object DefaultNativeDolbyVisionProfileBackend : NativeDolbyVisionProfileBackend {
