@@ -2,7 +2,6 @@ package com.nexio.tv.core.stream
 
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
-import java.net.URI
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -63,9 +62,8 @@ object AioStrictStreamParser {
             ?.takeUnless { AioParserSupport.shouldDropNearEqualFolderSize(sizeBytes, it) }
         val durationMs = AioParserSupport.parseDuration(description)
         val bitrate = parseBitrate(description)
-        val directDownloadServiceId = deriveDirectDownloadServiceId(stream)
-        val serviceId = deriveServiceId(stream, description, filename, directDownloadServiceId)
-        val cached = deriveCached(name, description, serviceId, isDirectDebridDownload = directDownloadServiceId != null)
+        val serviceId = deriveServiceId(stream, description, filename)
+        val cached = deriveCached(name, description, serviceId)
         val transportKind = deriveTransportKind(stream, serviceId, cached)
         val age = ageRegex.find(description)?.groupValues?.getOrNull(1)
         val ageHours = age?.let(AioParserSupport::parseAgeHours)
@@ -195,14 +193,8 @@ object AioStrictStreamParser {
         return listOfNotNull(base, resolution).joinToString(" ").trim().takeIf { it.isNotBlank() }
     }
 
-    private fun deriveServiceId(
-        stream: Stream,
-        description: String,
-        filename: String?,
-        directDownloadServiceId: String?
-    ): String? {
+    private fun deriveServiceId(stream: Stream, description: String, filename: String?): String? {
         stream.wrappedProviderId?.takeIf { it.isNotBlank() }?.let { return it }
-        directDownloadServiceId?.let { return it }
 
         val descriptionSignals = description.lines()
             .map { it.trim() }
@@ -223,20 +215,6 @@ object AioStrictStreamParser {
         return servicePatterns.entries.firstOrNull { (_, aliases) ->
             aliases.any { alias -> aliasRegex(alias).containsMatchIn(lowered) }
         }?.key
-    }
-
-    private fun deriveDirectDownloadServiceId(stream: Stream): String? {
-        val host = runCatching {
-            URI(stream.getStreamUrl().orEmpty()).host
-        }.getOrNull()
-            ?.trim()
-            ?.lowercase(Locale.US)
-            ?: return null
-
-        return when {
-            host == "download.real-debrid.com" || host.endsWith(".download.real-debrid.com") -> "RD"
-            else -> null
-        }
     }
 
     private fun deriveMessage(stream: Stream, description: String): String? {
@@ -322,15 +300,9 @@ object AioStrictStreamParser {
         return parsedFile.copy(resolution = "${closest}p")
     }
 
-    private fun deriveCached(
-        name: String,
-        description: String,
-        serviceId: String?,
-        isDirectDebridDownload: Boolean
-    ): Boolean? {
+    private fun deriveCached(name: String, description: String, serviceId: String?): Boolean? {
         val lowered = listOf(name, description).joinToString(" ").lowercase(Locale.US)
         return when {
-            isDirectDebridDownload -> true
             uncachedSymbols.any { lowered.contains(it.lowercase(Locale.US)) } -> false
             cachedSymbols.any { lowered.contains(it.lowercase(Locale.US)) } -> true
             cachedDebridPlusMarkerRegex.containsMatchIn(lowered) -> true
