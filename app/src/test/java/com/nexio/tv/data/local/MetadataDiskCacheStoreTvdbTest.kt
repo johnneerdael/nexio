@@ -8,6 +8,7 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -245,6 +246,40 @@ class MetadataDiskCacheStoreTvdbTest {
         )
 
         assertNull(enrichment?.rating)
+    }
+
+    @Test
+    fun `read TVDB enrichment tolerates missing rating source`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "tvdb::121361::series_extended::en-US::native",
+            """
+            {
+              "value": {
+                "seriesTvdbId": 121361,
+                "localizedTitle": "Game of Thrones",
+                "rating": null,
+                "genres": [],
+                "airsDays": {},
+                "remoteIds": {},
+                "aliases": [],
+                "contentRatings": [],
+                "castMembers": [],
+                "productionCompanies": [],
+                "networks": []
+              },
+              "tvdbSchemaVersion": 2,
+              "languageEpoch": 0,
+              "updatedAtMs": ${System.currentTimeMillis()}
+            }
+            """.trimIndent()
+        ).commit()
+
+        val enrichment = store.readTvdbEnrichment(121361, "series_extended", "en-US", "native")
+
+        enrichment.hashCode()
+        assertEquals(TitleRatingSource.IMDB, enrichment?.ratingSource)
     }
 
     @Test

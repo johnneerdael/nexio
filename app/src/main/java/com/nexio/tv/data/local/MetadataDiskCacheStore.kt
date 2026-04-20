@@ -681,6 +681,7 @@ class MetadataDiskCacheStore @Inject constructor(
         val value = root.get("value") ?: return null
         val parsed = runCatching { gson.fromJson(value, Meta::class.java) }.getOrNull() ?: return null
         val valueObj = runCatching { value.asJsonObject }.getOrNull() ?: return parsed.copy(castMembers = emptyList())
+            .sanitizedForCache()
         val castMembersFromJson = readCastMembers(valueObj, "castMembers")
         val castFromJson = readStringList(valueObj, "cast")
         val safeCastMembers = when {
@@ -688,14 +689,14 @@ class MetadataDiskCacheStore @Inject constructor(
             castFromJson.isNotEmpty() -> castFromJson.map { MetaCastMember(name = it) }
             else -> emptyList()
         }
-        return parsed.copy(castMembers = safeCastMembers)
+        return parsed.copy(castMembers = safeCastMembers).sanitizedForCache()
     }
 
     private fun decodeTmdbEnrichmentSafely(root: JsonObject): TmdbEnrichment? {
         val value = root.get("value") ?: return null
         val parsed = runCatching { gson.fromJson(value, TmdbEnrichment::class.java) }.getOrNull() ?: return null
         val valueObj = value.asJsonObject
-        return mergeTmdbEnrichmentCollections(parsed, valueObj)
+        return mergeTmdbEnrichmentCollections(parsed, valueObj).sanitizedForCache()
     }
 
     private fun decodeTmdbVideosSafely(root: JsonObject): List<TmdbVideoResult>? {
@@ -712,13 +713,13 @@ class MetadataDiskCacheStore @Inject constructor(
             castMembers = emptyList(),
             productionCompanies = emptyList(),
             networks = emptyList()
-        )
+        ).sanitizedForCache()
         return parsed.copy(
             rating = null,
             castMembers = readCastMembersFromJson(valueObj, "castMembers"),
             productionCompanies = readCompaniesFromJson(valueObj, "productionCompanies"),
             networks = readCompaniesFromJson(valueObj, "networks")
-        )
+        ).sanitizedForCache()
     }
 
     private fun decodeTvdbSeasonEpisodesSafely(root: JsonObject): List<TvEpisodeMetadata>? {
@@ -824,7 +825,7 @@ internal fun mergeTmdbEnrichmentCollections(
         castMembers = safeCastMembers,
         productionCompanies = safeProductionCompanies,
         networks = safeNetworks
-    )
+    ).sanitizedForCache()
 }
 
 private fun readCastMembersFromJson(obj: JsonObject, key: String): List<MetaCastMember> {
