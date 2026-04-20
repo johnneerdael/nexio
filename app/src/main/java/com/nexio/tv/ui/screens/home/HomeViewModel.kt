@@ -42,6 +42,7 @@ import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -96,6 +97,7 @@ class HomeViewModel @Inject constructor(
     internal val simklDiscoveryService: SimklDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
+    internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
     internal val tvMetadataRouter: TvMetadataRouter,

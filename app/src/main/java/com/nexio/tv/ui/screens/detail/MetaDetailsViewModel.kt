@@ -33,6 +33,7 @@ import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.AirDateGate
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.domain.model.ContentType
@@ -179,6 +180,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tvMetadataRouter: TvMetadataRouter = missingTvMetadataRouterForManualConstruction(),
     private val profileBoundary: ProfileBoundary,
     private val mdbListRepository: MDBListRepository,
+    private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
@@ -1534,6 +1536,12 @@ class MetaDetailsViewModel @Inject constructor(
                 isTvContent = isTvContent
             )
         }
+
+        updated = titleRatingOverrideRepository.enrichMeta(
+            meta = updated,
+            fallbackItemId = itemId,
+            fallbackItemType = itemType
+        )
 
         if (tmdbEnrichment?.collectionId != null) {
             loadCollectionAsync(tmdbEnrichment.collectionId, tmdbEnrichment.collectionName, settings)

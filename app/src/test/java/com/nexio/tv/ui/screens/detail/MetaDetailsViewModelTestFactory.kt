@@ -79,6 +79,8 @@ fun buildMetaDetailsViewModel(
     every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
 
     val context = mockk<Context>(relaxed = true)
+    val titleRatingOverrideRepository = mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>()
+    coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
 
     return MetaDetailsViewModel(
         context = context,
@@ -93,6 +95,7 @@ fun buildMetaDetailsViewModel(
         tvMetadataRouter = tvMetadataRouter,
         profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),
+        titleRatingOverrideRepository = titleRatingOverrideRepository,
         episodeRatingsSelectionRepository = mockk(relaxed = true),
         libraryRepository = libraryRepository,
         watchProgressRepository = watchProgressRepository,

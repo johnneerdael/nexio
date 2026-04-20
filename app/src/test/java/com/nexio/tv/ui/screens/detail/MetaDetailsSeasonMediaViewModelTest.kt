@@ -1052,9 +1052,11 @@ class MetaDetailsSeasonMediaViewModelTest {
         val context = mockk<Context>(relaxed = true)
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
+        val titleRatingOverrideRepository = mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>()
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { addonRepository.getInstalledAddons() } returns flowOf(installedAddons)
         every { profileBoundary.currentLanguageTag() } returns "en"
+        coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
 
         return MetaDetailsViewModel(
             context = context,
@@ -1069,6 +1071,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             tvMetadataRouter = tvMetadataRouter,
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
             watchProgressRepository = effectiveWatchProgressRepository,

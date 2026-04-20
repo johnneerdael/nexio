@@ -17,7 +17,7 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -66,7 +66,7 @@ internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPr
 class HomeCatalogRefreshCoordinator @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val metaRepository: MetaRepository,
-    private val mdbListRepository: MDBListRepository,
+    private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
@@ -157,7 +157,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     externalMeta = externalMeta
                 )
                 val localized = overlayProviderLocalizedMetadata(merged, onLog)
-                val enriched = mdbListRepository.enrichPreview(localized)
+                val enriched = titleRatingOverrideRepository.enrichPreview(localized)
                 posterRatingsUrlResolver.apply(enriched, activePosterProvider)
             }
             row.copy(items = hydratedItems)
@@ -289,7 +289,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 externalMeta = externalMeta
                             )
                             val localized = overlayProviderLocalizedMetadata(merged, onLog)
-                            val enriched = mdbListRepository.enrichPreview(localized)
+                            val enriched = titleRatingOverrideRepository.enrichPreview(localized)
                             posterRatingsUrlResolver.apply(enriched, activePosterProvider)
                         }
                         val refreshedHydrated = refreshed.copy(items = hydratedItems)

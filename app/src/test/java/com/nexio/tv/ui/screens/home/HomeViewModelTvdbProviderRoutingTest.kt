@@ -39,10 +39,12 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
+        val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
         every { viewModel.tvMetadataRouter } returns tvMetadataRouter
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.profileBoundary } returns profileBoundary
+        every { viewModel.titleRatingOverrideRepository } returns titleRatingOverrideRepository
         every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
@@ -277,5 +279,11 @@ class HomeViewModelTvdbProviderRoutingTest {
                 lastWatched = 42L
             )
         )
+    }
+
+    private fun passthroughTitleRatingOverrideRepository(): com.nexio.tv.data.repository.TitleRatingOverrideRepository {
+        return mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>().also { repository ->
+            coEvery { repository.enrichPreview(any()) } answers { firstArg() }
+        }
     }
 }
