@@ -9,7 +9,10 @@ import com.nexio.tv.domain.model.ContentType
 
 data class TmdbDiscoverySnapshot(
     val rowsByCatalog: Map<String, CatalogRow> = emptyMap(),
-    val updatedAtMs: Long = 0L
+    val updatedAtMs: Long = 0L,
+    val includeAdult: Boolean? = null,
+    val hideUnreleasedDigital: Boolean? = null,
+    val catalogIdsWithCurrentPreferences: Set<String> = emptySet()
 )
 
 fun tmdbCatalogTitle(catalogId: String): String? {

@@ -90,8 +90,8 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             items = listOf(meta("tmdb:1", "Movie"))
         )
         val tmdbPrefs = TmdbCatalogPreferences(
-            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
-            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
         )
         val fixture = fixture(
             tmdbSnapshot = TmdbDiscoverySnapshot(
@@ -106,7 +106,50 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         assertEquals("https://api.themoviedb.org/3", row?.addonBaseUrl)
         assertEquals("TMDB", row?.option?.sourceLabel)
         coVerify(exactly = 1) {
-            fixture.tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false)
+            fixture.tmdbDiscoveryService.refreshCatalogs(
+                tmdbPrefs,
+                force = false,
+                catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+            )
+        }
+    }
+
+    @Test
+    fun `resolving selected TMDB rows refreshes only selected TMDB catalog ids`() = runTest {
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(
+                TmdbCatalogIds.TRENDING_MOVIES,
+                TmdbCatalogIds.POPULAR_MOVIES,
+                TmdbCatalogIds.LATEST_RELEASES_MOVIES
+            ),
+            catalogOrder = listOf(
+                TmdbCatalogIds.TRENDING_MOVIES,
+                TmdbCatalogIds.POPULAR_MOVIES,
+                TmdbCatalogIds.LATEST_RELEASES_MOVIES
+            )
+        )
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(
+                rowsByCatalog = mapOf(
+                    TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                        catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                        items = listOf(meta("tmdb:1", "Movie"))
+                    )
+                )
+            ),
+            tmdbPrefs = tmdbPrefs
+        )
+
+        fixture.service.resolveSelectedRows(
+            listOf("tmdb_movie_${TmdbCatalogIds.TRENDING_MOVIES}")
+        )
+
+        coVerify(exactly = 1) {
+            fixture.tmdbDiscoveryService.refreshCatalogs(
+                tmdbPrefs,
+                force = false,
+                catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+            )
         }
     }
 
@@ -173,6 +216,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         }
         val tmdbDiscoveryService = mockk<TmdbDiscoveryService>(relaxed = true) {
             every { observeSnapshot() } returns flowOf(tmdbSnapshot)
+            coEvery { refreshCatalogs(tmdbPrefs, force = false, catalogIds = any()) } returns tmdbSnapshot
             coEvery { refreshCatalogs(tmdbPrefs, force = false) } returns tmdbSnapshot
         }
         val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true) {

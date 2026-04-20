@@ -147,6 +147,36 @@ class TmdbDiscoveryServiceTest {
         assertEquals(setOf(TmdbCatalogIds.TRENDING_MOVIES), refreshed.rowsByCatalog.keys)
     }
 
+    @Test
+    fun `subset catalog refresh fetches only selected enabled ids and preserves unrelated rows`() = runTest {
+        val client = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending")),
+                TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 2, title = "Popular"))
+            )
+        )
+        val service = client.createService()
+        val preferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        val initial = service.refreshCatalogs(preferences, force = true)
+        client.requestedCatalogIds.clear()
+
+        val refreshed = service.refreshCatalogs(
+            preferences = preferences,
+            force = false,
+            catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), client.requestedCatalogIds)
+        assertEquals(initial.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES), refreshed.rowsByCatalog[TmdbCatalogIds.POPULAR_MOVIES])
+        assertEquals(
+            setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            refreshed.rowsByCatalog.keys
+        )
+    }
+
     private class FakeTmdbDiscoveryClient(
         private val credential: MetadataProviderCredential = MetadataProviderCredential(
             "key",

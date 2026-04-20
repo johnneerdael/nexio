@@ -3,6 +3,8 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogIds
+import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
@@ -11,6 +13,7 @@ import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktPopularListOption
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -896,6 +899,73 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `tmdb refresh treats populated rows without preference provenance as stale`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = false
+        )
+        val snapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = listOf(samplePreview("tmdb:1", ContentType.MOVIE, "Trending Movie"))
+                )
+            ),
+            updatedAtMs = 123L
+        )
+
+        assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
+    }
+
+    @Test
+    fun `tmdb refresh invalidates populated rows when adult preference changes`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = true,
+            hideUnreleasedDigital = false
+        )
+        val snapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = listOf(samplePreview("tmdb:1", ContentType.MOVIE, "Trending Movie"))
+                )
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = false
+        )
+
+        assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
+    }
+
+    @Test
+    fun `tmdb refresh invalidates populated rows when digital release preference changes`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.LATEST_RELEASES_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.LATEST_RELEASES_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val snapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.LATEST_RELEASES_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.LATEST_RELEASES_MOVIES,
+                    items = listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Latest Movie"))
+                )
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = false
+        )
+
+        assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
+    }
+
+    @Test
     fun `serialized trakt refresh skips service when only up next is enabled`() {
         val prefs = TraktCatalogPreferences(
             enabledCatalogs = setOf(TraktCatalogIds.UP_NEXT),
@@ -949,6 +1019,23 @@ class HomeCatalogStartupReadinessTest {
             releaseInfo = null,
             imdbRating = null,
             genres = emptyList()
+        )
+    }
+
+    private fun tmdbRow(
+        catalogId: String,
+        items: List<MetaPreview>
+    ): CatalogRow {
+        return CatalogRow(
+            addonId = "tmdb",
+            addonName = "TMDB",
+            addonBaseUrl = "https://api.themoviedb.org/3",
+            catalogId = catalogId,
+            catalogName = "TMDB $catalogId",
+            type = ContentType.MOVIE,
+            items = items,
+            hasMore = false,
+            supportsSkip = false
         )
     }
 
