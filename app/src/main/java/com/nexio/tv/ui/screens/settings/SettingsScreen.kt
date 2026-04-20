@@ -87,7 +87,6 @@ private enum class IntegrationSettingsSection {
     Tmdb,
     Tvdb,
     Omdb,
-    Imdb,
     MdbList,
     AnimeSkip,
     SubtitleTranslation,
@@ -224,7 +223,6 @@ fun SettingsScreen(
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationTvdbFocusRequester = remember { FocusRequester() }
     val integrationOmdbFocusRequester = remember { FocusRequester() }
-    val integrationImdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
@@ -419,7 +417,6 @@ fun SettingsScreen(
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             tvdbFocusRequester = integrationTvdbFocusRequester,
                             omdbFocusRequester = integrationOmdbFocusRequester,
-                            imdbFocusRequester = integrationImdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
@@ -652,7 +649,6 @@ private fun IntegrationSettingsContent(
     tmdbFocusRequester: FocusRequester,
     tvdbFocusRequester: FocusRequester,
     omdbFocusRequester: FocusRequester,
-    imdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     subtitleTranslationFocusRequester: FocusRequester,
@@ -668,7 +664,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Debrid, IntegrationSettingsSection.TheIntroDb,
             IntegrationSettingsSection.Tmdb, IntegrationSettingsSection.Tvdb,
             IntegrationSettingsSection.Omdb,
-            IntegrationSettingsSection.Imdb, IntegrationSettingsSection.MdbList,
+            IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
             IntegrationSettingsSection.PosterRatings
         )
@@ -693,7 +689,6 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.Tvdb -> tvdbFocusRequester
             IntegrationSettingsSection.Omdb -> omdbFocusRequester
-            IntegrationSettingsSection.Imdb -> imdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
@@ -782,13 +777,6 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.Omdb) }
                                 )
                             }
-                            item(key = "integration_hub_imdb") {
-                                SettingsActionRow(
-                                    title = "IMDb Ratings API",
-                                    subtitle = stringResource(R.string.settings_imdb_subtitle),
-                                    onClick = { onSelectSection(IntegrationSettingsSection.Imdb) }
-                                )
-                            }
                             item(key = "integration_hub_mdblist") {
                                 SettingsActionRow(
                                     title = "MDBList",
@@ -875,12 +863,6 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Omdb -> {
             OmdbSettingsContent(
                 initialFocusRequester = omdbFocusRequester
-            )
-        }
-
-        IntegrationSettingsSection.Imdb -> {
-            ImdbSettingsContent(
-                initialFocusRequester = imdbFocusRequester
             )
         }
 

@@ -1,8 +1,8 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.ui.screens.detail.EpisodeRating
@@ -10,16 +10,18 @@ import com.nexio.tv.ui.screens.detail.EpisodeRatingSource
 import com.nexio.tv.ui.screens.detail.resolveEpisodeRatings
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
 
 @Singleton
 class EpisodeRatingsSelectionRepository @Inject constructor(
-    private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val customImdbEpisodeRatingsRepository: CustomImdbEpisodeRatingsRepository,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val omdbEpisodeRatingsRepository: OmdbEpisodeRatingsRepository
 ) {
+    internal var customImdbActiveProvider: () -> Boolean = {
+        BuildConfig.IMDB_API_URL.isNotBlank() && BuildConfig.IMDB_API_KEY.isNotBlank()
+    }
+
     suspend fun getEpisodeRatings(
         meta: Meta,
         fallbackItemId: String,
@@ -28,8 +30,7 @@ class EpisodeRatingsSelectionRepository @Inject constructor(
     ): Map<Pair<Int, Int>, EpisodeRating> {
         if (episodesBySeason.isEmpty()) return emptyMap()
 
-        val imdbSettings = imdbSettingsDataStore.settings.first()
-        if (imdbSettings.isActive) {
+        if (customImdbActiveProvider()) {
             return customImdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
                 meta = meta,
                 fallbackItemId = fallbackItemId,

@@ -100,7 +100,6 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 | `DebugSettingsDataStore` | `global-device` | `device` | `local-only` | none | Debug flags are device/operator state unless promoted into profile settings later. |
 | `EasyDebridSettingsDataStore` | `account-remote` | `account` | `remote-synced` | `account_settings_public.integrations.debrid.easyDebrid`, `account_secrets` | Provider credential/config is account-owned. |
 | `HomeCatalogSnapshotStore` | `profile-derived-cache` | `profile` | `derived-cache` | none | Home rows derive from profile catalog visibility/order. |
-| `ImdbSettingsDataStore` | `account-remote` | `account` | `remote-synced` | `account_settings_public.integrations.imdb`, `account_secrets` | Provider credential/config is account-owned. |
 | `LayoutPreferenceDataStore` | `profile-remote` | `profile` | `remote-synced` | `account_settings_public` for profile 1; `profile_settings.layout_settings` for profiles 2-4 | User-facing layout/catalog UX settings. |
 | `LibraryPreferences` | `profile-local` | `profile` | `local-only` | none | Library display/state preference must not bleed across profiles. |
 | `MDBListDiscoverySnapshotStore` | `profile-derived-cache` | `profile` | `derived-cache` | none | Discovery list cache depends on account availability and profile visibility. |

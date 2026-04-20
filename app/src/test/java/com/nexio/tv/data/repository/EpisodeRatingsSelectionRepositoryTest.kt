@@ -3,9 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
@@ -15,9 +13,7 @@ import com.nexio.tv.ui.screens.detail.EpisodeRating
 import com.nexio.tv.ui.screens.detail.EpisodeRatingSource
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -26,25 +22,20 @@ class EpisodeRatingsSelectionRepositoryTest {
 
     @Test
     fun `active custom imdb returns only imdb ratings and skips fallback providers`() = runTest {
-        val settingsStore = mockk<ImdbSettingsDataStore>()
         val customRepository = mockk<CustomImdbEpisodeRatingsRepository>()
         val tmdbService = mockk<TmdbService>()
         val tmdbMetadataService = mockk<TmdbMetadataService>()
         val omdbRepository = mockk<OmdbEpisodeRatingsRepository>()
-        every { settingsStore.settings } returns flowOf(
-            ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com", apiKey = "secret-key")
-        )
         coEvery {
             customRepository.getEpisodeRatingsForMeta(any(), any(), any(), any())
         } returns mapOf((1 to 1) to 8.4)
 
         val repository = EpisodeRatingsSelectionRepository(
-            imdbSettingsDataStore = settingsStore,
             customImdbEpisodeRatingsRepository = customRepository,
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
             omdbEpisodeRatingsRepository = omdbRepository
-        )
+        ).also { it.customImdbActiveProvider = { true } }
 
         val result = repository.getEpisodeRatings(
             meta = stubMeta("tt27444205"),
@@ -64,23 +55,18 @@ class EpisodeRatingsSelectionRepositoryTest {
 
     @Test
     fun `active custom imdb does not backfill from tmdb or omdb when custom result is empty`() = runTest {
-        val settingsStore = mockk<ImdbSettingsDataStore>()
         val customRepository = mockk<CustomImdbEpisodeRatingsRepository>()
         val tmdbService = mockk<TmdbService>()
         val tmdbMetadataService = mockk<TmdbMetadataService>()
         val omdbRepository = mockk<OmdbEpisodeRatingsRepository>()
-        every { settingsStore.settings } returns flowOf(
-            ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com", apiKey = "secret-key")
-        )
         coEvery { customRepository.getEpisodeRatingsForMeta(any(), any(), any(), any()) } returns emptyMap()
 
         val repository = EpisodeRatingsSelectionRepository(
-            imdbSettingsDataStore = settingsStore,
             customImdbEpisodeRatingsRepository = customRepository,
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
             omdbEpisodeRatingsRepository = omdbRepository
-        )
+        ).also { it.customImdbActiveProvider = { true } }
 
         val result = repository.getEpisodeRatings(
             meta = stubMeta("tmdb:100"),
@@ -97,12 +83,10 @@ class EpisodeRatingsSelectionRepositoryTest {
 
     @Test
     fun `inactive custom imdb preserves existing tmdb and omdb merge semantics`() = runTest {
-        val settingsStore = mockk<ImdbSettingsDataStore>()
         val customRepository = mockk<CustomImdbEpisodeRatingsRepository>()
         val tmdbService = mockk<TmdbService>()
         val tmdbMetadataService = mockk<TmdbMetadataService>()
         val omdbRepository = mockk<OmdbEpisodeRatingsRepository>()
-        every { settingsStore.settings } returns flowOf(ImdbSettings())
         coEvery { tmdbService.ensureTmdbId("tt27444205", "series") } returns "100"
         coEvery { tmdbMetadataService.fetchEpisodeEnrichment("100", listOf(1)) } returns mapOf(
             (1 to 1) to stubEpisodeEnrichment(7.2),
@@ -116,12 +100,11 @@ class EpisodeRatingsSelectionRepositoryTest {
         )
 
         val repository = EpisodeRatingsSelectionRepository(
-            imdbSettingsDataStore = settingsStore,
             customImdbEpisodeRatingsRepository = customRepository,
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
             omdbEpisodeRatingsRepository = omdbRepository
-        )
+        ).also { it.customImdbActiveProvider = { false } }
 
         val result = repository.getEpisodeRatings(
             meta = stubMeta("tt27444205"),

@@ -10,7 +10,6 @@ import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.KitsuAuthDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -124,8 +123,6 @@ private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
 private const val OMDB_SECRET_TYPE = "omdb_api_key"
 private const val OMDB_SECRET_REF = "integration:omdb"
-private const val IMDB_SECRET_TYPE = "imdb_api_key"
-private const val IMDB_SECRET_REF = "integration:imdb"
 private const val TRANSLATION_SECRET_TYPE = "translation_api_key"
 private const val TRANSLATION_SECRET_REF = "integration:subtitle-translation"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
@@ -184,7 +181,6 @@ class AccountSettingsSyncService @Inject constructor(
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
-    private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val premiumizeService: PremiumizeService,
@@ -278,7 +274,6 @@ class AccountSettingsSyncService @Inject constructor(
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
                 subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.drop(1).map { Unit },
-                imdbSettings = imdbSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeAccountState = premiumizeService.observeAccountState().drop(1).map { Unit },
@@ -413,7 +408,6 @@ class AccountSettingsSyncService @Inject constructor(
             syncTvdbCredentialSecretToRemote()
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(
                 TRANSLATION_SECRET_TYPE,
                 TRANSLATION_SECRET_REF,
@@ -574,7 +568,6 @@ class AccountSettingsSyncService @Inject constructor(
                 omdb = OmdbSyncSettings(
                     enabled = omdbSettingsDataStore.settings.first().enabled
                 ),
-                imdb = buildImdbSyncSettings(imdbSettingsDataStore),
                 theIntroDb = TheIntroDbSyncSettings(
                     enabled = theIntroDb.enabled,
                     showIntroButton = theIntroDb.showIntroButton,
@@ -757,7 +750,6 @@ class AccountSettingsSyncService @Inject constructor(
         // Moved to v8 per-profile blob sync: Trakt catalog preferences
         // Moved to v8 per-profile blob sync: Simkl catalog preferences
         // Moved to v8 per-profile blob sync: player tracking provider and formatter settings
-        applyImdbSyncSettings(settings.integrations.imdb, imdbSettingsDataStore)
     }
 
     private suspend fun applyRemoteSettings(settings: AccountSettingsPayload) {
@@ -1185,7 +1177,6 @@ class AccountSettingsSyncService @Inject constructor(
         }
         resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)?.let { mdbListSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
-        resolveApiKeySecretOrNull(IMDB_SECRET_TYPE, IMDB_SECRET_REF)?.let { imdbSettingsDataStore.setApiKey(it) }
         val genericTranslationKey = resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
         val allowLegacyFallback = settings.integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
         val legacyGeminiKey = if (genericTranslationKey != null && genericTranslationKey.isBlank() && allowLegacyFallback) {
@@ -1490,6 +1481,25 @@ class AccountSettingsSyncService @Inject constructor(
 
     private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {
         return runCatching {
+            if (addon.transportSchemaVersion == 2 && !addon.transportSecretRef.isNullOrBlank()) {
+                val transportPayload = withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_resolve_account_secret",
+                        buildJsonObject {
+                            put("p_secret_type", "addon_credential")
+                            put("p_secret_ref", addon.transportSecretRef)
+                            put("p_source", "app")
+                        }
+                    ).decodeAs<AccountAddonSecretPayload>()
+                }
+                return@runCatching buildResolvedAddonUrl(
+                    baseUrl = addon.transportBaseUrl ?: addon.url,
+                    manifestUrl = null,
+                    publicQueryParams = emptyMap(),
+                    secretPayload = transportPayload
+                ).let(::normalizeAddonInstallUrl)
+            }
+
             val secretPayload = addon.secretRef
                 ?.takeIf { it.isNotBlank() }
                 ?.let { secretRef ->

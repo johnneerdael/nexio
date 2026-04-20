@@ -1,6 +1,7 @@
 package com.nexio.tv.data.remote
 
 import android.util.Log
+import com.nexio.tv.BuildConfig
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -38,36 +39,32 @@ private fun buildCustomImdbUrl(baseUrl: String, pathAfterVersion: String): Strin
 interface CustomImdbClient {
     suspend fun validate(baseUrl: String, apiKey: String): Boolean
 
-    suspend fun fetchEpisodeRatings(
-        baseUrl: String,
-        apiKey: String,
-        tconst: String
-    ): Map<Pair<Int, Int>, Double>
+    suspend fun fetchEpisodeRatings(tconst: String): Map<Pair<Int, Int>, Double>
 
-    suspend fun fetchTitleRatings(
-        baseUrl: String,
-        apiKey: String,
-        identifiers: List<String>
-    ): Map<String, Double>
+    suspend fun fetchTitleRatings(identifiers: List<String>): Map<String, Double>
 }
 
 @Singleton
 class OkHttpCustomImdbClient @Inject constructor(
     private val okHttpClient: OkHttpClient,
-    private val moshi: Moshi
+    moshi: Moshi
 ) : CustomImdbClient {
     private val ratingWithEpisodesAdapter = moshi.adapter(RatingWithEpisodes::class.java)
     private val bulkRatingsRequestAdapter = moshi.adapter(BulkRatingsRequest::class.java)
     private val bulkRatingsResponseAdapter = moshi.adapter(BulkRatingsResponse::class.java)
     internal var delayMs: suspend (Long) -> Unit = { delay(it) }
 
+    internal var baseUrlProvider: () -> String = { BuildConfig.IMDB_API_URL }
+    internal var apiKeyProvider: () -> String = { BuildConfig.IMDB_API_KEY }
+
     override suspend fun validate(baseUrl: String, apiKey: String): Boolean {
         val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
-        if (normalizedBaseUrl.isBlank() || apiKey.isBlank()) return false
+        val trimmedApiKey = apiKey.trim()
+        if (normalizedBaseUrl.isBlank() || trimmedApiKey.isBlank()) return false
 
         val request = Request.Builder()
             .url(buildCustomImdbUrl(normalizedBaseUrl, "meta/stats"))
-            .header("X-API-Key", apiKey.trim())
+            .header("X-API-Key", trimmedApiKey)
             .get()
             .build()
 
@@ -85,23 +82,20 @@ class OkHttpCustomImdbClient @Inject constructor(
         }
     }
 
-    override suspend fun fetchEpisodeRatings(
-        baseUrl: String,
-        apiKey: String,
-        tconst: String
-    ): Map<Pair<Int, Int>, Double> {
-        val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
+    override suspend fun fetchEpisodeRatings(tconst: String): Map<Pair<Int, Int>, Double> {
+        val baseUrl = normalizeCustomImdbBaseUrl(baseUrlProvider())
+        val apiKey = apiKeyProvider().trim()
         val normalizedTconst = tconst.trim()
-        if (normalizedBaseUrl.isBlank() || apiKey.isBlank() || normalizedTconst.isBlank()) return emptyMap()
+        if (baseUrl.isBlank() || apiKey.isBlank() || normalizedTconst.isBlank()) return emptyMap()
 
-        val endpoint = buildCustomImdbUrl(normalizedBaseUrl, "ratings/$normalizedTconst")
+        val endpoint = buildCustomImdbUrl(baseUrl, "ratings/$normalizedTconst")
             .toHttpUrl()
             .newBuilder()
             .addQueryParameter("episodes", "true")
             .build()
         val request = Request.Builder()
             .url(endpoint)
-            .header("X-API-Key", apiKey.trim())
+            .header("X-API-Key", apiKey)
             .get()
             .build()
 
@@ -128,24 +122,21 @@ class OkHttpCustomImdbClient @Inject constructor(
         }
     }
 
-    override suspend fun fetchTitleRatings(
-        baseUrl: String,
-        apiKey: String,
-        identifiers: List<String>
-    ): Map<String, Double> {
-        val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
+    override suspend fun fetchTitleRatings(identifiers: List<String>): Map<String, Double> {
+        val baseUrl = normalizeCustomImdbBaseUrl(baseUrlProvider())
+        val apiKey = apiKeyProvider().trim()
         val normalizedIdentifiers = identifiers
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
-        if (normalizedBaseUrl.isBlank() || apiKey.isBlank() || normalizedIdentifiers.isEmpty()) return emptyMap()
+        if (baseUrl.isBlank() || apiKey.isBlank() || normalizedIdentifiers.isEmpty()) return emptyMap()
 
         val body = bulkRatingsRequestAdapter
             .toJson(BulkRatingsRequest(normalizedIdentifiers))
             .toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
-            .url(buildCustomImdbUrl(normalizedBaseUrl, "ratings/bulk"))
-            .header("X-API-Key", apiKey.trim())
+            .url(buildCustomImdbUrl(baseUrl, "ratings/bulk"))
+            .header("X-API-Key", apiKey)
             .post(body)
             .build()
 

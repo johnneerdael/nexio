@@ -12,9 +12,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CustomImdbClientTest {
@@ -28,110 +26,66 @@ class CustomImdbClientTest {
     }
 
     @Test
-    fun `validate calls stats endpoint with normalized base url and api key header`() = runTest {
-        var capturedPath = ""
-        var capturedApiKey = ""
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                capturedPath = chain.request().url.encodedPath
-                capturedApiKey = chain.request().header("X-API-Key").orEmpty()
-                jsonResponse(chain, """{"status":"ok"}""")
-            },
-            moshi = Moshi.Builder().build()
-        )
-
-        val result = client.validate(
-            baseUrl = " https://ratings.example.com/custom/ ",
-            apiKey = "secret-key"
-        )
-
-        assertTrue(result)
-        assertEquals("/custom/v1/meta/stats", capturedPath)
-        assertEquals("secret-key", capturedApiKey)
-    }
-
-    @Test
-    fun `validate reuses version path when base url already ends in v1`() = runTest {
-        var capturedPath = ""
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                capturedPath = chain.request().url.encodedPath
-                jsonResponse(chain, """{"status":"ok"}""")
-            },
-            moshi = Moshi.Builder().build()
-        )
-
-        val result = client.validate(
-            baseUrl = "https://ratings.example.com/custom/v1/",
-            apiKey = "secret-key"
-        )
-
-        assertTrue(result)
-        assertEquals("/custom/v1/meta/stats", capturedPath)
-    }
-
-    @Test
     fun `fetchEpisodeRatings calls single title ratings endpoint with episodes query and maps wrapper payload`() = runTest {
         var capturedPath = ""
         var capturedEpisodesQuery: String? = null
         var capturedMethod = ""
         var capturedRequestBody: String? = null
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                capturedPath = chain.request().url.encodedPath
-                capturedEpisodesQuery = chain.request().url.queryParameter("episodes")
-                capturedMethod = chain.request().method
-                capturedRequestBody = chain.request().body?.readUtf8()
-                jsonResponse(
-                    chain,
-                    """
-                    {
-                      "requestTconst": "tt27444205",
-                      "rating": { "tconst": "tt27444205", "averageRating": 8.8, "numVotes": 1200 },
-                      "episodesParentTconst": "tt27444205",
-                      "episodes": [
-                        {
-                          "tconst": "tt1000001",
-                          "parentTconst": "tt27444205",
-                          "seasonNumber": 1,
-                          "episodeNumber": 1,
-                          "averageRating": 8.3,
-                          "numVotes": 200
-                        },
-                        {
-                          "tconst": "tt1000002",
-                          "parentTconst": "tt27444205",
-                          "seasonNumber": 1,
-                          "episodeNumber": 2,
-                          "averageRating": 0.0,
-                          "numVotes": 20
-                        },
-                        {
-                          "tconst": "tt1000003",
-                          "parentTconst": "tt27444205",
-                          "seasonNumber": 2,
-                          "episodeNumber": 1,
-                          "averageRating": 7.5,
-                          "numVotes": 180
-                        }
-                      ]
-                    }
-                    """.trimIndent()
-                )
-            },
-            moshi = Moshi.Builder().build()
-        )
-
-        val result = client.fetchEpisodeRatings(
+        var capturedApiKey = ""
+        val client = buildClient(
             baseUrl = "https://ratings.example.com/custom",
-            apiKey = "secret-key",
-            tconst = "tt27444205"
-        )
+            apiKey = "secret-key"
+        ) { chain ->
+            capturedPath = chain.request().url.encodedPath
+            capturedEpisodesQuery = chain.request().url.queryParameter("episodes")
+            capturedMethod = chain.request().method
+            capturedRequestBody = chain.request().body?.readUtf8()
+            capturedApiKey = chain.request().header("X-API-Key").orEmpty()
+            jsonResponse(
+                chain,
+                """
+                {
+                  "requestTconst": "tt27444205",
+                  "rating": { "tconst": "tt27444205", "averageRating": 8.8, "numVotes": 1200 },
+                  "episodesParentTconst": "tt27444205",
+                  "episodes": [
+                    {
+                      "tconst": "tt1000001",
+                      "parentTconst": "tt27444205",
+                      "seasonNumber": 1,
+                      "episodeNumber": 1,
+                      "averageRating": 8.3,
+                      "numVotes": 200
+                    },
+                    {
+                      "tconst": "tt1000002",
+                      "parentTconst": "tt27444205",
+                      "seasonNumber": 1,
+                      "episodeNumber": 2,
+                      "averageRating": 0.0,
+                      "numVotes": 20
+                    },
+                    {
+                      "tconst": "tt1000003",
+                      "parentTconst": "tt27444205",
+                      "seasonNumber": 2,
+                      "episodeNumber": 1,
+                      "averageRating": 7.5,
+                      "numVotes": 180
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        }
+
+        val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
         assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
         assertEquals("true", capturedEpisodesQuery)
         assertEquals("GET", capturedMethod)
         assertNull(capturedRequestBody)
+        assertEquals("secret-key", capturedApiKey)
         assertEquals(
             mapOf(
                 (1 to 1) to 8.3,
@@ -146,31 +100,29 @@ class CustomImdbClientTest {
         var capturedPath = ""
         var capturedMethod = ""
         var capturedRequestBody: String? = null
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                capturedPath = chain.request().url.encodedPath
-                capturedMethod = chain.request().method
-                capturedRequestBody = chain.request().body?.readUtf8()
-                jsonResponse(
-                    chain,
-                    """
-                    {
-                      "results": [
-                        { "tconst": "tt32459853", "averageRating": 7.8, "numVotes": 1500 },
-                        { "tconst": "tt0944947", "averageRating": 9.2, "numVotes": 2300000 },
-                        { "tconst": "tt0000000", "averageRating": 0.0, "numVotes": 1 }
-                      ],
-                      "missing": ["Hello, world!"]
-                    }
-                    """.trimIndent()
-                )
-            },
-            moshi = Moshi.Builder().build()
-        )
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com/custom",
+            apiKey = "secret-key"
+        ) { chain ->
+            capturedPath = chain.request().url.encodedPath
+            capturedMethod = chain.request().method
+            capturedRequestBody = chain.request().body?.readUtf8()
+            jsonResponse(
+                chain,
+                """
+                {
+                  "results": [
+                    { "tconst": "tt32459853", "averageRating": 7.8, "numVotes": 1500 },
+                    { "tconst": "tt0944947", "averageRating": 9.2, "numVotes": 2300000 },
+                    { "tconst": "tt0000000", "averageRating": 0.0, "numVotes": 1 }
+                  ],
+                  "missing": ["Hello, world!"]
+                }
+                """.trimIndent()
+            )
+        }
 
         val result = client.fetchTitleRatings(
-            baseUrl = "https://ratings.example.com/custom",
-            apiKey = "secret-key",
             identifiers = listOf("Hello, world!", "tt32459853", "tt0944947")
         )
 
@@ -192,10 +144,62 @@ class CustomImdbClientTest {
     @Test
     fun `fetchEpisodeRatings reuses version path when base url already ends in v1`() = runTest {
         var capturedPath = ""
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                capturedPath = chain.request().url.encodedPath
-                jsonResponse(
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com/custom/v1/",
+            apiKey = "secret-key"
+        ) { chain ->
+            capturedPath = chain.request().url.encodedPath
+            jsonResponse(
+                chain,
+                """
+                {
+                  "requestTconst": "tt27444205",
+                  "episodesParentTconst": "tt27444205",
+                  "episodes": [
+                    {
+                      "tconst": "tt1000001",
+                      "parentTconst": "tt27444205",
+                      "seasonNumber": 1,
+                      "episodeNumber": 1,
+                      "averageRating": 8.3,
+                      "numVotes": 200
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        }
+
+        val result = client.fetchEpisodeRatings(tconst = "tt27444205")
+
+        assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
+        assertEquals(mapOf((1 to 1) to 8.3), result)
+    }
+
+    @Test
+    fun `fetchEpisodeRatings retries once after rate limit and falls back to one second delay`() = runTest {
+        var attempts = 0
+        val delays = mutableListOf<Long>()
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key"
+        ) { chain ->
+            attempts += 1
+            when (attempts) {
+                1 -> jsonResponse(
+                    chain,
+                    """
+                    {
+                      "error": {
+                        "code": "rate_limited",
+                        "message": "rate limit exceeded"
+                      }
+                    }
+                    """.trimIndent(),
+                    code = 429
+                )
+
+                else -> jsonResponse(
                     chain,
                     """
                     {
@@ -214,116 +218,14 @@ class CustomImdbClientTest {
                     }
                     """.trimIndent()
                 )
-            },
-            moshi = Moshi.Builder().build()
-        )
-
-        val result = client.fetchEpisodeRatings(
-            baseUrl = "https://ratings.example.com/custom/v1/",
-            apiKey = "secret-key",
-            tconst = "tt27444205"
-        )
-
-        assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
-        assertEquals(mapOf((1 to 1) to 8.3), result)
-    }
-
-    @Test
-    fun `validate retries once after rate limit using retry after header`() = runTest {
-        var attempts = 0
-        val delays = mutableListOf<Long>()
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                attempts += 1
-                when (attempts) {
-                    1 -> jsonResponse(
-                        chain,
-                        """
-                        {
-                          "error": {
-                            "code": "rate_limited",
-                            "message": "rate limit exceeded"
-                          }
-                        }
-                        """.trimIndent(),
-                        code = 429,
-                        headers = mapOf("Retry-After" to "2")
-                    )
-
-                    else -> jsonResponse(chain, """{"status":"ok"}""")
-                }
-            },
-            moshi = Moshi.Builder().build()
-        ).also { imdbClient ->
+            }
+        }.also { imdbClient ->
             imdbClient.delayMs = { delayMillis ->
                 delays += delayMillis
             }
         }
 
-        val result = client.validate(
-            baseUrl = "https://ratings.example.com",
-            apiKey = "secret-key"
-        )
-
-        assertTrue(result)
-        assertEquals(2, attempts)
-        assertEquals(listOf(2_000L), delays)
-    }
-
-    @Test
-    fun `fetchEpisodeRatings retries once after rate limit and falls back to one second delay`() = runTest {
-        var attempts = 0
-        val delays = mutableListOf<Long>()
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { chain ->
-                attempts += 1
-                when (attempts) {
-                    1 -> jsonResponse(
-                        chain,
-                        """
-                        {
-                          "error": {
-                            "code": "rate_limited",
-                            "message": "rate limit exceeded"
-                          }
-                        }
-                        """.trimIndent(),
-                        code = 429
-                    )
-
-                    else -> jsonResponse(
-                        chain,
-                        """
-                        {
-                          "requestTconst": "tt27444205",
-                          "episodesParentTconst": "tt27444205",
-                          "episodes": [
-                            {
-                              "tconst": "tt1000001",
-                              "parentTconst": "tt27444205",
-                              "seasonNumber": 1,
-                              "episodeNumber": 1,
-                              "averageRating": 8.3,
-                              "numVotes": 200
-                            }
-                          ]
-                        }
-                        """.trimIndent()
-                    )
-                }
-            },
-            moshi = Moshi.Builder().build()
-        ).also { imdbClient ->
-            imdbClient.delayMs = { delayMillis ->
-                delays += delayMillis
-            }
-        }
-
-        val result = client.fetchEpisodeRatings(
-            baseUrl = "https://ratings.example.com",
-            apiKey = "secret-key",
-            tconst = "tt27444205"
-        )
+        val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
         assertEquals(2, attempts)
         assertEquals(listOf(1_000L), delays)
@@ -331,13 +233,85 @@ class CustomImdbClientTest {
     }
 
     @Test
-    fun `validate returns false when remote call fails`() = runTest {
-        val client = OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient { throw IOException("boom") },
-            moshi = Moshi.Builder().build()
-        )
+    fun `fetchEpisodeRatings retries once after rate limit using retry after header`() = runTest {
+        var attempts = 0
+        val delays = mutableListOf<Long>()
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key"
+        ) { chain ->
+            attempts += 1
+            when (attempts) {
+                1 -> jsonResponse(
+                    chain,
+                    """
+                    {
+                      "error": {
+                        "code": "rate_limited",
+                        "message": "rate limit exceeded"
+                      }
+                    }
+                    """.trimIndent(),
+                    code = 429,
+                    headers = mapOf("Retry-After" to "2")
+                )
 
-        assertFalse(client.validate("https://ratings.example.com", "secret-key"))
+                else -> jsonResponse(
+                    chain,
+                    """
+                    {
+                      "requestTconst": "tt27444205",
+                      "episodesParentTconst": "tt27444205",
+                      "episodes": []
+                    }
+                    """.trimIndent()
+                )
+            }
+        }.also { imdbClient ->
+            imdbClient.delayMs = { delayMillis ->
+                delays += delayMillis
+            }
+        }
+
+        val result = client.fetchEpisodeRatings(tconst = "tt27444205")
+
+        assertEquals(2, attempts)
+        assertEquals(listOf(2_000L), delays)
+        assertEquals(emptyMap<Pair<Int, Int>, Double>(), result)
+    }
+
+    @Test
+    fun `fetchEpisodeRatings returns empty map when remote call fails`() = runTest {
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key"
+        ) { throw IOException("boom") }
+
+        assertEquals(emptyMap<Pair<Int, Int>, Double>(), client.fetchEpisodeRatings("tt27444205"))
+    }
+
+    @Test
+    fun `fetchEpisodeRatings returns empty map when api key is blank`() = runTest {
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com",
+            apiKey = ""
+        ) { chain -> jsonResponse(chain, "{}") }
+
+        assertEquals(emptyMap<Pair<Int, Int>, Double>(), client.fetchEpisodeRatings("tt27444205"))
+    }
+
+    private fun buildClient(
+        baseUrl: String,
+        apiKey: String,
+        handler: (Interceptor.Chain) -> Response
+    ): OkHttpCustomImdbClient {
+        return OkHttpCustomImdbClient(
+            okHttpClient = okHttpClient(handler),
+            moshi = Moshi.Builder().build()
+        ).also { client ->
+            client.baseUrlProvider = { baseUrl }
+            client.apiKeyProvider = { apiKey }
+        }
     }
 
     private fun okHttpClient(

@@ -9,7 +9,6 @@ import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvdbIdentityService
 import com.nexio.tv.core.tvdb.TvdbMetadataService
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -27,7 +26,6 @@ import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
@@ -1018,9 +1016,6 @@ class MetaDetailsSeasonMediaViewModelTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         every { tmdbSettingsDataStore.settings } returns flowOf(tmdbSettings)
 
-        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>()
-        every { imdbSettingsDataStore.settings } returns flowOf(ImdbSettings())
-
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(false)
         every { traktAuthDataStore.state } returns flowOf(TraktAuthState())
@@ -1065,7 +1060,6 @@ class MetaDetailsSeasonMediaViewModelTest {
             traktAuthService = traktAuthService,
             traktAuthDataStore = traktAuthDataStore,
             tmdbSettingsDataStore = tmdbSettingsDataStore,
-            imdbSettingsDataStore = imdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
             tmdbMetadataService = resolvedTmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
