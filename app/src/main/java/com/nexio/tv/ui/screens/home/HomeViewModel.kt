@@ -282,6 +282,8 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var mdbListDiscoveryRefreshInProgress: Boolean = false
     @Volatile
+    internal var tmdbDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
     internal var installedAddonsObserved: Boolean = false
     @Volatile
     internal var traktDiscoveryObserved: Boolean = false

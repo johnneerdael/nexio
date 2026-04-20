@@ -519,6 +519,28 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `configured home refresh bookkeeping includes tmdb discovery refresh`() {
+        assertTrue(
+            isConfiguredHomeRefreshInProgress(
+                catalogsLoadInProgress = false,
+                traktDiscoveryRefreshInProgress = false,
+                simklDiscoveryRefreshInProgress = false,
+                mdbListDiscoveryRefreshInProgress = false,
+                tmdbDiscoveryRefreshInProgress = true
+            )
+        )
+        assertFalse(
+            isConfiguredHomeRefreshInProgress(
+                catalogsLoadInProgress = false,
+                traktDiscoveryRefreshInProgress = false,
+                simklDiscoveryRefreshInProgress = false,
+                mdbListDiscoveryRefreshInProgress = false,
+                tmdbDiscoveryRefreshInProgress = false
+            )
+        )
+    }
+
+    @Test
     fun `publishable configured home keys include simkl rails only when snapshot has content`() {
         val prefs = SimklCatalogPreferences(
             enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH),
