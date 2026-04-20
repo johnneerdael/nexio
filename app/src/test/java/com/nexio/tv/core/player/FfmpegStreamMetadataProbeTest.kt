@@ -102,4 +102,30 @@ class FfmpegStreamMetadataProbeTest {
         assertEquals(8, result.streams.first().dvProfile)
         assertTrue(result.hasEmbeddedAssSsaSubtitleStream)
     }
+
+    @Test
+    fun debugCommandLogsExactUrlAndHeaderBlob() {
+        val command = FfmpegStreamMetadataProbe.debugProbeCommandForTesting(
+            url = "https://example.test/secret/path/movie.mkv?token=abc",
+            requestHeadersBlob = "Authorization: Bearer secret\r\nUser-Agent: Nexio\r\n"
+        )
+
+        assertTrue(command.contains("ffprobe -v error"))
+        assertTrue(command.contains("-rw_timeout 5000000"))
+        assertTrue(command.contains("-probesize 10000"))
+        assertTrue(command.contains("-analyzeduration 10000"))
+        assertTrue(command.contains("-headers 'Authorization: Bearer secret\\r\\nUser-Agent: Nexio\\r\\n'"))
+        assertTrue(command.contains("'https://example.test/secret/path/movie.mkv?token=abc'"))
+    }
+
+    @Test
+    fun debugCommandOmitsHeadersArgumentWhenNoHeadersArePresent() {
+        val command = FfmpegStreamMetadataProbe.debugProbeCommandForTesting(
+            url = "https://example.test/video.mkv",
+            requestHeadersBlob = null
+        )
+
+        assertFalse(command.contains("-headers"))
+        assertTrue(command.endsWith("'https://example.test/video.mkv'"))
+    }
 }

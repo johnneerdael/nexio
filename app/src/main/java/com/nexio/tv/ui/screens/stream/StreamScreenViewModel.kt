@@ -18,6 +18,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
 import com.nexio.tv.core.player.DolbyVisionAutoPlayDecisionReason
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
+import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
 import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
@@ -178,6 +179,11 @@ class StreamScreenViewModel @Inject constructor(
         viewModelScope.launch {
             debugSettingsDataStore.streamDiagnosticsEnabled.collectLatest { enabled ->
                 streamDiagnosticsEnabled = enabled
+            }
+        }
+        viewModelScope.launch {
+            debugSettingsDataStore.dolbyVisionDiagnosticsEnabled.collectLatest { enabled ->
+                FfmpegStreamMetadataProbe.setDiagnosticsEnabled(enabled)
             }
         }
         if (manualSelection) {
