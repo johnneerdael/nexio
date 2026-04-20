@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -88,27 +89,68 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             catalogId = TmdbCatalogIds.TRENDING_MOVIES,
             items = listOf(meta("tmdb:1", "Movie"))
         )
-        val service = service(
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        val fixture = fixture(
             tmdbSnapshot = TmdbDiscoverySnapshot(
                 rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow)
             ),
-            tmdbPrefs = TmdbCatalogPreferences(
-                enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
-                catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
-            )
+            tmdbPrefs = tmdbPrefs
         )
 
-        val row = service.resolveFeed("tmdb_movie_${TmdbCatalogIds.TRENDING_MOVIES}")
+        val row = fixture.service.resolveFeed("tmdb_movie_${TmdbCatalogIds.TRENDING_MOVIES}")
 
         assertEquals(listOf("tmdb:1"), row?.items?.map { it.id })
         assertEquals("https://api.themoviedb.org/3", row?.addonBaseUrl)
         assertEquals("TMDB", row?.option?.sourceLabel)
+        coVerify(exactly = 1) {
+            fixture.tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false)
+        }
+    }
+
+    @Test
+    fun `resolving continue watching feed does not refresh default enabled TMDB catalogs`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences()
+        )
+
+        fixture.service.resolveFeed(AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY)
+
+        coVerify(exactly = 0) {
+            fixture.tmdbDiscoveryService.refreshCatalogs(any(), force = false)
+        }
+    }
+
+    @Test
+    fun `resolving only continue watching selected rows does not refresh default enabled TMDB catalogs`() = runTest {
+        val fixture = fixture(
+            tmdbSnapshot = TmdbDiscoverySnapshot(),
+            tmdbPrefs = TmdbCatalogPreferences()
+        )
+
+        fixture.service.resolveSelectedRows(
+            listOf(AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY)
+        )
+
+        coVerify(exactly = 0) {
+            fixture.tmdbDiscoveryService.refreshCatalogs(any(), force = false)
+        }
     }
 
     private fun service(
         tmdbSnapshot: TmdbDiscoverySnapshot,
         tmdbPrefs: TmdbCatalogPreferences
     ): AndroidTvFeedCatalogService {
+        return fixture(tmdbSnapshot = tmdbSnapshot, tmdbPrefs = tmdbPrefs).service
+    }
+
+    private fun fixture(
+        tmdbSnapshot: TmdbDiscoverySnapshot,
+        tmdbPrefs: TmdbCatalogPreferences
+    ): ServiceFixture {
         val addonRepository = mockk<AddonRepository>(relaxed = true) {
             every { getInstalledAddons() } returns flowOf(emptyList())
         }
@@ -143,19 +185,27 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             coEvery { ensureFresh(force = false) } returns Unit
         }
 
-        return AndroidTvFeedCatalogService(
-            addonRepository = addonRepository,
-            catalogRepository = mockk<CatalogRepository>(relaxed = true),
-            layoutPreferenceDataStore = layoutPreferenceDataStore,
-            traktDiscoveryService = traktDiscoveryService,
-            traktSettingsDataStore = traktSettingsDataStore,
-            mdbListDiscoveryService = mdbListDiscoveryService,
-            mdbListSettingsDataStore = mdbListSettingsDataStore,
-            tmdbDiscoveryService = tmdbDiscoveryService,
-            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
-            continueWatchingSnapshotService = continueWatchingSnapshotService
+        return ServiceFixture(
+            service = AndroidTvFeedCatalogService(
+                addonRepository = addonRepository,
+                catalogRepository = mockk<CatalogRepository>(relaxed = true),
+                layoutPreferenceDataStore = layoutPreferenceDataStore,
+                traktDiscoveryService = traktDiscoveryService,
+                traktSettingsDataStore = traktSettingsDataStore,
+                mdbListDiscoveryService = mdbListDiscoveryService,
+                mdbListSettingsDataStore = mdbListSettingsDataStore,
+                tmdbDiscoveryService = tmdbDiscoveryService,
+                tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+                continueWatchingSnapshotService = continueWatchingSnapshotService
+            ),
+            tmdbDiscoveryService = tmdbDiscoveryService
         )
     }
+
+    private data class ServiceFixture(
+        val service: AndroidTvFeedCatalogService,
+        val tmdbDiscoveryService: TmdbDiscoveryService
+    )
 
     private fun tmdbRow(
         catalogId: String,
