@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TmdbSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -966,6 +967,80 @@ class HomeCatalogStartupReadinessTest {
         )
 
         assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
+    }
+
+    @Test
+    fun `tmdb refresh treats current authoritative empty snapshot as ready`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val snapshot = TmdbDiscoverySnapshot(
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+
+        assertFalse(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
+    }
+
+    @Test
+    fun `tmdb refresh treats preference or catalog provenance changes as stale`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val snapshot = TmdbDiscoverySnapshot(
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
+        assertTrue(shouldRefreshTmdbDiscoveryForState(prefs.copy(includeAdult = true), snapshot))
+    }
+
+    @Test
+    fun `tmdb credential signal change forces configured catalog refresh`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertTrue(
+            shouldForceTmdbDiscoveryRefreshForCredentialChange(
+                previous = TmdbSettings(apiKey = ""),
+                current = TmdbSettings(apiKey = "api-key"),
+                prefs = prefs
+            )
+        )
+        assertTrue(
+            shouldForceTmdbDiscoveryRefreshForCredentialChange(
+                previous = TmdbSettings(apiKey = "api-key"),
+                current = TmdbSettings(apiKey = ""),
+                prefs = prefs
+            )
+        )
+        assertFalse(
+            shouldForceTmdbDiscoveryRefreshForCredentialChange(
+                previous = TmdbSettings(apiKey = "api-key"),
+                current = TmdbSettings(apiKey = "api-key"),
+                prefs = prefs
+            )
+        )
+        assertFalse(
+            shouldForceTmdbDiscoveryRefreshForCredentialChange(
+                previous = TmdbSettings(apiKey = ""),
+                current = TmdbSettings(apiKey = "api-key"),
+                prefs = prefs.copy(enabledCatalogs = emptySet())
+            )
+        )
     }
 
     @Test
