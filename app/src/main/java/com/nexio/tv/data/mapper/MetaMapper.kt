@@ -75,8 +75,8 @@ fun VideoDto.toDomain(
         released = released,
         thumbnail = thumbnail,
         streams = streams?.map { it.toDomain(addonName = "Embedded Streams", addonLogo = null) } ?: emptyList(),
-        season = season,
-        episode = episode ?: number,
+        season = resolveVideoSeason(parentType),
+        episode = resolveVideoEpisode(parentType),
         overview = overview ?: description
     )
 }
@@ -92,6 +92,18 @@ private fun VideoDto.resolveVideoPlaybackId(parentType: String?): String {
     } else {
         id
     }
+}
+
+private fun VideoDto.resolveVideoSeason(parentType: String?): Int? {
+    return if (parentType.isSeriesType() && imdbSeason != null) imdbSeason else season
+}
+
+private fun VideoDto.resolveVideoEpisode(parentType: String?): Int? {
+    return if (parentType.isSeriesType() && imdbEpisode != null) imdbEpisode else episode ?: number
+}
+
+private fun String?.isSeriesType(): Boolean {
+    return equals("series", ignoreCase = true) || equals("tv", ignoreCase = true)
 }
 
 fun MetaLinkDto.toDomain(): MetaLink? {

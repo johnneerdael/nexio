@@ -265,7 +265,8 @@ internal fun HeroContentSection(
                         text = meta.description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = NexioColors.TextPrimary,
-                        overflow = TextOverflow.Clip,
+                        maxLines = 8,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .fillMaxWidth(0.6f)
                             .padding(bottom = 12.dp)

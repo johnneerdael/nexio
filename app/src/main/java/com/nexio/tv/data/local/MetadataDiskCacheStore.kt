@@ -48,7 +48,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TVDB_REFERENCE_PREFIX = "tvdb_ref::"
         private const val TVDB_REFERENCE_SCHEMA_VERSION = 1
         private const val HOME_REF_PREFIX = "home_ref::"
-        private const val META_CACHE_SCHEMA_VERSION = 3
+        private const val META_CACHE_SCHEMA_VERSION = 4
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 1

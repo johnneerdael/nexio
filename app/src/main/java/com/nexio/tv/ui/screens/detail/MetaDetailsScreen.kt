@@ -1028,8 +1028,8 @@ private fun MetaDetailsContent(
             isTrailerTakeoverPending = immediateTrailerTakeoverPending
         )
     }
-    val isSeries = remember(meta.type, meta.videos) {
-        meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
+    val isSeries = remember(meta) {
+        isSeriesDetailMeta(meta)
     }
     val nextEpisode = remember(episodesForSeason) { episodesForSeason.firstOrNull() }
     val heroVideo = remember(meta.videos, nextToWatch, nextEpisode, isSeries) {
@@ -1298,10 +1298,8 @@ private fun MetaDetailsContent(
             it.leadCreditKey() in leadingKeys && isLeadCreditRole(it.character)
         }
     }
-    val isTvShow = remember(meta.type, meta.apiType) {
-        meta.type == ContentType.SERIES ||
-            meta.type == ContentType.TV ||
-            meta.apiType in listOf("series", "tv")
+    val isTvShow = remember(meta) {
+        isSeriesDetailMeta(meta)
     }
     val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
     val hasMoreLikeThisSection = moreLikeThis.isNotEmpty()
