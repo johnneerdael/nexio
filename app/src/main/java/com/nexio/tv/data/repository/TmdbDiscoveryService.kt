@@ -18,6 +18,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import retrofit2.Response
 import java.time.LocalDate
 import javax.inject.Inject
@@ -117,8 +119,6 @@ class RetrofitTmdbDiscoveryClient @Inject constructor(
     }
 
     override suspend fun imdbId(tmdbId: Int, contentType: ContentType): String? {
-        val credential = credential()
-        if (credential.missing) return null
         val mediaType = when (contentType) {
             ContentType.SERIES, ContentType.TV -> "series"
             else -> "movie"
@@ -137,6 +137,7 @@ class TmdbDiscoveryService @Inject constructor(
     private val client: TmdbDiscoveryClient
 ) {
     private val snapshot = MutableStateFlow(TmdbDiscoverySnapshot())
+    private val imdbLookupSemaphore = Semaphore(IMDB_LOOKUP_CONCURRENCY)
 
     fun observeSnapshot(): Flow<TmdbDiscoverySnapshot> = snapshot
 
@@ -224,20 +225,25 @@ class TmdbDiscoveryService @Inject constructor(
             catalogName = title,
             type = contentType,
             items = items,
-            hasMore = true,
-            supportsSkip = true
+            hasMore = false,
+            supportsSkip = false
         )
     }
 
     private suspend fun mapResults(
         results: List<TmdbMediaResult>,
         contentType: ContentType
-    ): List<MetaPreview> {
-        val mapped = mutableListOf<MetaPreview>()
-        results.take(MAX_ITEMS_PER_SOURCE).forEach { result ->
-            mapResult(result, contentType)?.let { mapped += it }
-        }
-        return mapped
+    ): List<MetaPreview> = coroutineScope {
+        results.take(MAX_ITEMS_PER_SOURCE)
+            .map { result ->
+                async {
+                    imdbLookupSemaphore.withPermit {
+                        mapResult(result, contentType)
+                    }
+                }
+            }
+            .awaitAll()
+            .filterNotNull()
     }
 
     private suspend fun mapResult(
@@ -306,5 +312,6 @@ class TmdbDiscoveryService @Inject constructor(
         private const val SEARCH_CATALOG_ID = "tmdb_search"
         private const val SEARCH_CATALOG_NAME = "TMDB Search"
         private const val MAX_ITEMS_PER_SOURCE = 20
+        private const val IMDB_LOOKUP_CONCURRENCY = 6
     }
 }
