@@ -585,7 +585,7 @@ private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
     }
 }
 
-private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
+private suspend fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     if (pendingProviderEnrichmentByItemId.isEmpty() &&
         pendingMetaEnrichmentByItemId.isEmpty()
     ) {
@@ -601,11 +601,11 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     catalogsMap.forEach { (key, row) ->
         var mutableItems: MutableList<MetaPreview>? = null
         row.items.forEachIndexed { index, currentItem ->
-            val mergedItem = mergeFocusedItemEnrichment(
+            val mergedItem = titleRatingOverrideRepository.enrichPreview(mergeFocusedItemEnrichment(
                 currentItem = currentItem,
                 providerEnrichment = providerByItemId[currentItem.id],
                 externalMeta = metaByItemId[currentItem.id]
-            )
+            ))
             if (mergedItem != currentItem) {
                 val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
                 updatedItems[index] = mergedItem
@@ -739,12 +739,12 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
             async(Dispatchers.IO) {
                 try {
                     val enrichment = fetchProviderEnrichmentForPreview(item) ?: return@async item
-                    mergeFocusedItemEnrichment(
+                    titleRatingOverrideRepository.enrichPreview(mergeFocusedItemEnrichment(
                         currentItem = item,
                         providerEnrichment = enrichment,
                         externalMeta = null,
                         tmdbSettings = settings
-                    )
+                    ))
                 } catch (e: Exception) {
                     Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
                     item
