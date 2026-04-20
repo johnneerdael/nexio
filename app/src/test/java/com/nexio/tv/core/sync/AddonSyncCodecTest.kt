@@ -37,16 +37,18 @@ class AddonSyncCodecTest {
     }
 
     @Test
-    fun `top streaming uuid manifest path remains public addon path`() {
+    fun `top streaming uuid manifest path is stored as secret-backed suffix`() {
         val parsed = parseAddonInstallUrl(
             "https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc/manifest.json"
         )
 
-        assertEquals("https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc", parsed.publicBaseUrl)
-        assertEquals("https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc/manifest.json", parsed.manifestUrl)
-        assertEquals("manifest", parsed.installKind)
-        assertEquals(null, parsed.secretRef)
-        assertEquals(null, parsed.secretPayload)
+        assertEquals("https://top-streaming.stream", parsed.publicBaseUrl)
+        assertEquals("https://top-streaming.stream/manifest.json", parsed.manifestUrl)
+        assertEquals("configured", parsed.installKind)
+        assertEquals("path_segment", parsed.secretPayload?.kind)
+        assertEquals("f5ab503d-0ac4-4540-84de-5fb0437727dc", parsed.secretPayload?.pathSegment)
+        assertEquals("https://top-streaming.stream", parsed.transportBaseUrl)
+        assertEquals("/f5ab503d-0ac4-4540-84de-5fb0437727dc/manifest.json", parsed.transportSecretPayload.suffix)
     }
 
     @Test
