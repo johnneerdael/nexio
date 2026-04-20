@@ -5,7 +5,6 @@ import com.nexio.tv.data.repository.AssSsaEventFormat
 import com.nexio.tv.data.repository.AssSsaEventRecord
 import com.nexio.tv.data.repository.AssSsaProtectedTranslationUnit
 import com.nexio.tv.data.repository.AssSsaRisk
-import com.nexio.tv.data.repository.AssSsaTextTokenizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -31,19 +30,6 @@ internal class AssSsaTranslatingSampleSink(
         }
 
         val text = data.decodeToString()
-        val format = trackFormats[trackId] ?: AssSsaEventFormat.standardDialogue()
-        val records = text.lineSequence()
-            .mapNotNull { line -> AssSsaEventRecord.parseDialogueLine(line, format) }
-            .toList()
-        if (records.isEmpty()) {
-            downstream.onSubtitleSample(trackId, timeUs, data)
-            return
-        }
-        if (records.any { it.isSignLikeAssSsaEvent() }) {
-            downstream.onSubtitleSample(trackId, timeUs, data)
-            return
-        }
-
         if (useSystemPromptTranslation()) {
             scope.launch {
                 val translatedSample = runCatching {
@@ -58,10 +44,19 @@ internal class AssSsaTranslatingSampleSink(
             return
         }
 
+        val format = trackFormats[trackId] ?: AssSsaEventFormat.standardDialogue()
+        val records = text.lineSequence()
+            .mapNotNull { line -> AssSsaEventRecord.parseDialogueLine(line, format) }
+            .toList()
+        if (records.isEmpty()) {
+            downstream.onSubtitleSample(trackId, timeUs, data)
+            return
+        }
+
         val unitsById = records.mapIndexed { index, record ->
-            "evt_$index" to AssSsaProtectedTranslationUnit.fromTokens(
+            "evt_$index" to AssSsaProtectedTranslationUnit.fromText(
                 id = "evt_$index",
-                tokens = AssSsaTextTokenizer.tokenize(record.text)
+                text = record.text
             )
         }
         scope.launch {
@@ -96,24 +91,3 @@ internal class AssSsaTranslatingSampleSink(
         downstream.onFontAttachment(name, data)
     }
 }
-
-private fun AssSsaEventRecord.isSignLikeAssSsaEvent(): Boolean {
-    val style = field("Style").orEmpty()
-    val actor = field("Actor") ?: field("Name").orEmpty()
-    if (style.equals("Signs", ignoreCase = true) ||
-        style.equals("Credits", ignoreCase = true) ||
-        actor.equals("SIGN", ignoreCase = true) ||
-        actor.equals("CREDITS", ignoreCase = true)
-    ) {
-        return true
-    }
-    if (POSITIONED_SIGN_TAG_PATTERN.containsMatchIn(text)) return true
-    return INLINE_FONT_SIZE_PATTERN.findAll(text).any { match ->
-        val fontSize = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: return@any false
-        fontSize <= SIGN_INLINE_FONT_SIZE_THRESHOLD
-    }
-}
-
-private val POSITIONED_SIGN_TAG_PATTERN = Regex("""\\(?:pos|move|org|clip|iclip)\(""")
-private val INLINE_FONT_SIZE_PATTERN = Regex("""\\fs([0-9]+(?:\.[0-9]+)?)""")
-private const val SIGN_INLINE_FONT_SIZE_THRESHOLD = 20.0

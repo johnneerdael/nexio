@@ -110,9 +110,9 @@ class AssSsaTranslatingSampleSinkTest {
     }
 
     @Test
-    fun signLikeSamplesArePreservedInProtectedModeToAvoidTinyDialogue() = runTest {
+    fun signLikeSamplesTranslateThroughProtectedPathWithoutLosingFormatting() = runTest {
         val downstream = RecordingAssSsaSampleSink()
-        val sample = "Dialogue: 0,0:00:43.77,0:00:45.65,Default,SIGN,0,0,0,,{\\bord3\\shad0\\fs14\\pos(475.43,40)}Hirose..."
+        val sample = "Dialogue: 0,0:00:43.77,0:00:45.65,Default,SIGN,0,0,0,,{\\bord3\\shad0\\fs14\\pos(475.43,40)}My best friend?!"
         var protectedProviderCalls = 0
         var rawProviderCalls = 0
         val sink = AssSsaTranslatingSampleSink(
@@ -122,7 +122,8 @@ class AssSsaTranslatingSampleSinkTest {
             useSystemPromptTranslation = { false },
             translate = {
                 protectedProviderCalls += 1
-                emptyMap()
+                assertEquals(listOf("⟦ASS_000⟧My best friend?!"), it.map { unit -> unit.protectedText })
+                mapOf("evt_0" to "⟦ASS_000⟧Mijn beste vriend?!")
             },
             translateRawAssSsa = { raw ->
                 rawProviderCalls += 1
@@ -132,9 +133,67 @@ class AssSsaTranslatingSampleSinkTest {
 
         sink.onSubtitleSample(trackId = 4, timeUs = 43_770_000L, data = sample.toByteArray())
 
-        assertEquals(0, protectedProviderCalls)
+        assertEquals(1, protectedProviderCalls)
         assertEquals(0, rawProviderCalls)
-        assertEquals(sample, downstream.samples.single().decodeToString())
+        assertEquals(
+            "Dialogue: 0,0:00:43.77,0:00:45.65,Default,SIGN,0,0,0,,{\\bord3\\shad0\\fs14\\pos(475.43,40)}Mijn beste vriend?!",
+            downstream.samples.single().decodeToString()
+        )
+    }
+
+    @Test
+    fun systemPromptModeTranslatesSignLikeSamplesThroughRawProvider() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sample = "Dialogue: 0,0:00:43.77,0:00:45.65,Default,SIGN,0,0,0,,{\\bord3\\shad0\\fs14\\pos(475.43,40)}Sign text"
+        val translatedSample = "Dialogue: 0,0:00:43.77,0:00:45.65,Default,SIGN,0,0,0,,{\\bord3\\shad0\\fs14\\pos(475.43,40)}Bordtekst"
+        var protectedProviderCalls = 0
+        var rawProviderCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            useSystemPromptTranslation = { true },
+            translate = {
+                protectedProviderCalls += 1
+                emptyMap()
+            },
+            translateRawAssSsa = { raw ->
+                rawProviderCalls += 1
+                assertEquals(sample, raw)
+                translatedSample
+            }
+        )
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 43_770_000L, data = sample.toByteArray())
+
+        assertEquals(1, rawProviderCalls)
+        assertEquals(0, protectedProviderCalls)
+        assertEquals(translatedSample, downstream.samples.single().decodeToString())
+    }
+
+    @Test
+    fun systemPromptModeSendsUnclassifiedAssSampleThroughRawProvider() = runTest {
+        val downstream = RecordingAssSsaSampleSink()
+        val sample = "Comment: this shape is still handled by the raw system prompt"
+        val translatedSample = "Comment: deze vorm gaat nog steeds door de raw system prompt"
+        var rawProviderCalls = 0
+        val sink = AssSsaTranslatingSampleSink(
+            downstream = downstream,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            isEnabled = { true },
+            useSystemPromptTranslation = { true },
+            translate = { error("placeholder path should not be used") },
+            translateRawAssSsa = { raw ->
+                rawProviderCalls += 1
+                assertEquals(sample, raw)
+                translatedSample
+            }
+        )
+
+        sink.onSubtitleSample(trackId = 4, timeUs = 43_770_000L, data = sample.toByteArray())
+
+        assertEquals(1, rawProviderCalls)
+        assertEquals(translatedSample, downstream.samples.single().decodeToString())
     }
 
     @Test
