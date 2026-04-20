@@ -163,6 +163,7 @@ class SyntheticHomeCatalogStore private constructor(
     private fun decodeRow(element: JsonElement): CatalogRow? {
         return runCatching {
             gson.fromJson(element, CatalogRow::class.java)
+                ?.sanitizedForCache()
         }.getOrNull()
     }
 }

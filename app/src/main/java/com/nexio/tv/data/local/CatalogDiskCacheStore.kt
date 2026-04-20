@@ -33,7 +33,9 @@ class CatalogDiskCacheStore @Inject constructor(
             val raw = prefs.getString(prefKey(cacheKey), null)?.takeIf { it.isNotBlank() } ?: return null
             val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
             val rowJson = root.get("catalogRow") ?: return null
-            val row = gson.fromJson(rowJson, CatalogRow::class.java) ?: return null
+            val row = gson.fromJson(rowJson, CatalogRow::class.java)
+                ?.sanitizedForCache()
+                ?: return null
             Entry(
                 catalogRow = row,
                 catalogVersionHash = root.get("catalogVersionHash")?.asString.orEmpty(),
