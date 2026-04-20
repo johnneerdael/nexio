@@ -5,11 +5,15 @@ internal object AssSsaTextAstParser {
         val nodes = mutableListOf<AssSsaTextNode>()
         var textSpanIndex = 0
         var index = 0
+        var drawingMode = 0
 
         fun nextTextId(): String = "txt_${(textSpanIndex++).toString().padStart(3, '0')}"
 
         fun addTextSpan(text: String) {
-            if (text.isNotEmpty()) {
+            if (text.isEmpty()) return
+            if (drawingMode > 0) {
+                nodes += AssSsaTextNode.DrawingSpan(text)
+            } else {
                 nodes += AssSsaTextNode.TextSpan(id = nextTextId(), raw = text)
             }
         }
@@ -41,14 +45,34 @@ internal object AssSsaTextAstParser {
                 break
             }
             val block = raw.substring(blockStart, blockEnd + 1)
+            val tags = AssSsaOverrideTagParser.parseBlock(block)
             nodes += AssSsaTextNode.OverrideBlock(
                 raw = block,
-                tags = AssSsaOverrideTagParser.parseBlock(block)
+                tags = tags
             )
+            drawingMode = drawingModeAfterTags(tags, drawingMode)
             index = blockEnd + 1
         }
 
         return AssSsaTextAst(raw = raw, nodes = nodes)
+    }
+
+    private fun drawingModeAfterTags(tags: List<AssSsaOverrideTag>, current: Int): Int {
+        var drawingMode = current
+        tags.forEach { tag ->
+            if (tag.name.equals("p", ignoreCase = true)) {
+                tag.arguments.orEmpty().trim().toIntOrNull()?.let { value ->
+                    drawingMode = value
+                }
+                return@forEach
+            }
+            if (tag.name.length > 1 && tag.name.first().equals('p', ignoreCase = true)) {
+                tag.name.drop(1).toIntOrNull()?.let { value ->
+                    drawingMode = value
+                }
+            }
+        }
+        return drawingMode
     }
 }
 
