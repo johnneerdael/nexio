@@ -541,6 +541,100 @@ class SubtitleTranslationServiceProviderTest {
         }
     }
 
+    @Test
+    fun assSsaSystemPromptModeSendsRawAssBatchAndWritesTranslatedAss() = runTest {
+        val server = MockWebServer()
+        val sourceAss = """
+            [Script Info]
+            ScriptType: v4.00+
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,SIGN,0,0,0,,{\pos(475.43,40)}Sign text
+            Dialogue: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,Hello there.
+        """.trimIndent()
+        val translatedAss = """
+            [Script Info]
+            ScriptType: v4.00+
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,SIGN,0,0,0,,{\pos(475.43,40)}Bordtekst
+            Dialogue: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,Hallo daar.
+        """.trimIndent()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return if (request.path == "/subtitle.ass") {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setBody(sourceAss)
+                } else {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setBody(
+                            """
+                            {
+                              "choices": [
+                                {
+                                  "message": {
+                                    "content": ${JSONObject.quote(translatedAss)}
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        )
+                }
+            }
+        }
+        server.start()
+        val cacheDir = createTempDirectory("ass-system-prompt-test").toFile()
+        try {
+            val context = mockk<Context>()
+            every { context.cacheDir } returns cacheDir
+            val service = SubtitleTranslationService(
+                context = context,
+                httpClient = OkHttpClient()
+            )
+
+            val result = service.translateSubtitle(
+                sourceSubtitle = Subtitle(
+                    id = "ass-1",
+                    url = server.url("/subtitle.ass").toString(),
+                    lang = "en",
+                    addonName = "Addon",
+                    addonLogo = null
+                ),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "en",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString(),
+                    assSsaSystemPromptEnabled = true
+                )
+            ).getOrThrow()
+
+            val translatedFile = File(result.translatedSubtitle.url.removePrefix("file:"))
+            assertEquals(translatedAss, translatedFile.readText())
+
+            val downloadRequest = server.takeRequest()
+            assertEquals("/subtitle.ass", downloadRequest.path)
+            val providerRequest = server.takeRequest()
+            val body = providerRequest.body.readUtf8()
+            assertTrue(body.contains("ASS_SSA_SUBTITLE_TRANSLATOR"))
+            assertTrue(body.contains("Dialogue: 0,0:00:01.00,0:00:02.00,Default,SIGN"))
+            assertTrue(body.contains("""{\\pos(475.43,40)}Sign text"""))
+            assertTrue(body.contains("Hello there."))
+            assertFalse(body.contains(""""items""""))
+            assertFalse(body.contains("response_format"))
+        } finally {
+            server.shutdown()
+            cacheDir.deleteRecursively()
+        }
+    }
+
     private suspend fun assertProviderErrorDoesNotSplitAdaptiveChunks(
         statusCode: Int,
         expectedRequestCount: Int = 1

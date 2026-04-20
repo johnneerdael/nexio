@@ -62,6 +62,9 @@ internal data class AssSsaProtectedTranslationUnit(
 
         fun fromText(id: String, text: String): AssSsaProtectedTranslationUnit {
             val astUnit = AssSsaTextAstTranslationUnit.fromText(id, text)
+            val hasVisibleText = astUnit.ast.translatableSpans().any { span ->
+                span.raw.isNotBlank()
+            }
             val sawDrawing = astUnit.ast.nodes.any {
                 it is AssSsaTextNode.DrawingSpan || it is AssSsaTextNode.Malformed
             }
@@ -69,7 +72,7 @@ internal data class AssSsaProtectedTranslationUnit(
                 .filterIsInstance<AssSsaTextNode.OverrideBlock>()
                 .any { block -> KARAOKE_PATTERN.containsMatchIn(block.raw) }
             val risk = when {
-                astUnit.protectedText.isBlank() -> AssSsaRisk.PreserveOnly
+                !hasVisibleText -> AssSsaRisk.PreserveOnly
                 sawDrawing -> AssSsaRisk.Complex
                 sawKaraoke -> AssSsaRisk.Complex
                 astUnit.placeholders.size >= COMPLEX_PLACEHOLDER_COUNT -> AssSsaRisk.Complex
