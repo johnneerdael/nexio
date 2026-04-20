@@ -151,7 +151,7 @@ class MetadataDiskCacheStoreTest {
                 "links": [],
                 "trailerYtIds": []
               },
-              "metaSchemaVersion": 3,
+              "metaSchemaVersion": 4,
               "languageEpoch": 0,
               "updatedAtMs": ${System.currentTimeMillis()}
             }

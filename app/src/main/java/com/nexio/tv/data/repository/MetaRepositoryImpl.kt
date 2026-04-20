@@ -90,8 +90,9 @@ class MetaRepositoryImpl @Inject constructor(
                                 .sanitizeCastMembers()
                             metaCache[cacheKey] = meta
                             if (cacheOnDisk && writeToDisk) {
-                                metadataDiskCacheStore.writeMeta(
-                                    itemKey = "$candidateType:$candidateId",
+                                writeMetaDiskAliases(
+                                    candidateType = candidateType,
+                                    candidateId = candidateId,
                                     languageTag = languageTag,
                                     providerToken = providerToken,
                                     meta = meta
@@ -195,8 +196,9 @@ class MetaRepositoryImpl @Inject constructor(
                                     addonMetaCache[cacheKey] = meta
                                     metaCache[cacheKey] = meta
                                     if (cacheOnDisk && writeToDisk) {
-                                        metadataDiskCacheStore.writeMeta(
-                                            itemKey = "$candidateType:$candidateId",
+                                        writeMetaDiskAliases(
+                                            candidateType = candidateType,
+                                            candidateId = candidateId,
                                             languageTag = languageTag,
                                             providerToken = providerToken,
                                             meta = meta
@@ -237,8 +239,9 @@ class MetaRepositoryImpl @Inject constructor(
                             addonMetaCache[cacheKey] = meta
                             metaCache[cacheKey] = meta
                             if (cacheOnDisk && writeToDisk) {
-                                metadataDiskCacheStore.writeMeta(
-                                    itemKey = "$candidateType:$candidateId",
+                                writeMetaDiskAliases(
+                                    candidateType = candidateType,
+                                    candidateId = candidateId,
                                     languageTag = languageTag,
                                     providerToken = providerToken,
                                     meta = meta
@@ -270,6 +273,23 @@ class MetaRepositoryImpl @Inject constructor(
         }
 
         emit(NetworkResult.Error("Meta not found in any addon"))
+    }
+
+    private fun writeMetaDiskAliases(
+        candidateType: String,
+        candidateId: String,
+        languageTag: String,
+        providerToken: String,
+        meta: Meta
+    ) {
+        buildMetaDiskAliasKeys(candidateType, candidateId, meta).forEach { itemKey ->
+            metadataDiskCacheStore.writeMeta(
+                itemKey = itemKey,
+                languageTag = languageTag,
+                providerToken = providerToken,
+                meta = meta
+            )
+        }
     }
 
     override suspend fun getCachedMetaFromAllAddons(
@@ -450,4 +470,17 @@ class MetaRepositoryImpl @Inject constructor(
         if (activeProvider == null) return "native"
         return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
     }
+}
+
+internal fun buildMetaDiskAliasKeys(
+    candidateType: String,
+    candidateId: String,
+    meta: Meta
+): Set<String> {
+    val keys = linkedSetOf("$candidateType:$candidateId")
+    val resolvedType = meta.apiType.trim()
+    if (resolvedType.isNotBlank()) {
+        keys += "$resolvedType:$candidateId"
+    }
+    return keys
 }

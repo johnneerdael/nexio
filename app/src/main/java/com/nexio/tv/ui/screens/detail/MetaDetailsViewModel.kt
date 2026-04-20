@@ -1289,7 +1289,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadEpisodeRatingsAsync(meta: Meta) {
         episodeRatingsJob?.cancel()
-        val isSeries = meta.apiType in listOf("series", "tv", "show", "tvshow")
+        val isSeries = isSeriesDetailMeta(meta)
         val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct().sorted()
 
         _uiState.update { state ->
@@ -1843,7 +1843,7 @@ class MetaDetailsViewModel @Inject constructor(
             rawProgressMap = _uiState.value.episodeProgressMap,
             overrides = _uiState.value.episodeWatchOverrides
         )
-        val isSeries = meta.apiType in listOf("series", "tv")
+        val isSeries = isSeriesDetailMeta(meta)
         nextToWatchJob?.cancel()
 
         nextToWatchJob = viewModelScope.launch {
@@ -2985,6 +2985,13 @@ internal fun parseDetailApiTypeToContentType(apiType: String?): ContentType? {
         "series", "tv", "show", "tvshow", "anime" -> ContentType.SERIES
         else -> null
     }
+}
+
+internal fun isSeriesDetailMeta(meta: Meta): Boolean {
+    if (meta.type == ContentType.MOVIE) return false
+    if (meta.type == ContentType.SERIES || meta.type == ContentType.TV) return true
+    if (parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES) return true
+    return meta.videos.any { video -> video.season != null && video.episode != null }
 }
 
 internal fun buildKitsuEpisodeVideos(
