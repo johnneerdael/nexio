@@ -2,14 +2,11 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.remote.CustomImdbClient
-import com.nexio.tv.data.remote.normalizeCustomImdbBaseUrl
 import com.nexio.tv.domain.model.Meta
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -20,7 +17,6 @@ internal const val CUSTOM_IMDB_EPISODE_RATINGS_RETRY_TTL_MS = 30L * 60L * 1000L
 @Singleton
 class CustomImdbEpisodeRatingsRepository @Inject constructor(
     private val customImdbClient: CustomImdbClient,
-    private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val tmdbService: TmdbService
 ) {
     private data class CacheEntry(
@@ -41,19 +37,12 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
     ): Map<Pair<Int, Int>, Double> {
         if (episodesBySeason.isEmpty()) return emptyMap()
 
-        val settings = imdbSettingsDataStore.settings.first()
-        if (!settings.isActive) return emptyMap()
-
-        val normalizedBaseUrl = normalizeCustomImdbBaseUrl(settings.baseUrl)
-        val apiKey = settings.apiKey.trim()
         val seriesImdbId = resolveSeriesImdbId(meta, fallbackItemId, fallbackItemType) ?: return emptyMap()
         val requestedEpisodes = normalizeRequestedEpisodes(episodesBySeason)
         if (requestedEpisodes.isEmpty()) return emptyMap()
 
         val cacheKey = buildCacheKey(
-            baseUrl = normalizedBaseUrl,
             seriesImdbId = seriesImdbId,
-            apiKey = apiKey,
             requestedEpisodes = requestedEpisodes
         )
         val now = nowMsProvider()
@@ -63,8 +52,6 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
         return cacheMutex.withLock {
             cache[cacheKey]?.takeIf { it.expiresAtMs > nowMsProvider() }?.ratings ?: fetchAndCache(
                 cacheKey = cacheKey,
-                baseUrl = normalizedBaseUrl,
-                apiKey = apiKey,
                 seriesImdbId = seriesImdbId,
                 requestedEpisodes = requestedEpisodes
             )
@@ -73,8 +60,6 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
 
     private suspend fun fetchAndCache(
         cacheKey: String,
-        baseUrl: String,
-        apiKey: String,
         seriesImdbId: String,
         requestedEpisodes: Map<Int, Set<Int>>
     ): Map<Pair<Int, Int>, Double> {
@@ -82,11 +67,7 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
         val expectedCount = requestedEpisodes.values.sumOf { it.size }
 
         val fetched = runCatching {
-            customImdbClient.fetchEpisodeRatings(
-                baseUrl = baseUrl,
-                apiKey = apiKey,
-                tconst = seriesImdbId
-            ).filterKeys { (season, episode) ->
+            customImdbClient.fetchEpisodeRatings(seriesImdbId).filterKeys { (season, episode) ->
                 requestedEpisodes[season]?.contains(episode) == true
             }
         }.getOrElse { error ->
@@ -135,9 +116,7 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
     }
 
     private fun buildCacheKey(
-        baseUrl: String,
         seriesImdbId: String,
-        apiKey: String,
         requestedEpisodes: Map<Int, Set<Int>>
     ): String {
         val requestSignature = requestedEpisodes.entries
@@ -147,7 +126,7 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
                 "$season:$normalizedEpisodes"
             }
 
-        return "$baseUrl:$seriesImdbId:${apiKey.hashCode()}:$requestSignature"
+        return "$seriesImdbId:$requestSignature"
     }
 
     private fun extractImdbId(rawId: String?): String? {

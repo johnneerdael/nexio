@@ -1,10 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.remote.CustomImdbClient
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
@@ -12,9 +10,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.Video
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -25,23 +21,15 @@ class CustomImdbEpisodeRatingsRepositoryTest {
     fun `reuses full results until full ttl expires`() = runTest {
         var now = 1_000L
         val client = mockk<CustomImdbClient>()
-        val settingsStore = mockk<ImdbSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        every { settingsStore.settings } returns flowOf(
-            ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com/", apiKey = "secret-key")
-        )
         coEvery {
-            client.fetchEpisodeRatings(
-                baseUrl = "https://ratings.example.com",
-                apiKey = "secret-key",
-                tconst = "tt27444205"
-            )
+            client.fetchEpisodeRatings(tconst = "tt27444205")
         } returns mapOf(
             (1 to 1) to 8.3,
             (1 to 2) to 7.1
         )
 
-        val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
+        val repository = CustomImdbEpisodeRatingsRepository(client, tmdbService).also {
             it.nowMsProvider = { now }
         }
         val requestedEpisodes = mapOf(1 to setOf(1, 2))
@@ -61,11 +49,7 @@ class CustomImdbEpisodeRatingsRepositoryTest {
 
         assertEquals(first, second)
         coVerify(exactly = 1) {
-            client.fetchEpisodeRatings(
-                baseUrl = "https://ratings.example.com",
-                apiKey = "secret-key",
-                tconst = "tt27444205"
-            )
+            client.fetchEpisodeRatings(tconst = "tt27444205")
         }
     }
 
@@ -73,19 +57,15 @@ class CustomImdbEpisodeRatingsRepositoryTest {
     fun `partial results use shorter retry ttl`() = runTest {
         var now = 1_000L
         val client = mockk<CustomImdbClient>()
-        val settingsStore = mockk<ImdbSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        every { settingsStore.settings } returns flowOf(
-            ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com", apiKey = "secret-key")
-        )
         coEvery {
-            client.fetchEpisodeRatings(any(), any(), any())
+            client.fetchEpisodeRatings(any())
         } returnsMany listOf(
             mapOf((1 to 1) to 8.3),
             mapOf((1 to 1) to 8.3, (1 to 2) to 7.1)
         )
 
-        val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
+        val repository = CustomImdbEpisodeRatingsRepository(client, tmdbService).also {
             it.nowMsProvider = { now }
         }
         val requestedEpisodes = mapOf(1 to setOf(1, 2))
@@ -115,58 +95,20 @@ class CustomImdbEpisodeRatingsRepositoryTest {
         assertEquals(mapOf((1 to 1) to 8.3), partial)
         assertEquals(partial, cachedInsideRetryWindow)
         assertEquals(mapOf((1 to 1) to 8.3, (1 to 2) to 7.1), refreshed)
-        coVerify(exactly = 2) { client.fetchEpisodeRatings(any(), any(), any()) }
-    }
-
-    @Test
-    fun `cache key normalizes base url before storing results`() = runTest {
-        var now = 1_000L
-        val client = mockk<CustomImdbClient>()
-        val settingsStore = mockk<ImdbSettingsDataStore>()
-        val tmdbService = mockk<TmdbService>(relaxed = true)
-        every { settingsStore.settings } returnsMany listOf(
-            flowOf(ImdbSettings(enabled = true, baseUrl = " https://ratings.example.com/custom/ ", apiKey = "secret-key")),
-            flowOf(ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com/custom", apiKey = "secret-key"))
-        )
-        coEvery { client.fetchEpisodeRatings(any(), any(), any()) } returns mapOf(
-            (1 to 1) to 8.3
-        )
-
-        val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
-            it.nowMsProvider = { now }
-        }
-
-        repository.getEpisodeRatingsForMeta(
-            meta = stubMeta("tt27444205"),
-            fallbackItemId = "",
-            fallbackItemType = "series",
-            episodesBySeason = mapOf(1 to setOf(1))
-        )
-        repository.getEpisodeRatingsForMeta(
-            meta = stubMeta("tt27444205"),
-            fallbackItemId = "",
-            fallbackItemType = "series",
-            episodesBySeason = mapOf(1 to setOf(1))
-        )
-
-        coVerify(exactly = 1) { client.fetchEpisodeRatings(any(), any(), any()) }
+        coVerify(exactly = 2) { client.fetchEpisodeRatings(any()) }
     }
 
     @Test
     fun `wider request bypasses narrower cached response`() = runTest {
         var now = 1_000L
         val client = mockk<CustomImdbClient>()
-        val settingsStore = mockk<ImdbSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        every { settingsStore.settings } returns flowOf(
-            ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com", apiKey = "secret-key")
-        )
-        coEvery { client.fetchEpisodeRatings(any(), any(), any()) } returnsMany listOf(
+        coEvery { client.fetchEpisodeRatings(any()) } returnsMany listOf(
             mapOf((1 to 1) to 8.3),
             mapOf((1 to 1) to 8.3, (1 to 2) to 7.1)
         )
 
-        val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
+        val repository = CustomImdbEpisodeRatingsRepository(client, tmdbService).also {
             it.nowMsProvider = { now }
         }
 
@@ -185,7 +127,7 @@ class CustomImdbEpisodeRatingsRepositoryTest {
 
         assertEquals(mapOf((1 to 1) to 8.3), narrow)
         assertEquals(mapOf((1 to 1) to 8.3, (1 to 2) to 7.1), wider)
-        coVerify(exactly = 2) { client.fetchEpisodeRatings(any(), any(), any()) }
+        coVerify(exactly = 2) { client.fetchEpisodeRatings(any()) }
     }
 
     private fun stubMeta(id: String): Meta {

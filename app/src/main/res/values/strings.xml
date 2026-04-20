@@ -160,7 +160,6 @@
     <string name="settings_tvdb_subtitle">TVDB is used for TV metadata when configured</string>
     <string name="settings_theintrodb_subtitle">Playback intro, recap, credits, and preview controls</string>
     <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
-    <string name="settings_imdb_subtitle">Primary episode ratings via your custom IMDb API</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
     <string name="settings_animeskip_subtitle">Anime intro/outro skip timestamps</string>
     <string name="settings_subtitle_translation_subtitle">AI subtitle translation with configurable model providers</string>
@@ -636,21 +635,6 @@
     <string name="omdb_dialog_subtitle">Enter your OMDB API key to fetch IMDb episode ratings</string>
     <string name="omdb_dialog_placeholder">Enter OMDB API key</string>
     <string name="omdb_invalid_api_key">Invalid OMDB API key</string>
-
-    <!-- ImdbSettingsScreen -->
-    <string name="imdb_title">IMDb Ratings API</string>
-    <string name="imdb_subtitle">Use your custom IMDb API as the primary source for episode ratings, with two-way sync to your account</string>
-    <string name="imdb_enable_title">Enable IMDb ratings API</string>
-    <string name="imdb_enable_subtitle">When enabled and fully configured, custom IMDb replaces OMDB and TMDB for episode ratings</string>
-    <string name="imdb_connection_title">IMDb API Connection</string>
-    <string name="imdb_connection_subtitle">Configure the base URL and API key here or on web. Changes sync both ways through your account.</string>
-    <string name="imdb_dialog_title">IMDb API Connection</string>
-    <string name="imdb_dialog_subtitle">Enter the custom IMDb API base URL and API key. Both are required before validation succeeds.</string>
-    <string name="imdb_base_url_label">Base URL</string>
-    <string name="imdb_base_url_placeholder">https://ratings.example.com/custom</string>
-    <string name="imdb_api_key_label">API Key</string>
-    <string name="imdb_api_key_placeholder">Enter IMDb API key</string>
-    <string name="imdb_invalid_configuration">Invalid IMDb base URL or API key</string>
 
     <!-- DebridSettingsContent -->
     <string name="debrid_title">Debrid</string>

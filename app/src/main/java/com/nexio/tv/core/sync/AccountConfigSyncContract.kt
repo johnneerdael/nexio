@@ -2,7 +2,6 @@ package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
-import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -20,7 +19,6 @@ import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
-import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
@@ -31,7 +29,6 @@ import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.domain.model.AddonParserPreset
-import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.flow.Flow
@@ -61,7 +58,6 @@ internal fun observeAccountConfigSyncChanges(
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
-    imdbSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -90,7 +86,6 @@ internal fun observeAccountConfigSyncChanges(
         animeSkipEnabled,
         animeSkipClientId,
         subtitleTranslationSettings,
-        imdbSettings,
         posterRatingsSettings,
         premiumizeSettings,
         premiumizeAccountState,
@@ -121,7 +116,6 @@ internal fun observeAccountConfigSyncChangedPaths(
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
-    imdbSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -150,7 +144,6 @@ internal fun observeAccountConfigSyncChangedPaths(
         animeSkipEnabled.map { "integrations.animeSkip.enabled" },
         animeSkipClientId.map { "integrations.animeSkip.clientId" },
         subtitleTranslationSettings.map { "integrations.subtitleTranslation" },
-        imdbSettings.map { "integrations.imdb" },
         posterRatingsSettings.map { "integrations.posterRatings" },
         premiumizeSettings.map { "integrations.debrid.premiumize" },
         premiumizeAccountState.map { "integrations.debrid.premiumize" },
@@ -315,27 +308,6 @@ internal suspend fun buildRemoteAddonInstallConfigs(
         }
 }
 
-internal suspend fun buildImdbSyncSettings(
-    imdbSettingsDataStore: ImdbSettingsDataStore
-): ImdbSyncSettings {
-    val settings: ImdbSettings = imdbSettingsDataStore.settings.first()
-    return ImdbSyncSettings(
-        enabled = settings.enabled,
-        baseUrl = settings.baseUrl
-    )
-}
-
-internal suspend fun applyImdbSyncSettings(
-    settings: ImdbSyncSettings,
-    imdbSettingsDataStore: ImdbSettingsDataStore
-) {
-    imdbSettingsDataStore.setEnabled(settings.enabled)
-    val trimmedBaseUrl = settings.baseUrl.trim()
-    if (trimmedBaseUrl.isNotBlank()) {
-        imdbSettingsDataStore.setBaseUrl(trimmedBaseUrl)
-    }
-}
-
 internal fun SubtitleTranslationSyncSettings.toDomainSettings(apiKey: String = ""): SubtitleTranslationSettings {
     return normalizeSubtitleTranslationSettings(
         enabled = enabled,
@@ -355,7 +327,6 @@ internal suspend fun applyAccountConfigSyncSettings(
     theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
-    imdbSettingsDataStore: ImdbSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
     simklSettingsDataStore: SimklSettingsDataStore,
@@ -435,5 +406,4 @@ internal suspend fun applyAccountConfigSyncSettings(
         descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
         badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
     )
-    applyImdbSyncSettings(settings.integrations.imdb, imdbSettingsDataStore)
 }
