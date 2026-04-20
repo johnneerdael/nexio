@@ -1,8 +1,6 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.lifecycle.SavedStateHandle
-import java.nio.charset.StandardCharsets
-import java.util.Base64
 import java.net.URLDecoder
 
 internal data class PlayerNavigationArgs(
@@ -39,28 +37,14 @@ internal data class PlayerNavigationArgs(
     val resumeSource: String?
 ) {
     companion object {
-        private const val URL_SAFE_BASE64_PREFIX = "u64_"
-
         fun from(savedStateHandle: SavedStateHandle): PlayerNavigationArgs {
             fun decodedOrNull(key: String): String? {
                 val value = savedStateHandle.get<String>(key) ?: return null
                 return if (value.isNotEmpty()) URLDecoder.decode(value, "UTF-8") else null
             }
 
-            fun decodedStreamUrl(): String? {
-                val value = savedStateHandle.get<String>("streamUrl") ?: return null
-                if (value.isEmpty()) return null
-                if (value.startsWith(URL_SAFE_BASE64_PREFIX)) {
-                    val payload = value.removePrefix(URL_SAFE_BASE64_PREFIX)
-                    return runCatching {
-                        String(Base64.getUrlDecoder().decode(payload), StandardCharsets.UTF_8)
-                    }.getOrNull()
-                }
-                return URLDecoder.decode(value, "UTF-8")
-            }
-
             return PlayerNavigationArgs(
-                streamUrl = decodedStreamUrl() ?: "",
+                streamUrl = decodedOrNull("streamUrl") ?: "",
                 title = decodedOrNull("title") ?: "",
                 streamName = decodedOrNull("streamName"),
                 serviceKey = decodedOrNull("serviceKey"),

@@ -3,8 +3,6 @@ package com.nexio.tv.ui.navigation
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.OrganizationDiscoverType
 import com.nexio.tv.ui.screens.player.PlayerLaunchSource
-import java.nio.charset.StandardCharsets
-import java.util.Base64
 import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
@@ -76,17 +74,8 @@ sealed class Screen(val route: String) {
         }
     }
     data object Player : Screen("player/{streamUrl}/{title}?streamName={streamName}&serviceKey={serviceKey}&year={year}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&originalLanguage={originalLanguage}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&season={season}&episode={episode}&episodeTitle={episodeTitle}&bingeGroup={bingeGroup}&rememberedAudioLanguage={rememberedAudioLanguage}&rememberedAudioName={rememberedAudioName}&playerBackend={playerBackend}&autoPlayNav={autoPlayNav}&returnToDetailOnBack={returnToDetailOnBack}&deterministicAutoplay={deterministicAutoplay}&filename={filename}&videoHash={videoHash}&videoSize={videoSize}&startFromBeginning={startFromBeginning}&launchSource={launchSource}&resumePositionMs={resumePositionMs}&resumeDurationMs={resumeDurationMs}&resumeProgressPercent={resumeProgressPercent}&resumeLastWatchedMs={resumeLastWatchedMs}&resumeSource={resumeSource}") {
-        private const val URL_SAFE_BASE64_PREFIX = "u64_"
-
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-
-        private fun encodeStreamUrl(value: String): String {
-            val encoded = Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
-            return URL_SAFE_BASE64_PREFIX + encoded
-        }
 
         fun createRoute(
             streamUrl: String,
@@ -124,7 +113,7 @@ sealed class Screen(val route: String) {
             resumeLastWatchedMs: Long? = null,
             resumeSource: String? = null
         ): String {
-            val encodedUrl = encodeStreamUrl(streamUrl)
+            val encodedUrl = encode(streamUrl)
             val encodedTitle = encode(title)
             val encodedStreamName = streamName?.let { encode(it) } ?: ""
             val encodedServiceKey = serviceKey?.let { encode(it) } ?: ""
