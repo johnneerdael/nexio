@@ -11,16 +11,7 @@ internal data class AssSsaTextAst(
     }
 
     companion object {
-        fun parse(raw: String): AssSsaTextAst {
-            return AssSsaTextAst(
-                raw = raw,
-                nodes = if (raw.isEmpty()) {
-                    emptyList()
-                } else {
-                    listOf(AssSsaTextNode.TextSpan(id = "txt_000", raw = raw))
-                }
-            )
-        }
+        fun parse(raw: String): AssSsaTextAst = AssSsaTextAstParser.parse(raw)
     }
 }
 
