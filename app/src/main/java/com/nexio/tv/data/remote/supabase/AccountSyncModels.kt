@@ -55,6 +55,9 @@ data class AccountAddonPayload(
     @SerialName("public_query_params") val publicQueryParams: Map<String, String> = emptyMap(),
     @SerialName("install_kind") val installKind: String = "manifest",
     @SerialName("secret_ref") val secretRef: String? = null,
+    @SerialName("transport_schema_version") val transportSchemaVersion: Int = 1,
+    @SerialName("transport_base_url") val transportBaseUrl: String? = null,
+    @SerialName("transport_secret_ref") val transportSecretRef: String? = null,
     @SerialName("sort_order") val sortOrder: Int = 0
 )
 
@@ -62,7 +65,8 @@ data class AccountAddonPayload(
 data class AccountAddonSecretPayload(
     val kind: String = "query_params",
     val params: Map<String, String> = emptyMap(),
-    @SerialName("pathSegment") val pathSegment: String? = null
+    @SerialName("pathSegment") val pathSegment: String? = null,
+    val suffix: String? = null
 )
 
 @Serializable
