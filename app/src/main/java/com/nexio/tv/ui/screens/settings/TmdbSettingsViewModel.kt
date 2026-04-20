@@ -133,6 +133,9 @@ data class TmdbSettingsUiState(
     val isActive: Boolean
         get() = enabled
 
+    val catalogControlsEditable: Boolean
+        get() = true
+
     fun fromSettings(settings: TmdbSettings): TmdbSettingsUiState = copy(
         enabled = settings.enabled,
         apiKey = settings.apiKey,

@@ -77,9 +77,31 @@ class TmdbSettingsViewModelTest {
         assertFalse(state.hideUnreleasedDigital)
     }
 
-    private fun TestScope.createViewModel(): TmdbSettingsViewModel {
+    @Test
+    fun `catalog preferences remain editable when metadata enrichment is inactive`() = runTest(dispatcher) {
+        val viewModel = createViewModel(tmdbSettings = TmdbSettings(enabled = false))
+
+        advanceUntilIdle()
+        val inactiveState = viewModel.uiState.value
+        assertFalse(inactiveState.isActive)
+        assertTrue(inactiveState.catalogControlsEditable)
+        assertTrue(TmdbCatalogIds.TRENDING_MOVIES in inactiveState.enabledCatalogKeys)
+        assertTrue(TmdbCatalogIds.LATEST_RELEASES_SERIES in inactiveState.enabledCatalogKeys)
+        assertFalse(TmdbCatalogIds.POPULAR_MOVIES in inactiveState.enabledCatalogKeys)
+
+        viewModel.onEvent(TmdbSettingsEvent.ToggleCatalog(TmdbCatalogIds.POPULAR_MOVIES, enabled = true))
+        viewModel.onEvent(TmdbSettingsEvent.ToggleAdultContent(enabled = true))
+        advanceUntilIdle()
+
+        val updatedState = viewModel.uiState.value
+        assertFalse(updatedState.isActive)
+        assertTrue(TmdbCatalogIds.POPULAR_MOVIES in updatedState.enabledCatalogKeys)
+        assertTrue(updatedState.includeAdult)
+    }
+
+    private fun TestScope.createViewModel(tmdbSettings: TmdbSettings = TmdbSettings()): TmdbSettingsViewModel {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore> {
-            every { settings } returns MutableStateFlow(TmdbSettings())
+            every { settings } returns MutableStateFlow(tmdbSettings)
         }
         val catalogSettingsDataStore = TmdbCatalogSettingsDataStore(
             factory = profileDataStoreFactoryForTest(),
