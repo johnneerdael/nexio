@@ -198,17 +198,26 @@ class SubtitleTranslationService @Inject constructor(
                 } else if (document.format == TimedTextFormat.ASS ||
                     document.format == TimedTextFormat.SSA
                 ) {
-                    val protectedTranslations = mutableMapOf<String, String>()
-                    AssSsaTranslationBatchPlanner.plan(document.assSsaProtectedUnits())
-                        .forEach { batch ->
-                            protectedTranslations += translateProtectedAssSsaUnits(
-                                units = batch.units,
-                                targetLanguageCode = normalizedTarget,
-                                sourceLanguageCode = sourceLanguageCode,
-                                settings = normalizedSettings
-                            ).getOrThrow()
-                        }
-                    document.renderAssSsaProtected(protectedTranslations)
+                    if (normalizedSettings.assSsaSystemPromptEnabled) {
+                        translateRawAssSsaText(
+                            text = sourceText,
+                            targetLanguageCode = normalizedTarget,
+                            sourceLanguageCode = sourceLanguageCode,
+                            settings = normalizedSettings
+                        ).getOrThrow()
+                    } else {
+                        val protectedTranslations = mutableMapOf<String, String>()
+                        AssSsaTranslationBatchPlanner.plan(document.assSsaProtectedUnits())
+                            .forEach { batch ->
+                                protectedTranslations += translateProtectedAssSsaUnits(
+                                    units = batch.units,
+                                    targetLanguageCode = normalizedTarget,
+                                    sourceLanguageCode = sourceLanguageCode,
+                                    settings = normalizedSettings
+                                ).getOrThrow()
+                            }
+                        document.renderAssSsaProtected(protectedTranslations)
+                    }
                 } else {
                     val translatedBlocks = translateBlocks(
                         blocks = document.translatableBlocks,
