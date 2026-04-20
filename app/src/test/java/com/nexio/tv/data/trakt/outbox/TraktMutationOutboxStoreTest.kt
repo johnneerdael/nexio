@@ -233,6 +233,55 @@ class TraktMutationOutboxStoreTest {
         assertEquals("queued-2", restored.items.single().id)
     }
 
+    @Test
+    fun `read drops object shaped malformed envelopes missing required fields`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 1,
+              "snapshot": {
+                "items": [
+                  {
+                    "id": "missing-required-fields",
+                    "priority": "WATCHED",
+                    "payload": {},
+                    "metadata": {},
+                    "state": "QUEUED",
+                    "createdAtMs": 1,
+                    "updatedAtMs": 1,
+                    "nextAttemptAtMs": 1,
+                    "attemptCount": 0
+                  },
+                  {
+                    "id": "valid",
+                    "adapterKey": "progress",
+                    "mutationKind": "history_add",
+                    "priority": "WATCHED",
+                    "payload": {},
+                    "metadata": {},
+                    "state": "QUEUED",
+                    "createdAtMs": 1,
+                    "updatedAtMs": 1,
+                    "nextAttemptAtMs": 1,
+                    "attemptCount": 0,
+                    "profileId": 1
+                  }
+                ],
+                "nextWritableAtMs": 0,
+                "updatedAtMs": 1
+              }
+            }
+            """.trimIndent()
+        ).commit()
+        val store = TraktMutationOutboxStore(context = mockContext(prefs))
+
+        val restored = store.read()
+
+        assertEquals(listOf("valid"), restored.items.map { it.id })
+    }
+
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
         return mockk(relaxed = true) {
             every { getSharedPreferences("trakt_mutation_outbox", Context.MODE_PRIVATE) } returns prefs
