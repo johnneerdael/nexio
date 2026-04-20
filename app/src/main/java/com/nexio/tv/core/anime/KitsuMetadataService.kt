@@ -25,9 +25,15 @@ class KitsuMetadataService @Inject constructor(
 ) {
     suspend fun fetchEnrichment(rawId: String, mediaKind: ContentMediaKind): TvMetadataEnrichment? =
         withContext(Dispatchers.IO) {
-            if (!kitsuAuthService.providerAuthenticated()) return@withContext null
+            if (!kitsuAuthService.providerEnabled()) return@withContext null
             val animeId = AnimeStremioId.parse(rawId) ?: return@withContext null
-            val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
+            val kitsuId = when (animeId.source) {
+                AnimeIdSource.KITSU -> animeId.value
+                else -> {
+                    if (!kitsuAuthService.providerAuthenticated()) return@withContext null
+                    idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
+                }
+            }
             val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
             val response = runCatching {
                 api.getAnime(authorization, kitsuId)
@@ -59,9 +65,15 @@ class KitsuMetadataService @Inject constructor(
         mediaKind: ContentMediaKind,
         seasonNumbers: List<Int>
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> = withContext(Dispatchers.IO) {
-        if (!kitsuAuthService.providerAuthenticated()) return@withContext emptyMap()
+        if (!kitsuAuthService.providerEnabled()) return@withContext emptyMap()
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext emptyMap()
-        val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
+        val kitsuId = when (animeId.source) {
+            AnimeIdSource.KITSU -> animeId.value
+            else -> {
+                if (!kitsuAuthService.providerAuthenticated()) return@withContext emptyMap()
+                idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
+            }
+        }
         val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
         val episodes = fetchEpisodePages(authorization, kitsuId, rawId)
 
