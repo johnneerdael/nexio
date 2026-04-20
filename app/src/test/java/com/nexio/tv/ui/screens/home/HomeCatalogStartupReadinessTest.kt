@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
@@ -968,6 +969,88 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `publishable tmdb keys require current preference provenance and current catalog id`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val snapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = listOf(samplePreview("tmdb:1", ContentType.MOVIE, "Trending Movie"))
+                ),
+                TmdbCatalogIds.POPULAR_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.POPULAR_MOVIES,
+                    items = listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Popular Movie"))
+                )
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertEquals(
+            listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            buildPublishableConfiguredTmdbOrderKeys(prefs, snapshot)
+        )
+        assertEquals(
+            emptyList<String>(),
+            buildPublishableConfiguredTmdbOrderKeys(prefs.copy(includeAdult = true), snapshot)
+        )
+    }
+
+    @Test
+    fun `restored merged home snapshot removes tmdb rows without current source provenance`() {
+        val tmdbItem = samplePreview("tmdb:1", ContentType.MOVIE, "Stale TMDB Movie")
+        val addonItem = samplePreview("tt0000001", ContentType.MOVIE, "Addon Movie")
+        val restored = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(
+                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)),
+                addonRow("cinemeta", "popular", listOf(addonItem))
+            ),
+            fullCatalogRows = listOf(
+                tmdbRow(TmdbCatalogIds.TRENDING_MOVIES, listOf(tmdbItem)),
+                addonRow("cinemeta", "popular", listOf(addonItem))
+            ),
+            heroItems = listOf(tmdbItem, addonItem),
+            orderedGroupKeys = listOf(TmdbCatalogIds.TRENDING_MOVIES, "cinemeta_movie_popular")
+        )
+        val currentPreferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = true,
+            hideUnreleasedDigital = false
+        )
+        val mismatchedSnapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Current TMDB Movie"))
+                )
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = false,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        val filtered = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = restored,
+            tmdbPrefs = currentPreferences,
+            tmdbSnapshot = mismatchedSnapshot
+        )
+
+        assertEquals(listOf("cinemeta"), filtered.catalogRows.map { it.addonId })
+        assertEquals(listOf("cinemeta"), filtered.fullCatalogRows.map { it.addonId })
+        assertEquals(listOf("tt0000001"), filtered.heroItems.map { it.id })
+        assertEquals(listOf("cinemeta_movie_popular"), filtered.orderedGroupKeys)
+    }
+
+    @Test
     fun `persisted tmdb rows without preference provenance are not current rows`() {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
@@ -1085,6 +1168,24 @@ class HomeCatalogStartupReadinessTest {
             addonBaseUrl = "https://api.themoviedb.org/3",
             catalogId = catalogId,
             catalogName = "TMDB $catalogId",
+            type = ContentType.MOVIE,
+            items = items,
+            hasMore = false,
+            supportsSkip = false
+        )
+    }
+
+    private fun addonRow(
+        addonId: String,
+        catalogId: String,
+        items: List<MetaPreview>
+    ): CatalogRow {
+        return CatalogRow(
+            addonId = addonId,
+            addonName = addonId,
+            addonBaseUrl = "https://example.com/$addonId",
+            catalogId = catalogId,
+            catalogName = "Catalog $catalogId",
             type = ContentType.MOVIE,
             items = items,
             hasMore = false,

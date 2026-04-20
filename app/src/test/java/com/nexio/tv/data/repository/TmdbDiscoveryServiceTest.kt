@@ -177,6 +177,37 @@ class TmdbDiscoveryServiceTest {
         )
     }
 
+    @Test
+    fun `subset catalog refresh drops previously current rows when preference provenance changes`() = runTest {
+        val client = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending")),
+                TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 2, title = "Popular"))
+            )
+        )
+        val service = client.createService()
+        val previousPreferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = false
+        )
+        service.refreshCatalogs(previousPreferences, force = true)
+        client.requestedCatalogIds.clear()
+        val currentPreferences = previousPreferences.copy(includeAdult = true)
+
+        val refreshed = service.refreshCatalogs(
+            preferences = currentPreferences,
+            force = false,
+            catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), client.requestedCatalogIds)
+        assertEquals(setOf(TmdbCatalogIds.TRENDING_MOVIES), refreshed.rowsByCatalog.keys)
+        assertEquals(setOf(TmdbCatalogIds.TRENDING_MOVIES), refreshed.catalogIdsWithCurrentPreferences)
+        assertFalse(TmdbCatalogIds.POPULAR_MOVIES in refreshed.currentRowsFor(currentPreferences))
+    }
+
     private class FakeTmdbDiscoveryClient(
         private val credential: MetadataProviderCredential = MetadataProviderCredential(
             "key",

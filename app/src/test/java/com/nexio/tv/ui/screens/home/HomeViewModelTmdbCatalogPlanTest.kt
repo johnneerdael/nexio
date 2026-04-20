@@ -24,10 +24,11 @@ class HomeViewModelTmdbCatalogPlanTest {
             catalogId = TmdbCatalogIds.TRENDING_MOVIES,
             items = listOf(meta("tt0000001", "Movie"))
         )
+        val prefs = TmdbCatalogPreferences(enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES))
 
         val plan = planFor(
-            tmdbPrefs = TmdbCatalogPreferences(enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES)),
-            tmdbSnapshot = TmdbDiscoverySnapshot(rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow))
+            tmdbPrefs = prefs,
+            tmdbSnapshot = currentTmdbSnapshot(prefs, TmdbCatalogIds.TRENDING_MOVIES to tmdbRow)
         )
 
         assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), plan.publishableOrderKeys)
@@ -58,10 +59,40 @@ class HomeViewModelTmdbCatalogPlanTest {
             catalogId = TmdbCatalogIds.TRENDING_MOVIES,
             items = emptyList()
         )
+        val prefs = TmdbCatalogPreferences(enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES))
 
         val plan = planFor(
-            tmdbPrefs = TmdbCatalogPreferences(enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES)),
-            tmdbSnapshot = TmdbDiscoverySnapshot(rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow))
+            tmdbPrefs = prefs,
+            tmdbSnapshot = currentTmdbSnapshot(prefs, TmdbCatalogIds.TRENDING_MOVIES to tmdbRow)
+        )
+
+        assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), plan.expectedOrderKeys)
+        assertTrue(plan.publishableOrderKeys.isEmpty())
+        assertTrue(plan.rails.isEmpty())
+    }
+
+    @Test
+    fun `tmdb plan excludes rows not current for preferences`() {
+        val tmdbRow = tmdbRow(
+            catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+            items = listOf(meta("tt0000001", "Movie"))
+        )
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = true,
+            hideUnreleasedDigital = false
+        )
+
+        val plan = planFor(
+            tmdbPrefs = prefs,
+            tmdbSnapshot = TmdbDiscoverySnapshot(
+                rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
+                updatedAtMs = 123L,
+                includeAdult = false,
+                hideUnreleasedDigital = false,
+                catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+            )
         )
 
         assertEquals(listOf(TmdbCatalogIds.TRENDING_MOVIES), plan.expectedOrderKeys)
@@ -115,6 +146,20 @@ class HomeViewModelTmdbCatalogPlanTest {
             isLoading = false,
             hasMore = false,
             supportsSkip = false
+        )
+    }
+
+    private fun currentTmdbSnapshot(
+        prefs: TmdbCatalogPreferences,
+        vararg rows: Pair<String, CatalogRow>
+    ): TmdbDiscoverySnapshot {
+        val sanitized = prefs.sanitized()
+        return TmdbDiscoverySnapshot(
+            rowsByCatalog = rows.toMap(),
+            updatedAtMs = 123L,
+            includeAdult = sanitized.includeAdult,
+            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
+            catalogIdsWithCurrentPreferences = rows.map { it.first }.toSet()
         )
     }
 

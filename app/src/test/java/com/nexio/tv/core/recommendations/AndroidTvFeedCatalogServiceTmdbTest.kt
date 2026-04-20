@@ -38,19 +38,19 @@ class AndroidTvFeedCatalogServiceTmdbTest {
 
     @Test
     fun `feed options include enabled TMDB catalog from snapshot`() = runTest {
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
         val service = service(
-            tmdbSnapshot = TmdbDiscoverySnapshot(
-                rowsByCatalog = mapOf(
-                    TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
-                        catalogId = TmdbCatalogIds.TRENDING_MOVIES,
-                        items = listOf(meta("tmdb:1", "Movie"))
-                    )
+            tmdbSnapshot = currentTmdbSnapshot(
+                tmdbPrefs,
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = listOf(meta("tmdb:1", "Movie"))
                 )
             ),
-            tmdbPrefs = TmdbCatalogPreferences(
-                enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
-                catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
-            )
+            tmdbPrefs = tmdbPrefs
         )
 
         val option = service.observeFeedOptions().first()
@@ -84,6 +84,40 @@ class AndroidTvFeedCatalogServiceTmdbTest {
     }
 
     @Test
+    fun `feed options exclude TMDB rows without current preference provenance`() = runTest {
+        val tmdbPrefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            includeAdult = true,
+            hideUnreleasedDigital = false
+        )
+        val service = service(
+            tmdbSnapshot = TmdbDiscoverySnapshot(
+                rowsByCatalog = mapOf(
+                    TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                        catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                        items = listOf(meta("tmdb:1", "Trending"))
+                    ),
+                    TmdbCatalogIds.POPULAR_MOVIES to tmdbRow(
+                        catalogId = TmdbCatalogIds.POPULAR_MOVIES,
+                        items = listOf(meta("tmdb:2", "Popular"))
+                    )
+                ),
+                updatedAtMs = 123L,
+                includeAdult = false,
+                hideUnreleasedDigital = false,
+                catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+            ),
+            tmdbPrefs = tmdbPrefs
+        )
+
+        val keys = service.observeFeedOptions().first().map { it.key }
+
+        assertFalse("tmdb_movie_${TmdbCatalogIds.TRENDING_MOVIES}" in keys)
+        assertFalse("tmdb_movie_${TmdbCatalogIds.POPULAR_MOVIES}" in keys)
+    }
+
+    @Test
     fun `resolving selected TMDB feed returns snapshot items and row base url`() = runTest {
         val tmdbRow = tmdbRow(
             catalogId = TmdbCatalogIds.TRENDING_MOVIES,
@@ -94,9 +128,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
         )
         val fixture = fixture(
-            tmdbSnapshot = TmdbDiscoverySnapshot(
-                rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow)
-            ),
+            tmdbSnapshot = currentTmdbSnapshot(tmdbPrefs, TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
             tmdbPrefs = tmdbPrefs
         )
 
@@ -266,6 +298,20 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             isLoading = false,
             hasMore = false,
             supportsSkip = false
+        )
+    }
+
+    private fun currentTmdbSnapshot(
+        prefs: TmdbCatalogPreferences,
+        vararg rows: Pair<String, CatalogRow>
+    ): TmdbDiscoverySnapshot {
+        val sanitized = prefs.sanitized()
+        return TmdbDiscoverySnapshot(
+            rowsByCatalog = rows.toMap(),
+            updatedAtMs = 123L,
+            includeAdult = sanitized.includeAdult,
+            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
+            catalogIdsWithCurrentPreferences = rows.map { it.first }.toSet()
         )
     }
 
