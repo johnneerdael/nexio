@@ -2017,7 +2017,11 @@ private fun describeExtensionRendererMode(mode: Int): String {
 private fun buildStableAudioCapabilities(context: Context): AudioCapabilities {
     val detected = AudioCapabilities.getCapabilities(context, AudioAttributes.DEFAULT, null)
     return AudioCapabilities(
-        intArrayOf(C.ENCODING_PCM_16BIT),
+        safeAudioModeSupportedEncodingsForTesting(),
         detected.maxChannelCount
     )
+}
+
+internal fun safeAudioModeSupportedEncodingsForTesting(): IntArray {
+    return intArrayOf(C.ENCODING_PCM_16BIT)
 }
