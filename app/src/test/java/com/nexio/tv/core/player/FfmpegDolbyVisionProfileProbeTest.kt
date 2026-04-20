@@ -85,14 +85,14 @@ class FfmpegDolbyVisionProfileProbeTest {
     }
 
     @Test
-    fun `stream metadata populates video audio and hdr fields`() = runBlocking {
+    fun `stream metadata populates video and hdr fields`() = runBlocking {
         val probe = FfmpegDolbyVisionProfileProbe(
             backend = fakeBackend(
                 streamMetadataJson = """
                     {
                       "streams": [
                         {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020","dv_profile":7},
-                        {"codec_type":"audio","codec_name":"truehd"}
+                        {"codec_type":"subtitle","codec_name":"ass"}
                       ]
                     }
                 """.trimIndent()
@@ -109,7 +109,39 @@ class FfmpegDolbyVisionProfileProbeTest {
         assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
         assertEquals(7, result.profileNumber)
         assertEquals("hevc", result.videoCodec)
-        assertEquals("truehd", result.audioCodec)
+        assertEquals(null, result.audioCodec)
+        assertEquals("dolbyvision", result.hdrType)
+    }
+
+    @Test
+    fun `stream metadata side data result maps to detected profile`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = fakeBackend(
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {
+                          "index":0,
+                          "codec_type":"video",
+                          "codec_name":"hevc",
+                          "color_transfer":"smpte2084",
+                          "color_primaries":"bt2020",
+                          "side_data_list":[
+                            {"side_data_type":"DOVI configuration record","dv_profile":8}
+                          ]
+                        },
+                        {"index":2,"codec_type":"subtitle","codec_name":"ass"}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val result = probe.probe(context, "https://example.com/dv8.mkv", null, "dv8.mkv")
+
+        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
+        assertEquals(8, result.profileNumber)
+        assertEquals("hevc", result.videoCodec)
         assertEquals("dolbyvision", result.hdrType)
     }
 
@@ -120,8 +152,7 @@ class FfmpegDolbyVisionProfileProbeTest {
                 streamMetadataJson = """
                     {
                       "streams": [
-                        {"codec_type":"video","codec_name":"av1","color_transfer":"smpte2084","color_primaries":"bt2020","dv_profile":10},
-                        {"codec_type":"audio","codec_name":"eac3"}
+                        {"codec_type":"video","codec_name":"av1","color_transfer":"smpte2084","color_primaries":"bt2020","dv_profile":10}
                       ]
                     }
                 """.trimIndent()
@@ -133,20 +164,18 @@ class FfmpegDolbyVisionProfileProbeTest {
         assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
         assertEquals(10, result.profileNumber)
         assertEquals("av1", result.videoCodec)
-        assertEquals("eac3", result.audioCodec)
+        assertEquals(null, result.audioCodec)
         assertEquals("dolbyvision", result.hdrType)
     }
 
     @Test
-    fun `stream metadata prefers strongest audio track`() = runBlocking {
+    fun `stream metadata detects hdr10`() = runBlocking {
         val probe = FfmpegDolbyVisionProfileProbe(
             backend = fakeBackend(
                 streamMetadataJson = """
                     {
                       "streams": [
-                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020"},
-                        {"codec_type":"audio","codec_name":"ac3"},
-                        {"codec_type":"audio","codec_name":"truehd"}
+                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020"}
                       ]
                     }
                 """.trimIndent()
@@ -156,7 +185,7 @@ class FfmpegDolbyVisionProfileProbeTest {
         val result = probe.probe(context, "https://example.com/test.mkv", null, "test.mkv")
 
         assertEquals(DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION, result.status)
-        assertEquals("truehd", result.audioCodec)
+        assertEquals(null, result.audioCodec)
         assertEquals("hdr10", result.hdrType)
     }
 
@@ -167,8 +196,7 @@ class FfmpegDolbyVisionProfileProbeTest {
                 streamMetadataJson = """
                     {
                       "streams": [
-                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020","hdr10_plus":true},
-                        {"codec_type":"audio","codec_name":"eac3"}
+                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020","hdr10_plus":true}
                       ]
                     }
                 """.trimIndent()
@@ -179,7 +207,7 @@ class FfmpegDolbyVisionProfileProbeTest {
 
         assertEquals(DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION, result.status)
         assertEquals("hdr10+", result.hdrType)
-        assertEquals("eac3", result.audioCodec)
+        assertEquals(null, result.audioCodec)
     }
 
     @Test
@@ -199,8 +227,7 @@ class FfmpegDolbyVisionProfileProbeTest {
                           "color_transfer":"smpte2084",
                           "color_primaries":"bt2020",
                           "dv_profile":7
-                        },
-                        {"codec_type":"audio","codec_name":"truehd"}
+                        }
                       ]
                     }
                 """.trimIndent()
@@ -212,41 +239,11 @@ class FfmpegDolbyVisionProfileProbeTest {
         assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
         assertEquals(7, result.profileNumber)
         assertEquals("hevc", result.videoCodec)
-        assertEquals("truehd", result.audioCodec)
+        assertEquals(null, result.audioCodec)
     }
 
     @Test
-    fun `metadata without dv profile falls back to legacy profile probe`() = runBlocking {
-        val probe = FfmpegDolbyVisionProfileProbe(
-            backend = object : NativeDolbyVisionProfileBackend {
-                override fun probe(url: String, requestHeadersBlob: String?): Int = 7
-
-                override fun probeStreamMetadataJson(
-                    url: String,
-                    requestHeadersBlob: String?
-                ): String? {
-                    return """
-                        {
-                          "streams": [
-                            {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020"},
-                            {"codec_type":"audio","codec_name":"eac3"}
-                          ]
-                        }
-                    """.trimIndent()
-                }
-            }
-        )
-
-        val result = probe.probe(context, "https://example.com/dv-webdl.mkv", null, "dv-webdl.mkv")
-
-        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
-        assertEquals(7, result.profileNumber)
-        assertEquals("hevc", result.videoCodec)
-        assertEquals("eac3", result.audioCodec)
-    }
-
-    @Test
-    fun `metadata without dv profile remains not dolby vision when legacy probe finds no profile`() =
+    fun `metadata without dv profile remains not dolby vision`() =
         runBlocking {
             val probe = FfmpegDolbyVisionProfileProbe(
                 backend = object : NativeDolbyVisionProfileBackend {

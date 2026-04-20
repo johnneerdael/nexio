@@ -126,29 +126,17 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun negativeProbeOnlyEnablesAssReadyPipelineForKnownMkvOrWebmFilename() {
-        assertTrue(
+    fun negativeProbeNeverEnablesAssReadyPipelineForProgressiveFallback() {
+        assertFalse(
             shouldEnableAssSsaPipelineForProgressiveFallback(
                 url = "https://example.test/proxy",
                 filename = "episode.mkv"
             )
         )
-        assertTrue(
+        assertFalse(
             shouldEnableAssSsaPipelineForProgressiveFallback(
                 url = "https://example.test/proxy",
                 filename = "episode.webm"
-            )
-        )
-        assertFalse(
-            shouldEnableAssSsaPipelineForProgressiveFallback(
-                url = "https://example.test/proxy",
-                filename = null
-            )
-        )
-        assertFalse(
-            shouldEnableAssSsaPipelineForProgressiveFallback(
-                url = "https://example.test/playlist.m3u8",
-                filename = "episode.mkv"
             )
         )
         assertFalse(
@@ -160,36 +148,14 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun overlayProviderNullWaitsForRetryWithoutClaimingAssSsaPipelineActive() {
+    fun overlayProviderNullStillStartsAssSsaPipelineWithoutReinitialization() {
         val decision = resolveAssSsaPipelineOverlayDecision(
             requestedUseAssSsaPipeline = true,
             overlayAttached = false
         )
 
-        assertFalse(decision.useAssSsaPipeline)
+        assertTrue(decision.useAssSsaPipeline)
         assertFalse(decision.disableOverrideForCurrentStream)
-    }
-
-    @Test
-    fun overlayAvailabilityRetriesPendingAssSsaPipeline() {
-        assertTrue(
-            shouldRetryAssSsaPipelineWhenOverlayAvailable(
-                overrideForCurrentStream = true,
-                activePlayerUsesAssSsaRenderer = false,
-                switchInFlight = false,
-                fallbackHandled = false,
-                overlayAvailable = true
-            )
-        )
-        assertFalse(
-            shouldRetryAssSsaPipelineWhenOverlayAvailable(
-                overrideForCurrentStream = true,
-                activePlayerUsesAssSsaRenderer = false,
-                switchInFlight = false,
-                fallbackHandled = true,
-                overlayAvailable = true
-            )
-        )
     }
 
     @Test

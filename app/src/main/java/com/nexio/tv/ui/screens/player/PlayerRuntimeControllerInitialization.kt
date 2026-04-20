@@ -126,7 +126,7 @@ internal fun resolveAssSsaPipelineOverlayDecision(
     overlayAttached: Boolean
 ): AssSsaPipelineOverlayDecision {
     return AssSsaPipelineOverlayDecision(
-        useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
+        useAssSsaPipeline = requestedUseAssSsaPipeline,
         disableOverrideForCurrentStream = false
     )
 }
@@ -154,37 +154,12 @@ internal fun resolveAssSsaPipelineTrackAdjustment(
     )
 }
 
-internal fun shouldRetryAssSsaPipelineWhenOverlayAvailable(
-    overrideForCurrentStream: Boolean?,
-    activePlayerUsesAssSsaRenderer: Boolean,
-    switchInFlight: Boolean,
-    fallbackHandled: Boolean,
-    overlayAvailable: Boolean
-): Boolean {
-    return overrideForCurrentStream == true &&
-        !activePlayerUsesAssSsaRenderer &&
-        !switchInFlight &&
-        !fallbackHandled &&
-        overlayAvailable
-}
-
 internal fun PlayerRuntimeController.setAssSsaRenderOverlayViewProvider(
     provider: (() -> AssSsaRenderOverlayView?)?
 ) {
     assSsaOverlayViewProvider = provider
     val overlayView = provider?.invoke()
     assSsaRenderController?.setOverlayView(overlayView)
-    if (shouldRetryAssSsaPipelineWhenOverlayAvailable(
-            overrideForCurrentStream = assSsaPipelineOverrideForCurrentStream,
-            activePlayerUsesAssSsaRenderer = activePlayerUsesAssSsaRenderer,
-            switchInFlight = assSsaPipelineSwitchInFlight,
-            fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream,
-            overlayAvailable = overlayView != null
-        )
-    ) {
-        assSsaPipelineSwitchInFlight = true
-        scheduleDeferredPlayerReinitialize(fromPositionMs = _exoPlayer?.currentPosition ?: 0L)
-    }
 }
 
 internal fun shouldEnableAssSsaSampleTranslation(
@@ -322,14 +297,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         "ASS_SSA_RENDER: FFmpeg startup probe did not detect embedded ASS/SSA " +
                             "host=${url.safeHost()}"
                     )
-                    if (shouldEnableAssSsaPipelineForProgressiveFallback(url, currentFilename)) {
-                        assSsaPipelineOverrideForCurrentStream = true
-                        Log.w(
-                            PlayerRuntimeController.TAG,
-                            "ASS_SSA_RENDER: enabling progressive ASS-ready pipeline after " +
-                                "negative startup probe host=${url.safeHost()} filename=${currentFilename ?: "unknown"}"
-                        )
-                    }
                 }
             }
             val requestedUseAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
@@ -1912,14 +1879,7 @@ internal fun shouldEnableAssSsaPipelineForProgressiveFallback(
     url: String,
     filename: String?
 ): Boolean {
-    if (!isProgressiveMediaUrl(url)) return false
-    val normalizedFilename = filename
-        ?.substringBefore('?')
-        ?.substringBefore('#')
-        ?.lowercase(Locale.US)
-        .orEmpty()
-    return normalizedFilename.endsWith(".mkv") ||
-        normalizedFilename.endsWith(".webm")
+    return false
 }
 
 private fun shouldProbeEmbeddedAssSsaBeforePlayerInit(url: String): Boolean {

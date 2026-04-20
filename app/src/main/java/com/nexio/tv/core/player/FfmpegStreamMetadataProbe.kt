@@ -127,7 +127,8 @@ object FfmpegStreamMetadataProbe {
                         rFrameRate = obj.get("r_frame_rate")?.asStringOrNull(),
                         colorTransfer = obj.get("color_transfer")?.asStringOrNull(),
                         colorPrimaries = obj.get("color_primaries")?.asStringOrNull(),
-                        dvProfile = obj.get("dv_profile")?.asIntOrNull(),
+                        dvProfile = obj.get("dv_profile")?.asIntOrNull()
+                            ?: obj.firstDolbyVisionProfileFromSideData(),
                         hdr10Plus = obj.get("hdr10_plus")?.asBooleanOrNull() ?: false
                     )
                 }
@@ -174,4 +175,17 @@ private fun JsonElement.asIntOrNull(): Int? {
 
 private fun JsonElement.asBooleanOrNull(): Boolean? {
     return runCatching { asBoolean }.getOrNull()
+}
+
+private fun com.google.gson.JsonObject.firstDolbyVisionProfileFromSideData(): Int? {
+    return getAsJsonArray("side_data_list")
+        ?.asSequence()
+        ?.mapNotNull { sideData ->
+            sideData
+                ?.takeIf { it.isJsonObject }
+                ?.asJsonObject
+                ?.get("dv_profile")
+                ?.asIntOrNull()
+        }
+        ?.firstOrNull()
 }
