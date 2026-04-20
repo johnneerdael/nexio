@@ -10,6 +10,7 @@ import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -112,6 +113,99 @@ class MetadataDiskCacheStoreTest {
         store.flushPendingWritesForTest()
 
         assertNull(store.readMeta("movie:tt1", "en", "RPDB:12345"))
+    }
+
+    @Test
+    fun `readMeta tolerates current schema entry without rating source`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "meta::movie:tt1::en::native",
+            """
+            {
+              "value": {
+                "id": "tt1",
+                "type": "MOVIE",
+                "rawType": "movie",
+                "name": "Legacy Movie",
+                "poster": null,
+                "posterShape": "POSTER",
+                "background": null,
+                "logo": null,
+                "description": null,
+                "releaseInfo": null,
+                "imdbRating": null,
+                "genres": [],
+                "runtime": null,
+                "director": [],
+                "writer": [],
+                "cast": [],
+                "castMembers": [],
+                "videos": [],
+                "productionCompanies": [],
+                "networks": [],
+                "ageRating": null,
+                "country": null,
+                "awards": null,
+                "language": null,
+                "links": [],
+                "trailerYtIds": []
+              },
+              "metaSchemaVersion": 3,
+              "languageEpoch": 0,
+              "updatedAtMs": ${System.currentTimeMillis()}
+            }
+            """.trimIndent()
+        ).apply()
+
+        val meta = store.readMeta("movie:tt1", "en", "native")
+
+        meta.hashCode()
+        assertEquals(TitleRatingSource.IMDB, meta?.ratingSource)
+    }
+
+    @Test
+    fun `read TMDB enrichment tolerates legacy cache without rating source`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "tmdb::movie:550::en-US::native",
+            """
+            {
+              "value": {
+                "localizedTitle":"Fight Club",
+                "description":null,
+                "genres":[],
+                "backdrop":null,
+                "logo":null,
+                "poster":null,
+                "directorMembers":[],
+                "writerMembers":[],
+                "castMembers":[],
+                "releaseInfo":"1999",
+                "rating":8.4,
+                "runtimeMinutes":139,
+                "director":[],
+                "writer":[],
+                "productionCompanies":[],
+                "networks":[],
+                "ageRating":null,
+                "countries":null,
+                "language":"en",
+                "collectionId":null,
+                "collectionName":null
+              },
+              "tmdbSchemaVersion": 2,
+              "languageEpoch": 0,
+              "updatedAtMs": ${System.currentTimeMillis()}
+            }
+            """.trimIndent()
+        ).commit()
+
+        val enrichment = store.readTmdbEnrichment("movie:550", "en-US", "native")
+
+        enrichment.hashCode()
+        assertEquals(TitleRatingSource.TMDB, enrichment?.ratingSource)
     }
 
     @Test
