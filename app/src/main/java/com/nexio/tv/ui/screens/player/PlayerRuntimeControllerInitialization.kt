@@ -126,7 +126,7 @@ internal fun resolveAssSsaPipelineOverlayDecision(
     overlayAttached: Boolean
 ): AssSsaPipelineOverlayDecision {
     return AssSsaPipelineOverlayDecision(
-        useAssSsaPipeline = requestedUseAssSsaPipeline,
+        useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
         disableOverrideForCurrentStream = false
     )
 }
@@ -154,11 +154,37 @@ internal fun resolveAssSsaPipelineTrackAdjustment(
     )
 }
 
+internal fun shouldRetryAssSsaPipelineWhenOverlayAvailable(
+    overrideForCurrentStream: Boolean?,
+    activePlayerUsesAssSsaRenderer: Boolean,
+    switchInFlight: Boolean,
+    fallbackHandled: Boolean,
+    overlayAvailable: Boolean
+): Boolean {
+    return overrideForCurrentStream == true &&
+        !activePlayerUsesAssSsaRenderer &&
+        !switchInFlight &&
+        !fallbackHandled &&
+        overlayAvailable
+}
+
 internal fun PlayerRuntimeController.setAssSsaRenderOverlayViewProvider(
     provider: (() -> AssSsaRenderOverlayView?)?
 ) {
     assSsaOverlayViewProvider = provider
-    assSsaRenderController?.setOverlayView(provider?.invoke())
+    val overlayView = provider?.invoke()
+    assSsaRenderController?.setOverlayView(overlayView)
+    if (shouldRetryAssSsaPipelineWhenOverlayAvailable(
+            overrideForCurrentStream = assSsaPipelineOverrideForCurrentStream,
+            activePlayerUsesAssSsaRenderer = activePlayerUsesAssSsaRenderer,
+            switchInFlight = assSsaPipelineSwitchInFlight,
+            fallbackHandled = assSsaPipelineFallbackHandledForCurrentStream,
+            overlayAvailable = overlayView != null
+        )
+    ) {
+        assSsaPipelineSwitchInFlight = true
+        scheduleDeferredPlayerReinitialize(fromPositionMs = _exoPlayer?.currentPosition ?: 0L)
+    }
 }
 
 internal fun shouldEnableAssSsaSampleTranslation(
@@ -1893,8 +1919,7 @@ internal fun shouldEnableAssSsaPipelineForProgressiveFallback(
         ?.lowercase(Locale.US)
         .orEmpty()
     return normalizedFilename.endsWith(".mkv") ||
-        normalizedFilename.endsWith(".webm") ||
-        normalizedFilename.isBlank()
+        normalizedFilename.endsWith(".webm")
 }
 
 private fun shouldProbeEmbeddedAssSsaBeforePlayerInit(url: String): Boolean {
@@ -1991,31 +2016,8 @@ private fun describeExtensionRendererMode(mode: Int): String {
 @Suppress("DEPRECATION")
 private fun buildStableAudioCapabilities(context: Context): AudioCapabilities {
     val detected = AudioCapabilities.getCapabilities(context, AudioAttributes.DEFAULT, null)
-    val supportedEncodings = mutableListOf<Int>()
-    val knownEncodings = intArrayOf(
-        C.ENCODING_PCM_16BIT,
-        C.ENCODING_AC3,
-        C.ENCODING_AC4,
-        C.ENCODING_DTS,
-        C.ENCODING_E_AC3_JOC,
-        C.ENCODING_E_AC3,
-        C.ENCODING_DOLBY_TRUEHD
-    )
-    for (encoding in knownEncodings) {
-        if (detected.supportsEncoding(encoding)) {
-            supportedEncodings += encoding
-        }
-    }
-    // Force DTS-HD/DTS:X passthrough down to DTS core. This avoids AudioTrack init failures on
-    // devices that advertise DTS-HD direct playback but fail to initialize the encoded sink.
-    if ((detected.supportsEncoding(C.ENCODING_DTS_HD) ||
-            detected.supportsEncoding(C.ENCODING_DTS_UHD_P2)) &&
-        C.ENCODING_DTS !in supportedEncodings
-    ) {
-        supportedEncodings += C.ENCODING_DTS
-    }
     return AudioCapabilities(
-        supportedEncodings.toIntArray(),
+        intArrayOf(C.ENCODING_PCM_16BIT),
         detected.maxChannelCount
     )
 }
