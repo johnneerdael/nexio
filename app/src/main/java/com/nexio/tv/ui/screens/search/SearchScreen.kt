@@ -91,6 +91,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.domain.model.MetaPreview
 
 internal data class SearchManualStreamSelectionTarget(
@@ -451,6 +452,16 @@ fun SearchScreen(
                     keyboardController = keyboardController
                 )
 
+                if (uiState.imdbSuggestions.isNotEmpty()) {
+                    ImdbSuggestionDropdown(
+                        suggestions = uiState.imdbSuggestions,
+                        onSelect = { suggestion ->
+                            val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
+                            onNavigateToDetail(suggestion.tconst, type, "")
+                        }
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Box(
@@ -500,6 +511,18 @@ fun SearchScreen(
                         onOpenDiscover = onOpenDiscover,
                         keyboardController = keyboardController
                     )
+                }
+
+                if (uiState.imdbSuggestions.isNotEmpty()) {
+                    item {
+                        ImdbSuggestionDropdown(
+                            suggestions = uiState.imdbSuggestions,
+                            onSelect = { suggestion ->
+                                val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
+                                onNavigateToDetail(suggestion.tconst, type, "")
+                            }
+                        )
+                    }
                 }
 
                 if (trimmedSubmittedQuery.length < 2 || hasPendingUnsubmittedQuery) {
@@ -646,6 +669,55 @@ fun SearchScreen(
                 searchManualStreamSelectionTarget = null
             }
         )
+    }
+}
+
+@Composable
+private fun ImdbSuggestionDropdown(
+    suggestions: List<ImdbSuggestion>,
+    onSelect: (ImdbSuggestion) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        suggestions.forEach { suggestion ->
+            Button(
+                onClick = { onSelect(suggestion) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
+                val typeLabel = if (suggestion.titleType.equals("movie", ignoreCase = true)) {
+                    "Movie"
+                } else {
+                    "Series"
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = suggestion.primaryTitle + year,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = typeLabel,
+                        style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
+                        color = NexioColors.TextSecondary
+                    )
+                }
+            }
+        }
     }
 }
 

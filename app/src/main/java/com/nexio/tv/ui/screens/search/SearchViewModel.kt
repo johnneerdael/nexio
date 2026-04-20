@@ -3,6 +3,8 @@ package com.nexio.tv.ui.screens.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.remote.api.ImdbSearchService
+import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DEFAULT_MAX_RECENT_SEARCHES
@@ -37,7 +39,8 @@ class SearchViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
-    private val searchHistoryDataStore: SearchHistoryDataStore
+    private val searchHistoryDataStore: SearchHistoryDataStore,
+    private val imdbSearchService: ImdbSearchService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -177,18 +180,40 @@ class SearchViewModel @Inject constructor(
         suggestionJob?.cancel()
 
         if (query.length < 2) {
-            _uiState.update { it.copy(suggestions = emptyList()) }
+            _uiState.update { it.copy(suggestions = emptyList(), imdbSuggestions = emptyList()) }
             return
         }
 
         // Don't show suggestions if the query already matches the submitted search
         if (query == _uiState.value.submittedQuery.trim() && _uiState.value.catalogRows.isNotEmpty()) {
-            _uiState.update { it.copy(suggestions = emptyList()) }
+            _uiState.update { it.copy(suggestions = emptyList(), imdbSuggestions = emptyList()) }
             return
         }
 
         suggestionJob = viewModelScope.launch {
             kotlinx.coroutines.delay(SUGGESTION_DEBOUNCE_MS)
+
+            val imdbResults: List<ImdbSuggestion> = try {
+                imdbSearchService.search(query)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (_uiState.value.query.trim() != query) return@launch
+            if (imdbResults.isNotEmpty()) {
+                val names = imdbResults.asSequence()
+                    .map { it.primaryTitle }
+                    .distinct()
+                    .take(MAX_SUGGESTIONS)
+                    .toList()
+                _uiState.update {
+                    it.copy(suggestions = names, imdbSuggestions = imdbResults)
+                }
+                return@launch
+            }
+
+            _uiState.update { it.copy(imdbSuggestions = emptyList()) }
 
             val addons = try {
                 addonRepository.getInstalledAddons().first()
@@ -268,7 +293,8 @@ class SearchViewModel @Inject constructor(
             it.copy(
                 submittedQuery = query,
                 query = rawQuery,
-                suggestions = emptyList()
+                suggestions = emptyList(),
+                imdbSuggestions = emptyList()
             )
         }
 

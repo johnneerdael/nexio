@@ -329,6 +329,9 @@ android {
         buildConfigField("String", "TMDB_API_URL", "\"${resolveProperty(devProperties, localProperties, "TMDB_API_URL", "https://api.themoviedb.org/3/")}\"")
         buildConfigField("String", "TVDB_API_KEY", "\"${resolveProperty(devProperties, localProperties, "TVDB_API_KEY")}\"")
         buildConfigField("String", "TVDB_API_URL", "\"${resolveProperty(devProperties, localProperties, "TVDB_API_URL", "https://api4.thetvdb.com/v4/")}\"")
+        buildConfigField("String", "IMDB_API_URL", "\"${resolveProperty(devProperties, localProperties, "IMDB_API_URL", "https://api.nexioapp.org/v1/")}\"")
+        buildConfigField("String", "IMDB_WS_URL", "\"${resolveProperty(devProperties, localProperties, "IMDB_WS_URL", "wss://api.nexioapp.org/v1/ws")}\"")
+        buildConfigField("String", "IMDB_API_KEY", "\"${resolveProperty(devProperties, localProperties, "IMDB_API_KEY")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
         buildConfigField("boolean", "DOVI_EXTRACTOR_HOOK_READY", doviExtractorHookReady.toString())
         if (enableDoviNative) {

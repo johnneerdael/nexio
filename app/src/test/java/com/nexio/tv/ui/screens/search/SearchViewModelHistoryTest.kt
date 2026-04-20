@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.search
 
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.remote.api.ImdbSearchService
+import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.CatalogRow
@@ -51,7 +53,8 @@ class SearchViewModelHistoryTest {
             catalogRepository = EmptyCatalogRepository(),
             layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
             playerSettingsDataStore = playerSettingsDataStoreForTest(),
-            searchHistoryDataStore = historyStore
+            searchHistoryDataStore = historyStore,
+            imdbSearchService = EmptyImdbSearchService
         )
 
         viewModel.onEvent(SearchEvent.QueryChanged("  Severance  "))
@@ -63,6 +66,10 @@ class SearchViewModelHistoryTest {
         }
 
         assertEquals(listOf("Severance"), recentSearches)
+    }
+
+    private object EmptyImdbSearchService : ImdbSearchService {
+        override suspend fun search(query: String, types: Set<String>): List<ImdbSuggestion> = emptyList()
     }
 
     private class EmptyAddonRepository : AddonRepository {
