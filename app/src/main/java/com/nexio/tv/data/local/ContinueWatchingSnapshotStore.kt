@@ -232,7 +232,9 @@ class ContinueWatchingSnapshotStore private constructor(
     ): Map<String, HomeDisplayMetadata> {
         val obj = root.getAsJsonObject(key) ?: return emptyMap()
         val type = object : TypeToken<Map<String, HomeDisplayMetadata>>() {}.type
-        return gson.fromJson<Map<String, HomeDisplayMetadata>>(obj, type) ?: emptyMap()
+        return gson.fromJson<Map<String, HomeDisplayMetadata>>(obj, type)
+            ?.mapValues { (_, metadata) -> metadata.sanitizedForCache() }
+            ?: emptyMap()
     }
 
     private fun currentLanguageTag(): String {
