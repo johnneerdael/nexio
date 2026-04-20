@@ -34,18 +34,16 @@ interface TmdbApi {
 
     @GET("trending/movie/{time_window}")
     suspend fun getTrendingMovies(
-        @Path("time_window") timeWindow: String = "week",
+        @Path("time_window") timeWindow: String = "day",
         @Query("api_key") apiKey: String,
-        @Query("language") language: String? = null,
-        @Query("page") page: Int = 1
+        @Query("language") language: String? = null
     ): Response<TmdbPagedMediaResponse>
 
     @GET("trending/tv/{time_window}")
     suspend fun getTrendingTv(
-        @Path("time_window") timeWindow: String = "week",
+        @Path("time_window") timeWindow: String = "day",
         @Query("api_key") apiKey: String,
-        @Query("language") language: String? = null,
-        @Query("page") page: Int = 1
+        @Query("language") language: String? = null
     ): Response<TmdbPagedMediaResponse>
 
     @GET("movie/popular")
