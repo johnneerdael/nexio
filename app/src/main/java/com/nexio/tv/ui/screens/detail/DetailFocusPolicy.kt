@@ -115,3 +115,29 @@ internal fun resolvePeopleSectionUpTarget(
         SectionUpTarget.HERO_PLAY
     }
 }
+
+/**
+ * Returns true when the detail screen should re-steal focus back onto the hero Play button
+ * after it previously landed there and then lost focus without an intentional user navigation.
+ *
+ * The guard is intentionally narrow so it never fights against the user:
+ * - It only applies while no explicit restore is pending.
+ * - It never runs while a trailer is starting or playing (trailer flow owns focus).
+ * - It requires that Play had been focused at least once (we are re-stealing, not claiming).
+ * - It exits immediately once the user navigates away (down/left/right/other hero action).
+ */
+internal fun shouldReclaimPlayFocus(
+    playEverFocused: Boolean,
+    playIsFocused: Boolean,
+    userHasNavigatedFromPlay: Boolean,
+    hasPendingRestoreTarget: Boolean,
+    isTrailerPlaying: Boolean,
+    isTrailerLoading: Boolean
+): Boolean {
+    return playEverFocused &&
+        !playIsFocused &&
+        !userHasNavigatedFromPlay &&
+        !hasPendingRestoreTarget &&
+        !isTrailerPlaying &&
+        !isTrailerLoading
+}

@@ -1063,6 +1063,10 @@ private fun MetaDetailsContent(
     var pendingRestoreMoreLikeItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
     var restoreFocusToken by rememberSaveable(meta.id) { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
+    // Guard state for post-landing focus-thief protection on the Play button.
+    var playButtonIsFocused by remember { mutableStateOf(false) }
+    var playButtonEverFocused by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var userHasNavigatedFromPlay by rememberSaveable(meta.id) { mutableStateOf(false) }
     var initialDetailReturnFocusHandled by remember(
         meta.id,
         detailReturnEpisodeFocusRequest?.season,
@@ -1527,6 +1531,7 @@ private fun MetaDetailsContent(
         } else {
             {
                 hasUserMovedDownFromHero = true
+                userHasNavigatedFromPlay = true
                 coroutineScope.launch {
                     logFocusState("heroMoveDownRequested")
                     moveFocusToLazyItem(
@@ -1565,19 +1570,53 @@ private fun MetaDetailsContent(
             )
         ) {
             try {
-                delay(300)
+                delay(120)
                 if (!initialHeroFocusRequested) {
                     logFocusState("autoResetFocusToHero fallback")
-                    resetFocusToHero(
-                        focusManager = focusManager,
-                        listState = listState,
-                        heroPlayFocusRequester = heroPlayFocusRequester,
+                    heroPlayFocusRequester.requestFocusUntilFocused(
+                        isFocused = { playButtonIsFocused },
+                        initialFrames = 0,
                         reason = "initial_detail_entry_fallback"
                     )
                 }
             } finally {
                 logFocusState("autoResetFocusToHero finished")
             }
+        }
+    }
+
+    // Post-landing guard: if Play had focus and loses it without an explicit user navigation,
+    // re-steal focus back. Runs only while the guard policy allows and for a bounded window.
+    LaunchedEffect(
+        meta.id,
+        playButtonEverFocused,
+        userHasNavigatedFromPlay,
+        pendingRestoreType,
+        isTrailerPlaying,
+        isTrailerLoading
+    ) {
+        if (!playButtonEverFocused) return@LaunchedEffect
+        // Bounded window (~1.5 s) after initial landing so we don't fight users forever.
+        val guardFrames = 90
+        repeat(guardFrames) {
+            if (
+                !shouldReclaimPlayFocus(
+                    playEverFocused = playButtonEverFocused,
+                    playIsFocused = playButtonIsFocused,
+                    userHasNavigatedFromPlay = userHasNavigatedFromPlay,
+                    hasPendingRestoreTarget = pendingRestoreType != null,
+                    isTrailerPlaying = isTrailerPlaying,
+                    isTrailerLoading = isTrailerLoading
+                )
+            ) {
+                if (userHasNavigatedFromPlay) return@LaunchedEffect
+                // Skip this frame; conditions may change (e.g., trailer resolving).
+                delay(16)
+                return@repeat
+            }
+            logFocusState("reclaimPlayFocus guardActive")
+            runCatching { heroPlayFocusRequester.requestFocus() }
+            delay(32)
         }
     }
 
@@ -1713,6 +1752,10 @@ private fun MetaDetailsContent(
                 onHeroActionFocused = { action ->
                     logFocusState("heroActionFocused action=$action")
                     initialHeroFocusRequested = true
+                    if (action != HeroAction.PLAY) {
+                        // Moving to LIBRARY/TRAILER is a real user navigation — disarm the guard.
+                        userHasNavigatedFromPlay = true
+                    }
                     clearPendingRestore()
                 },
                 restorePlayFocusToken = if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0,
@@ -1723,6 +1766,12 @@ private fun MetaDetailsContent(
                     clearPendingRestore()
                     coroutineScope.launch {
                         listState.restoreHeroScrollAfterFocus(reason = "play_focus_restored")
+                    }
+                },
+                onPlayFocusChanged = { focused ->
+                    playButtonIsFocused = focused
+                    if (focused) {
+                        playButtonEverFocused = true
                     }
                 }
             )
