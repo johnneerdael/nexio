@@ -66,6 +66,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 
+private const val HERO_DESCRIPTION_MAX_LINES = 6
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun HeroContentSection(
@@ -261,12 +263,20 @@ internal fun HeroContentSection(
                 }
 
                 if (meta.description != null) {
+                    val fullDescription = meta.description
+                    var displayedDescription by remember(fullDescription) { mutableStateOf(fullDescription) }
                     Text(
-                        text = meta.description,
+                        text = displayedDescription,
                         style = MaterialTheme.typography.bodyMedium,
                         color = NexioColors.TextPrimary,
-                        maxLines = 8,
-                        overflow = TextOverflow.Ellipsis,
+                        maxLines = HERO_DESCRIPTION_MAX_LINES,
+                        overflow = TextOverflow.Clip,
+                        onTextLayout = { layout ->
+                            if (layout.hasVisualOverflow && displayedDescription == fullDescription) {
+                                val visibleEnd = layout.getLineEnd(HERO_DESCRIPTION_MAX_LINES - 1, visibleEnd = true)
+                                displayedDescription = collapseHeroDescriptionForOverflow(fullDescription, visibleEnd)
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth(0.6f)
                             .padding(bottom = 12.dp)
@@ -277,6 +287,18 @@ internal fun HeroContentSection(
             }
         }
     }
+}
+
+internal fun collapseHeroDescriptionForOverflow(text: String, visibleEnd: Int): String {
+    val visible = text
+        .take(visibleEnd.coerceIn(0, text.length))
+        .trimEnd()
+    val withoutTrailingPeriod = if (visible.endsWith(".")) {
+        visible.dropLast(1).trimEnd()
+    } else {
+        visible
+    }
+    return "$withoutTrailingPeriod..."
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
