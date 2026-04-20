@@ -33,7 +33,6 @@ class KitsuMetadataService @Inject constructor(
 
             val resource = response.takeIf { it.isSuccessful }?.body()?.data ?: return@withContext null
             val attributes = resource.attributes ?: return@withContext null
-            val rating = attributes.averageRating?.toDoubleOrNull()?.div(10.0)
             TvMetadataEnrichment(
                 seriesTvdbId = null,
                 localizedTitle = attributes.canonicalTitle,
@@ -42,7 +41,7 @@ class KitsuMetadataService @Inject constructor(
                 backdrop = attributes.coverImage?.bestUrl(),
                 poster = attributes.posterImage?.bestUrl(),
                 releaseInfo = attributes.startDate,
-                rating = rating,
+                rating = null,
                 runtimeMinutes = attributes.episodeLength,
                 ageRating = attributes.ageRating,
                 language = "ja",

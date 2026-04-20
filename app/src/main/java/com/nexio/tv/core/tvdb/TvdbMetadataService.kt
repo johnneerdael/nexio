@@ -353,7 +353,7 @@ class TvdbMetadataService @Inject constructor(
         if (
             title == null && description == null && genres.isEmpty() && poster == null &&
             artwork.backdrop == null && artwork.logo == null && firstAired.trimmed() == null &&
-            score == null && averageRuntime == null && contentRatings.isEmpty()
+            averageRuntime == null && contentRatings.isEmpty()
         ) {
             return null
         }
@@ -367,7 +367,7 @@ class TvdbMetadataService @Inject constructor(
             logo = artwork.logo,
             poster = poster,
             releaseInfo = firstAired.trimmed(),
-            rating = score,
+            rating = null,
             runtimeMinutes = averageRuntime,
             ageRating = advancedMetadata?.ageRating ?: contentRatings.firstOrNull(),
             countries = countries.takeIf { it.isNotEmpty() },

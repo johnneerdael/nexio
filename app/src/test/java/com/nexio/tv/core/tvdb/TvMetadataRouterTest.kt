@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TvdbSettings
 import com.nexio.tv.domain.model.TvdbValidationStatus
@@ -127,6 +128,7 @@ class TvMetadataRouterTest {
 
         assertEquals(TvProvider.TMDB, decision.provider)
         assertEquals("Fallback title", decision.value?.localizedTitle)
+        assertEquals(TitleRatingSource.TMDB, decision.value?.ratingSource)
         assertNull(decision.value?.seriesTvdbId)
         assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_INACTIVE })
         assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB })

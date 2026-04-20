@@ -34,6 +34,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import retrofit2.Response
 import retrofit2.http.GET
@@ -186,6 +187,23 @@ class TvdbMetadataServiceTest {
         assertEquals("HBO", enrichment?.networks?.firstOrNull()?.name)
         assertEquals("Bighead Littlehead", enrichment?.productionCompanies?.firstOrNull()?.name)
         coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false) }
+    }
+
+    @Test
+    fun `series enrichment does not expose tvdb score as rating`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
+        } returns Response.success(
+            TvdbSeriesExtendedResponse(data = fullSeriesRecord().copy(score = 14244.2))
+        )
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
+
+        assertNull(enrichment?.rating)
     }
 
     @Test
