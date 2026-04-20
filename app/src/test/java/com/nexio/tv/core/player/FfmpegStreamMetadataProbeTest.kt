@@ -72,4 +72,34 @@ class FfmpegStreamMetadataProbeTest {
         assertEquals(2, calls)
         assertEquals("hevc", recovered?.streams?.single()?.codecName)
     }
+
+    @Test
+    fun parsesDolbyVisionProfileFromFfprobeSideDataList() {
+        val result = FfmpegStreamMetadataProbe.parseForTesting(
+            """
+            {
+              "streams": [
+                {
+                  "index": 0,
+                  "codec_type": "video",
+                  "codec_name": "hevc",
+                  "width": 3840,
+                  "height": 2160,
+                  "avg_frame_rate": "24000/1001",
+                  "side_data_list": [
+                    {
+                      "side_data_type": "DOVI configuration record",
+                      "dv_profile": 8
+                    }
+                  ]
+                },
+                {"index": 2, "codec_type": "subtitle", "codec_name": "ass"}
+              ]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(8, result.streams.first().dvProfile)
+        assertTrue(result.hasEmbeddedAssSsaSubtitleStream)
+    }
 }
