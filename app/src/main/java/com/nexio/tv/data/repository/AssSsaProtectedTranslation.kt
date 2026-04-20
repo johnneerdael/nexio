@@ -17,15 +17,19 @@ internal data class AssSsaProtectedTranslationUnit(
     val originalTokens: List<AssSsaTextToken>,
     val protectedText: String,
     val placeholders: List<AssSsaPlaceholder>,
-    val risk: AssSsaRisk
+    val risk: AssSsaRisk,
+    private val astUnit: AssSsaTextAstTranslationUnit? = null
 ) {
-    fun reconstruct(translatedText: String): Result<String> = runCatching {
-        validateTranslatedText(translatedText)
-        var result = translatedText
-        placeholders.forEach { placeholder ->
-            result = result.replace(placeholder.token, placeholder.raw)
+    fun reconstruct(translatedText: String): Result<String> {
+        astUnit?.let { return it.reconstruct(translatedText) }
+        return runCatching {
+            validateTranslatedText(translatedText)
+            var result = translatedText
+            placeholders.forEach { placeholder ->
+                result = result.replace(placeholder.token, placeholder.raw)
+            }
+            rebuildOriginalPrefixAndProtectedText(result)
         }
-        rebuildOriginalPrefixAndProtectedText(result)
     }
 
     private fun validateTranslatedText(translatedText: String) {
@@ -53,63 +57,31 @@ internal data class AssSsaProtectedTranslationUnit(
 
     companion object {
         fun fromTokens(id: String, tokens: List<AssSsaTextToken>): AssSsaProtectedTranslationUnit {
-            val placeholders = mutableListOf<AssSsaPlaceholder>()
-            val protected = StringBuilder()
-            var index = 0
-            var sawDrawing = false
-            var sawKaraoke = false
+            return fromText(id = id, text = tokens.joinToString("") { it.raw })
+        }
 
-            tokens.forEach { token ->
-                when (token) {
-                    is AssSsaTextToken.Text -> protected.append(token.raw)
-                    is AssSsaTextToken.LineBreak -> {
-                        val marker = "⟦LB_${index.toString().padStart(3, '0')}⟧"
-                        index += 1
-                        placeholders += AssSsaPlaceholder(marker, token.raw, token)
-                        protected.append(marker)
-                    }
-                    is AssSsaTextToken.HardSpace -> {
-                        val marker = "⟦HS_${index.toString().padStart(3, '0')}⟧"
-                        index += 1
-                        placeholders += AssSsaPlaceholder(marker, token.raw, token)
-                        protected.append(marker)
-                    }
-                    is AssSsaTextToken.OverrideBlock -> {
-                        if (KARAOKE_PATTERN.containsMatchIn(token.raw)) {
-                            sawKaraoke = true
-                        }
-                        if (DRAWING_MODE_PATTERN.containsMatchIn(token.raw)) {
-                            return@forEach
-                        }
-                        if (token.raw.hasAssSsaLineLevelTag()) {
-                            return@forEach
-                        }
-                        val marker = "⟦ASS_${index.toString().padStart(3, '0')}⟧"
-                        index += 1
-                        placeholders += AssSsaPlaceholder(marker, token.raw, token)
-                        protected.append(marker)
-                    }
-                    is AssSsaTextToken.Drawing -> {
-                        sawDrawing = true
-                    }
-                    is AssSsaTextToken.Malformed -> {
-                        sawDrawing = true
-                    }
-                }
+        fun fromText(id: String, text: String): AssSsaProtectedTranslationUnit {
+            val astUnit = AssSsaTextAstTranslationUnit.fromText(id, text)
+            val sawDrawing = astUnit.ast.nodes.any {
+                it is AssSsaTextNode.DrawingSpan || it is AssSsaTextNode.Malformed
             }
-
+            val sawKaraoke = astUnit.ast.nodes
+                .filterIsInstance<AssSsaTextNode.OverrideBlock>()
+                .any { block -> KARAOKE_PATTERN.containsMatchIn(block.raw) }
             val risk = when {
-                sawDrawing -> AssSsaRisk.PreserveOnly
+                astUnit.protectedText.isBlank() -> AssSsaRisk.PreserveOnly
+                sawDrawing -> AssSsaRisk.Complex
                 sawKaraoke -> AssSsaRisk.Complex
-                placeholders.size >= COMPLEX_PLACEHOLDER_COUNT -> AssSsaRisk.Complex
+                astUnit.placeholders.size >= COMPLEX_PLACEHOLDER_COUNT -> AssSsaRisk.Complex
                 else -> AssSsaRisk.Normal
             }
             return AssSsaProtectedTranslationUnit(
                 id = id,
-                originalTokens = tokens,
-                protectedText = protected.toString(),
-                placeholders = placeholders,
-                risk = risk
+                originalTokens = AssSsaTextTokenizer.tokenize(text),
+                protectedText = astUnit.protectedText,
+                placeholders = emptyList(),
+                risk = risk,
+                astUnit = astUnit
             )
         }
     }
