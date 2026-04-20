@@ -40,9 +40,7 @@ class KitsuAuthService(
             KitsuTokenRequest(
                 grantType = "password",
                 username = normalizedUsername,
-                password = password,
-                clientId = "",
-                clientSecret = ""
+                password = password
             )
         )
         val body = response.takeIf { it.isSuccessful }?.body() ?: return false
@@ -71,9 +69,7 @@ class KitsuAuthService(
         val response = api.token(
             KitsuTokenRequest(
                 grantType = "refresh_token",
-                refreshToken = refreshToken,
-                clientId = "",
-                clientSecret = ""
+                refreshToken = refreshToken
             )
         )
         val body = response.takeIf { it.isSuccessful }?.body() ?: return accessToken

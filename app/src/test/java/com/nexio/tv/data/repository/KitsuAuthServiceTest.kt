@@ -27,9 +27,7 @@ class KitsuAuthServiceTest {
                     grantType = "password",
                     username = "user@example.com",
                     password = "p@ss word",
-                    refreshToken = null,
-                    clientId = "",
-                    clientSecret = ""
+                    refreshToken = null
                 )
             )
         } returns Response.success(
@@ -72,9 +70,7 @@ class KitsuAuthServiceTest {
                     grantType = "refresh_token",
                     username = null,
                     password = null,
-                    refreshToken = "old-refresh",
-                    clientId = "",
-                    clientSecret = ""
+                    refreshToken = "old-refresh"
                 )
             )
         } returns Response.success(
