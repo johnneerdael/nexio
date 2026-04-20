@@ -173,6 +173,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     persistedMDBListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     tmdbDiscoverySnapshot = com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
+    tmdbDiscoveryRefreshInProgress = false
     tmdbCatalogPreferencesObserved = false
     inMemoryHomeSnapshot = null
     pendingRestoredCatalogSnapshot = null
@@ -874,6 +875,14 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
 
         refreshJobs.add(
             launch(Dispatchers.IO) {
+                if (refreshTmdbDiscovery) {
+                    withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
+                        tmdbDiscoveryRefreshInProgress = true
+                        startupRefreshPending = true
+                        scheduleUpdateCatalogRows()
+                    }
+                }
                 try {
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=tmdb_discovery")
                     if (refreshTmdbDiscovery) {
@@ -910,6 +919,14 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
                     throw e
                 } catch (t: Throwable) {
                     Log.w(HomeViewModel.TAG, "Unexpected failure during TMDB refresh in serialized startup pipeline", t)
+                } finally {
+                    if (refreshTmdbDiscovery) {
+                        withContext(Dispatchers.Main.immediate) {
+                            if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
+                            tmdbDiscoveryRefreshInProgress = false
+                            scheduleUpdateCatalogRows()
+                        }
+                    }
                 }
             }
         )
@@ -1632,11 +1649,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     try {
         val hasRestoredContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
             _uiState.value.heroItems.isNotEmpty()
-        val activeRefreshInProgress =
-            catalogsLoadInProgress ||
-                traktDiscoveryRefreshInProgress ||
-                simklDiscoveryRefreshInProgress ||
-                mdbListDiscoveryRefreshInProgress
+        val activeRefreshInProgress = isConfiguredHomeRefreshInProgress(
+            catalogsLoadInProgress = catalogsLoadInProgress,
+            traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
+            simklDiscoveryRefreshInProgress = simklDiscoveryRefreshInProgress,
+            mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress,
+            tmdbDiscoveryRefreshInProgress = tmdbDiscoveryRefreshInProgress
+        )
         val refreshInProgress = startupRefreshPending || activeRefreshInProgress
         val shouldPreserveCachedHome =
             hasPersistedCatalogSnapshot && (restoredCatalogSnapshotActive || hasRestoredContent || refreshInProgress)
@@ -1997,11 +2016,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     )
     val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
     val publishableExpectedOrderKeys = catalogPlan.publishableOrderKeys
-    val activeRefreshInProgress =
-        catalogsLoadInProgress ||
-            traktDiscoveryRefreshInProgress ||
-            simklDiscoveryRefreshInProgress ||
-            mdbListDiscoveryRefreshInProgress
+    val activeRefreshInProgress = isConfiguredHomeRefreshInProgress(
+        catalogsLoadInProgress = catalogsLoadInProgress,
+        traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
+        simklDiscoveryRefreshInProgress = simklDiscoveryRefreshInProgress,
+        mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress,
+        tmdbDiscoveryRefreshInProgress = tmdbDiscoveryRefreshInProgress
+    )
     val refreshInProgress = startupRefreshPending || activeRefreshInProgress
     pendingRestoredCatalogSnapshot?.let { snapshot ->
         applyPersistedHomeSnapshotIfEligiblePipeline(snapshot, requireSourceCachesReady = false)
@@ -2145,7 +2166,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             ),
             preserveTmdbRows = shouldPreserveTmdbCachedRows(
                 snapshot = effectiveTmdbSnapshot,
-                refreshInProgress = startupHydrationPending || startupRefreshPending
+                refreshInProgress = startupHydrationPending || startupRefreshPending || tmdbDiscoveryRefreshInProgress
             ),
             retainUnorderedRows = restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending
         )

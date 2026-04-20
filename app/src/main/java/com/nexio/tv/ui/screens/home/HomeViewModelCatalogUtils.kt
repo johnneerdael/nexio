@@ -505,6 +505,20 @@ internal fun areConfiguredHomePublishSourcesReady(
     return addonsReady && traktReady && simklReady && mdbReady && tmdbReady
 }
 
+internal fun isConfiguredHomeRefreshInProgress(
+    catalogsLoadInProgress: Boolean,
+    traktDiscoveryRefreshInProgress: Boolean,
+    simklDiscoveryRefreshInProgress: Boolean,
+    mdbListDiscoveryRefreshInProgress: Boolean,
+    tmdbDiscoveryRefreshInProgress: Boolean
+): Boolean {
+    return catalogsLoadInProgress ||
+        traktDiscoveryRefreshInProgress ||
+        simklDiscoveryRefreshInProgress ||
+        mdbListDiscoveryRefreshInProgress ||
+        tmdbDiscoveryRefreshInProgress
+}
+
 internal fun shouldRefreshTmdbDiscoveryForState(
     prefs: TmdbCatalogPreferences,
     snapshot: TmdbDiscoverySnapshot
