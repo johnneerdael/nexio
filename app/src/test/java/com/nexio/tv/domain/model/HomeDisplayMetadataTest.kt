@@ -59,4 +59,30 @@ class HomeDisplayMetadataTest {
         assertEquals("rpdb", displayMetadata.posterProviderTag)
         assertEquals("rpdb", roundTripped.posterProviderTag)
     }
+
+    @Test
+    fun `toHomeDisplayMetadata and applyTo preserve rating source`() {
+        val preview = MetaPreview(
+            id = "tmdb:1399",
+            type = ContentType.SERIES,
+            name = "Game of Thrones",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "2011",
+            imdbRating = 8.9f,
+            ratingSource = TitleRatingSource.TMDB,
+            genres = emptyList()
+        )
+
+        val displayMetadata = preview.toHomeDisplayMetadata()
+        val roundTripped = displayMetadata.applyTo(
+            preview.copy(imdbRating = null, ratingSource = TitleRatingSource.IMDB)
+        )
+
+        assertEquals(TitleRatingSource.TMDB, displayMetadata.ratingSource)
+        assertEquals(TitleRatingSource.TMDB, roundTripped.ratingSource)
+    }
 }
