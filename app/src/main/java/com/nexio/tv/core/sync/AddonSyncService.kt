@@ -85,6 +85,28 @@ class AddonSyncService @Inject constructor(
                         )
                     }
                 }
+                withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_set_account_secret",
+                        buildJsonObject {
+                            put("p_secret_type", "addon_credential")
+                            put("p_secret_ref", parsed.transportSecretRef)
+                            put(
+                                "p_secret_payload",
+                                Json.encodeToJsonElement(
+                                    com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload.serializer(),
+                                    parsed.transportSecretPayload
+                                )
+                            )
+                            put(
+                                "p_masked_preview",
+                                "Transport ••••${parsed.transportSecretPayload.suffix.orEmpty().takeLast(4)}"
+                            )
+                            put("p_status", "configured")
+                            put("p_source", "app")
+                        }
+                    )
+                }
             }
 
             val params = buildJsonObject {
@@ -98,6 +120,9 @@ class AddonSyncService @Inject constructor(
                             put("public_query_params", Json.encodeToJsonElement(MapSerializer(String.serializer(), String.serializer()), parsedAddon.publicQueryParams))
                             put("install_kind", parsedAddon.installKind)
                             parsedAddon.secretRef?.let { put("secret_ref", it) }
+                            put("transport_schema_version", 2)
+                            put("transport_base_url", parsedAddon.transportBaseUrl)
+                            put("transport_secret_ref", parsedAddon.transportSecretRef)
                             put("sort_order", index)
                         }
                     }
@@ -149,6 +174,25 @@ class AddonSyncService @Inject constructor(
 
     private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {
         return runCatching {
+            if (addon.transportSchemaVersion == 2 && !addon.transportSecretRef.isNullOrBlank()) {
+                val transportPayload = withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_resolve_account_secret",
+                        buildJsonObject {
+                            put("p_secret_type", "addon_credential")
+                            put("p_secret_ref", addon.transportSecretRef)
+                            put("p_source", "app")
+                        }
+                    ).decodeAs<AccountAddonSecretPayload>()
+                }
+                return@runCatching buildResolvedAddonUrl(
+                    baseUrl = addon.transportBaseUrl ?: addon.url,
+                    manifestUrl = null,
+                    publicQueryParams = emptyMap(),
+                    secretPayload = transportPayload
+                ).let(::normalizeAddonInstallUrl)
+            }
+
             val secretPayload = addon.secretRef
                 ?.takeIf { it.isNotBlank() }
                 ?.let { secretRef ->

@@ -37,7 +37,10 @@ data class ParsedAddonSyncEntry(
     val publicQueryParams: Map<String, String>,
     val installKind: String,
     val secretRef: String?,
-    val secretPayload: AccountAddonSecretPayload?
+    val secretPayload: AccountAddonSecretPayload?,
+    val transportBaseUrl: String,
+    val transportSecretRef: String,
+    val transportSecretPayload: AccountAddonSecretPayload
 )
 
 fun normalizePublicAddonBaseUrl(rawUrl: String): String {
@@ -111,6 +114,7 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
     require(candidate.isNotBlank()) { "Addon URL is required." }
 
     val parsed = URL(candidate)
+    val transport = splitAddonTransportUrl(candidate)
     val pathSegments = parsed.path.split('/').filter { it.isNotBlank() }
     val hasManifestPath = pathSegments.lastOrNull()?.equals("manifest.json", ignoreCase = true) == true
     // The encoded-config / secret segment normally sits one before the
@@ -167,6 +171,11 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
         }
 
     val secretRef = if (hasPathSecret || secretParams.isNotEmpty()) addonSecretRef(publicBaseUrl) else null
+    val transportSecretRef = addonTransportSecretRef(transport.baseUrl, transport.suffix)
+    val transportSecretPayload = AccountAddonSecretPayload(
+        kind = "manifest_suffix_v1",
+        suffix = transport.suffix
+    )
     val secretPayload = if (secretRef != null) {
         AccountAddonSecretPayload(
             kind = when {
@@ -187,7 +196,10 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
         publicQueryParams = publicQueryParams,
         installKind = if (secretRef == null) "manifest" else "configured",
         secretRef = secretRef,
-        secretPayload = secretPayload
+        secretPayload = secretPayload,
+        transportBaseUrl = transport.baseUrl,
+        transportSecretRef = transportSecretRef,
+        transportSecretPayload = transportSecretPayload
     )
 }
 
@@ -197,6 +209,13 @@ fun buildResolvedAddonUrl(
     publicQueryParams: Map<String, String>,
     secretPayload: AccountAddonSecretPayload?
 ): String {
+    if (secretPayload?.kind == "manifest_suffix_v1") {
+        val suffix = secretPayload.suffix?.trim().orEmpty()
+        if (suffix.isNotBlank()) {
+            return baseUrl.trimEnd('/') + if (suffix.startsWith("/")) suffix else "/$suffix"
+        }
+    }
+
     var resolved = manifestUrl
         ?.trim()
         .orEmpty()
@@ -231,6 +250,39 @@ private fun addonSecretRef(publicBaseUrl: String): String {
         .replace(Regex("[^a-z0-9]+"), "_")
         .trim('_')
 }
+
+private fun addonTransportSecretRef(baseUrl: String, suffix: String): String {
+    return "${addonSecretRef(baseUrl)}:transport:${shortStableHash(suffix)}"
+}
+
+private fun shortStableHash(value: String): String {
+    var hash = 0x811c9dc5.toInt()
+    value.forEach { char ->
+        hash = hash xor char.code
+        hash *= 16777619
+    }
+    return java.lang.Integer.toUnsignedString(hash, 36)
+}
+
+private fun splitAddonTransportUrl(rawUrl: String): TransportParts {
+    val parsed = URL(rawUrl.trim())
+    val path = parsed.path?.takeIf { it.isNotBlank() && it != "/" }.orEmpty()
+    val suffixPath = when {
+        path.isBlank() -> "/manifest.json"
+        path.endsWith("/manifest.json", ignoreCase = true) -> path
+        else -> path.trimEnd('/') + "/manifest.json"
+    }
+    val querySuffix = parsed.query?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+    return TransportParts(
+        baseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}",
+        suffix = suffixPath + querySuffix
+    )
+}
+
+private data class TransportParts(
+    val baseUrl: String,
+    val suffix: String
+)
 
 private fun looksSensitivePathSegment(segment: String): Boolean {
     val value = segment.trim()

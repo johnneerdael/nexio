@@ -836,7 +836,6 @@
     <string name="settings_simkl_subtitle">Abrir pantalla de conexión SIMKL.</string>
     <string name="settings_theintrodb_subtitle">Controles de reproducción de intro, resumen, créditos y vista previa</string>
     <string name="settings_omdb_subtitle">Configura OMDB en la app o en la web con sincronización bidireccional</string>
-    <string name="settings_imdb_subtitle">Valoraciones de episodios principales a través de tu API personalizada de IMDb</string>
     <string name="youtube_trailer_login_title">Inicio de sesión para tráilers de YouTube</string>
     <string name="youtube_trailer_login_subtitle">Inicia sesión con un código de TV para que Nexio pueda reproducir tráilers de YouTube directamente en la app</string>
     <string name="youtube_trailer_login_hub_subtitle">Inicio de sesión del dispositivo TV para reproducción autenticada de tráilers de YouTube</string>
@@ -938,19 +937,6 @@
     <string name="omdb_dialog_subtitle">Introduce tu clave API de OMDB para obtener valoraciones de episodios de IMDb</string>
     <string name="omdb_dialog_placeholder">Introduce la clave API de OMDB</string>
     <string name="omdb_invalid_api_key">Clave API de OMDB no válida</string>
-    <string name="imdb_title">API de valoraciones de IMDb</string>
-    <string name="imdb_subtitle">Usa tu API personalizada de IMDb como fuente principal para valoraciones de episodios, con sincronización bidireccional con tu cuenta</string>
-    <string name="imdb_enable_title">Habilitar API de valoraciones de IMDb</string>
-    <string name="imdb_enable_subtitle">Cuando esté habilitado y completamente configurado, IMDb personalizado reemplaza a OMDB y TMDB para las valoraciones de episodios</string>
-    <string name="imdb_connection_title">Conexión a la API de IMDb</string>
-    <string name="imdb_connection_subtitle">Configura la URL base y la clave API aquí o en la web. Los cambios se sincronizan bidireccionalmente a través de tu cuenta.</string>
-    <string name="imdb_dialog_title">Conexión a la API de IMDb</string>
-    <string name="imdb_dialog_subtitle">Introduce la URL base y la clave API personalizada de IMDb. Ambas son necesarias antes de que la validación sea correcta.</string>
-    <string name="imdb_base_url_label">URL base</string>
-    <string name="imdb_base_url_placeholder">https://ratings.example.com/custom</string>
-    <string name="imdb_api_key_label">Clave API</string>
-    <string name="imdb_api_key_placeholder">Introduce la clave API de IMDb</string>
-    <string name="imdb_invalid_configuration">URL base de IMDb o clave API no válida</string>
     <string name="debrid_title">Debrid</string>
     <string name="debrid_subtitle">Conecta Real-Debrid, Premiumize, TorBox o EasyDebrid para Service Wrap y reproducción debrid</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>

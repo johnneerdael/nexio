@@ -838,7 +838,6 @@
     <string name="settings_simkl_subtitle">Open SIMKL-verbindingsscherm.</string>
     <string name="settings_theintrodb_subtitle">Intro-, samenvatting-, aftiteling- en voorbeeldweergavebesturing</string>
     <string name="settings_omdb_subtitle">Configureer OMDB in de app of op het web met tweewegsynchronisatie</string>
-    <string name="settings_imdb_subtitle">Primaire afleveringsbeoordelingen via uw aangepaste IMDb API</string>
     <string name="youtube_trailer_login_title">YouTube Trailer-aanmelding</string>
     <string name="youtube_trailer_login_subtitle">Meld u aan met een tv-code zodat Nexio directe in-app afspeling van YouTube-trailers kan oplossen</string>
     <string name="youtube_trailer_login_hub_subtitle">TV-apparaataanmelding voor geauthenticeerde YouTube-trailerafspeling</string>
@@ -940,19 +939,6 @@
     <string name="omdb_dialog_subtitle">Voer uw OMDB API-sleutel in om IMDb-afleveringsbeoordelingen op te halen</string>
     <string name="omdb_dialog_placeholder">Voer OMDB API-sleutel in</string>
     <string name="omdb_invalid_api_key">Ongeldige OMDB API-sleutel</string>
-    <string name="imdb_title">IMDb Beoordelingen API</string>
-    <string name="imdb_subtitle">Gebruik uw aangepaste IMDb API als primaire bron voor afleveringsbeoordelingen, met tweewegsynchronisatie naar uw account</string>
-    <string name="imdb_enable_title">IMDb-beoordelingen API inschakelen</string>
-    <string name="imdb_enable_subtitle">Wanneer ingeschakeld en volledig geconfigureerd, vervangt aangepaste IMDb OMDB en TMDB voor afleveringsbeoordelingen</string>
-    <string name="imdb_connection_title">IMDb API-verbinding</string>
-    <string name="imdb_connection_subtitle">Configureer de basis-URL en API-sleutel hier of op internet. Wijzigingen worden tweerichting gesynchroniseerd via uw account.</string>
-    <string name="imdb_dialog_title">IMDb API-verbinding</string>
-    <string name="imdb_dialog_subtitle">Voer de aangepaste IMDb API-basis-URL en API-sleutel in. Beide zijn vereist voordat validatie slaagt.</string>
-    <string name="imdb_base_url_label">Basis-URL</string>
-    <string name="imdb_base_url_placeholder">https://ratings.example.com/custom</string>
-    <string name="imdb_api_key_label">API-sleutel</string>
-    <string name="imdb_api_key_placeholder">Voer IMDb API-sleutel in</string>
-    <string name="imdb_invalid_configuration">Ongeldige IMDb basis-URL of API-sleutel</string>
     <string name="debrid_title">Debrid</string>
     <string name="debrid_subtitle">Verbind Real-Debrid, Premiumize, TorBox of EasyDebrid voor Service Wrap en debrid-weergave</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>

@@ -836,7 +836,6 @@
     <string name="settings_simkl_subtitle">SIMKL-Verbindungsbildschirm öffnen.</string>
     <string name="settings_theintrodb_subtitle">Steuerung für Intro-, Rückblick-, Abspann- und Vorschau-Wiedergabe</string>
     <string name="settings_omdb_subtitle">OMDB in der App oder im Web mit Zwei-Wege-Sync konfigurieren</string>
-    <string name="settings_imdb_subtitle">Primäre Episodenbewertungen über Ihre benutzerdefinierte IMDb API</string>
     <string name="youtube_trailer_login_title">YouTube-Trailer-Anmeldung</string>
     <string name="youtube_trailer_login_subtitle">Mit einem TV-Code anmelden, damit Nexio die direkte In-App-Wiedergabe von YouTube-Trailern auflösen kann</string>
     <string name="youtube_trailer_login_hub_subtitle">TV-Geräteanmeldung für authentifizierte YouTube-Trailer-Wiedergabe</string>
@@ -938,19 +937,6 @@
     <string name="omdb_dialog_subtitle">OMDB API-Schlüssel eingeben, um IMDb-Episodenbewertungen abzurufen</string>
     <string name="omdb_dialog_placeholder">OMDB API-Schlüssel eingeben</string>
     <string name="omdb_invalid_api_key">Ungültiger OMDB API-Schlüssel</string>
-    <string name="imdb_title">IMDb Bewertungs-API</string>
-    <string name="imdb_subtitle">Benutzerdefinierte IMDb API als primäre Quelle für Episodenbewertungen verwenden, mit Zwei-Wege-Sync zu Ihrem Konto</string>
-    <string name="imdb_enable_title">IMDb Bewertungs-API aktivieren</string>
-    <string name="imdb_enable_subtitle">Wenn aktiviert und vollständig konfiguriert, ersetzt benutzerdefiniertes IMDb OMDB und TMDB für Episodenbewertungen</string>
-    <string name="imdb_connection_title">IMDb API-Verbindung</string>
-    <string name="imdb_connection_subtitle">Basis-URL und API-Schlüssel hier oder im Web konfigurieren. Änderungen werden bidirektional über Ihr Konto synchronisiert.</string>
-    <string name="imdb_dialog_title">IMDb API-Verbindung</string>
-    <string name="imdb_dialog_subtitle">Benutzerdefinierte IMDb API-Basis-URL und API-Schlüssel eingeben. Beide sind erforderlich, bevor die Validierung erfolgreich ist.</string>
-    <string name="imdb_base_url_label">Basis-URL</string>
-    <string name="imdb_base_url_placeholder">https://ratings.example.com/custom</string>
-    <string name="imdb_api_key_label">API-Schlüssel</string>
-    <string name="imdb_api_key_placeholder">IMDb API-Schlüssel eingeben</string>
-    <string name="imdb_invalid_configuration">Ungültige IMDb Basis-URL oder API-Schlüssel</string>
     <string name="debrid_title">Debrid</string>
     <string name="debrid_subtitle">Real-Debrid, Premiumize, TorBox oder EasyDebrid für Service Wrap und Debrid-Wiedergabe verbinden</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>

@@ -836,7 +836,6 @@
     <string name="settings_simkl_subtitle">打开 SIMKL 连接界面。</string>
     <string name="settings_theintrodb_subtitle">片头、回顾、片尾和预告片播放控制</string>
     <string name="settings_omdb_subtitle">在应用或网页端配置 OMDB，支持双向同步</string>
-    <string name="settings_imdb_subtitle">通过自定义 IMDb API 获取主要剧集评分</string>
     <string name="youtube_trailer_login_title">YouTube 预告片登录</string>
     <string name="youtube_trailer_login_subtitle">使用电视码登录，让 Nexio 直接在应用内播放 YouTube 预告片</string>
     <string name="youtube_trailer_login_hub_subtitle">电视设备登录以进行已验证的 YouTube 预告片播放</string>
@@ -938,19 +937,6 @@
     <string name="omdb_dialog_subtitle">输入您的 OMDB API 密钥以获取 IMDb 剧集评分</string>
     <string name="omdb_dialog_placeholder">输入 OMDB API 密钥</string>
     <string name="omdb_invalid_api_key">无效的 OMDB API 密钥</string>
-    <string name="imdb_title">IMDb 评分 API</string>
-    <string name="imdb_subtitle">使用自定义 IMDb API 作为剧集评分的主要来源，支持双向同步到您的账户</string>
-    <string name="imdb_enable_title">启用 IMDb 评分 API</string>
-    <string name="imdb_enable_subtitle">启用并完整配置后，自定义 IMDb 将替代 OMDB 和 TMDB 用于剧集评分</string>
-    <string name="imdb_connection_title">IMDb API 连接</string>
-    <string name="imdb_connection_subtitle">在此处或网页端配置基础 URL 和 API 密钥。更改通过您的账户双向同步。</string>
-    <string name="imdb_dialog_title">IMDb API 连接</string>
-    <string name="imdb_dialog_subtitle">输入自定义 IMDb API 基础 URL 和 API 密钥。两者都需要填写才能通过验证。</string>
-    <string name="imdb_base_url_label">基础 URL</string>
-    <string name="imdb_base_url_placeholder">https://ratings.example.com/custom</string>
-    <string name="imdb_api_key_label">API 密钥</string>
-    <string name="imdb_api_key_placeholder">输入 IMDb API 密钥</string>
-    <string name="imdb_invalid_configuration">无效的 IMDb 基础 URL 或 API 密钥</string>
     <string name="debrid_title">Debrid</string>
     <string name="debrid_subtitle">连接 Real-Debrid、Premiumize、TorBox 或 EasyDebrid 以使用 Service Wrap 和 Debrid 播放</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>

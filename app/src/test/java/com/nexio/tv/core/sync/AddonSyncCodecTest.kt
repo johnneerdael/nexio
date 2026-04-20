@@ -70,4 +70,42 @@ class AddonSyncCodecTest {
             resolved
         )
     }
+
+    @Test
+    fun `addon transport v2 stores origin and opaque manifest suffix`() {
+        val parsed = parseAddonInstallUrl(
+            "https://comet.feels.legal/eyJjb25maWciOnRydWV9/manifest.json"
+        )
+
+        val resolved = buildResolvedAddonUrl(
+            baseUrl = parsed.transportBaseUrl,
+            manifestUrl = null,
+            publicQueryParams = emptyMap(),
+            secretPayload = parsed.transportSecretPayload
+        )
+
+        assertEquals("https://comet.feels.legal", parsed.transportBaseUrl)
+        assertEquals("manifest_suffix_v1", parsed.transportSecretPayload.kind)
+        assertEquals("/eyJjb25maWciOnRydWV9/manifest.json", parsed.transportSecretPayload.suffix)
+        assertEquals(
+            "https://comet.feels.legal/eyJjb25maWciOnRydWV9/manifest.json",
+            resolved
+        )
+    }
+
+    @Test
+    fun `addon transport v2 stores public addon manifest suffix too`() {
+        val parsed = parseAddonInstallUrl("https://thepiratebay-plus.strem.fun/manifest.json")
+
+        val resolved = buildResolvedAddonUrl(
+            baseUrl = parsed.transportBaseUrl,
+            manifestUrl = null,
+            publicQueryParams = emptyMap(),
+            secretPayload = parsed.transportSecretPayload
+        )
+
+        assertEquals("https://thepiratebay-plus.strem.fun", parsed.transportBaseUrl)
+        assertEquals("/manifest.json", parsed.transportSecretPayload.suffix)
+        assertEquals("https://thepiratebay-plus.strem.fun/manifest.json", resolved)
+    }
 }
