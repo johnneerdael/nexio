@@ -182,13 +182,18 @@ class TmdbDiscoveryService @Inject constructor(
         force: Boolean,
         catalogIds: Set<String>? = null
     ): TmdbDiscoverySnapshot = coroutineScope {
+        val sanitized = preferences.sanitized()
         if (client.credential().missing) {
-            val missingCredentialSnapshot = if (catalogIds == null) TmdbDiscoverySnapshot() else snapshot.value
+            val missingCredentialSnapshot = TmdbDiscoverySnapshot(
+                updatedAtMs = System.currentTimeMillis(),
+                includeAdult = sanitized.includeAdult,
+                hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
+                catalogIdsWithCurrentPreferences = sanitized.enabledCatalogIds()
+            )
             snapshot.value = missingCredentialSnapshot
             return@coroutineScope missingCredentialSnapshot
         }
 
-        val sanitized = preferences.sanitized()
         val requestedCatalogIds = catalogIds
             ?.map { it.trim() }
             ?.filter { it.isNotEmpty() }

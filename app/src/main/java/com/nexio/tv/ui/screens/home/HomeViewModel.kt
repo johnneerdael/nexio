@@ -231,7 +231,8 @@ class HomeViewModel @Inject constructor(
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
     internal var tmdbDiscoverySnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot =
         com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
-    internal var tmdbCatalogPreferences: TmdbCatalogPreferences = TmdbCatalogPreferences()
+    internal var tmdbCatalogPreferences: TmdbCatalogPreferences =
+        TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
