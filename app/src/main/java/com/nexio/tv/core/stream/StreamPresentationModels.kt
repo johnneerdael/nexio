@@ -340,7 +340,10 @@ object StreamPresentationEngine {
         var droppedEpisodeMismatchCount = 0
         var droppedMovieYearMismatchCount = 0
 
-        val filteredByRequest = parsed.filterNot { item ->
+        val passthroughItems = parsed.filter { it.isDirectPlaybackPassthrough() }
+        val filterableItems = parsed.filterNot { it.isDirectPlaybackPassthrough() }
+
+        val filteredByRequest = filterableItems.filterNot { item ->
             val dropEpisode = shouldFilterEpisodeMismatch(
                 parsed = item.parsed,
                 requestContext = requestContext,
@@ -360,7 +363,7 @@ object StreamPresentationEngine {
                 droppedMovieYearMismatchCount += 1
             }
             dropYear
-        }
+        } + passthroughItems
 
         var droppedWebDolbyVisionCount = 0
         val filteredByDv = if (flags.filterWebDolbyVisionStreamsEnabled) {
@@ -403,12 +406,14 @@ object StreamPresentationEngine {
             )
         }
 
+        val dedupePassthroughItems = filteredByDv.filter { it.isDirectPlaybackPassthrough() }
+        val dedupeInput = filteredByDv.filterNot { it.isDirectPlaybackPassthrough() }
         val dedupeResult = if (flags.deduplicateGroupedStreamsEnabled) {
-            deduplicate(filteredByDv)
+            deduplicate(dedupeInput)
         } else {
-            DeduplicationResult(items = filteredByDv)
+            DeduplicationResult(items = dedupeInput)
         }
-        val groupedPreSortItems = dedupeResult.items
+        val groupedPreSortItems = dedupeResult.items + dedupePassthroughItems
         val droppedDeduplicateCount = if (flags.deduplicateGroupedStreamsEnabled) {
             (filteredByDv.size - groupedPreSortItems.size).coerceAtLeast(0)
         } else {
@@ -506,6 +511,14 @@ object StreamPresentationEngine {
             mixedCachedUncachedClusterCount = mixedCachedUncachedClusterCount,
             cachedDroppedForUncachedClusterCount = cachedDroppedForUncachedClusterCount
         )
+    }
+
+    private fun StreamCardModel.isDirectPlaybackPassthrough(): Boolean {
+        return !stream.getStreamUrl().isNullOrBlank() &&
+            stream.infoHash.isNullOrBlank() &&
+            stream.ytId.isNullOrBlank() &&
+            parsed.serviceId == null &&
+            (stream.behaviorHints?.notWebReady == true || stream.behaviorHints?.filename.isNullOrBlank())
     }
 
     private fun dedupeKeys(item: StreamCardModel): Set<String> {

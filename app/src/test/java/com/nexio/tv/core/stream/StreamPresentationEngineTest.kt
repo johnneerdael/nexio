@@ -118,6 +118,82 @@ class StreamPresentationEngineTest {
     }
 
     @Test
+    fun `direct addon stream remains playable when it has no metadata filename`() {
+        val stream = stream(
+            filename = "",
+            name = "NebulaStreams 4K | 4khdhub",
+            description = """
+                4K | WEB
+                📺 HDR • BluRay
+                🎞️ HEVC • 10-bit
+                🎧 DD+
+                📦 16.83GB
+                🌐 Hindi + English
+                🔍 4khdhub
+                📁 The Shawshank Redemption (1994)
+            """.trimIndent(),
+            addonName = "NebulaStreams",
+            url = "https://cryptoinsights.site/direct/path%2Fwith%2Fencoded?token=a%2Fb%3D&expires=1776650158",
+            notWebReady = true,
+            videoSizeBytes = null
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(stream),
+            availableAddons = listOf(stream.addonName),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(
+                contentType = "movie",
+                title = "The Shawshank Redemption",
+                year = "1994"
+            )
+        )
+
+        val item = result.items.single()
+        assertEquals(stream.url, item.stream.getStreamUrl())
+        assertEquals(true, item.parsed.hasUsablePlaybackTarget)
+        assertEquals(StreamTransportKind.HTTP, item.parsed.transportKind)
+    }
+
+    @Test
+    fun `direct addon stream bypasses metadata mismatch filters`() {
+        val stream = stream(
+            filename = "",
+            name = "NebulaStreams 4K | 4khdhub",
+            description = "Movie.From.Addon.Catalog.2026.2160p",
+            addonName = "NebulaStreams",
+            url = "https://cryptoinsights.site/direct/movie-2026.mkv",
+            notWebReady = true,
+            videoSizeBytes = null
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(stream),
+            availableAddons = listOf(stream.addonName),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true,
+                filterMovieYearMismatchStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(
+                contentType = "movie",
+                title = "Different Metadata Title",
+                year = "1994"
+            )
+        )
+
+        val item = result.items.single()
+        assertEquals(stream.url, item.stream.getStreamUrl())
+    }
+
+    @Test
     fun `uniform formatting uses custom synced template when selected`() {
         val result = StreamPresentationEngine.organize(
             streams = listOf(
@@ -765,19 +841,21 @@ class StreamPresentationEngineTest {
         infoHash: String? = null,
         fileIdx: Int? = null,
         wrappedProviderId: String? = null,
-        videoSizeBytes: Long? = null
+        videoSizeBytes: Long? = null,
+        url: String = "https://example.com/video.mkv",
+        notWebReady: Boolean? = null
     ): Stream {
         return Stream(
             name = name,
             title = null,
             description = description,
-            url = "https://example.com/video.mkv",
+            url = url,
             ytId = null,
             infoHash = infoHash,
             fileIdx = fileIdx,
             externalUrl = null,
             behaviorHints = StreamBehaviorHints(
-                notWebReady = null,
+                notWebReady = notWebReady,
                 bingeGroup = null,
                 countryWhitelist = null,
                 proxyHeaders = null,
