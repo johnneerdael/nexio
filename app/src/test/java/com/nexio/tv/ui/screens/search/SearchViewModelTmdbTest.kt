@@ -137,6 +137,30 @@ class SearchViewModelTmdbTest {
         assertEquals(emptyList<CatalogRow>(), viewModel.uiState.value.catalogRows)
     }
 
+    @Test
+    fun `submitted search publishes addon rows before delayed TMDB search completes`() = runTest(dispatcher) {
+        val tmdbSearch = CompletableDeferred<List<TmdbMediaResult>>()
+        val viewModel = createViewModel(
+            addonRepository = FakeAddonRepository(listOf(searchableAddon())),
+            catalogRepository = FakeCatalogRepository(addonRow = addonCatalogRow()),
+            tmdbDiscoveryService = FakeTmdbDiscoveryClient(movieSearchDeferred = tmdbSearch).createService()
+        )
+
+        viewModel.onEvent(SearchEvent.QueryChanged("matrix"))
+        viewModel.onEvent(SearchEvent.SubmitSearch)
+        testScheduler.runCurrent()
+
+        assertEquals(listOf("addon_search"), viewModel.uiState.value.catalogRows.map { it.catalogId })
+
+        tmdbSearch.complete(listOf(tmdbMediaResult(id = 603, title = "The Matrix")))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(
+            listOf("tmdb_search", "addon_search"),
+            viewModel.uiState.value.catalogRows.map { it.catalogId }
+        )
+    }
+
     private fun TestScope.createViewModel(
         addonRepository: AddonRepository = FakeAddonRepository(emptyList()),
         catalogRepository: CatalogRepository = FakeCatalogRepository(),

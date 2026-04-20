@@ -523,9 +523,14 @@ internal fun shouldRefreshTmdbDiscoveryForState(
     prefs: TmdbCatalogPreferences,
     snapshot: TmdbDiscoverySnapshot
 ): Boolean {
-    if (buildExpectedConfiguredTmdbOrderKeys(prefs).isEmpty()) return false
+    val expectedKeys = buildExpectedConfiguredTmdbOrderKeys(prefs)
+    if (expectedKeys.isEmpty()) return false
     if (snapshot.updatedAtMs <= 0L) return true
-    return buildExpectedConfiguredTmdbOrderKeys(prefs).any { key ->
+    val sanitized = prefs.sanitized()
+    if (snapshot.includeAdult != sanitized.includeAdult) return true
+    if (snapshot.hideUnreleasedDigital != sanitized.hideUnreleasedDigital) return true
+    return expectedKeys.any { key ->
+        key !in snapshot.catalogIdsWithCurrentPreferences ||
         snapshot.rowsByCatalog[key]?.items.isNullOrEmpty()
     }
 }

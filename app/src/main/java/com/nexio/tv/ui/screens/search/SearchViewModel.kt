@@ -420,20 +420,22 @@ class SearchViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isSearching = true, error = null, catalogRows = emptyList()) }
 
-            val tmdbRows = runCatching {
-                val preferences = tmdbCatalogSettingsDataStore.catalogPreferences.first()
-                tmdbDiscoveryService.search(query, preferences)
-            }.getOrElse { error ->
-                if (error is CancellationException) throw error
-                emptyList()
-            }
+            val tmdbJob = launch {
+                val tmdbRows = runCatching {
+                    val preferences = tmdbCatalogSettingsDataStore.catalogPreferences.first()
+                    tmdbDiscoveryService.search(query, preferences)
+                }.getOrElse { error ->
+                    if (error is CancellationException) throw error
+                    emptyList()
+                }
 
-            if (!isCurrentSubmittedSearch(query)) {
-                return@launch
-            }
+                if (!isCurrentSubmittedSearch(query)) {
+                    return@launch
+                }
 
-            if (tmdbRows.isNotEmpty()) {
-                publishTmdbRows(tmdbRows)
+                if (tmdbRows.isNotEmpty()) {
+                    publishTmdbRows(tmdbRows)
+                }
             }
 
             val addons = try {
@@ -441,8 +443,14 @@ class SearchViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                tmdbJob.join()
                 if (isCurrentSubmittedSearch(query)) {
-                    _uiState.update { it.copy(isSearching = false, error = e.message ?: "Failed to load addons") }
+                    _uiState.update {
+                        it.copy(
+                            isSearching = false,
+                            error = if (catalogsMap.isEmpty()) e.message ?: "Failed to load addons" else null
+                        )
+                    }
                 }
                 return@launch
             }
@@ -456,7 +464,8 @@ class SearchViewModel @Inject constructor(
             val searchTargets = buildSearchTargets(addons)
 
             if (searchTargets.isEmpty()) {
-                if (tmdbRows.isEmpty()) {
+                tmdbJob.join()
+                if (catalogsMap.isEmpty()) {
                     _uiState.update {
                         it.copy(
                             isSearching = false,
@@ -484,7 +493,7 @@ class SearchViewModel @Inject constructor(
             }
 
             val jobs = searchTargets.map { (addon, catalog) ->
-                viewModelScope.launch {
+                launch {
                     loadCatalog(addon, catalog, query)
                 }
             }
@@ -493,7 +502,7 @@ class SearchViewModel @Inject constructor(
 
             // Wait for all jobs to complete so we can stop showing the global loading state.
             try {
-                jobs.joinAll()
+                (jobs + tmdbJob).joinAll()
             } finally {
                 if (isCurrentSubmittedSearch(query)) {
                     _uiState.update { it.copy(isSearching = false) }

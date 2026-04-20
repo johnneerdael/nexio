@@ -179,17 +179,24 @@ class TmdbDiscoveryService @Inject constructor(
 
     suspend fun refreshCatalogs(
         preferences: TmdbCatalogPreferences,
-        force: Boolean
+        force: Boolean,
+        catalogIds: Set<String>? = null
     ): TmdbDiscoverySnapshot = coroutineScope {
         if (client.credential().missing) {
-            val emptySnapshot = TmdbDiscoverySnapshot()
-            snapshot.value = emptySnapshot
-            return@coroutineScope emptySnapshot
+            val missingCredentialSnapshot = if (catalogIds == null) TmdbDiscoverySnapshot() else snapshot.value
+            snapshot.value = missingCredentialSnapshot
+            return@coroutineScope missingCredentialSnapshot
         }
 
         val sanitized = preferences.sanitized()
-        val enabledCatalogs = sanitized.catalogOrder.filter { it in sanitized.enabledCatalogs }
-        val rows = enabledCatalogs
+        val requestedCatalogIds = catalogIds
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.toSet()
+        val enabledCatalogs = sanitized.catalogOrder
+            .filter { it in sanitized.enabledCatalogs }
+            .filter { requestedCatalogIds == null || it in requestedCatalogIds }
+        val refreshedRows = enabledCatalogs
             .map { catalogId ->
                 async {
                     val row = fetchCatalogRow(catalogId, sanitized)
@@ -200,9 +207,31 @@ class TmdbDiscoveryService @Inject constructor(
             .mapNotNull { (catalogId, row) -> row?.let { catalogId to it } }
             .toMap()
 
+        val previous = snapshot.value
+        val rows = if (catalogIds == null) {
+            refreshedRows
+        } else {
+            previous.rowsByCatalog + refreshedRows
+        }
+        val previousCurrentCatalogIds = if (
+            previous.includeAdult == sanitized.includeAdult &&
+            previous.hideUnreleasedDigital == sanitized.hideUnreleasedDigital
+        ) {
+            previous.catalogIdsWithCurrentPreferences
+        } else {
+            emptySet()
+        }
+        val catalogIdsWithCurrentPreferences = if (catalogIds == null) {
+            refreshedRows.keys
+        } else {
+            previousCurrentCatalogIds + refreshedRows.keys
+        }
         val refreshed = TmdbDiscoverySnapshot(
             rowsByCatalog = rows,
-            updatedAtMs = System.currentTimeMillis()
+            updatedAtMs = System.currentTimeMillis(),
+            includeAdult = sanitized.includeAdult,
+            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
+            catalogIdsWithCurrentPreferences = catalogIdsWithCurrentPreferences
         )
         snapshot.value = refreshed
         refreshed

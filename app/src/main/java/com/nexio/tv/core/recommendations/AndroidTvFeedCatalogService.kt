@@ -136,8 +136,15 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
         val tmdbPrefs = tmdbCatalogSettingsDataStore.catalogPreferences.first()
-        if (normalizedKeys.any(::isTmdbFeedKey)) {
-            runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false) }
+        val selectedTmdbCatalogIds = normalizedKeys.mapNotNull(::tmdbCatalogIdForFeedKey).toSet()
+        if (selectedTmdbCatalogIds.isNotEmpty()) {
+            runCatching {
+                tmdbDiscoveryService.refreshCatalogs(
+                    tmdbPrefs,
+                    force = false,
+                    catalogIds = selectedTmdbCatalogIds
+                )
+            }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
@@ -204,8 +211,15 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
         val tmdbPrefs = tmdbCatalogSettingsDataStore.catalogPreferences.first()
-        if (isTmdbFeedKey(normalizedKey)) {
-            runCatching { tmdbDiscoveryService.refreshCatalogs(tmdbPrefs, force = false) }
+        val selectedTmdbCatalogId = tmdbCatalogIdForFeedKey(normalizedKey)
+        if (selectedTmdbCatalogId != null) {
+            runCatching {
+                tmdbDiscoveryService.refreshCatalogs(
+                    tmdbPrefs,
+                    force = false,
+                    catalogIds = setOf(selectedTmdbCatalogId)
+                )
+            }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
@@ -477,9 +491,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
         return buildContinueWatchingItemsForAndroidTvFeed(snapshot)
     }
 
-    private fun isTmdbFeedKey(key: String): Boolean {
-        return key.startsWith("tmdb_") &&
-            TmdbCatalogIds.BUILT_IN_ORDER.any { catalogId -> key.endsWith("_$catalogId") }
+    private fun tmdbCatalogIdForFeedKey(key: String): String? {
+        if (!key.startsWith("tmdb_")) return null
+        return TmdbCatalogIds.BUILT_IN_ORDER.firstOrNull { catalogId -> key.endsWith("_$catalogId") }
     }
 }
 
