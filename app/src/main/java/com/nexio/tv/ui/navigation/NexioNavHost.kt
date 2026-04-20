@@ -1274,11 +1274,11 @@ internal fun buildContinueWatchingStreamRoute(
                 item.progress.contentType.equals("series", ignoreCase = true),
             startFromBeginning = startFromBeginning,
             deterministicAutoplay = deterministicAutoplayEnabled,
-            resumePositionMs = item.progress.position,
-            resumeDurationMs = item.progress.duration,
-            resumeProgressPercent = item.progress.progressPercent,
-            resumeLastWatchedMs = item.progress.lastWatched,
-            resumeSource = item.progress.source
+            resumePositionMs = item.progress.position.takeUnless { startFromBeginning },
+            resumeDurationMs = item.progress.duration.takeUnless { startFromBeginning },
+            resumeProgressPercent = item.progress.progressPercent.takeUnless { startFromBeginning },
+            resumeLastWatchedMs = item.progress.lastWatched.takeUnless { startFromBeginning },
+            resumeSource = item.progress.source.takeUnless { startFromBeginning }
         )
 
         is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(

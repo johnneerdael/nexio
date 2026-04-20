@@ -7,6 +7,7 @@ import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -77,6 +78,26 @@ class StreamRuntimeRoutingTest {
 
         assertTrue(route.contains("startFromBeginning=true"))
         assertTrue(route.contains("deterministicAutoplay=true"))
+    }
+
+    @Test
+    fun `continue watching start from beginning route clears resume progress`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(
+                    durationMs = 9_091_000L,
+                    positionMs = 123_000L,
+                    progressPercent = 12.5f
+                )
+            ),
+            deterministicAutoplayEnabled = true,
+            startFromBeginning = true
+        )
+
+        assertFalse(route.contains("resumePositionMs=123000"))
+        assertFalse(route.contains("resumeDurationMs=9091000"))
+        assertFalse(route.contains("resumeProgressPercent=12.5"))
+        assertFalse(route.contains("resumeLastWatchedMs=42"))
     }
 
     @Test
