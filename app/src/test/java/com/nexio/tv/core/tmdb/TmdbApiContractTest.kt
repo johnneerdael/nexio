@@ -1,8 +1,18 @@
 package com.nexio.tv.core.tmdb
 
 import com.nexio.tv.data.remote.api.TmdbApi
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.test.runTest
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.GET
@@ -69,6 +79,41 @@ class TmdbApiContractTest {
             ),
             getQueryNames("discoverTv")
         )
+    }
+
+    @Test
+    fun `trending endpoints default to day and omit page query when time window is omitted`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            val api = Retrofit.Builder()
+                .baseUrl(server.url("/3/"))
+                .addConverterFactory(
+                    MoshiConverterFactory.create(
+                        Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+                    )
+                )
+                .build()
+                .create(TmdbApi::class.java)
+
+            server.enqueue(MockResponse().setBody("""{ "page": 1, "results": [] }"""))
+            val moviesResponse = api.getTrendingMovies(apiKey = "key")
+            assertNotNull(moviesResponse.body())
+
+            val moviesRequest = requireNotNull(server.takeRequest())
+            assertTrue(moviesRequest.path!!.contains("/3/trending/movie/day"))
+            assertFalse(moviesRequest.path!!.contains("page="))
+
+            server.enqueue(MockResponse().setBody("""{ "page": 1, "results": [] }"""))
+            val tvResponse = api.getTrendingTv(apiKey = "key")
+            assertNotNull(tvResponse.body())
+
+            val tvRequest = requireNotNull(server.takeRequest())
+            assertTrue(tvRequest.path!!.contains("/3/trending/tv/day"))
+            assertFalse(tvRequest.path!!.contains("page="))
+        } finally {
+            server.shutdown()
+        }
     }
 
     private fun getPath(methodName: String): String {
