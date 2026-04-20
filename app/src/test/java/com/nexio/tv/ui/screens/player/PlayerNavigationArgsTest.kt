@@ -1,7 +1,9 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.ui.navigation.Screen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class PlayerNavigationArgsTest {
@@ -19,6 +21,31 @@ class PlayerNavigationArgsTest {
 
         assertEquals("asset:///truehd.mkv", args.streamUrl)
         assertEquals("TrueHD Validation", args.title)
+    }
+
+    @Test
+    fun `player route carries direct addon urls without percent encoded path separators`() {
+        val streamUrl = "https://cryptoinsights.site/direct/path%2Fwith%2Fencoded?token=a%2Fb%3D&expires=1776650158"
+        val route = Screen.Player.createRoute(
+            streamUrl = streamUrl,
+            title = "Direct Addon"
+        )
+        val streamUrlSegment = route.removePrefix("player/").substringBefore("/")
+
+        assertFalse(streamUrlSegment.contains("%2F", ignoreCase = true))
+        assertFalse(streamUrlSegment.contains("/"))
+
+        val args = PlayerNavigationArgs.from(
+            SavedStateHandle(
+                mapOf(
+                    "streamUrl" to streamUrlSegment,
+                    "title" to "Direct%20Addon"
+                )
+            )
+        )
+
+        assertEquals(streamUrl, args.streamUrl)
+        assertEquals("Direct Addon", args.title)
     }
 
     @Test
