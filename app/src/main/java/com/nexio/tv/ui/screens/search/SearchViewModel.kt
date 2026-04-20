@@ -11,6 +11,8 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DEFAULT_MAX_RECENT_SEARCHES
 import com.nexio.tv.data.local.SearchHistoryDataStore
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
+import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -44,7 +46,9 @@ class SearchViewModel @Inject constructor(
     private val searchHistoryDataStore: SearchHistoryDataStore,
     private val imdbSearchService: ImdbSearchService,
     private val imdbPosterLookupService: ImdbPosterLookupService,
-    private val debugSettingsDataStore: DebugSettingsDataStore
+    private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val tmdbDiscoveryService: TmdbDiscoveryService,
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -409,6 +413,22 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSearching = true, error = null, catalogRows = emptyList()) }
 
+            val tmdbRows = runCatching {
+                val preferences = tmdbCatalogSettingsDataStore.catalogPreferences.first()
+                tmdbDiscoveryService.search(query, preferences)
+            }.getOrElse { error ->
+                if (error is CancellationException) throw error
+                emptyList()
+            }
+
+            if (uiState.value.submittedQuery.trim() != query) {
+                return@launch
+            }
+
+            if (tmdbRows.isNotEmpty()) {
+                publishTmdbRows(tmdbRows)
+            }
+
             val addons = try {
                 addonRepository.getInstalledAddons().first()
             } catch (e: Exception) {
@@ -421,12 +441,21 @@ class SearchViewModel @Inject constructor(
             val searchTargets = buildSearchTargets(addons)
 
             if (searchTargets.isEmpty()) {
-                _uiState.update {
-                    it.copy(
-                        isSearching = false,
-                        error = "No searchable catalogs found in installed addons",
-                        catalogRows = emptyList()
-                    )
+                if (tmdbRows.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isSearching = false,
+                            error = "No searchable catalogs found in installed addons",
+                            catalogRows = emptyList()
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isSearching = false,
+                            error = null
+                        )
+                    }
                 }
                 return@launch
             }
@@ -460,6 +489,18 @@ class SearchViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun publishTmdbRows(rows: List<CatalogRow>) {
+        rows.forEachIndexed { index, row ->
+            val key = catalogKey(addonId = row.addonId, type = row.apiType, catalogId = row.catalogId)
+            catalogsMap[key] = row
+            if (key !in catalogOrder) {
+                catalogOrder.add(index.coerceAtMost(catalogOrder.size), key)
+            }
+        }
+        hasRenderedFirstCatalog = true
+        updateCatalogRowsNow()
     }
 
     private suspend fun loadCatalog(addon: Addon, catalog: CatalogDescriptor, query: String) {
