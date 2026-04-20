@@ -24,4 +24,21 @@ class DebugSettingsDataStoreTest {
 
         assertTrue(store.dolbyVisionDiagnosticsEnabled.first())
     }
+
+    @Test
+    fun `auto translate diagnostics toggles default disabled and persist`() = runTest {
+        val store = DebugSettingsDataStore(context = ApplicationProvider.getApplicationContext())
+
+        store.setAutoTranslateDiagnosticsEnabled(false)
+        store.setAutoTranslateUnsafeBodyLoggingEnabled(false)
+
+        assertFalse(store.autoTranslateDiagnosticsEnabled.first())
+        assertFalse(store.autoTranslateUnsafeBodyLoggingEnabled.first())
+
+        store.setAutoTranslateDiagnosticsEnabled(true)
+        store.setAutoTranslateUnsafeBodyLoggingEnabled(true)
+
+        assertTrue(store.autoTranslateDiagnosticsEnabled.first())
+        assertTrue(store.autoTranslateUnsafeBodyLoggingEnabled.first())
+    }
 }

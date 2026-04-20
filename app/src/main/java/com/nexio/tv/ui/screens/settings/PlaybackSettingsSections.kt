@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -152,6 +154,8 @@ internal fun PlaybackSettingsSections(
     startupPerfTelemetryEnabled: Boolean,
     diskSpoolDiagnosticsEnabled: Boolean,
     dolbyVisionDiagnosticsEnabled: Boolean,
+    autoTranslateDiagnosticsEnabled: Boolean,
+    autoTranslateUnsafeBodyLoggingEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
     onSetTraktScrobbleApiLoggingEnabled: (Boolean) -> Unit,
@@ -159,6 +163,8 @@ internal fun PlaybackSettingsSections(
     onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
     onSetDiskSpoolDiagnosticsEnabled: (Boolean) -> Unit,
     onSetDolbyVisionDiagnosticsEnabled: (Boolean) -> Unit,
+    onSetAutoTranslateDiagnosticsEnabled: (Boolean) -> Unit,
+    onSetAutoTranslateUnsafeBodyLoggingEnabled: (Boolean) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
@@ -612,6 +618,28 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_dolby_vision_diagnostics_subtitle),
                     isChecked = dolbyVisionDiagnosticsEnabled,
                     onCheckedChange = onSetDolbyVisionDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_auto_translate_diagnostics") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.ClosedCaption,
+                    title = stringResource(R.string.playback_logging_auto_translate_diagnostics_title),
+                    subtitle = stringResource(R.string.playback_logging_auto_translate_diagnostics_subtitle),
+                    isChecked = autoTranslateDiagnosticsEnabled,
+                    onCheckedChange = onSetAutoTranslateDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_auto_translate_unsafe_body_dump") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Warning,
+                    title = stringResource(R.string.playback_logging_auto_translate_unsafe_body_dump_title),
+                    subtitle = stringResource(R.string.playback_logging_auto_translate_unsafe_body_dump_subtitle),
+                    isChecked = autoTranslateUnsafeBodyLoggingEnabled,
+                    onCheckedChange = onSetAutoTranslateUnsafeBodyLoggingEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

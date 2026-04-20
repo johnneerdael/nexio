@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.domain.model.Subtitle
@@ -117,6 +118,8 @@ private fun sha256(input: String): String {
     return digest.joinToString("") { "%02x".format(it) }
 }
 
+private fun String.utf8Size(): Int = toByteArray(StandardCharsets.UTF_8).size
+
 data class TranslatedSubtitleAsset(
     val sourceSubtitle: Subtitle,
     val translatedSubtitle: Subtitle
@@ -132,7 +135,9 @@ data class SubtitleTranslationChunkConfig(
 @Singleton
 class SubtitleTranslationService @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val httpClient: OkHttpClient
+    private val httpClient: OkHttpClient,
+    internal val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
+        AutoTranslateDiagnosticsLogger.disabled()
 ) {
     companion object {
         val DEFAULT_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
@@ -398,7 +403,12 @@ class SubtitleTranslationService @Inject constructor(
                 systemPromptOverride = buildProtectedAssSsaSystemPrompt()
             ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
-            parseProtectedAssSsaResponse(response, units)
+            parseProtectedAssSsaResponse(response, units).also { parsed ->
+                diagnosticsLogger.log(
+                    "protected_ass_parse_success requestedItems=${units.size} parsedItems=${parsed.size} " +
+                        "missingItems=${(units.size - parsed.size).coerceAtLeast(0)}"
+                )
+            }
         }
     }
 
@@ -431,10 +441,18 @@ class SubtitleTranslationService @Inject constructor(
             ) ?: throw IllegalStateException("Subtitle translation provider did not return raw ASS/SSA text.")
 
             val translated = sanitizeRawAssSsaResponse(response)
-            validateRawAssSsaTranslation(
+            val validation = validateRawAssSsaTranslation(
                 source = text,
                 translated = translated
-            ).getOrThrow()
+            )
+            diagnosticsLogger.log(
+                "raw_ass_validation result=${if (validation.isSuccess) "success" else "failure"} " +
+                    "sourceBytes=${text.utf8Size()} translatedBytes=${translated.utf8Size()} " +
+                    "sourceHash=${AutoTranslateDiagnosticsLogger.sha256Short(text)} " +
+                    "translatedHash=${AutoTranslateDiagnosticsLogger.sha256Short(translated)} " +
+                    "error=${validation.exceptionOrNull()?.message.orEmpty()}"
+            )
+            validation.getOrThrow()
             translated
         }
     }
@@ -984,55 +1002,79 @@ class SubtitleTranslationService @Inject constructor(
         val systemPrompt = systemPromptOverride
             ?: buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
         val endpoint = providerEndpoint(settings)
-        val request = when (settings.provider) {
-            SubtitleTranslationProvider.OPENAI -> openAiRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildOpenAiChatCompletionRequest(
+        val userPayload = promptPayload.toString()
+        val (request, requestBodyText) = when (settings.provider) {
+            SubtitleTranslationProvider.OPENAI -> {
+                val body = buildOpenAiChatCompletionRequest(
                     settings = settings,
                     systemPrompt = systemPrompt,
-                    userPayload = promptPayload.toString(),
+                    userPayload = userPayload,
                     includeJsonMode = includeSchema
                 )
-            )
-            SubtitleTranslationProvider.ANTHROPIC -> anthropicRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildAnthropicMessagesRequest(
+                openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
+            SubtitleTranslationProvider.ANTHROPIC -> {
+                val body = buildAnthropicMessagesRequest(
                     settings = settings,
                     systemPrompt = systemPrompt,
-                    userPayload = promptPayload.toString()
+                    userPayload = userPayload
                 )
-            )
-            SubtitleTranslationProvider.GEMINI -> geminiRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildGeminiGenerationRequest(
+                anthropicRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
+            SubtitleTranslationProvider.GEMINI -> {
+                val body = buildGeminiGenerationRequest(
                     promptPayload = promptPayload,
                     systemPrompt = systemPrompt,
                     includeSchema = includeSchema
                 )
-            )
-            SubtitleTranslationProvider.DASHSCOPE -> dashScopeRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildDashScopeGenerationRequest(
+                geminiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
+            SubtitleTranslationProvider.DASHSCOPE -> {
+                val body = buildDashScopeGenerationRequest(
                     settings = settings,
-                    markerPayload = markerPayload ?: promptPayload.toString(),
+                    markerPayload = markerPayload ?: userPayload,
                     sourceLanguage = sourceLanguageName,
                     targetLanguage = targetLanguageName
                 )
-            )
+                dashScopeRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
         }
+        logPreparedTranslationRequest(
+            mode = "structured",
+            provider = settings.provider,
+            model = settings.model,
+            request = request,
+            requestBodyText = requestBodyText,
+            systemPrompt = systemPrompt,
+            userPayload = userPayload,
+            targetLanguageCode = targetLanguageCode,
+            sourceLanguageName = sourceLanguageName,
+            includeSchema = includeSchema
+        )
 
         var attempt = 1
         while (true) {
+            val startedAtMs = SystemClock.elapsedRealtime()
             httpClient.newCall(request).execute().use { response ->
                 val raw = response.body?.string().orEmpty()
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                logTranslationResponse(
+                    mode = "structured",
+                    provider = settings.provider,
+                    model = settings.model,
+                    responseCode = response.code,
+                    successful = response.isSuccessful,
+                    attempt = attempt,
+                    elapsedMs = elapsedMs,
+                    raw = raw
+                )
                 if (!response.isSuccessful) {
                     Log.w(TAG, "Subtitle translation request failed provider=${settings.provider} code=${response.code} attempt=$attempt body=${raw.take(300)}")
                     val providerError = classifyProviderError(settings.provider, response.code, raw)
                     if (includeSchema && isStructuredRequestFallbackEligible(response.code, providerError)) {
+                        diagnosticsLogger.log(
+                            "structured_fallback_eligible provider=${settings.provider} code=${response.code} error=$providerError"
+                        )
                         return null
                     }
                     if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
@@ -1042,18 +1084,28 @@ class SubtitleTranslationService @Inject constructor(
                             attempt = attempt
                         )
                         Log.w(TAG, "Retrying subtitle translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
+                        diagnosticsLogger.log(
+                            "request_retry mode=structured provider=${settings.provider} " +
+                                "nextAttempt=${attempt + 1} delayMs=$delayMs error=$providerError"
+                        )
                         sleepBeforeRetry(delayMs)
                         attempt += 1
                         continue
                     }
                     throw providerException(settings.provider, response.code, raw)
                 }
-                return when (settings.provider) {
+                val parsed = when (settings.provider) {
                     SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
                     SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
                     SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
                     SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
                 }
+                logParsedTranslationResponse(
+                    mode = "structured",
+                    provider = settings.provider,
+                    parsed = parsed
+                )
+                return parsed
             }
         }
     }
@@ -1066,50 +1118,70 @@ class SubtitleTranslationService @Inject constructor(
         settings: SubtitleTranslationSettings
     ): String? {
         val endpoint = providerEndpoint(settings)
-        val request = when (settings.provider) {
-            SubtitleTranslationProvider.OPENAI -> openAiRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildOpenAiChatCompletionRequest(
+        val (request, requestBodyText) = when (settings.provider) {
+            SubtitleTranslationProvider.OPENAI -> {
+                val body = buildOpenAiChatCompletionRequest(
                     settings = settings,
                     systemPrompt = systemPrompt,
                     userPayload = userPayload,
                     includeJsonMode = false
                 )
-            )
-            SubtitleTranslationProvider.ANTHROPIC -> anthropicRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildAnthropicMessagesRequest(
+                openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
+            SubtitleTranslationProvider.ANTHROPIC -> {
+                val body = buildAnthropicMessagesRequest(
                     settings = settings,
                     systemPrompt = systemPrompt,
                     userPayload = userPayload
                 )
-            )
-            SubtitleTranslationProvider.GEMINI -> geminiRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildGeminiRawGenerationRequest(
+                anthropicRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
+            SubtitleTranslationProvider.GEMINI -> {
+                val body = buildGeminiRawGenerationRequest(
                     userPayload = userPayload,
                     systemPrompt = systemPrompt
                 )
-            )
-            SubtitleTranslationProvider.DASHSCOPE -> dashScopeRequest(
-                endpoint = endpoint,
-                apiKey = settings.apiKey,
-                body = buildDashScopeGenerationRequest(
+                geminiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
+            SubtitleTranslationProvider.DASHSCOPE -> {
+                val body = buildDashScopeGenerationRequest(
                     settings = settings,
                     markerPayload = userPayload,
                     sourceLanguage = sourceLanguageName,
                     targetLanguage = targetLanguageName
                 )
-            )
+                dashScopeRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
+            }
         }
+        logPreparedTranslationRequest(
+            mode = "raw_ass",
+            provider = settings.provider,
+            model = settings.model,
+            request = request,
+            requestBodyText = requestBodyText,
+            systemPrompt = systemPrompt,
+            userPayload = userPayload,
+            targetLanguageCode = targetLanguageName,
+            sourceLanguageName = sourceLanguageName,
+            includeSchema = false
+        )
 
         var attempt = 1
         while (true) {
+            val startedAtMs = SystemClock.elapsedRealtime()
             httpClient.newCall(request).execute().use { response ->
                 val raw = response.body?.string().orEmpty()
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                logTranslationResponse(
+                    mode = "raw_ass",
+                    provider = settings.provider,
+                    model = settings.model,
+                    responseCode = response.code,
+                    successful = response.isSuccessful,
+                    attempt = attempt,
+                    elapsedMs = elapsedMs,
+                    raw = raw
+                )
                 if (!response.isSuccessful) {
                     Log.w(TAG, "Raw ASS/SSA translation request failed provider=${settings.provider} code=${response.code} attempt=$attempt body=${raw.take(300)}")
                     val providerError = classifyProviderError(settings.provider, response.code, raw)
@@ -1120,20 +1192,84 @@ class SubtitleTranslationService @Inject constructor(
                             attempt = attempt
                         )
                         Log.w(TAG, "Retrying raw ASS/SSA translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
+                        diagnosticsLogger.log(
+                            "request_retry mode=raw_ass provider=${settings.provider} " +
+                                "nextAttempt=${attempt + 1} delayMs=$delayMs error=$providerError"
+                        )
                         sleepBeforeRetry(delayMs)
                         attempt += 1
                         continue
                     }
                     throw providerException(settings.provider, response.code, raw)
                 }
-                return when (settings.provider) {
+                val parsed = when (settings.provider) {
                     SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
                     SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
                     SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
                     SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
                 }
+                logParsedTranslationResponse(
+                    mode = "raw_ass",
+                    provider = settings.provider,
+                    parsed = parsed
+                )
+                return parsed
             }
         }
+    }
+
+    private fun logPreparedTranslationRequest(
+        mode: String,
+        provider: SubtitleTranslationProvider,
+        model: String,
+        request: Request,
+        requestBodyText: String,
+        systemPrompt: String,
+        userPayload: String,
+        targetLanguageCode: String,
+        sourceLanguageName: String,
+        includeSchema: Boolean
+    ) {
+        diagnosticsLogger.log(
+            "request_prepared mode=$mode provider=$provider model=$model " +
+                "host=${request.url.host} path=${request.url.encodedPath} target=$targetLanguageCode " +
+                "source=$sourceLanguageName includeSchema=$includeSchema " +
+                "requestBytes=${requestBodyText.utf8Size()} promptBytes=${systemPrompt.utf8Size()} " +
+                "userBytes=${userPayload.utf8Size()} requestHash=${AutoTranslateDiagnosticsLogger.sha256Short(requestBodyText)}"
+        )
+        diagnosticsLogger.logUnsafe("request_body mode=$mode provider=$provider", requestBodyText)
+        diagnosticsLogger.logUnsafe("request_system_prompt mode=$mode provider=$provider", systemPrompt)
+        diagnosticsLogger.logUnsafe("request_user_payload mode=$mode provider=$provider", userPayload)
+    }
+
+    private fun logTranslationResponse(
+        mode: String,
+        provider: SubtitleTranslationProvider,
+        model: String,
+        responseCode: Int,
+        successful: Boolean,
+        attempt: Int,
+        elapsedMs: Long,
+        raw: String
+    ) {
+        diagnosticsLogger.log(
+            "response_received mode=$mode provider=$provider model=$model code=$responseCode " +
+                "successful=$successful attempt=$attempt elapsedMs=$elapsedMs " +
+                "responseBytes=${raw.utf8Size()} responseHash=${AutoTranslateDiagnosticsLogger.sha256Short(raw)}"
+        )
+        diagnosticsLogger.logUnsafe("response_body mode=$mode provider=$provider", raw)
+    }
+
+    private fun logParsedTranslationResponse(
+        mode: String,
+        provider: SubtitleTranslationProvider,
+        parsed: String?
+    ) {
+        diagnosticsLogger.log(
+            "response_parsed mode=$mode provider=$provider parsed=${parsed != null} " +
+                "parsedBytes=${parsed.orEmpty().utf8Size()} parsedHash=${AutoTranslateDiagnosticsLogger.sha256Short(parsed.orEmpty())}"
+        )
+        diagnosticsLogger.logUnsafe("parsed_text mode=$mode provider=$provider", parsed.orEmpty())
     }
 
     private fun geminiRequest(

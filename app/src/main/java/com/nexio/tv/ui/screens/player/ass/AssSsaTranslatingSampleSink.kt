@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player.ass
 import androidx.media3.common.Format
 import com.nexio.tv.data.repository.AssSsaEventFormat
 import com.nexio.tv.data.repository.AssSsaEventRecord
+import com.nexio.tv.data.repository.AutoTranslateDiagnosticsLogger
 import com.nexio.tv.data.repository.AssSsaProtectedTranslationUnit
 import com.nexio.tv.data.repository.AssSsaRisk
 import kotlinx.coroutines.CoroutineScope
@@ -14,7 +15,9 @@ internal class AssSsaTranslatingSampleSink(
     private val isEnabled: () -> Boolean,
     private val useSystemPromptTranslation: () -> Boolean,
     private val translate: suspend (List<AssSsaProtectedTranslationUnit>) -> Map<String, String>,
-    private val translateRawAssSsa: suspend (String) -> String
+    private val translateRawAssSsa: suspend (String) -> String,
+    private val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
+        AutoTranslateDiagnosticsLogger.disabled()
 ) : AssSsaSampleSink {
     private val trackFormats = linkedMapOf<Int, AssSsaEventFormat>()
 
@@ -25,16 +28,38 @@ internal class AssSsaTranslatingSampleSink(
 
     override fun onSubtitleSample(trackId: Int, timeUs: Long, data: ByteArray) {
         if (!isEnabled()) {
+            diagnosticsLogger.log(
+                "sample_emit_original reason=disabled track=$trackId timeUs=$timeUs bytes=${data.size} " +
+                    "hash=${AutoTranslateDiagnosticsLogger.sha256Short(data.decodeToString())}"
+            )
+            diagnosticsLogger.logUnsafe("sample_original_disabled track=$trackId timeUs=$timeUs", data.decodeToString())
             downstream.onSubtitleSample(trackId, timeUs, data)
             return
         }
 
         val text = data.decodeToString()
         if (useSystemPromptTranslation()) {
+            diagnosticsLogger.log(
+                "sample_translate_start mode=raw_ass track=$trackId timeUs=$timeUs bytes=${data.size} " +
+                    "hash=${AutoTranslateDiagnosticsLogger.sha256Short(text)}"
+            )
+            diagnosticsLogger.logUnsafe("sample_raw_ass_source track=$trackId timeUs=$timeUs", text)
             scope.launch {
                 val translatedSample = runCatching {
                     translateRawAssSsa(text)
+                }.onFailure { error ->
+                    diagnosticsLogger.log(
+                        "sample_translate_failed mode=raw_ass track=$trackId timeUs=$timeUs " +
+                            "error=${error::class.simpleName}:${error.message}"
+                    )
                 }.getOrDefault(text)
+                diagnosticsLogger.log(
+                    "sample_emit_${if (translatedSample == text) "original" else "translated"} mode=raw_ass " +
+                        "track=$trackId timeUs=$timeUs sourceBytes=${data.size} translatedBytes=${translatedSample.toByteArray().size} " +
+                        "sourceHash=${AutoTranslateDiagnosticsLogger.sha256Short(text)} " +
+                        "translatedHash=${AutoTranslateDiagnosticsLogger.sha256Short(translatedSample)}"
+                )
+                diagnosticsLogger.logUnsafe("sample_raw_ass_output track=$trackId timeUs=$timeUs", translatedSample)
                 downstream.onSubtitleSample(
                     trackId = trackId,
                     timeUs = timeUs,
@@ -49,6 +74,9 @@ internal class AssSsaTranslatingSampleSink(
             .mapNotNull { line -> AssSsaEventRecord.parseDialogueLine(line, format) }
             .toList()
         if (records.isEmpty()) {
+            diagnosticsLogger.log(
+                "sample_emit_original reason=no_dialogue_records track=$trackId timeUs=$timeUs bytes=${data.size}"
+            )
             downstream.onSubtitleSample(trackId, timeUs, data)
             return
         }
@@ -63,12 +91,27 @@ internal class AssSsaTranslatingSampleSink(
             val translatableUnits = unitsById
                 .map { it.second }
                 .filter { it.risk != AssSsaRisk.PreserveOnly && it.protectedText.isNotBlank() }
+            diagnosticsLogger.log(
+                "sample_translate_start mode=protected track=$trackId timeUs=$timeUs records=${records.size} " +
+                    "units=${unitsById.size} translatable=${translatableUnits.size} " +
+                    "preserveOnly=${unitsById.count { it.second.risk == AssSsaRisk.PreserveOnly }} " +
+                    "bytes=${data.size} hash=${AutoTranslateDiagnosticsLogger.sha256Short(text)}"
+            )
+            diagnosticsLogger.logUnsafe("sample_protected_source track=$trackId timeUs=$timeUs", text)
             if (translatableUnits.isEmpty()) {
+                diagnosticsLogger.log(
+                    "sample_emit_original reason=no_translatable_units mode=protected track=$trackId timeUs=$timeUs"
+                )
                 downstream.onSubtitleSample(trackId, timeUs, data)
                 return@launch
             }
             val translated = runCatching {
                 translate(translatableUnits)
+            }.onFailure { error ->
+                diagnosticsLogger.log(
+                    "sample_translate_failed mode=protected track=$trackId timeUs=$timeUs " +
+                        "error=${error::class.simpleName}:${error.message}"
+                )
             }.getOrDefault(emptyMap())
             val translatedLines = records.mapIndexed { index, record ->
                 val unitId = "evt_$index"
@@ -84,6 +127,13 @@ internal class AssSsaTranslatingSampleSink(
                 timeUs = timeUs,
                 data = translatedLines.joinToString("\n").toByteArray()
             )
+            val output = translatedLines.joinToString("\n")
+            diagnosticsLogger.log(
+                "sample_emit_translated mode=protected track=$trackId timeUs=$timeUs " +
+                    "translatedItems=${translated.size} outputBytes=${output.toByteArray().size} " +
+                    "outputHash=${AutoTranslateDiagnosticsLogger.sha256Short(output)}"
+            )
+            diagnosticsLogger.logUnsafe("sample_protected_output track=$trackId timeUs=$timeUs", output)
         }
     }
 

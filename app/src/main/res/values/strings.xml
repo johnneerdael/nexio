@@ -323,6 +323,10 @@
     <string name="playback_logging_disk_spool_diagnostics_subtitle">Emit disk spool decisions, prewarm, fallback, and buffer frontier details to logcat.</string>
     <string name="playback_logging_dolby_vision_diagnostics_title">Enable Dolby Vision Diagnostics</string>
     <string name="playback_logging_dolby_vision_diagnostics_subtitle">Emit DV conversion counters and native conversion details to logcat for troubleshooting. Leave off during normal playback.</string>
+    <string name="playback_logging_auto_translate_diagnostics_title">Enable Auto-Translate Diagnostics</string>
+    <string name="playback_logging_auto_translate_diagnostics_subtitle">Emit auto-translate decisions, request timing, payload sizes, response sizes, validation results, and fallback reasons to logcat.</string>
+    <string name="playback_logging_auto_translate_unsafe_body_dump_title">Dump Auto-Translate Prompt and Response Bodies</string>
+    <string name="playback_logging_auto_translate_unsafe_body_dump_subtitle">Unsafe: logs full prompts, responses, and subtitle text. May expose API payload content in adb logs.</string>
     <string name="playback_logging_disk_first_home_startup_title">Enable Disk-First Home Startup Mode</string>
     <string name="playback_logging_disk_first_home_startup_subtitle">Defer heavy home refresh work for the first 20 seconds and prefer cached disk content on startup.</string>
     <string name="playback_afr_open">Open</string>

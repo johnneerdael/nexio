@@ -148,6 +148,8 @@ internal fun PlaybackSettingsContent(
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolDiagnosticsEnabled by viewModel.diskSpoolDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val dolbyVisionDiagnosticsEnabled by viewModel.dolbyVisionDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val autoTranslateDiagnosticsEnabled by viewModel.autoTranslateDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val autoTranslateUnsafeBodyLoggingEnabled by viewModel.autoTranslateUnsafeBodyLoggingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -370,6 +372,8 @@ internal fun PlaybackSettingsContent(
                 startupPerfTelemetryEnabled = startupPerfTelemetryEnabled,
                 diskSpoolDiagnosticsEnabled = diskSpoolDiagnosticsEnabled,
                 dolbyVisionDiagnosticsEnabled = dolbyVisionDiagnosticsEnabled,
+                autoTranslateDiagnosticsEnabled = autoTranslateDiagnosticsEnabled,
+                autoTranslateUnsafeBodyLoggingEnabled = autoTranslateUnsafeBodyLoggingEnabled,
                 onSetFireOsIecVerboseLoggingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFireOsIecVerboseLoggingEnabled(enabled) }
                 },
@@ -390,6 +394,12 @@ internal fun PlaybackSettingsContent(
                 },
                 onSetDolbyVisionDiagnosticsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setDolbyVisionDiagnosticsEnabled(enabled) }
+                },
+                onSetAutoTranslateDiagnosticsEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setAutoTranslateDiagnosticsEnabled(enabled) }
+                },
+                onSetAutoTranslateUnsafeBodyLoggingEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setAutoTranslateUnsafeBodyLoggingEnabled(enabled) }
                 },
                 onSetIecPackerMaxPcmChannelLayout = { layout ->
                     coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }

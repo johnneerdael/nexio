@@ -32,6 +32,10 @@ class DebugSettingsDataStore @Inject constructor(
     private val diskSpoolDiagnosticsEnabledKey = booleanPreferencesKey("disk_spool_diagnostics_enabled")
     private val dolbyVisionDiagnosticsEnabledKey =
         booleanPreferencesKey("dolby_vision_diagnostics_enabled")
+    private val autoTranslateDiagnosticsEnabledKey =
+        booleanPreferencesKey("auto_translate_diagnostics_enabled")
+    private val autoTranslateUnsafeBodyLoggingEnabledKey =
+        booleanPreferencesKey("auto_translate_unsafe_body_logging_enabled")
     private val diskFirstHomeStartupEnabledKey = booleanPreferencesKey("disk_first_home_startup_enabled")
     private val diskFirstHomeStartupDefaultAppliedKey =
         booleanPreferencesKey("migration_disk_first_home_startup_default_applied")
@@ -72,6 +76,14 @@ class DebugSettingsDataStore @Inject constructor(
         prefs[dolbyVisionDiagnosticsEnabledKey] ?: false
     }
 
+    val autoTranslateDiagnosticsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[autoTranslateDiagnosticsEnabledKey] ?: false
+    }
+
+    val autoTranslateUnsafeBodyLoggingEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[autoTranslateUnsafeBodyLoggingEnabledKey] ?: false
+    }
+
     val diskFirstHomeStartupEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[diskFirstHomeStartupEnabledKey] ?: true
     }
@@ -109,6 +121,24 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setDolbyVisionDiagnosticsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[dolbyVisionDiagnosticsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setAutoTranslateDiagnosticsEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[autoTranslateDiagnosticsEnabledKey] = enabled
+            if (!enabled) {
+                prefs[autoTranslateUnsafeBodyLoggingEnabledKey] = false
+            }
+        }
+    }
+
+    suspend fun setAutoTranslateUnsafeBodyLoggingEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[autoTranslateUnsafeBodyLoggingEnabledKey] = enabled
+            if (enabled) {
+                prefs[autoTranslateDiagnosticsEnabledKey] = true
+            }
         }
     }
 
