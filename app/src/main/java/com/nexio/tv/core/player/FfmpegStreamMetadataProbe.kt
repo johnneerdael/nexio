@@ -31,6 +31,16 @@ data class FfmpegStreamMetadata(
     val hdr10Plus: Boolean = false
 )
 
+internal interface FfmpegStreamMetadataBackend {
+    fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String?
+}
+
+private object DefaultFfmpegStreamMetadataBackend : FfmpegStreamMetadataBackend {
+    override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
+        return FfmpegLibrary.probeDolbyVisionStreamMetadataJson(url, requestHeadersBlob)
+    }
+}
+
 object FfmpegStreamMetadataProbe {
     private const val TAG = "FfmpegStreamMetadata"
     private const val MAX_CACHE_ENTRIES = 12
@@ -47,6 +57,22 @@ object FfmpegStreamMetadataProbe {
             eldest: MutableMap.MutableEntry<ProbeKey, FfmpegStreamMetadataProbeResult>?
         ): Boolean {
             return size > MAX_CACHE_ENTRIES
+        }
+    }
+    @Volatile
+    private var backend: FfmpegStreamMetadataBackend = DefaultFfmpegStreamMetadataBackend
+
+    internal fun setBackendForTesting(testBackend: FfmpegStreamMetadataBackend) {
+        synchronized(nativeProbeLock) {
+            backend = testBackend
+            cache.clear()
+        }
+    }
+
+    internal fun resetForTesting() {
+        synchronized(nativeProbeLock) {
+            backend = DefaultFfmpegStreamMetadataBackend
+            cache.clear()
         }
     }
 
@@ -66,9 +92,13 @@ object FfmpegStreamMetadataProbe {
             val key = ProbeKey(url = url, requestHeadersBlob = headerBlob)
             synchronized(nativeProbeLock) {
                 cache[key]?.let { return it }
-                FfmpegLibrary.probeDolbyVisionStreamMetadataJson(url, headerBlob)
+                val parsed = backend.probeStreamMetadataJson(url, headerBlob)
                     ?.let(::parse)
-                    ?.also { cache[key] = it }
+                if (parsed == null || parsed.streams.isEmpty()) {
+                    Log.w(TAG, "FFmpeg stream metadata probe returned no streams")
+                    return null
+                }
+                parsed.also { cache[key] = it }
             }
         }.getOrElse { error ->
             Log.w(TAG, "FFmpeg stream metadata probe failed: ${error.message}")
