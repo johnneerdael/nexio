@@ -474,6 +474,58 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     @Test
+    fun `deterministic autoplay candidate selection drops 1WinStudio filenames`() = runBlocking {
+        val cards = listOf(
+            scenarioCard(
+                streamKey = "bad-release",
+                providerId = "RD",
+                filename = "High.Potential.S02E16.WEB-DL.1080p.1WinStudio.mkv"
+            ),
+            scenarioCard(
+                streamKey = "safe-release",
+                providerId = "PM",
+                filename = "High.Potential.S02E16.WEB-DL.1080p.CleanGroup.mkv"
+            )
+        )
+        val event = autoplayDecisionEvent(
+            winners = listOf(
+                remuxWinner(
+                    streamKey = "bad-release",
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    averageBitrateMbps = 20.0,
+                    filename = "High.Potential.S02E16.WEB-DL.1080p.1WinStudio.mkv"
+                ),
+                remuxWinner(
+                    streamKey = "safe-release",
+                    provider = DebridBenchmarkProvider.PREMIUMIZE,
+                    averageBitrateMbps = 18.0,
+                    filename = "High.Potential.S02E16.WEB-DL.1080p.CleanGroup.mkv"
+                )
+            ),
+            selected = remuxWinner(
+                streamKey = "bad-release",
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                averageBitrateMbps = 20.0,
+                filename = "High.Potential.S02E16.WEB-DL.1080p.1WinStudio.mkv"
+            )
+        )
+        val preflighted = mutableListOf<String>()
+
+        val selected = selectDeterministicAutoplayCandidate(
+            event = event,
+            eligibleStreams = cards,
+            maxCandidates = 3,
+            isPlayable = { item ->
+                preflighted += item.stream.wrappedOriginalStreamKey.orEmpty()
+                true
+            }
+        )
+
+        assertEquals("safe-release", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
+        assertEquals(listOf("safe-release"), preflighted)
+    }
+
+    @Test
     fun `deterministic autoplay candidate selection preserves selected dv non dv fallback`() = runBlocking {
         val primary = scenarioCard(
             streamKey = "primary-dv",
@@ -659,7 +711,8 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         streamKey: String,
         providerId: String,
         visualTags: List<String> = listOf("HDR10"),
-        quality: String = "BluRay"
+        quality: String = "BluRay",
+        filename: String = "$streamKey.mkv"
     ) = BenchmarkAwareScoringScenarioStream(
         streamKey = streamKey,
         providerId = providerId,
@@ -669,7 +722,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         sizeBytes = 50L * 1024L * 1024L * 1024L,
         durationMs = 120L * 60_000L,
         visualTags = visualTags,
-        filename = "$streamKey.mkv"
+        filename = filename
     ).toStreamCardModel()
 
     private fun autoplayDecisionEvent(
