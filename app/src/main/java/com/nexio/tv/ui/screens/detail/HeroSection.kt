@@ -620,9 +620,10 @@ private fun MetaInfoRow(
     }
     val imdbRating = if (hideImdbRating) null else meta.imdbRating
     val shouldShowImdbRating = imdbRating != null
-    val imdbModel = remember(context) {
+    val ratingBadge = remember(meta.ratingSource) { titleRatingBadge(meta.ratingSource) }
+    val ratingModel = remember(context, ratingBadge.logoRes) {
         ImageRequest.Builder(context)
-            .data(com.nexio.tv.R.raw.imdb_logo_2016)
+            .data(ratingBadge.logoRes)
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
@@ -675,11 +676,11 @@ private fun MetaInfoRow(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    AsyncImage(
-                        model = imdbModel,
-                        contentDescription = stringResource(R.string.cd_rating),
-                        modifier = Modifier.size(30.dp),
+                    ) {
+                        AsyncImage(
+                            model = ratingModel,
+                            contentDescription = ratingBadge.contentDescription,
+                            modifier = Modifier.size(30.dp),
                         contentScale = ContentScale.Fit
                     )
                     val ratingText = remember(rating) { String.format("%.1f", rating) }
