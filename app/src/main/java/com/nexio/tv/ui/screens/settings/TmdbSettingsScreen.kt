@@ -130,7 +130,7 @@ fun TmdbSettingsContent(
                             R.string.tmdb_catalogs_enabled_count,
                             uiState.enabledCatalogKeys.size
                         ),
-                        enabled = uiState.isActive,
+                        enabled = uiState.catalogControlsEditable,
                         onClick = { showCatalogDialog = true }
                     )
                 }
@@ -140,7 +140,7 @@ fun TmdbSettingsContent(
                         title = stringResource(R.string.tmdb_adult_content_title),
                         subtitle = stringResource(R.string.tmdb_adult_content_subtitle),
                         checked = uiState.includeAdult,
-                        enabled = uiState.isActive,
+                        enabled = uiState.catalogControlsEditable,
                         onToggle = {
                             viewModel.onEvent(
                                 TmdbSettingsEvent.ToggleAdultContent(!uiState.includeAdult)
@@ -154,7 +154,7 @@ fun TmdbSettingsContent(
                         title = stringResource(R.string.tmdb_digital_release_filter_title),
                         subtitle = stringResource(R.string.tmdb_digital_release_filter_subtitle),
                         checked = uiState.hideUnreleasedDigital,
-                        enabled = uiState.isActive,
+                        enabled = uiState.catalogControlsEditable,
                         onToggle = {
                             viewModel.onEvent(
                                 TmdbSettingsEvent.ToggleDigitalReleaseFilter(!uiState.hideUnreleasedDigital)
@@ -312,7 +312,7 @@ fun TmdbSettingsContent(
                             title = tmdbCatalogTitle(catalogId),
                             subtitle = tmdbCatalogSubtitle(catalogId),
                             checked = enabled,
-                            enabled = uiState.isActive,
+                            enabled = uiState.catalogControlsEditable,
                             onToggle = {
                                 viewModel.onEvent(
                                     TmdbSettingsEvent.ToggleCatalog(catalogId, !enabled)
