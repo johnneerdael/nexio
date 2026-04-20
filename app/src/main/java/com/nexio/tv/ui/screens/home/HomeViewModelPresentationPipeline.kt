@@ -667,6 +667,7 @@ internal fun mergeFocusedItemEnrichment(
                 name = providerEnrichment.localizedTitle ?: merged.name,
                 description = providerEnrichment.description ?: merged.description,
                 imdbRating = providerEnrichment.rating?.toFloat() ?: merged.imdbRating,
+                ratingSource = if (providerEnrichment.rating != null) providerEnrichment.ratingSource else merged.ratingSource,
                 genres = if (providerEnrichment.genres.isNotEmpty()) providerEnrichment.genres else merged.genres
             )
         }
@@ -898,10 +899,11 @@ private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {
         genres = genres,
         backdrop = backdrop,
         logo = logo,
-        poster = poster,
-        releaseInfo = releaseInfo,
-        rating = rating,
-        runtimeMinutes = runtimeMinutes,
+            poster = poster,
+            releaseInfo = releaseInfo,
+            rating = rating,
+            ratingSource = ratingSource,
+            runtimeMinutes = runtimeMinutes,
         ageRating = ageRating,
         countries = countries,
         language = language

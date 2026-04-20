@@ -706,11 +706,13 @@ class MetadataDiskCacheStore @Inject constructor(
         val value = root.get("value") ?: return null
         val parsed = runCatching { gson.fromJson(value, TvMetadataEnrichment::class.java) }.getOrNull() ?: return null
         val valueObj = runCatching { value.asJsonObject }.getOrNull() ?: return parsed.copy(
+            rating = null,
             castMembers = emptyList(),
             productionCompanies = emptyList(),
             networks = emptyList()
         )
         return parsed.copy(
+            rating = null,
             castMembers = readCastMembersFromJson(valueObj, "castMembers"),
             productionCompanies = readCompaniesFromJson(valueObj, "productionCompanies"),
             networks = readCompaniesFromJson(valueObj, "networks")

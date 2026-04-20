@@ -25,6 +25,7 @@ import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MetaReviewSource
 import com.nexio.tv.domain.model.PersonDetail
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TitleRatingSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -1040,6 +1041,7 @@ data class TmdbEnrichment(
     val castMembers: List<MetaCastMember>,
     val releaseInfo: String?,
     val rating: Double?,
+    val ratingSource: TitleRatingSource = TitleRatingSource.TMDB,
     val runtimeMinutes: Int?,
     val director: List<String>,
     val writer: List<String>,

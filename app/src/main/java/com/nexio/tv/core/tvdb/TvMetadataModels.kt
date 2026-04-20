@@ -3,6 +3,7 @@ package com.nexio.tv.core.tvdb
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TvdbEpisodeOrder
 import com.nexio.tv.domain.model.TvdbSeasonOrderContext
 
@@ -31,6 +32,7 @@ data class TvMetadataEnrichment(
     val poster: String? = null,
     val releaseInfo: String? = null,
     val rating: Double? = null,
+    val ratingSource: TitleRatingSource = TitleRatingSource.IMDB,
     val runtimeMinutes: Int? = null,
     val ageRating: String? = null,
     val countries: List<String>? = null,

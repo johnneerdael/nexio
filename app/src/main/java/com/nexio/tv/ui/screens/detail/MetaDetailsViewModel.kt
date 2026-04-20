@@ -1430,6 +1430,11 @@ class MetaDetailsViewModel @Inject constructor(
         val releaseInfo = tvEnrichment?.releaseInfo ?: tmdbEnrichment?.releaseInfo
         val localReleaseInfo = tvEnrichment?.let(::formatTvdbDetailLocalReleaseInfo)
         val rating = tvEnrichment?.rating ?: tmdbEnrichment?.rating
+        val ratingSource = when {
+            tvEnrichment?.rating != null -> tvEnrichment.ratingSource
+            tmdbEnrichment?.rating != null -> tmdbEnrichment.ratingSource
+            else -> updated.ratingSource
+        }
         val runtimeMinutes = tvEnrichment?.runtimeMinutes ?: tmdbEnrichment?.runtimeMinutes
         val ageRating = tvEnrichment?.ageRating ?: tmdbEnrichment?.ageRating
         val countries = tvEnrichment?.countries ?: tmdbEnrichment?.countries
@@ -1452,7 +1457,10 @@ class MetaDetailsViewModel @Inject constructor(
             if (!genres.isNullOrEmpty()) {
                 updated = updated.copy(genres = genres)
             }
-            updated = updated.copy(imdbRating = rating?.toFloat() ?: updated.imdbRating)
+            updated = updated.copy(
+                imdbRating = rating?.toFloat() ?: updated.imdbRating,
+                ratingSource = if (rating != null) ratingSource else updated.ratingSource
+            )
         }
 
         // Group: Details (runtime, release info, country, language)

@@ -213,6 +213,41 @@ class MetadataDiskCacheStoreTvdbTest {
     }
 
     @Test
+    fun `read TVDB enrichment drops cached score values from rating`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "tvdb::121361::series_extended::en-US::native",
+            """
+            {
+              "value": {
+                "seriesTvdbId": 121361,
+                "localizedTitle": "Game of Thrones",
+                "rating": 14244.2,
+                "genres": [],
+                "airsDays": {},
+                "remoteIds": {},
+                "aliases": [],
+                "contentRatings": []
+              },
+              "tvdbSchemaVersion": 2,
+              "languageEpoch": 0,
+              "updatedAtMs": ${System.currentTimeMillis()}
+            }
+            """.trimIndent()
+        ).apply()
+
+        val enrichment = store.readTvdbEnrichment(
+            seriesId = 121361,
+            recordKind = "series_extended",
+            languageTag = "en-US",
+            providerToken = "native"
+        )
+
+        assertNull(enrichment?.rating)
+    }
+
+    @Test
     fun `expired TVDB enrichment cache entry is ignored`() {
         val prefs = InMemorySharedPreferences()
         val store = MetadataDiskCacheStore(context = mockContext(prefs))

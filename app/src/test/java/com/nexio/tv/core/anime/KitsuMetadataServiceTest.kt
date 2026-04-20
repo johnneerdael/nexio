@@ -56,7 +56,7 @@ class KitsuMetadataServiceTest {
         assertEquals("https://media.kitsu.io/cover.jpg", enrichment?.backdrop)
         assertEquals("2009-04-05", enrichment?.releaseInfo)
         assertEquals(24, enrichment?.runtimeMinutes)
-        assertEquals(8.812, enrichment?.rating ?: 0.0, 0.001)
+        assertNull("Kitsu average should not masquerade as IMDb or TMDB", enrichment?.rating)
         assertEquals("R", enrichment?.ageRating)
     }
 

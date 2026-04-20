@@ -443,6 +443,7 @@ class TvMetadataRouter @Inject constructor(
             poster = poster,
             releaseInfo = releaseInfo,
             rating = rating,
+            ratingSource = ratingSource,
             runtimeMinutes = runtimeMinutes,
             ageRating = ageRating,
             countries = countries,

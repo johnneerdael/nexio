@@ -543,6 +543,7 @@ internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadata
         releaseInfo = enrichment.releaseInfo ?: releaseInfo,
         runtime = (enrichment.runtimeMinutes ?: enrichment.averageRuntimeMinutes)?.toString() ?: runtime,
         imdbRating = enrichment.rating?.toFloat() ?: imdbRating,
+        ratingSource = if (enrichment.rating != null) enrichment.ratingSource else ratingSource,
         background = enrichment.backdrop ?: background,
         logo = enrichment.logo ?: logo,
         poster = enrichment.poster ?: poster
