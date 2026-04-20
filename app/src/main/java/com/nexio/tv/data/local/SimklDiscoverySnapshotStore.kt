@@ -111,6 +111,7 @@ class SimklDiscoverySnapshotStore private constructor(
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return SimklDiscoverySnapshot()
         val itemsByCatalog = root.getAsJsonObject("itemsByCatalog")
             ?.let { gson.fromJson<Map<String, List<MetaPreview>>>(it, itemsByCatalogType) }
+            ?.mapValues { (_, items) -> items.orEmpty().map { item -> item.sanitizedForCache() } }
             ?: emptyMap()
         return SimklDiscoverySnapshot(
             itemsByCatalog = itemsByCatalog,

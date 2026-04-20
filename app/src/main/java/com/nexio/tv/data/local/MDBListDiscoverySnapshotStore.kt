@@ -88,7 +88,9 @@ class MDBListDiscoverySnapshotStore private constructor(
         val canonical = MDBListDiscoverySnapshot(
             personalLists = decodeListOptions(root, "personalLists", isPersonal = true),
             topLists = decodeListOptions(root, "topLists", isPersonal = false),
-            customListCatalogs = decodeArray(root, "customListCatalogs"),
+            customListCatalogs = decodeArray<MDBListCustomCatalog>(root, "customListCatalogs").map { catalog ->
+                catalog.copy(items = catalog.items.orEmpty().map { item -> item.sanitizedForCache() })
+            },
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
         if (canonical.updatedAtMs > 0L ||

@@ -145,7 +145,15 @@ class TraktDiscoverySnapshotStore private constructor(
     private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {
         val array = root.getAsJsonArray(key) ?: return emptyList()
         val type = object : TypeToken<List<T>>() {}.type
-        return gson.fromJson<List<T>>(array, type) ?: emptyList()
+        return (gson.fromJson<List<T>>(array, type) ?: emptyList()).map { value ->
+            when (value) {
+                is MetaPreview -> value.sanitizedForCache() as T
+                is TraktCustomListCatalog -> value.copy(
+                    items = value.items.orEmpty().map { item -> item.sanitizedForCache() }
+                ) as T
+                else -> value
+            }
+        }
     }
 
     private fun decodePopularLists(root: JsonObject): List<TraktPopularListOption> {

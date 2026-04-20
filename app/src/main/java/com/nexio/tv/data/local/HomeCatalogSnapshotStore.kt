@@ -222,7 +222,7 @@ class HomeCatalogSnapshotStore private constructor(
                     "Dropping malformed cached items from $label[$index] for catalogId=${row.catalogId}"
                 )
             }
-            row.copy(items = sanitizedItems)
+            row.copy(items = sanitizedItems).sanitizedForCache()
         }
     }
 
@@ -232,7 +232,7 @@ class HomeCatalogSnapshotStore private constructor(
             if (item == null) {
                 Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
             }
-            item
+            item?.sanitizedForCache()
         }
     }
 }
