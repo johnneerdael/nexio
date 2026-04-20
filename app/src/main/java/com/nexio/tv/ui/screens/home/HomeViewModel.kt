@@ -236,6 +236,8 @@ class HomeViewModel @Inject constructor(
     internal var persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedTmdbSyntheticIncludeAdult: Boolean? = null
+    internal var persistedTmdbSyntheticHideUnreleasedDigital: Boolean? = null
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
@@ -419,7 +421,7 @@ class HomeViewModel @Inject constructor(
                     persistedTraktSyntheticGroups = emptyList()
                     persistedSimklSyntheticGroups = emptyList()
                     persistedMDBListSyntheticGroups = emptyList()
-                    persistedTmdbSyntheticGroups = emptyList()
+                    clearPersistedTmdbSyntheticGroups()
                     watchProgressRepository.invalidateLocalizedMetadata()
                     continueWatchingSnapshotService.invalidateLocalizedMetadata()
                     logStartupPerf("metadata_language_changed")

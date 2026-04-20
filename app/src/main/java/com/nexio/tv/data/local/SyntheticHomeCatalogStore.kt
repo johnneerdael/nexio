@@ -57,7 +57,9 @@ class SyntheticHomeCatalogStore private constructor(
         val traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val simklGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
-        val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+        val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val tmdbIncludeAdult: Boolean? = null,
+        val tmdbHideUnreleasedDigital: Boolean? = null
     )
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
@@ -85,6 +87,8 @@ class SyntheticHomeCatalogStore private constructor(
                 add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
                 add("tmdbGroups", encodeGroups(snapshot.tmdbGroups))
+                snapshot.tmdbIncludeAdult?.let { addProperty("tmdbIncludeAdult", it) }
+                snapshot.tmdbHideUnreleasedDigital?.let { addProperty("tmdbHideUnreleasedDigital", it) }
             }
             prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
@@ -115,7 +119,9 @@ class SyntheticHomeCatalogStore private constructor(
             traktGroups = decodeGroups(root.getAsJsonArray("traktGroups")),
             simklGroups = decodeGroups(root.getAsJsonArray("simklGroups")),
             mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups")),
-            tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups"))
+            tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups")),
+            tmdbIncludeAdult = decodeBoolean(root, "tmdbIncludeAdult"),
+            tmdbHideUnreleasedDigital = decodeBoolean(root, "tmdbHideUnreleasedDigital")
         )
     }
 
@@ -161,6 +167,12 @@ class SyntheticHomeCatalogStore private constructor(
             orderKey = orderKey,
             rows = rows
         )
+    }
+
+    private fun decodeBoolean(root: JsonObject, name: String): Boolean? {
+        return root.get(name)
+            ?.takeIf { !it.isJsonNull }
+            ?.let { runCatching { it.asBoolean }.getOrNull() }
     }
 
     private fun decodeRow(element: JsonElement): CatalogRow? {

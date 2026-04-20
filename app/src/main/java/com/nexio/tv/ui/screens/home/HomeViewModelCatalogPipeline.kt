@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
@@ -145,7 +146,7 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
             persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
-            persistedTmdbSyntheticGroups = snapshot.tmdbGroups
+            applyPersistedTmdbSyntheticSnapshot(snapshot)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_synthetic_snapshot")
         }
     }
@@ -165,7 +166,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     persistedTraktSyntheticGroups = emptyList()
     persistedSimklSyntheticGroups = emptyList()
     persistedMDBListSyntheticGroups = emptyList()
-    persistedTmdbSyntheticGroups = emptyList()
+    clearPersistedTmdbSyntheticGroups()
     traktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     persistedTraktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     simklDiscoverySnapshot = com.nexio.tv.data.repository.SimklDiscoverySnapshot()
@@ -263,7 +264,7 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
             persistedTraktSyntheticGroups = if (diskState.traktAuthenticated || hasTraktDiskState) snapshot.traktGroups else emptyList()
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
-            persistedTmdbSyntheticGroups = snapshot.tmdbGroups
+            applyPersistedTmdbSyntheticSnapshot(snapshot)
         }
         diskState.traktSnapshot?.let { snapshot ->
             val hydrated = applyTomatoesOverridesToTraktSnapshot(snapshot, syntheticTomatoesOverridesByItemId)
@@ -1251,8 +1252,59 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
         persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()
         persistedSimklSyntheticGroups = snapshot.simklGroups
         persistedMDBListSyntheticGroups = snapshot.mdbListGroups
-        persistedTmdbSyntheticGroups = snapshot.tmdbGroups
+        applyPersistedTmdbSyntheticSnapshot(snapshot)
     }
+}
+
+internal fun HomeViewModel.applyPersistedTmdbSyntheticSnapshot(snapshot: SyntheticHomeCatalogStore.Snapshot) {
+    persistedTmdbSyntheticGroups = snapshot.tmdbGroups
+    persistedTmdbSyntheticIncludeAdult = snapshot.tmdbIncludeAdult
+    persistedTmdbSyntheticHideUnreleasedDigital = snapshot.tmdbHideUnreleasedDigital
+}
+
+internal fun HomeViewModel.clearPersistedTmdbSyntheticGroups() {
+    persistedTmdbSyntheticGroups = emptyList()
+    persistedTmdbSyntheticIncludeAdult = null
+    persistedTmdbSyntheticHideUnreleasedDigital = null
+}
+
+private fun HomeViewModel.persistedTmdbSyntheticGroupsMatchingPreferences(
+    prefs: TmdbCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    return tmdbGroupsMatchPreferences(
+        groups = persistedTmdbSyntheticGroups,
+        includeAdult = persistedTmdbSyntheticIncludeAdult,
+        hideUnreleasedDigital = persistedTmdbSyntheticHideUnreleasedDigital,
+        prefs = prefs
+    )
+}
+
+private fun HomeViewModel.syntheticHomeSnapshotFallback(
+    traktGroups: List<PersistedSyntheticCatalogGroup> = persistedTraktSyntheticGroups,
+    simklGroups: List<PersistedSyntheticCatalogGroup> = persistedSimklSyntheticGroups,
+    mdbListGroups: List<PersistedSyntheticCatalogGroup> = persistedMDBListSyntheticGroups,
+    tmdbGroups: List<PersistedSyntheticCatalogGroup> = persistedTmdbSyntheticGroups
+): SyntheticHomeCatalogStore.Snapshot {
+    return SyntheticHomeCatalogStore.Snapshot(
+        traktGroups = traktGroups,
+        simklGroups = simklGroups,
+        mdbListGroups = mdbListGroups,
+        tmdbGroups = tmdbGroups,
+        tmdbIncludeAdult = persistedTmdbSyntheticIncludeAdult,
+        tmdbHideUnreleasedDigital = persistedTmdbSyntheticHideUnreleasedDigital
+    )
+}
+
+private fun SyntheticHomeCatalogStore.Snapshot.withCurrentTmdbPreferenceProvenance(
+    groups: List<PersistedSyntheticCatalogGroup>,
+    prefs: TmdbCatalogPreferences
+): SyntheticHomeCatalogStore.Snapshot {
+    val sanitized = prefs.sanitized()
+    return copy(
+        tmdbGroups = groups,
+        tmdbIncludeAdult = sanitized.includeAdult,
+        tmdbHideUnreleasedDigital = sanitized.hideUnreleasedDigital
+    )
 }
 
 internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
@@ -1264,10 +1316,10 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
         syntheticCatalogStoreMutex.withLock {
             withContext(Dispatchers.IO) {
                 val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
-                    ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
+                    ?: syntheticHomeSnapshotFallback(
+                        traktGroups = emptyList(),
                         simklGroups = persistedSimklSyntheticGroups,
-                        mdbListGroups = persistedMDBListSyntheticGroups,
-                        tmdbGroups = persistedTmdbSyntheticGroups
+                        mdbListGroups = persistedMDBListSyntheticGroups
                     )
                 syntheticHomeCatalogStore.write(existingSnapshot.copy(traktGroups = emptyList()), profileId = profileId)
             }
@@ -1284,12 +1336,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
             val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
-                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
-                    traktGroups = persistedTraktSyntheticGroups,
-                    simklGroups = persistedSimklSyntheticGroups,
-                    mdbListGroups = persistedMDBListSyntheticGroups,
-                    tmdbGroups = persistedTmdbSyntheticGroups
-                )
+                ?: syntheticHomeSnapshotFallback()
             val liveGroups = buildConfiguredCatalogPlan(
                 addons = emptyList(),
                 disabledHomeCatalogKeys = emptySet(),
@@ -1360,12 +1407,7 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
             val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
-                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
-                    traktGroups = persistedTraktSyntheticGroups,
-                    simklGroups = persistedSimklSyntheticGroups,
-                    mdbListGroups = persistedMDBListSyntheticGroups,
-                    tmdbGroups = persistedTmdbSyntheticGroups
-                )
+                ?: syntheticHomeSnapshotFallback()
             val liveGroups = buildConfiguredCatalogPlan(
                 addons = emptyList(),
                 disabledHomeCatalogKeys = emptySet(),
@@ -1435,12 +1477,7 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
             val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
-                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
-                    traktGroups = persistedTraktSyntheticGroups,
-                    simklGroups = persistedSimklSyntheticGroups,
-                    mdbListGroups = persistedMDBListSyntheticGroups,
-                    tmdbGroups = persistedTmdbSyntheticGroups
-                )
+                ?: syntheticHomeSnapshotFallback()
             val liveGroups = buildSyntheticMDBListRows(
                 prefs = mdbPrefsSnapshot,
                 snapshot = snapshot
@@ -1492,17 +1529,12 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
     val profileId = profileManager.activeProfileId.value
     val tmdbPrefsSnapshot = tmdbCatalogPreferences
     val telemetryEnabled = startupPerfTelemetryEnabled
-    var appliedTmdbGroups: List<PersistedSyntheticCatalogGroup>? = null
+    var appliedTmdbSnapshot: SyntheticHomeCatalogStore.Snapshot? = null
 
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
             val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
-                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
-                    traktGroups = persistedTraktSyntheticGroups,
-                    simklGroups = persistedSimklSyntheticGroups,
-                    mdbListGroups = persistedMDBListSyntheticGroups,
-                    tmdbGroups = persistedTmdbSyntheticGroups
-                )
+                ?: syntheticHomeSnapshotFallback()
             val liveGroups = buildConfiguredCatalogPlan(
                 addons = emptyList(),
                 disabledHomeCatalogKeys = emptySet(),
@@ -1539,26 +1571,33 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
             val renewedTmdbGroups = liveGroups
                 .replaceRows(hydratedRows)
                 .toPersistedSyntheticCatalogGroups()
-            val effectiveTmdbGroups = if (
-                renewedTmdbGroups.isEmpty() &&
-                existingSnapshot.tmdbGroups.isNotEmpty() &&
-                shouldRefreshTmdbDiscoveryForState(tmdbPrefsSnapshot, snapshot)
-            ) {
-                existingSnapshot.tmdbGroups
+            val effectiveTmdbGroups = resolveEffectiveTmdbSyntheticGroups(
+                renewedTmdbGroups = renewedTmdbGroups,
+                existingSnapshot = existingSnapshot,
+                prefs = tmdbPrefsSnapshot,
+                snapshot = snapshot
+            )
+            val preservedExistingTmdbGroups = renewedTmdbGroups.isEmpty() &&
+                effectiveTmdbGroups.isNotEmpty() &&
+                effectiveTmdbGroups == existingSnapshot.tmdbGroupsMatchingPreferences(tmdbPrefsSnapshot)
+            val renewedSnapshot = if (preservedExistingTmdbGroups) {
+                existingSnapshot.copy(tmdbGroups = effectiveTmdbGroups)
             } else {
-                renewedTmdbGroups
+                existingSnapshot.withCurrentTmdbPreferenceProvenance(
+                    groups = effectiveTmdbGroups,
+                    prefs = tmdbPrefsSnapshot
+                )
             }
-            val renewedSnapshot = existingSnapshot.copy(tmdbGroups = effectiveTmdbGroups)
             if (renewedSnapshot == existingSnapshot) {
                 return@withContext
             }
             syntheticHomeCatalogStore.write(renewedSnapshot, profileId = profileId)
-            appliedTmdbGroups = effectiveTmdbGroups
+            appliedTmdbSnapshot = renewedSnapshot
         }
     }
-    appliedTmdbGroups?.let { groups ->
+    appliedTmdbSnapshot?.let { renewedSnapshot ->
         withContext(Dispatchers.Main.immediate) {
-            persistedTmdbSyntheticGroups = groups
+            applyPersistedTmdbSyntheticSnapshot(renewedSnapshot)
         }
     }
 }
@@ -2027,6 +2066,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     pendingRestoredCatalogSnapshot?.let { snapshot ->
         applyPersistedHomeSnapshotIfEligiblePipeline(snapshot, requireSourceCachesReady = false)
     }
+    val currentPreferencePersistedTmdbSyntheticGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbPrefs)
     val computationSignature = withContext(Dispatchers.Default) {
         buildCatalogComputationSignature(
             orderedKeys = orderedKeys,
@@ -2046,7 +2086,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             persistedMDBListSyntheticGroups = persistedMDBListSyntheticGroups,
             tmdbSnapshot = effectiveTmdbSnapshot,
             tmdbPrefs = tmdbPrefs,
-            persistedTmdbSyntheticGroups = persistedTmdbSyntheticGroups,
+            persistedTmdbSyntheticGroups = currentPreferencePersistedTmdbSyntheticGroups,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
             startupHydrationPending = startupHydrationPending,
             refreshInProgress = refreshInProgress,
@@ -2067,7 +2107,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val syntheticMDBListGroups = persistedMDBListSyntheticGroups.toSyntheticCatalogOrderGroups()
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
-        val syntheticTmdbGroups = persistedTmdbSyntheticGroups.toSyntheticCatalogOrderGroups()
+        val syntheticTmdbGroups = currentPreferencePersistedTmdbSyntheticGroups.toSyntheticCatalogOrderGroups()
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val liveSyntheticGroups = catalogPlan.toPersistedSyntheticCatalogGroups()
             .toSyntheticCatalogOrderGroups()

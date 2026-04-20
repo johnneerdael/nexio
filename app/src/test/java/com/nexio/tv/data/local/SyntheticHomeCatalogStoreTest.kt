@@ -161,6 +161,63 @@ class SyntheticHomeCatalogStoreTest {
     }
 
     @Test
+    fun `write persists tmdb preference provenance`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 7
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+        val snapshot = SyntheticHomeCatalogStore.Snapshot(
+            tmdbGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = TmdbCatalogIds.TRENDING_MOVIES,
+                    rows = listOf(sampleRow("tmdb", TmdbCatalogIds.TRENDING_MOVIES))
+                )
+            ),
+            tmdbIncludeAdult = true,
+            tmdbHideUnreleasedDigital = false
+        )
+
+        store.write(snapshot)
+
+        val raw = prefs.all.values.singleOrNull()?.toString().orEmpty()
+        assertTrue(raw.contains("\"tmdbIncludeAdult\":true"))
+        assertTrue(raw.contains("\"tmdbHideUnreleasedDigital\":false"))
+        assertEquals(snapshot, store.read())
+    }
+
+    @Test
+    fun `read decodes v4 snapshot without tmdb provenance as unknown`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+        prefs.edit()
+            .putString(
+                "snapshot:p1:en",
+                """
+                {
+                  "schemaVersion":4,
+                  "languageEpoch":0,
+                  "languageTag":"en",
+                  "traktGroups":[],
+                  "simklGroups":[],
+                  "mdbListGroups":[],
+                  "tmdbGroups":[]
+                }
+                """.trimIndent()
+            )
+            .commit()
+
+        val restored = store.read()
+
+        assertEquals(SyntheticHomeCatalogStore.Snapshot(), restored)
+        assertNull(restored?.tmdbIncludeAdult)
+        assertNull(restored?.tmdbHideUnreleasedDigital)
+    }
+
+    @Test
     fun `explicit profile id keeps synthetic snapshots isolated`() {
         val prefs = InMemorySharedPreferences()
         val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))

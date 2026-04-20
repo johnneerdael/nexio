@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
@@ -46,6 +47,67 @@ internal fun CatalogPlan.toPersistedSyntheticCatalogGroups(): List<PersistedSynt
             )
         }
     }
+}
+
+internal fun SyntheticHomeCatalogStore.Snapshot.tmdbGroupsMatchingPreferences(
+    prefs: TmdbCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    return if (hasTmdbPreferenceProvenanceMatching(prefs)) tmdbGroups else emptyList()
+}
+
+internal fun SyntheticHomeCatalogStore.Snapshot.hasTmdbPreferenceProvenanceMatching(
+    prefs: TmdbCatalogPreferences
+): Boolean {
+    val sanitized = prefs.sanitized()
+    return tmdbIncludeAdult == sanitized.includeAdult &&
+        tmdbHideUnreleasedDigital == sanitized.hideUnreleasedDigital
+}
+
+internal fun tmdbGroupsMatchPreferences(
+    groups: List<PersistedSyntheticCatalogGroup>,
+    includeAdult: Boolean?,
+    hideUnreleasedDigital: Boolean?,
+    prefs: TmdbCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    val sanitized = prefs.sanitized()
+    return if (
+        includeAdult == sanitized.includeAdult &&
+        hideUnreleasedDigital == sanitized.hideUnreleasedDigital
+    ) {
+        groups
+    } else {
+        emptyList()
+    }
+}
+
+internal fun resolveEffectiveTmdbSyntheticGroups(
+    renewedTmdbGroups: List<PersistedSyntheticCatalogGroup>,
+    existingSnapshot: SyntheticHomeCatalogStore.Snapshot,
+    prefs: TmdbCatalogPreferences,
+    snapshot: TmdbDiscoverySnapshot
+): List<PersistedSyntheticCatalogGroup> {
+    if (renewedTmdbGroups.isNotEmpty()) return renewedTmdbGroups
+    val existingCurrentGroups = existingSnapshot.tmdbGroupsMatchingPreferences(prefs)
+    if (existingCurrentGroups.isEmpty()) return emptyList()
+    return if (shouldPreserveExistingTmdbGroupsDuringRefresh(prefs, snapshot)) {
+        existingCurrentGroups
+    } else {
+        emptyList()
+    }
+}
+
+internal fun shouldPreserveExistingTmdbGroupsDuringRefresh(
+    prefs: TmdbCatalogPreferences,
+    snapshot: TmdbDiscoverySnapshot
+): Boolean {
+    val expectedKeys = buildExpectedConfiguredTmdbOrderKeys(prefs)
+    if (expectedKeys.isEmpty()) return false
+    val sanitized = prefs.sanitized()
+    val snapshotHasCurrentPreferenceProvenance = snapshot.updatedAtMs > 0L &&
+        snapshot.includeAdult == sanitized.includeAdult &&
+        snapshot.hideUnreleasedDigital == sanitized.hideUnreleasedDigital
+    if (!snapshotHasCurrentPreferenceProvenance) return true
+    return expectedKeys.any { key -> key !in snapshot.catalogIdsWithCurrentPreferences }
 }
 
 internal fun buildConfiguredCatalogPlan(

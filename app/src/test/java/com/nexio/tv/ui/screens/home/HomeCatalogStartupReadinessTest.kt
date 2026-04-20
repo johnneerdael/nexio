@@ -1,8 +1,10 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -966,6 +968,57 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `persisted tmdb rows without preference provenance are not current rows`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES))
+        )
+
+        assertTrue(persistedSnapshot.tmdbGroupsMatchingPreferences(prefs).isEmpty())
+    }
+
+    @Test
+    fun `current preference empty tmdb refresh clears old persisted tmdb rows`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
+            includeAdult = false,
+            hideUnreleasedDigital = true
+        )
+        val existingSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES)),
+            tmdbIncludeAdult = false,
+            tmdbHideUnreleasedDigital = true
+        )
+        val currentEmptySnapshot = TmdbDiscoverySnapshot(
+            rowsByCatalog = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.TRENDING_MOVIES,
+                    items = emptyList()
+                )
+            ),
+            updatedAtMs = 123L,
+            includeAdult = false,
+            hideUnreleasedDigital = true,
+            catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        val effectiveGroups = resolveEffectiveTmdbSyntheticGroups(
+            renewedTmdbGroups = emptyList(),
+            existingSnapshot = existingSnapshot,
+            prefs = prefs,
+            snapshot = currentEmptySnapshot
+        )
+
+        assertTrue(effectiveGroups.isEmpty())
+    }
+
+    @Test
     fun `serialized trakt refresh skips service when only up next is enabled`() {
         val prefs = TraktCatalogPreferences(
             enabledCatalogs = setOf(TraktCatalogIds.UP_NEXT),
@@ -1036,6 +1089,18 @@ class HomeCatalogStartupReadinessTest {
             items = items,
             hasMore = false,
             supportsSkip = false
+        )
+    }
+
+    private fun tmdbGroup(catalogId: String): PersistedSyntheticCatalogGroup {
+        return PersistedSyntheticCatalogGroup(
+            orderKey = catalogId,
+            rows = listOf(
+                tmdbRow(
+                    catalogId = catalogId,
+                    items = listOf(samplePreview("tmdb:1", ContentType.MOVIE, "TMDB Movie"))
+                )
+            )
         )
     }
 
