@@ -7,6 +7,7 @@ import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
@@ -42,6 +43,51 @@ class ContinueWatchingSnapshotStoreTest {
         assertEquals(snapshot.displayMetadataByItemKey, store.read()?.displayMetadataByItemKey)
 
         assertEquals(snapshot.displayMetadataByItemKey, store.read()?.displayMetadataByItemKey)
+    }
+
+    @Test
+    fun `read display metadata map tolerates legacy entries without rating source`() {
+        val prefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs)
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 5,
+              "languageEpoch": 0,
+              "languageTag": "en",
+              "resumeItems": [],
+              "nextUpItems": [],
+              "traktUpNextItems": [],
+              "scheduledReemit": [],
+              "displayMetadataByItemKey": {
+                "movie:tt123": {
+                  "title":"Movie",
+                  "logo":null,
+                  "description":null,
+                  "genres":[],
+                  "releaseInfo":"2025",
+                  "runtime":null,
+                  "imdbRating":8.3,
+                  "tomatoesRating":null,
+                  "poster":null,
+                  "posterProviderTag":null,
+                  "backdrop":null
+                }
+              },
+              "updatedAtMs": 100
+            }
+            """.trimIndent()
+        ).commit()
+
+        val metadata = store.read(profileId = 1)?.displayMetadataByItemKey?.get("movie:tt123")
+
+        metadata.hashCode()
+        assertEquals(TitleRatingSource.IMDB, metadata?.ratingSource)
     }
 
     @Test
