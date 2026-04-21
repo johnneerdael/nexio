@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -416,11 +417,16 @@ internal fun ModernRowSection(
         val rowStartPadding = 52.dp
         val context = LocalContext.current
         val imageLoader = context.imageLoader
+        val playbackActivityTracker = remember(context) {
+            com.nexio.tv.core.player.PlaybackActivityTracker.fromContext(context)
+        }
+        val isPlaybackActive by playbackActivityTracker.isActive.collectAsState()
 
         LaunchedEffect(
             row.key,
             isActiveRow,
             isVerticalRowsScrolling,
+            isPlaybackActive,
             row.items.size,
             modernCatalogCardWidth,
             modernCatalogCardHeight,
@@ -428,6 +434,7 @@ internal fun ModernRowSection(
             continueWatchingCardHeight
         ) {
             if (!shouldPrefetchModernRow(isActiveRow, isVerticalRowsScrolling)) return@LaunchedEffect
+            if (isPlaybackActive) return@LaunchedEffect
             val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
             val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
             val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }

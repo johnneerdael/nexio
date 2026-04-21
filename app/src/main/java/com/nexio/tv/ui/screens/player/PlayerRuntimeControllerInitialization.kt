@@ -182,6 +182,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
         return
     }
 
+    playbackActivityTracker.setActive(true)
     com.nexio.tv.core.player.FrameRateUtils.beginMainPlayerDisplayModeSession()
 
     val playbackSessionId = playbackSessionGuard.beginPlaybackSession()

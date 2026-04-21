@@ -4,6 +4,7 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,6 +113,17 @@ internal fun PlayerVideoSurface(
         }
     }
 
+    // The runtime controller creates AssSsaRenderController before Compose runs the
+    // AndroidView update block (where ensureAssSsaRenderOverlay actually attaches the
+    // overlay to the PlayerView). Re-push the provider whenever assSsaOverlayView
+    // flips so setOverlayView() fires as soon as attachment completes, instead of
+    // waiting for an unrelated renderState change to recompose the AndroidView.
+    LaunchedEffect(assSsaOverlayView, assSsaRenderOverlayProvider) {
+        if (assSsaOverlayView != null) {
+            assSsaRenderOverlayProvider?.invoke { assSsaOverlayView }
+        }
+    }
+
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
@@ -126,9 +138,8 @@ internal fun PlayerVideoSurface(
             if (playerView.player !== player) {
                 playerView.player = player
             }
-            if (assSsaRenderOverlayProvider != null) {
+            if (assSsaRenderOverlayProvider != null && assSsaOverlayView == null) {
                 assSsaOverlayView = playerView.ensureAssSsaRenderOverlay()
-                assSsaRenderOverlayProvider.invoke { assSsaOverlayView }
             }
 
             val plan = buildPlayerViewMutationPlan(lastAppliedState, renderState)
