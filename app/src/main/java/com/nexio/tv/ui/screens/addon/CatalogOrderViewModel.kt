@@ -13,6 +13,9 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogIds
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
@@ -21,6 +24,7 @@ import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoveryService
+import com.nexio.tv.data.repository.tmdbCatalogTitle
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.repository.AddonRepository
@@ -43,6 +47,7 @@ class CatalogOrderViewModel @Inject constructor(
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
     private val androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore,
     private val androidTvFeedCatalogService: AndroidTvFeedCatalogService,
     private val catalogPriorityHydrationNotifier: CatalogPriorityHydrationNotifier
@@ -52,6 +57,7 @@ class CatalogOrderViewModel @Inject constructor(
     val uiState: StateFlow<CatalogOrderUiState> = _uiState.asStateFlow()
     private var disabledKeysCache: Set<String> = emptySet()
     private var savedOrderKeysCache: List<String> = emptyList()
+    private var tmdbCatalogKeysCache: Set<String> = emptySet()
 
     init {
         observeCatalogs()
@@ -68,6 +74,16 @@ class CatalogOrderViewModel @Inject constructor(
 
     fun toggleCatalogEnabled(disableKey: String?) {
         if (disableKey.isNullOrBlank()) return
+        if (disableKey in tmdbCatalogKeysCache) {
+            val currentlyEnabled = disableKey !in disabledKeysCache
+            viewModelScope.launch {
+                tmdbCatalogSettingsDataStore.setCatalogEnabled(disableKey, !currentlyEnabled)
+                if (!currentlyEnabled) {
+                    catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
+                }
+            }
+            return
+        }
         val wasDisabled = disableKey in disabledKeysCache
         val updatedDisabled = disabledKeysCache.toMutableSet().apply {
             if (disableKey in this) remove(disableKey) else add(disableKey)
@@ -132,8 +148,9 @@ class CatalogOrderViewModel @Inject constructor(
                 baseInputsFlow,
                 simklSettingsDataStore.catalogPreferences,
                 mdbListDiscoveryService.observeSnapshot(),
-                mdbListSettingsDataStore.catalogPreferences
-            ) { base, simklPrefs, mdbListSnapshot, mdbListPrefs ->
+                mdbListSettingsDataStore.catalogPreferences,
+                tmdbCatalogSettingsDataStore.catalogPreferences
+            ) { base, simklPrefs, mdbListSnapshot, mdbListPrefs, tmdbPrefs ->
                 base.savedOrderKeys to buildOrderedCatalogItems(
                     addons = base.addons,
                     savedOrderKeys = base.savedOrderKeys,
@@ -142,7 +159,8 @@ class CatalogOrderViewModel @Inject constructor(
                     traktPrefs = base.traktPrefs,
                     simklPrefs = simklPrefs,
                     mdbListSnapshot = mdbListSnapshot,
-                    mdbListPrefs = mdbListPrefs
+                    mdbListPrefs = mdbListPrefs,
+                    tmdbPrefs = tmdbPrefs
                 )
             }.collectLatest { (savedOrderKeys, orderedItems) ->
                 savedOrderKeysCache = savedOrderKeys
@@ -196,12 +214,16 @@ class CatalogOrderViewModel @Inject constructor(
         traktPrefs: TraktCatalogPreferences,
         simklPrefs: SimklCatalogPreferences,
         mdbListSnapshot: MDBListDiscoverySnapshot,
-        mdbListPrefs: MDBListCatalogPreferences
+        mdbListPrefs: MDBListCatalogPreferences,
+        tmdbPrefs: TmdbCatalogPreferences
     ): List<CatalogOrderItem> {
+        val tmdbEntries = buildAllTmdbCatalogEntries(tmdbPrefs)
+        tmdbCatalogKeysCache = tmdbEntries.map { it.key }.toSet()
         val defaultEntries = buildDefaultCatalogEntries(addons, disabledKeys)
             .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs, disabledKeys))
             .plus(buildActiveSimklCatalogEntries(simklPrefs, disabledKeys))
             .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs, disabledKeys))
+            .plus(tmdbEntries)
         val availableMap = defaultEntries.associateBy { it.key }
         val defaultOrderKeys = defaultEntries.map { it.key }
         val savedValid = savedOrderKeys
@@ -380,6 +402,27 @@ class CatalogOrderViewModel @Inject constructor(
                 typeLabel = if (option?.isPersonal == true) "personal list" else "top list",
                 isToggleable = true,
                 isDisabled = key in disabledKeys
+            )
+        }
+    }
+
+    private fun buildAllTmdbCatalogEntries(
+        prefs: TmdbCatalogPreferences
+    ): List<CatalogOrderEntry> {
+        val sanitized = prefs.sanitized()
+        val orderedIds = sanitized.catalogOrder
+            .filter { it in TmdbCatalogIds.BUILT_IN_ORDER } +
+            TmdbCatalogIds.BUILT_IN_ORDER.filterNot { it in sanitized.catalogOrder }
+        return orderedIds.distinct().map { catalogId ->
+            val isMovieCatalog = catalogId.endsWith("_movies")
+            CatalogOrderEntry(
+                key = catalogId,
+                disableKey = catalogId,
+                catalogName = tmdbCatalogTitle(catalogId) ?: catalogId,
+                addonName = "TMDB",
+                typeLabel = if (isMovieCatalog) "movie" else "series",
+                isToggleable = true,
+                isDisabled = catalogId !in sanitized.enabledCatalogs
             )
         }
     }
