@@ -426,7 +426,21 @@ fun SearchScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NexioColors.Background),
+            .background(NexioColors.Background)
+            .onPreviewKeyEvent { keyEvent ->
+                val native = keyEvent.nativeKeyEvent
+                if (native.action == KeyEvent.ACTION_DOWN && native.repeatCount == 0) {
+                    when (native.keyCode) {
+                        KeyEvent.KEYCODE_VOICE_ASSIST,
+                        KeyEvent.KEYCODE_ASSIST,
+                        KeyEvent.KEYCODE_SEARCH -> {
+                            if (!isVoiceListening) launchVoiceSearch()
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                }
+                false
+            },
         contentAlignment = Alignment.TopCenter
     ) {
         if (isDiscoverMode) {
@@ -921,11 +935,11 @@ private fun SearchInputField(
                     false
                 },
             keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Done,
+                imeAction = ImeAction.Search,
                 autoCorrectEnabled = false
             ),
             keyboardActions = KeyboardActions(
-                onDone = {
+                onSearch = {
                     onSubmit()
                     keyboardController?.hide()
                 }
