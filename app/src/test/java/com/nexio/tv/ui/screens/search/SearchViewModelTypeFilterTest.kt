@@ -1,8 +1,13 @@
 package com.nexio.tv.ui.screens.search
 
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tmdb.ImdbPosterLookupService
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AddonResource
@@ -174,7 +179,13 @@ class SearchViewModelTypeFilterTest {
             layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
             playerSettingsDataStore = playerSettingsDataStoreForTest(),
             searchHistoryDataStore = searchHistoryDataStoreForTest(),
-            imdbSearchService = EmptyImdbSearchService
+            imdbSearchService = EmptyImdbSearchService,
+            imdbPosterLookupService = mockk<ImdbPosterLookupService>().apply {
+                coEvery { lookupPosterUrl(any(), any(), any()) } returns null
+            },
+            debugSettingsDataStore = mockk<DebugSettingsDataStore>().apply {
+                every { searchPosterPreviewEnabled } returns flowOf(false)
+            }
         )
     }
 

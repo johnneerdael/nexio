@@ -35,7 +35,9 @@ data class SearchUiState(
     val posterCardCornerRadiusDp: Int = 12,
     val recentSearches: List<String> = emptyList(),
     val suggestions: List<String> = emptyList(),
-    val imdbSuggestions: List<ImdbSuggestion> = emptyList()
+    val imdbSuggestions: List<ImdbSuggestion> = emptyList(),
+    val imdbSuggestionPosters: Map<String, String> = emptyMap(),
+    val searchPosterPreviewEnabled: Boolean = false
 )
 
 @Immutable

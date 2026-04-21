@@ -3,8 +3,10 @@ package com.nexio.tv.ui.screens.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DEFAULT_MAX_RECENT_SEARCHES
@@ -40,7 +42,9 @@ class SearchViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val searchHistoryDataStore: SearchHistoryDataStore,
-    private val imdbSearchService: ImdbSearchService
+    private val imdbSearchService: ImdbSearchService,
+    private val imdbPosterLookupService: ImdbPosterLookupService,
+    private val debugSettingsDataStore: DebugSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -53,6 +57,7 @@ class SearchViewModel @Inject constructor(
     private var discoverJob: Job? = null
     private var catalogRowsUpdateJob: Job? = null
     private var suggestionJob: Job? = null
+    private var posterEnrichmentJob: Job? = null
     private var hasRenderedFirstCatalog = false
     private var pendingCatalogResponses = 0
     private var revealBatchAfterNextDiscoverFetch = false
@@ -129,6 +134,50 @@ class SearchViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            debugSettingsDataStore.searchPosterPreviewEnabled
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _uiState.update { it.copy(searchPosterPreviewEnabled = enabled) }
+                    if (!enabled) {
+                        posterEnrichmentJob?.cancel()
+                        _uiState.update { it.copy(imdbSuggestionPosters = emptyMap()) }
+                    } else {
+                        enrichPosters(_uiState.value.imdbSuggestions)
+                    }
+                }
+        }
+    }
+
+    private fun enrichPosters(suggestions: List<ImdbSuggestion>) {
+        posterEnrichmentJob?.cancel()
+        if (suggestions.isEmpty() || !_uiState.value.searchPosterPreviewEnabled) return
+        val targets = suggestions.take(MAX_SUGGESTIONS)
+        posterEnrichmentJob = viewModelScope.launch {
+            targets.forEach { suggestion ->
+                launch {
+                    val url = try {
+                        imdbPosterLookupService.lookupPosterUrl(
+                            tconst = suggestion.tconst,
+                            titleType = suggestion.titleType
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    } ?: return@launch
+                    val stillRelevant = _uiState.value.imdbSuggestions
+                        .any { it.tconst == suggestion.tconst }
+                    if (!stillRelevant) return@launch
+                    _uiState.update { state ->
+                        if (state.imdbSuggestionPosters[suggestion.tconst] == url) state
+                        else state.copy(
+                            imdbSuggestionPosters = state.imdbSuggestionPosters + (suggestion.tconst to url)
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private data class LayoutPrefs(
@@ -180,13 +229,27 @@ class SearchViewModel @Inject constructor(
         suggestionJob?.cancel()
 
         if (query.length < 2) {
-            _uiState.update { it.copy(suggestions = emptyList(), imdbSuggestions = emptyList()) }
+            _uiState.update {
+                it.copy(
+                    suggestions = emptyList(),
+                    imdbSuggestions = emptyList(),
+                    imdbSuggestionPosters = emptyMap()
+                )
+            }
+            posterEnrichmentJob?.cancel()
             return
         }
 
         // Don't show suggestions if the query already matches the submitted search
         if (query == _uiState.value.submittedQuery.trim() && _uiState.value.catalogRows.isNotEmpty()) {
-            _uiState.update { it.copy(suggestions = emptyList(), imdbSuggestions = emptyList()) }
+            _uiState.update {
+                it.copy(
+                    suggestions = emptyList(),
+                    imdbSuggestions = emptyList(),
+                    imdbSuggestionPosters = emptyMap()
+                )
+            }
+            posterEnrichmentJob?.cancel()
             return
         }
 
@@ -207,13 +270,24 @@ class SearchViewModel @Inject constructor(
                     .distinct()
                     .take(MAX_SUGGESTIONS)
                     .toList()
+                val existingPosters = _uiState.value.imdbSuggestionPosters
+                val activeTconsts = imdbResults.map { it.tconst }.toSet()
+                val prunedPosters = existingPosters.filterKeys { it in activeTconsts }
                 _uiState.update {
-                    it.copy(suggestions = names, imdbSuggestions = imdbResults)
+                    it.copy(
+                        suggestions = names,
+                        imdbSuggestions = imdbResults,
+                        imdbSuggestionPosters = prunedPosters
+                    )
                 }
+                enrichPosters(imdbResults)
                 return@launch
             }
 
-            _uiState.update { it.copy(imdbSuggestions = emptyList()) }
+            posterEnrichmentJob?.cancel()
+            _uiState.update {
+                it.copy(imdbSuggestions = emptyList(), imdbSuggestionPosters = emptyMap())
+            }
 
             val addons = try {
                 addonRepository.getInstalledAddons().first()
@@ -289,12 +363,14 @@ class SearchViewModel @Inject constructor(
     private fun performSearch(rawQuery: String) {
         val query = rawQuery.trim()
         suggestionJob?.cancel()
+        posterEnrichmentJob?.cancel()
         _uiState.update {
             it.copy(
                 submittedQuery = query,
                 query = rawQuery,
                 suggestions = emptyList(),
-                imdbSuggestions = emptyList()
+                imdbSuggestions = emptyList(),
+                imdbSuggestionPosters = emptyMap()
             )
         }
 
