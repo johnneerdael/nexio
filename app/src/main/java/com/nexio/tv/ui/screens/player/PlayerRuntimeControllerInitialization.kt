@@ -55,7 +55,6 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
-import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.repository.AssSsaTranslationBatchPlanner
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
@@ -183,6 +182,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
         return
     }
 
+    playbackActivityTracker.setActive(true)
     com.nexio.tv.core.player.FrameRateUtils.beginMainPlayerDisplayModeSession()
 
     val playbackSessionId = playbackSessionGuard.beginPlaybackSession()
@@ -205,20 +205,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 deviceLanguages = deviceLanguages,
                 originalLanguage = originalLanguage
             )
-            currentInternalPlayerEngine = playerSettings.internalPlayerEngine
-            autoSwitchInternalPlayerOnErrorEnabled = playerSettings.autoSwitchInternalPlayerOnError
-            mpvHardwareDecodeModeSetting = playerSettings.mpvHardwareDecodeMode
-            mpvPreferredAudioLanguages = preferredAudioLanguages
-            if (currentInternalPlayerEngine == InternalPlayerEngine.LIBMPV) {
-                mpvInitializationInProgress = true
-                try {
-                    initializeMpvPlayer(url, headers)
-                    fetchAddonSubtitles()
-                } finally {
-                    mpvInitializationInProgress = false
-                }
-                return@launch
-            }
             val experimentalFireOsIecPassthroughEnabled =
                 playerSettings.experimentalDtsIecPassthroughEnabled
             val kodiCustomAudioSinkEnabled = experimentalFireOsIecPassthroughEnabled
@@ -265,11 +251,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             AudioCapabilities.setFireOsIecVerboseLoggingEnabled(
                 playerSettings.fireOsIecVerboseLoggingEnabled
             )
-            _uiState.update {
-                it.copy(
-                    internalPlayerEngine = currentInternalPlayerEngine
-                )
-            }
             if (assSsaPipelineDecisionStreamUrl != currentStreamUrl) {
                 resetAssSsaPipelineDecisionForStream(currentStreamUrl)
             }
@@ -1157,9 +1138,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
                         if (responseCode == 416 && !hasRetriedCurrentStreamAfter416) {
                             retryCurrentStreamFromStartAfter416()
-                            return
-                        }
-                        if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError)) {
                             return
                         }
                         _uiState.update {

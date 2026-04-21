@@ -136,8 +136,6 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 | `TvdbTokenStore` | `account-remote` | `account` | `remote-synced` | `account_secrets` or token-refresh service state | TVDB token is derived from account-owned TVDB credentials. |
 | `WatchProgressPreferences` | `profile-local` | `profile` | `local-only` | none | Local watch progress preferences must not bleed across profiles. |
 | `WatchedItemsPreferences` | `profile-local` | `profile` | `local-only` | none | Local watched item state must not bleed across profiles. |
-| `YouTubeTrailerAuthDataStore` | `global-device` | `device` | `local-only` | none | Device helper auth. Reclassify if product requires per-profile YouTube state. |
-| `YouTubeTrailerTokenStore` | `global-device` | `device` | `local-only` | none | Device helper token cache. Reclassify if product requires per-profile YouTube state. |
 | `UpdatePreferences` | `global-device` | `device` | `local-only` | none | App update preference is device-wide operational state. |
 | `profile_cleanup_state` | `global-device` | `device` | `local-only` | none | Pending remote profile cleanup retry state, not user preference. |
 

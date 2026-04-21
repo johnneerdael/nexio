@@ -231,6 +231,9 @@ class MainActivity : ComponentActivity() {
 
         @Volatile
         private var processProfileSelectionGatePassed: Boolean = false
+
+        @Volatile
+        var voiceKeyHandler: (() -> Boolean)? = null
     }
 
     @Inject
@@ -250,6 +253,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
+
+    @Inject
+    lateinit var authPresenceDataStore: com.nexio.tv.data.local.AuthPresenceDataStore
 
     @Inject
     lateinit var catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
@@ -403,6 +409,10 @@ class MainActivity : ComponentActivity() {
                 .hasSeenAuthQrOnFirstLaunch
                 .map<Boolean, Boolean?> { it }
                 .collectAsState(initial = cachedHasSeenAuthQrOnFirstLaunch)
+            val hadAuthenticatedSession by authPresenceDataStore
+                .hadAuthenticatedSession
+                .map<Boolean, Boolean?> { it }
+                .collectAsState(initial = null)
             val authState by authManager.authState.collectAsState()
 
             LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
@@ -465,7 +475,8 @@ class MainActivity : ComponentActivity() {
                         shouldShowAuthQrOnStartup(
                             hasSeenAuthQrOnFirstLaunch = hasSeenAuthQrOnFirstLaunch,
                             authState = authState,
-                            onboardingCompletedThisSession = onboardingCompletedThisSession
+                            onboardingCompletedThisSession = onboardingCompletedThisSession,
+                            hadAuthenticatedSession = hadAuthenticatedSession
                         )
                     ) {
                         AuthQrSignInScreen(
@@ -1144,6 +1155,13 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             idleScreensaverController.registerInteraction()
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_VOICE_ASSIST,
+                KeyEvent.KEYCODE_ASSIST,
+                KeyEvent.KEYCODE_SEARCH -> {
+                    if (voiceKeyHandler?.invoke() == true) return true
+                }
+            }
         }
         return super.dispatchKeyEvent(event)
     }

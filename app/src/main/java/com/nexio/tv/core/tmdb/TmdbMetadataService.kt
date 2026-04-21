@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Locale
 import javax.inject.Inject
@@ -175,7 +176,9 @@ class TmdbMetadataService(
                             tmdbId = company.id,
                             name = name,
                             logo = buildImageUrl(company.logoPath, size = "w300"),
-                            kind = MetaCompanyKind.COMPANY
+                            kind = MetaCompanyKind.COMPANY,
+                            provider = "tmdb",
+                            providerId = company.id?.toString()
                         )
                     }
                 val networks = details?.networks
@@ -186,7 +189,9 @@ class TmdbMetadataService(
                             tmdbId = network.id,
                             name = name,
                             logo = buildImageUrl(network.logoPath, size = "w300"),
-                            kind = MetaCompanyKind.NETWORK
+                            kind = MetaCompanyKind.NETWORK,
+                            provider = "tmdb",
+                            providerId = network.id?.toString()
                         )
                     }
                 val poster = if (activePosterProvider == null) {
@@ -220,7 +225,9 @@ class TmdbMetadataService(
                             name = name,
                             character = member.character?.takeIf { it.isNotBlank() },
                             photo = buildImageUrl(member.profilePath, size = "w500"),
-                            tmdbId = member.id
+                            tmdbId = member.id,
+                            provider = "tmdb",
+                            providerId = member.id?.toString()
                         )
                     }
 
@@ -234,7 +241,9 @@ class TmdbMetadataService(
                                 name = name,
                                 character = "Creator",
                                 photo = buildImageUrl(creator.profilePath, size = "w500"),
-                                tmdbId = tmdbPersonId
+                                tmdbId = tmdbPersonId,
+                                provider = "tmdb",
+                                providerId = tmdbPersonId.toString()
                             )
                         }
                         .distinctBy { it.tmdbId ?: it.name.lowercase() }
@@ -262,7 +271,9 @@ class TmdbMetadataService(
                             name = name,
                             character = "Director",
                             photo = buildImageUrl(member.profilePath, size = "w500"),
-                            tmdbId = tmdbPersonId
+                            tmdbId = tmdbPersonId,
+                            provider = "tmdb",
+                            providerId = tmdbPersonId.toString()
                         )
                     }
                     .distinctBy { it.tmdbId ?: it.name.lowercase() }
@@ -285,7 +296,9 @@ class TmdbMetadataService(
                             name = name,
                             character = "Writer",
                             photo = buildImageUrl(member.profilePath, size = "w500"),
-                            tmdbId = tmdbPersonId
+                            tmdbId = tmdbPersonId,
+                            provider = "tmdb",
+                            providerId = tmdbPersonId.toString()
                         )
                     }
                     .distinctBy { it.tmdbId ?: it.name.lowercase() }
@@ -864,6 +877,48 @@ class TmdbMetadataService(
         Log.d(TAG, "Metadata cache cleared")
     }
 
+    suspend fun findPersonIdByExactName(name: String): Int? =
+        withContext(Dispatchers.IO) {
+            val query = name.trim()
+            if (query.isBlank()) return@withContext null
+            val apiKey = requireApiKey() ?: return@withContext null
+
+            try {
+                val top = tmdbApi.searchPeople(
+                    apiKey = apiKey,
+                    query = query
+                ).body()?.results.orEmpty().firstOrNull() ?: return@withContext null
+                val topName = top.name?.trim().orEmpty()
+                if (topName.isBlank()) return@withContext null
+                if (!namesMatchExactly(query, topName)) return@withContext null
+                top.id
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to search TMDB person by name '$query': ${e.message}")
+                null
+            }
+        }
+
+    suspend fun findCompanyIdByExactName(name: String): Int? =
+        withContext(Dispatchers.IO) {
+            val query = name.trim()
+            if (query.isBlank()) return@withContext null
+            val apiKey = requireApiKey() ?: return@withContext null
+
+            try {
+                val top = tmdbApi.searchCompanies(
+                    apiKey = apiKey,
+                    query = query
+                ).body()?.results.orEmpty().firstOrNull() ?: return@withContext null
+                val topName = top.name?.trim().orEmpty()
+                if (topName.isBlank()) return@withContext null
+                if (!namesMatchExactly(query, topName)) return@withContext null
+                top.id
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to search TMDB company by name '$query': ${e.message}")
+                null
+            }
+        }
+
     private fun mapMovieCreditsFromCast(cast: List<TmdbPersonCreditCast>): List<MetaPreview> {
         val seenMovieIds = mutableSetOf<Int>()
         return cast
@@ -962,6 +1017,24 @@ class TmdbMetadataService(
                     genres = emptyList()
                 )
             }
+    }
+
+    private fun namesMatchExactly(left: String, right: String): Boolean {
+        return normalizePersonName(left) == normalizePersonName(right)
+    }
+
+    private fun normalizePersonName(value: String): String {
+        val normalized = Normalizer.normalize(value, Normalizer.Form.NFKD)
+        return buildString(normalized.length) {
+            normalized.forEach { ch ->
+                if (Character.getType(ch) != Character.NON_SPACING_MARK.toInt()) {
+                    append(ch)
+                }
+            }
+        }
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
     }
 }
 

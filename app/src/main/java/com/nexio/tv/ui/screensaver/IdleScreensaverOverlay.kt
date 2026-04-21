@@ -618,7 +618,6 @@ private fun buildScreensaverImageRequest(
     return ImageRequest.Builder(context)
         .data(url)
         .crossfade(false)
-        .allowHardware(true)
         .memoryCacheKey("${url}_${width}x${height}")
         .size(decodeSize)
         .build()
@@ -663,7 +662,6 @@ private suspend fun preloadScreensaverSlide(
             ImageRequest.Builder(context)
                 .data(logoUrl)
                 .crossfade(false)
-                .allowHardware(true)
                 .build()
         )
     }

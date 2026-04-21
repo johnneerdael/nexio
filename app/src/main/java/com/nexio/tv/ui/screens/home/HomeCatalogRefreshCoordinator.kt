@@ -8,6 +8,7 @@ import coil.request.ImageRequest
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
@@ -75,6 +76,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val profileBoundary: ProfileBoundary,
+    private val playbackActivityTracker: PlaybackActivityTracker,
     @ApplicationContext private val appContext: Context
 ) {
     /**
@@ -490,6 +492,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
     private suspend fun prefetchImageEntries(entries: List<ImageCacheEntry>) {
         if (entries.isEmpty()) return
+        if (playbackActivityTracker.isActive.value) return
         val imageLoader = appContext.imageLoader
         entries.forEach { entry ->
             runCatching {

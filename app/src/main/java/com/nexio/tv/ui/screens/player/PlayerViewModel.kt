@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
+import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -48,6 +49,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleTranslationService: SubtitleTranslationService,
     private val tvMetadataRouter: TvMetadataRouter,
     private val playbackIdleGateState: PlaybackIdleGateState,
+    private val playbackActivityTracker: PlaybackActivityTracker,
     @Named("playback") private val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -69,6 +71,7 @@ class PlayerViewModel @Inject constructor(
         subtitleTranslationService = subtitleTranslationService,
         tvMetadataRouter = tvMetadataRouter,
         playbackIdleGateState = playbackIdleGateState,
+        playbackActivityTracker = playbackActivityTracker,
         playbackOkHttpClient = playbackOkHttpClient,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
@@ -109,10 +112,6 @@ class PlayerViewModel @Inject constructor(
 
     fun attachHostActivity(activity: android.app.Activity?) {
         controller.attachHostActivity(activity)
-    }
-
-    fun attachMpvView(view: NexioMpvSurfaceView?) {
-        controller.attachMpvView(view)
     }
 
     internal fun setAssSsaRenderOverlayViewProvider(provider: (() -> AssSsaRenderOverlayView?)?) {

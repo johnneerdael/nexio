@@ -77,13 +77,26 @@ fun AuthQrSignInScreen(
     }
 
     LaunchedEffect(uiState.authState, isSignedIn, uiState.qrLoginCode, uiState.isLoading) {
+        val needsQr = uiState.authState is AuthState.SignedOut || uiState.authState is AuthState.SessionLost
         if (
-            uiState.authState !is AuthState.Loading &&
+            needsQr &&
             !isSignedIn &&
             uiState.qrLoginCode.isNullOrBlank() &&
             !uiState.isLoading
         ) {
-            viewModel.startQrLogin()
+            // Debounce: only mint a QR code if we stay in SignedOut/SessionLost for a moment.
+            // On cold-start / post-upgrade, AuthState can briefly flash one of these
+            // while Supabase's session storage hydrates — starting a QR login on
+            // that flash is exactly the spurious re-auth prompt we want to avoid.
+            delay(1500)
+            val stillNeedsQr = uiState.authState is AuthState.SignedOut || uiState.authState is AuthState.SessionLost
+            if (
+                stillNeedsQr &&
+                uiState.qrLoginCode.isNullOrBlank() &&
+                !uiState.isLoading
+            ) {
+                viewModel.startQrLogin()
+            }
         }
     }
 

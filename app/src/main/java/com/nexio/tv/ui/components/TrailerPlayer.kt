@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.components
 
 import android.util.Log
+import android.view.LayoutInflater
+import com.nexio.tv.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -300,23 +302,25 @@ fun TrailerPlayer(
         ) {
             AndroidView(
                 factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        bindTrailerPlayerView(this, trailerPlayer)
-                        useController = false
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        setOnKeyListener { _, keyCode, event ->
-                            currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+                    (LayoutInflater.from(ctx)
+                        .inflate(R.layout.exo_trailer_player_view, null, false) as PlayerView)
+                        .apply {
+                            bindTrailerPlayerView(this, trailerPlayer)
+                            useController = false
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            setOnKeyListener { _, keyCode, event ->
+                                currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+                            }
+                            keepScreenOn = true
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            resizeMode = if (cropToFill) {
+                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            } else {
+                                AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            }
                         }
-                        keepScreenOn = true
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        resizeMode = if (cropToFill) {
-                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        } else {
-                            AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        }
-                    }
                 },
                 update = { view ->
                     bindTrailerPlayerView(view, trailerPlayer)

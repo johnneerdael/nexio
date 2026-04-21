@@ -5,7 +5,6 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.nexio.tv.core.stream.StreamCardModel
-import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import com.nexio.tv.data.repository.SkipInterval
@@ -116,14 +115,11 @@ data class PlayerUiState(
     // Stream source badge
     val showStreamSourceIndicator: Boolean = false,
     val streamSourceIndicatorText: String = "",
-    val showPlayerEngineSwitchInfo: Boolean = false,
-    val playerEngineSwitchInfoText: String = "",
     // Frame rate matching
     val detectedFrameRateRaw: Float = 0f,
     val detectedFrameRateSource: FrameRateSource? = null,
     val detectedFrameRate: Float = 0f,
     val afrProbeRunning: Boolean = false,
-    val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,
     val displayModeInfo: DisplayModeInfo? = null,
     val showDisplayModeInfo: Boolean = false,
     // Aspect ratio / resize mode
@@ -223,7 +219,6 @@ sealed class PlayerEvent {
     data class OnSetSubtitleVerticalOffset(val offset: Int) : PlayerEvent()
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()
-    data object OnSwitchInternalPlayerEngine : PlayerEvent()
 }
 
 data class DisplayModeInfo(

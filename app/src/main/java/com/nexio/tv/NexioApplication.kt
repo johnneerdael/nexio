@@ -6,8 +6,6 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -39,9 +37,6 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
 
     override fun onCreate() {
         super.onCreate()
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
         appScope.launch {
             ObsoletePlaybackCacheCleanup.cleanup(cacheDir)
             retainPosterCacheOnStartup()
@@ -68,7 +63,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
         return ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.10)
                     .build()
             }
             .diskCache {
@@ -81,6 +76,10 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             .fetcherDispatcher(Dispatchers.IO.limitedParallelism(4))
             .bitmapFactoryMaxParallelism(2)
             .allowRgb565(true)
+            // Hardware bitmaps route through hwui's glTexSubImage2D and
+            // eventually SIGABRT with GL_OUT_OF_MEMORY on low-end TV boxes
+            // (Ugoos AM3 and similar) when many posters/backdrops accumulate.
+            .allowHardware(false)
             .crossfade(false)
             .build()
     }

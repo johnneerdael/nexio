@@ -10,7 +10,6 @@ import com.nexio.tv.data.remote.api.TmdbSeasonSummary
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.remote.api.TmdbVideosResponse
 import com.nexio.tv.data.remote.api.TrailerApi
-import com.nexio.tv.data.trailer.helper.TrailerAvailabilityService
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -68,7 +67,6 @@ class TrailerServiceLatestSeasonTest {
         tmdbSettingsDataStore: TmdbSettingsDataStore,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         tmdbMetadataService: TmdbMetadataService,
-        trailerAvailabilityService: TrailerAvailabilityService,
     ): TrailerService = TrailerService(
         trailerApi = mockk(relaxed = true),
         tmdbApi = tmdbApi,
@@ -78,7 +76,6 @@ class TrailerServiceLatestSeasonTest {
         tmdbMetadataService = tmdbMetadataService,
         addonRepository = mockk(relaxed = true),
         streamRepository = mockk(relaxed = true),
-        trailerAvailabilityService = trailerAvailabilityService,
         clock = fixedClock
     )
 
@@ -87,13 +84,11 @@ class TrailerServiceLatestSeasonTest {
         tmdbApi: TmdbApi,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         tmdbMetadataService: TmdbMetadataService,
-        trailerAvailabilityService: TrailerAvailabilityService,
         tmdbSettingsDataStore: TmdbSettingsDataStore,
         inAppYouTubeExtractor: InAppYouTubeExtractor,
     ) {
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(apiKey = "tmdb-key"))
         every { tmdbMetadataService.currentTmdbLanguageTag() } returns "en-US"
-        coEvery { trailerAvailabilityService.isSignedIn() } returns false
         // Disk cache always misses so TMDB API is always consulted
         every {
             metadataDiskCacheStore.readTmdbTitleVideos(any(), any(), any(), any())
@@ -136,10 +131,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         // Seasons: 1 (aired), 3 (aired, latest), 4 (future)
         coEvery { tmdbApi.getTvDetails(tvId = 12345, apiKey = "tmdb-key") } returns Response.success(
@@ -159,7 +152,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
 
@@ -178,10 +171,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery {
             tmdbApi.getTvSeasonVideos(tvId = 12345, seasonNumber = 2, apiKey = "tmdb-key", language = "en-US")
@@ -190,7 +181,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series", seasonNumber = 2)
 
@@ -210,10 +201,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery { tmdbApi.getTvDetails(tvId = 12345, apiKey = "tmdb-key") } returns Response.success(
             TmdbDetailsResponse(
@@ -226,7 +215,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
 
@@ -245,10 +234,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery { tmdbApi.getTvDetails(tvId = 12345, apiKey = "tmdb-key") } returns Response.success(
             TmdbDetailsResponse(
@@ -258,7 +245,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
 
@@ -277,10 +264,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery { tmdbApi.getTvDetails(tvId = 12345, apiKey = "tmdb-key") } returns Response.success(
             TmdbDetailsResponse(
@@ -298,7 +283,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
 
@@ -316,15 +301,13 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery { tmdbApi.getTvDetails(any(), any()) } throws java.io.IOException("network error")
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         // Should not throw; falls back to series-level
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
@@ -344,10 +327,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         every {
             metadataDiskCacheStore.readTmdbTitleVideos(any(), any(), any(), any())
@@ -360,7 +341,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Movie", tmdbId = "99999", type = "movie")
 
@@ -379,10 +360,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery { tmdbApi.getTvDetails(tvId = 12345, apiKey = "tmdb-key") } returns Response.success(
             TmdbDetailsResponse(
@@ -397,7 +376,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         // Two calls for the same show with the same args — first hits outer lookupCache on second call
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
@@ -418,10 +397,8 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
         stubCommonMocks(tmdbApi, metadataDiskCacheStore, tmdbMetadataService,
-            trailerAvailabilityService, tmdbSettingsDataStore, inAppYouTubeExtractor)
+            tmdbSettingsDataStore, inAppYouTubeExtractor)
 
         coEvery { tmdbApi.getTvDetails(tvId = 12345, apiKey = "tmdb-key") } returns Response.success(
             TmdbDetailsResponse(
@@ -439,7 +416,7 @@ class TrailerServiceLatestSeasonTest {
         } returns Response.success(TmdbVideosResponse(id = 12345, results = emptyList()))
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
 
@@ -466,11 +443,9 @@ class TrailerServiceLatestSeasonTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
 
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(apiKey = "tmdb-key"))
         every { tmdbMetadataService.currentTmdbLanguageTag() } returns "en-US"
-        coEvery { trailerAvailabilityService.isSignedIn() } returns false
         coEvery { inAppYouTubeExtractor.extractPlaybackSource(any()) } returns playbackSource
 
         // Old disk cache has a series-level entry (written by the pre-upgrade code)
@@ -514,7 +489,7 @@ class TrailerServiceLatestSeasonTest {
         )
 
         val service = buildService(tmdbApi, inAppYouTubeExtractor, tmdbSettingsDataStore,
-            metadataDiskCacheStore, tmdbMetadataService, trailerAvailabilityService)
+            metadataDiskCacheStore, tmdbMetadataService)
 
         service.resolveTrailer(title = "Test Show", tmdbId = "12345", type = "series")
 

@@ -12,7 +12,6 @@ import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.data.trailer.helper.TrailerAvailabilityService
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -51,8 +50,7 @@ private sealed interface CachedTrailerLookup {
 
 private data class CachedTrailerPlaybackSource(
     val playbackSource: TrailerPlaybackSource,
-    val cachedAt: Instant,
-    val authBacked: Boolean
+    val cachedAt: Instant
 )
 
 @Singleton
@@ -65,7 +63,6 @@ class TrailerService(
     private val tmdbMetadataService: TmdbMetadataService,
     private val addonRepository: AddonRepository,
     private val streamRepository: StreamRepository,
-    private val trailerAvailabilityService: TrailerAvailabilityService,
     private val clock: Clock,
     private val metadataApiKeyResolver: MetadataApiKeyResolver? = null,
     private val tvdbTrailerResolver: TvdbTrailerResolver? = null
@@ -80,7 +77,6 @@ class TrailerService(
         tmdbMetadataService: TmdbMetadataService,
         addonRepository: AddonRepository,
         streamRepository: StreamRepository,
-        trailerAvailabilityService: TrailerAvailabilityService,
         metadataApiKeyResolver: MetadataApiKeyResolver,
         tvdbTrailerResolver: TvdbTrailerResolver
     ) : this(
@@ -92,7 +88,6 @@ class TrailerService(
         tmdbMetadataService = tmdbMetadataService,
         addonRepository = addonRepository,
         streamRepository = streamRepository,
-        trailerAvailabilityService = trailerAvailabilityService,
         clock = Clock.systemUTC(),
         metadataApiKeyResolver = metadataApiKeyResolver,
         tvdbTrailerResolver = tvdbTrailerResolver
@@ -134,7 +129,6 @@ class TrailerService(
         contentId: String? = null,
         fallbackYtIds: List<String> = emptyList()
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
-        val helperSignedIn = trailerAvailabilityService.isSignedIn()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
         val tmdbApiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
 
@@ -166,7 +160,6 @@ class TrailerService(
             seasonNumber = effectiveSeasonNumber,
             contentId = contentId,
             fallbackYtIds = fallbackYtIds,
-            helperSignedIn = helperSignedIn,
             tmdbLanguage = tmdbLanguage,
             tmdbApiKey = tmdbApiKey
         )
@@ -433,14 +426,11 @@ class TrailerService(
         seasonNumber: Int?,
         contentId: String?,
         fallbackYtIds: List<String>,
-        helperSignedIn: Boolean,
         tmdbLanguage: String,
         tmdbApiKey: String
     ): String {
         return buildString {
             append(buildLookupCachePrefix(title, year, tmdbId, type, seasonNumber, contentId, fallbackYtIds))
-            append('|')
-            append(helperSignedIn)
             append('|')
             append(tmdbLanguage)
             append('|')
@@ -799,13 +789,10 @@ class TrailerService(
         title: String?,
         year: String?
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
-        val helperSignedIn = trailerAvailabilityService.isSignedIn()
         val youtubeKey = extractYouTubeVideoId(youtubeUrl)
         if (!youtubeKey.isNullOrBlank()) {
             getValidCachedYoutubeSource(youtubeKey)?.let { cached ->
-                trailerDebugLog(
-                    "resolveYouTubeTrailer cache hit key=$youtubeKey authBacked=${cached.authBacked}"
-                )
+                trailerDebugLog("resolveYouTubeTrailer cache hit key=$youtubeKey")
                 return@withContext TrailerResolutionResult.Playback(cached.playbackSource)
             }
         }
@@ -832,35 +819,12 @@ class TrailerService(
             if (!youtubeKey.isNullOrBlank()) {
                 youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
                     playbackSource = localSource,
-                    cachedAt = Instant.now(clock),
-                    authBacked = false
+                    cachedAt = Instant.now(clock)
                 )
             }
             return@withContext TrailerResolutionResult.Playback(localSource)
         }
         trailerDebugLog("resolveYouTubeTrailer native miss url=$youtubeUrl")
-
-        if (helperSignedIn) {
-            val helperSource = trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
-            if (helperSource != null) {
-                trailerDebugLog("resolveYouTubeTrailer helper success url=$youtubeUrl")
-                Log.d(TAG, "Resolved $youtubeUrl via authenticated embedded helper")
-                if (!youtubeKey.isNullOrBlank()) {
-                    youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                        playbackSource = helperSource,
-                        cachedAt = Instant.now(clock),
-                        authBacked = true
-                    )
-                }
-                return@withContext TrailerResolutionResult.Playback(helperSource)
-            }
-            trailerDebugLog("resolveYouTubeTrailer helper miss url=$youtubeUrl")
-            Log.w(
-                TAG,
-                "Authenticated embedded helper did not resolve $youtubeUrl, " +
-                    "falling back to backend/public trailer resolution"
-            )
-        }
 
         if (BuildConfig.TRAILER_API_URL.isNotBlank()) {
             val backendUrl = runCatching {
@@ -882,8 +846,7 @@ class TrailerService(
                 if (!youtubeKey.isNullOrBlank()) {
                     youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
                         playbackSource = playbackSource,
-                        cachedAt = Instant.now(clock),
-                        authBacked = false
+                        cachedAt = Instant.now(clock)
                     )
                 }
                 return@withContext TrailerResolutionResult.Playback(playbackSource)
@@ -1111,7 +1074,7 @@ class TrailerService(
             return cached
         }
         youtubeSourceCache.remove(youtubeKey, cached)
-        trailerDebugLog("resolveYouTubeTrailer cache expired key=$youtubeKey authBacked=${cached.authBacked}")
+        trailerDebugLog("resolveYouTubeTrailer cache expired key=$youtubeKey")
         return null
     }
 }

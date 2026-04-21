@@ -13,6 +13,12 @@ private const val ANTHROPIC_VERSION = "2023-06-01"
 private const val OPENAI_NATIVE_BASE_URL = "https://api.openai.com/v1"
 private const val DASHSCOPE_GENERATION_PATH = "/services/aigc/text-generation/generation"
 
+internal fun isOpenRouterEndpoint(settings: SubtitleTranslationSettings): Boolean {
+    val raw = settings.baseUrl.trim().lowercase()
+    if (raw.isEmpty()) return false
+    return raw.contains("openrouter.ai")
+}
+
 internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
     val rawRoot = settings.baseUrl.trim().trimEnd('/').ifBlank {
         when (settings.provider) {
@@ -46,7 +52,9 @@ internal fun buildOpenAiChatCompletionRequest(
     settings: SubtitleTranslationSettings,
     systemPrompt: String,
     userPayload: String,
-    includeJsonMode: Boolean = true
+    includeJsonMode: Boolean = true,
+    strictJsonSchemaItemCount: Int? = null,
+    isReasoningModel: Boolean = false
 ): JSONObject {
     val systemMessage = JSONObject()
     systemMessage.put("role", "system")
@@ -62,16 +70,101 @@ internal fun buildOpenAiChatCompletionRequest(
 
     val body = JSONObject()
     body.put("model", settings.model)
-    body.put("temperature", 0.2)
+    body.put("temperature", 0)
     body.put("messages", messages)
 
     if (includeJsonMode) {
-        val responseFormat = JSONObject()
-        responseFormat.put("type", "json_object")
+        val useStrictSchema = strictJsonSchemaItemCount != null &&
+            supportsStrictJsonSchemaResponseFormat(settings)
+        val responseFormat = if (useStrictSchema) {
+            buildOpenAiStrictJsonSchemaResponseFormat(strictJsonSchemaItemCount!!)
+        } else {
+            JSONObject().put("type", "json_object")
+        }
         body.put("response_format", responseFormat)
     }
 
+    if (shouldDisableReasoning(settings, isReasoningModel)) {
+        body.put("reasoning", JSONObject().put("effort", "none"))
+    }
+
+    if (isOpenRouterEndpoint(settings)) {
+        val provider = JSONObject()
+        provider.put("allow_fallbacks", true)
+        provider.put("sort", "throughput")
+        body.put("provider", provider)
+    }
+
     return body
+}
+
+internal fun shouldDisableReasoning(
+    settings: SubtitleTranslationSettings,
+    isReasoningModel: Boolean
+): Boolean {
+    if (settings.provider != SubtitleTranslationProvider.OPENAI) return false
+    if (isReasoningModel) return true
+    if (isOpenRouterEndpoint(settings)) return false
+    return matchesNativeOpenAiReasoningPrefix(settings.model)
+}
+
+private fun matchesNativeOpenAiReasoningPrefix(model: String): Boolean {
+    val normalized = model.trim().lowercase().removePrefix("openai/")
+    return normalized.startsWith("gpt-5") ||
+        normalized.startsWith("o1") ||
+        normalized.startsWith("o3") ||
+        normalized.startsWith("o4")
+}
+
+internal fun supportsStrictJsonSchemaResponseFormat(
+    settings: SubtitleTranslationSettings
+): Boolean {
+    val isOpenAiProvider = settings.provider == SubtitleTranslationProvider.OPENAI
+    if (!isOpenAiProvider) return false
+    val normalized = settings.model.trim().lowercase().removePrefix("openai/")
+    return normalized.startsWith("gpt-4o") ||
+        normalized.startsWith("gpt-4.1") ||
+        normalized.startsWith("gpt-5") ||
+        normalized.startsWith("chatgpt-4o") ||
+        normalized.startsWith("o1") ||
+        normalized.startsWith("o3") ||
+        normalized.startsWith("o4")
+}
+
+private fun buildOpenAiStrictJsonSchemaResponseFormat(itemCount: Int): JSONObject {
+    val idSchema = JSONObject().put("type", "integer")
+    val textSchema = JSONObject().put("type", "string")
+
+    val itemProperties = JSONObject()
+        .put("id", idSchema)
+        .put("text", textSchema)
+
+    val itemSchema = JSONObject()
+        .put("type", "object")
+        .put("additionalProperties", false)
+        .put("required", JSONArray().put("id").put("text"))
+        .put("properties", itemProperties)
+
+    val arraySchema = JSONObject()
+        .put("type", "array")
+        .put("items", itemSchema)
+        .put("minItems", itemCount)
+        .put("maxItems", itemCount)
+
+    val rootSchema = JSONObject()
+        .put("type", "object")
+        .put("additionalProperties", false)
+        .put("required", JSONArray().put("items"))
+        .put("properties", JSONObject().put("items", arraySchema))
+
+    val schemaWrapper = JSONObject()
+        .put("name", "subtitle_translation")
+        .put("strict", true)
+        .put("schema", rootSchema)
+
+    return JSONObject()
+        .put("type", "json_schema")
+        .put("json_schema", schemaWrapper)
 }
 
 internal fun buildAnthropicMessagesRequest(
@@ -96,7 +189,7 @@ internal fun buildAnthropicMessagesRequest(
     val body = JSONObject()
     body.put("model", settings.model)
     body.put("max_tokens", 8192)
-    body.put("temperature", 0.2)
+    body.put("temperature", 0)
     body.put("system", systemPrompt)
     body.put("messages", messages)
     return body
