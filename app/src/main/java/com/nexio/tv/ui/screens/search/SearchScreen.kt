@@ -10,6 +10,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
@@ -79,6 +81,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nexio.tv.ui.components.CatalogRowSection
@@ -104,6 +107,22 @@ private val SearchScreenHorizontalPadding = 48.dp
 private val SearchInputButtonSize = 56.dp
 private val SearchInputButtonSpacing = 12.dp
 private val SearchPanelSpacing = 12.dp
+private val SearchSelectableItemShape = RoundedCornerShape(12.dp)
+
+internal enum class SearchFieldDownTarget {
+    None,
+    RecentActions,
+    Results
+}
+
+internal fun resolveSearchFieldDownTarget(
+    canMoveToResults: Boolean,
+    showRecentSearches: Boolean
+): SearchFieldDownTarget = when {
+    canMoveToResults -> SearchFieldDownTarget.Results
+    showRecentSearches -> SearchFieldDownTarget.RecentActions
+    else -> SearchFieldDownTarget.None
+}
 
 internal data class SearchManualStreamSelectionTarget(
     val item: MetaPreview,
@@ -165,6 +184,8 @@ fun SearchScreen(
     val voiceFailedWithCodeTemplate = stringResource(R.string.search_voice_failed_with_code)
     val voiceFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
+    val recentClearFocusRequester = remember { FocusRequester() }
+    val recentFirstItemFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var isSearchFieldAttached by remember { mutableStateOf(false) }
     var isSearchAreaFocused by remember { mutableStateOf(false) }
@@ -337,6 +358,12 @@ fun SearchScreen(
         uiState.catalogRows
     ) {
         if (isDiscoverMode) false else trimmedSubmittedQuery.length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
+    }
+    val searchFieldDownTarget = remember(canMoveToResults, showRecentSearches) {
+        resolveSearchFieldDownTarget(
+            canMoveToResults = canMoveToResults,
+            showRecentSearches = showRecentSearches
+        )
     }
     val submitCurrentQuery: (String) -> Unit = { submittedQuery ->
         viewModel.onEvent(SearchEvent.SubmitSearch)
@@ -511,7 +538,8 @@ fun SearchScreen(
             ) {
                 SearchInputField(
                     query = uiState.query,
-                    canMoveToResults = canMoveToResults,
+                    moveDownTarget = searchFieldDownTarget,
+                    recentActionsFocusRequester = if (showRecentSearches) recentClearFocusRequester else null,
                     voiceFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else null,
                     searchFocusRequester = searchFocusRequester,
                     onAttached = { isSearchFieldAttached = true },
@@ -549,6 +577,9 @@ fun SearchScreen(
                         recentSearches = uiState.recentSearches,
                         onRecentSearch = submitRecentSearch,
                         onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
+                        searchFocusRequester = searchFocusRequester,
+                        clearFocusRequester = recentClearFocusRequester,
+                        firstRecentSearchFocusRequester = recentFirstItemFocusRequester,
                         listMaxHeight = 280.dp,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -580,7 +611,8 @@ fun SearchScreen(
                 item {
                     SearchInputField(
                         query = uiState.query,
-                        canMoveToResults = canMoveToResults,
+                        moveDownTarget = searchFieldDownTarget,
+                        recentActionsFocusRequester = if (showRecentSearches) recentClearFocusRequester else null,
                         voiceFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else null,
                         searchFocusRequester = searchFocusRequester,
                         onAttached = { isSearchFieldAttached = true },
@@ -635,6 +667,9 @@ fun SearchScreen(
                             recentSearches = uiState.recentSearches,
                             onRecentSearch = submitRecentSearch,
                             onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
+                            searchFocusRequester = searchFocusRequester,
+                            clearFocusRequester = recentClearFocusRequester,
+                            firstRecentSearchFocusRequester = recentFirstItemFocusRequester,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(dropdownContentPadding)
@@ -803,10 +838,10 @@ private fun ImdbSuggestionDropdown(
                 Button(
                     onClick = { onSelect(suggestion) },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.colors(
-                        containerColor = NexioColors.BackgroundCard,
-                        contentColor = NexioColors.TextPrimary
-                    )
+                    colors = searchSelectableButtonColors(),
+                    border = searchSelectableButtonBorder(),
+                    scale = searchSelectableButtonScale(),
+                    shape = ButtonDefaults.shape(SearchSelectableItemShape)
                 ) {
                     val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
                     val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
@@ -856,6 +891,9 @@ private fun RecentSearchesSection(
     recentSearches: List<String>,
     onRecentSearch: (String) -> Unit,
     onClear: () -> Unit,
+    searchFocusRequester: FocusRequester,
+    clearFocusRequester: FocusRequester,
+    firstRecentSearchFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     listMaxHeight: Dp? = null
 ) {
@@ -865,7 +903,7 @@ private fun RecentSearchesSection(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -873,13 +911,24 @@ private fun RecentSearchesSection(
                 style = androidx.tv.material3.MaterialTheme.typography.titleMedium,
                 color = NexioColors.TextPrimary
             )
+        }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
             Button(
                 onClick = onClear,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
+                modifier = Modifier
+                    .focusRequester(clearFocusRequester)
+                    .focusProperties {
+                        up = searchFocusRequester
+                        down = firstRecentSearchFocusRequester
+                    },
+                colors = searchSelectableButtonColors(),
+                border = searchSelectableButtonBorder(),
+                scale = searchSelectableButtonScale(),
+                shape = ButtonDefaults.shape(SearchSelectableItemShape)
             ) {
                 Text(stringResource(R.string.search_recent_clear))
             }
@@ -898,14 +947,24 @@ private fun RecentSearchesSection(
             modifier = listModifier,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            recentSearches.forEach { query ->
+            recentSearches.forEachIndexed { index, query ->
                 Button(
                     onClick = { onRecentSearch(query) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.colors(
-                        containerColor = NexioColors.BackgroundCard,
-                        contentColor = NexioColors.TextPrimary
-                    )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (index == 0) {
+                                Modifier
+                                    .focusRequester(firstRecentSearchFocusRequester)
+                                    .focusProperties { up = clearFocusRequester }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    colors = searchSelectableButtonColors(),
+                    border = searchSelectableButtonBorder(),
+                    scale = searchSelectableButtonScale(),
+                    shape = ButtonDefaults.shape(SearchSelectableItemShape)
                 ) {
                     Text(
                         text = query,
@@ -965,7 +1024,8 @@ internal fun SearchManualStreamSelectionDialog(
 @Composable
 private fun SearchInputField(
     query: String,
-    canMoveToResults: Boolean,
+    moveDownTarget: SearchFieldDownTarget,
+    recentActionsFocusRequester: FocusRequester?,
     voiceFocusRequester: FocusRequester?,
     searchFocusRequester: FocusRequester,
     onAttached: () -> Unit,
@@ -1044,6 +1104,11 @@ private fun SearchInputField(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(searchFocusRequester)
+                .focusProperties {
+                    if (moveDownTarget == SearchFieldDownTarget.RecentActions && recentActionsFocusRequester != null) {
+                        down = recentActionsFocusRequester
+                    }
+                }
                 .onPreviewKeyEvent { keyEvent ->
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_ENTER,
@@ -1055,11 +1120,22 @@ private fun SearchInputField(
                         }
 
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (canMoveToResults) {
-                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                                    onMoveToResults()
+                            when (moveDownTarget) {
+                                SearchFieldDownTarget.Results -> {
+                                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                        onMoveToResults()
+                                    }
+                                    return@onPreviewKeyEvent true
                                 }
-                                return@onPreviewKeyEvent true
+
+                                SearchFieldDownTarget.RecentActions -> {
+                                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                        runCatching { recentActionsFocusRequester?.requestFocus() }
+                                    }
+                                    return@onPreviewKeyEvent true
+                                }
+
+                                SearchFieldDownTarget.None -> Unit
                             }
                         }
                     }
@@ -1181,3 +1257,28 @@ private fun Modifier.searchInputButtonChrome(
         )
     }
 }
+
+@Composable
+private fun searchSelectableButtonColors() = ButtonDefaults.colors(
+    containerColor = NexioColors.BackgroundCard,
+    contentColor = NexioColors.TextPrimary,
+    focusedContainerColor = NexioColors.BackgroundCard,
+    focusedContentColor = NexioColors.TextPrimary
+)
+
+@Composable
+private fun searchSelectableButtonBorder() = ButtonDefaults.border(
+    border = Border(
+        border = BorderStroke(1.dp, NexioColors.Border),
+        shape = SearchSelectableItemShape
+    ),
+    focusedBorder = Border(
+        border = BorderStroke(2.dp, NexioColors.FocusRing),
+        shape = SearchSelectableItemShape
+    )
+)
+
+private fun searchSelectableButtonScale() = ButtonDefaults.scale(
+    focusedScale = 1f,
+    pressedScale = 1f
+)
