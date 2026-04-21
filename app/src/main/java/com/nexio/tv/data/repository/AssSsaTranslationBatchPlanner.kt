@@ -1,8 +1,8 @@
 package com.nexio.tv.data.repository
 
 internal data class AssSsaTranslationBatchConfig(
-    val maxEvents: Int = 80,
-    val maxVisibleChars: Int = 8_000,
+    val maxEvents: Int = DEFAULT_TRANSLATION_RAMP_TERMINAL,
+    val maxVisibleChars: Int = 20_000,
     val rampUpEnabled: Boolean = true
 )
 

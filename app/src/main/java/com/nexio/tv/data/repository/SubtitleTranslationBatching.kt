@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 internal val DEFAULT_TRANSLATION_RAMP_UP_SCHEDULE: IntArray = intArrayOf(5, 10, 20, 40, 60)
+internal val DEFAULT_TRANSLATION_RAMP_TERMINAL: Int =
+    DEFAULT_TRANSLATION_RAMP_UP_SCHEDULE.last()
 
 internal data class RampedTranslationBatch<T>(
     val items: List<T>,
@@ -77,8 +79,9 @@ internal fun <T> planRampedTranslationBatches(
     }
 
     return coreBatches.mapIndexed { index, coreBatch ->
-        val lead = if (index > 0) listOf(coreBatches[index - 1].last()) else emptyList()
-        val trail = if (index < coreBatches.lastIndex) listOf(coreBatches[index + 1].first()) else emptyList()
+        val overlapSize = overlapSizeForCore(coreBatch.size)
+        val lead = if (index > 0) coreBatches[index - 1].takeLast(overlapSize) else emptyList()
+        val trail = if (index < coreBatches.lastIndex) coreBatches[index + 1].take(overlapSize) else emptyList()
         RampedTranslationBatch(
             items = lead + coreBatch + trail,
             leadOverlap = lead.size,
@@ -86,4 +89,11 @@ internal fun <T> planRampedTranslationBatches(
             trailOverlap = trail.size
         )
     }
+}
+
+private fun overlapSizeForCore(coreSize: Int): Int = when {
+    coreSize >= 50 -> 4
+    coreSize >= 30 -> 3
+    coreSize >= 8 -> 2
+    else -> 1
 }
