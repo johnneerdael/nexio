@@ -229,7 +229,8 @@ data class TmdbFindResult(
     @Json(name = "id") val id: Int,
     @Json(name = "title") val title: String? = null,
     @Json(name = "name") val name: String? = null,
-    @Json(name = "media_type") val mediaType: String? = null
+    @Json(name = "media_type") val mediaType: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null
 )
 
 @JsonClass(generateAdapter = true)

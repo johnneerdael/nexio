@@ -39,6 +39,8 @@ class DebugSettingsDataStore @Inject constructor(
     private val diskFirstHomeStartupEnabledKey = booleanPreferencesKey("disk_first_home_startup_enabled")
     private val diskFirstHomeStartupDefaultAppliedKey =
         booleanPreferencesKey("migration_disk_first_home_startup_default_applied")
+    private val searchPosterPreviewEnabledKey =
+        booleanPreferencesKey("search_poster_preview_enabled")
 
     init {
         ioScope.launch {
@@ -86,6 +88,10 @@ class DebugSettingsDataStore @Inject constructor(
 
     val diskFirstHomeStartupEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[diskFirstHomeStartupEnabledKey] ?: true
+    }
+
+    val searchPosterPreviewEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[searchPosterPreviewEnabledKey] ?: false
     }
 
     suspend fun setAccountTabEnabled(enabled: Boolean) {
@@ -145,6 +151,12 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setDiskFirstHomeStartupEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[diskFirstHomeStartupEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSearchPosterPreviewEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[searchPosterPreviewEnabledKey] = enabled
         }
     }
 }

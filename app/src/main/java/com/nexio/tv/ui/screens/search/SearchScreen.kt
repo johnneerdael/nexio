@@ -469,6 +469,8 @@ fun SearchScreen(
                 if (uiState.imdbSuggestions.isNotEmpty()) {
                     ImdbSuggestionDropdown(
                         suggestions = uiState.imdbSuggestions,
+                        posterUrls = uiState.imdbSuggestionPosters,
+                        posterPreviewEnabled = uiState.searchPosterPreviewEnabled,
                         onSelect = { suggestion ->
                             val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                             onNavigateToDetail(suggestion.tconst, type, "")
@@ -531,6 +533,8 @@ fun SearchScreen(
                     item {
                         ImdbSuggestionDropdown(
                             suggestions = uiState.imdbSuggestions,
+                            posterUrls = uiState.imdbSuggestionPosters,
+                            posterPreviewEnabled = uiState.searchPosterPreviewEnabled,
                             onSelect = { suggestion ->
                                 val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                                 onNavigateToDetail(suggestion.tconst, type, "")
@@ -689,6 +693,8 @@ fun SearchScreen(
 @Composable
 private fun ImdbSuggestionDropdown(
     suggestions: List<ImdbSuggestion>,
+    posterUrls: Map<String, String> = emptyMap(),
+    posterPreviewEnabled: Boolean = false,
     onSelect: (ImdbSuggestion) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -713,11 +719,36 @@ private fun ImdbSuggestionDropdown(
                 } else {
                     "Series"
                 }
+                val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (posterPreviewEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .width(28.dp)
+                                .height(42.dp)
+                        ) {
+                            if (posterUrl != null) {
+                                coil.compose.AsyncImage(
+                                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                        .data(posterUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            NexioColors.Background,
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
                     Text(
                         text = suggestion.primaryTitle + year,
                         maxLines = 1,
