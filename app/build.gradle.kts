@@ -475,7 +475,7 @@ android {
         unitTests.isReturnDefaultValues = true
         unitTests.all {
             it.maxHeapSize = "2g"
-            it.forkEvery = 50  // restart JVM every 50 tests to avoid state buildup
+            it.forkEvery = 10  // restart JVM every 10 tests to keep cross-test pollution (MockK global state, leaked coroutines dispatching to Dispatchers.Main) from causing flaky failures; see 2026-04-21 investigation
             it.workingDir = rootProject.projectDir
         }
     }
