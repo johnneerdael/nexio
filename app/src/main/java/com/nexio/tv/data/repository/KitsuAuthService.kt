@@ -9,7 +9,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class KitsuAuthSnapshot(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val username: String? = null,
     val accessToken: String? = null,
     val refreshToken: String? = null,
@@ -87,7 +87,7 @@ class KitsuAuthService(
     }
 
     suspend fun providerEnabled(): Boolean {
-        return authStore.state.first().enabled
+        return true
     }
 
     suspend fun disconnect() {

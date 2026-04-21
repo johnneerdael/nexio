@@ -593,7 +593,7 @@ class AccountSettingsSyncService @Inject constructor(
                     topPostersEnabled = posterRatings.topPostersEnabled
                 ),
                 kitsuAuth = KitsuAuthSyncSettings(
-                    enabled = kitsuAuth.enabled,
+                    enabled = true,
                     connected = kitsuAuth.isAuthenticated,
                     username = kitsuAuth.username.orEmpty(),
                     accessTokenSecretRef = KITSU_ACCESS_SECRET_TYPE,
@@ -740,7 +740,7 @@ class AccountSettingsSyncService @Inject constructor(
         val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
         kitsuAuthDataStore.save(
             currentKitsu.copy(
-                enabled = remoteKitsu.enabled,
+                enabled = true,
                 username = remoteKitsu.username,
                 expiresAtEpochSeconds = remoteKitsu.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
                 includeNsfw = remoteKitsu.includeNsfw
@@ -839,7 +839,7 @@ class AccountSettingsSyncService @Inject constructor(
         val currentKitsu = kitsuAuthDataStore.stateForProfile(defaultProfileId).first()
         kitsuAuthDataStore.save(
             currentKitsu.copy(
-                enabled = remoteKitsu.enabled,
+                enabled = true,
                 username = remoteKitsu.username,
                 expiresAtEpochSeconds = remoteKitsu.expiresAtEpochSeconds ?: currentKitsu.expiresAtEpochSeconds,
                 includeNsfw = remoteKitsu.includeNsfw

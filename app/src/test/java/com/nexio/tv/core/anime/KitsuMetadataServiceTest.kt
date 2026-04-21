@@ -239,21 +239,33 @@ class KitsuMetadataServiceTest {
 
     @Test
     fun `returns null when id is not anime`() = runTest {
-        val auth = mockk<KitsuAuthService>()
-        coEvery { auth.providerEnabled() } returns true
+        val auth = mockk<KitsuAuthService>(relaxed = true)
         val service = KitsuMetadataService(mockk(relaxed = true), mockk(relaxed = true), auth)
 
         assertNull(service.fetchEnrichment("trakt:123", ContentMediaKind.SERIES))
     }
 
     @Test
-    fun `returns null when provider is disabled`() = runTest {
-        val api = mockk<KitsuApi>(relaxed = true)
+    fun `fetchEnrichment does not require provider enabled state`() = runTest {
+        val api = mockk<KitsuApi>()
+        val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        coEvery { auth.providerEnabled() } returns false
-        val service = KitsuMetadataService(api, mockk(relaxed = true), auth)
+        val service = KitsuMetadataService(api, mapper, auth)
 
-        assertNull(service.fetchEnrichment("mal:5114", ContentMediaKind.SERIES))
-        coVerify(exactly = 0) { api.getAnime(any(), any(), any()) }
+        coEvery { mapper.resolveKitsuId(any(), any()) } returns "3936"
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnime(null, "3936", any()) } returns Response.success(
+            KitsuResourceResponse(
+                data = KitsuAnimeResource(
+                    id = "3936",
+                    attributes = KitsuAnimeAttributes(canonicalTitle = "Fullmetal Alchemist: Brotherhood")
+                )
+            )
+        )
+
+        val enrichment = service.fetchEnrichment("mal:5114", ContentMediaKind.SERIES)
+
+        assertEquals("Fullmetal Alchemist: Brotherhood", enrichment?.localizedTitle)
+        coVerify(exactly = 1) { api.getAnime(null, "3936", any()) }
     }
 }

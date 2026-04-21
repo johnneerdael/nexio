@@ -1,7 +1,7 @@
 package com.nexio.tv.domain.model
 
 data class KitsuSettings(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val username: String = "",
     val authenticated: Boolean = false,
     val accessTokenSecretRef: String? = null,
