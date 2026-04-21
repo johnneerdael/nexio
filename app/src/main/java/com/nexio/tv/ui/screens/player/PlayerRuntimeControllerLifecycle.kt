@@ -16,6 +16,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     flushPlaybackSnapshotForSwitchOrExit()
     playbackSessionGuard.onPlayerReleased()
     playbackIdleGateState.onPlayerSessionEnded()
+    playbackActivityTracker.setActive(false)
     cancelFirstFrameWatchdog()
     cancelPostFirstFrameBufferingWatchdog()
     deactivateAddonSubtitleOverlay()

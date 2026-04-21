@@ -9,6 +9,7 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
+import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
@@ -64,6 +65,7 @@ class PlayerRuntimeController(
     internal val subtitleTranslationService: SubtitleTranslationService,
     internal val tvMetadataRouter: TvMetadataRouter,
     internal val playbackIdleGateState: PlaybackIdleGateState,
+    internal val playbackActivityTracker: PlaybackActivityTracker,
     internal val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
