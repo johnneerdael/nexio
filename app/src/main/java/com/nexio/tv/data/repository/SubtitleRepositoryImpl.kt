@@ -9,6 +9,7 @@ import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.domain.repository.OpenSubtitlesSource
 import com.nexio.tv.domain.repository.SubtitleRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -21,12 +22,14 @@ import javax.inject.Inject
 
 class SubtitleRepositoryImpl @Inject constructor(
     private val api: AddonApi,
-    private val addonRepository: AddonRepositoryImpl
+    private val addonRepository: AddonRepositoryImpl,
+    private val openSubtitlesSource: OpenSubtitlesSource
 ) : SubtitleRepository {
 
     companion object {
         private const val TAG = "SubtitleRepository"
         private const val PER_ADDON_TIMEOUT_MS = 8_000L
+        private const val NATIVE_SOURCE_TIMEOUT_MS = 10_000L
     }
 
     override suspend fun getSubtitles(
@@ -41,58 +44,74 @@ class SubtitleRepositoryImpl @Inject constructor(
         val startedAtMs = System.currentTimeMillis()
         Log.d(TAG, "Fetching subtitles for type=$requestType, id=$id, videoId=$videoId")
         
-        // Get installed addons
         val addons = try {
             addonRepository.getInstalledAddons().first()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get installed addons", e)
-            return@withContext emptyList()
+            emptyList()
         }
 
-     
-        
-        // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
             addon.resources.any { resource ->
                 isSubtitleResource(resource.name) && supportsType(resource, requestType, id)
             }
         }
-        
+
         Log.d(TAG, "Found ${subtitleAddons.size} subtitle addons: ${subtitleAddons.map { it.name }}")
-        
-        if (subtitleAddons.isEmpty()) {
-            return@withContext emptyList()
+
+        val (addonResult, nativeResult) = coroutineScope {
+            val addonsDeferred = async {
+                subtitleAddons.map { addon ->
+                    async {
+                        val addonStartMs = System.currentTimeMillis()
+                        val subtitles = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
+                            fetchSubtitlesFromAddon(addon, type, id, videoId, videoHash, videoSize, filename)
+                        }
+                        if (subtitles == null) {
+                            Log.w(
+                                TAG,
+                                "Subtitle fetch timed out for addon=${addon.name} after ${PER_ADDON_TIMEOUT_MS}ms"
+                            )
+                            emptyList()
+                        } else {
+                            Log.d(
+                                TAG,
+                                "Subtitle fetch done for addon=${addon.name} count=${subtitles.size} in ${System.currentTimeMillis() - addonStartMs}ms"
+                            )
+                            subtitles
+                        }
+                    }
+                }.awaitAll().flatten()
+            }
+            val nativeDeferred = async {
+                withTimeoutOrNull(NATIVE_SOURCE_TIMEOUT_MS) {
+                    runCatching {
+                        openSubtitlesSource.search(
+                            type = requestType,
+                            id = id,
+                            videoId = videoId,
+                            videoHash = videoHash,
+                            videoSize = videoSize,
+                            filename = filename
+                        )
+                    }.onFailure { Log.w(TAG, "native opensubtitles failed: ${it.message}") }
+                        .getOrDefault(emptyList())
+                }.orEmpty()
+            }
+            addonsDeferred.await() to nativeDeferred.await()
         }
-        
-        // Fetch subtitles from all addons in parallel
-        val result = coroutineScope {
-            subtitleAddons.map { addon ->
-                async {
-                    val addonStartMs = System.currentTimeMillis()
-                    val subtitles = withTimeoutOrNull(PER_ADDON_TIMEOUT_MS) {
-                        fetchSubtitlesFromAddon(addon, type, id, videoId, videoHash, videoSize, filename)
-                    }
-                    if (subtitles == null) {
-                        Log.w(
-                            TAG,
-                            "Subtitle fetch timed out for addon=${addon.name} after ${PER_ADDON_TIMEOUT_MS}ms"
-                        )
-                        emptyList()
-                    } else {
-                        Log.d(
-                            TAG,
-                            "Subtitle fetch done for addon=${addon.name} count=${subtitles.size} in ${System.currentTimeMillis() - addonStartMs}ms"
-                        )
-                        subtitles
-                    }
-                }
-            }.awaitAll().flatten()
+
+        // Native rows win on collisions so the isHashMatch flag survives.
+        val seen = HashSet<String>(nativeResult.size + addonResult.size)
+        val merged = buildList {
+            nativeResult.forEach { if (seen.add(it.id)) add(it) }
+            addonResult.forEach { if (seen.add(it.id)) add(it) }
         }
         Log.d(
             TAG,
-            "Subtitle fetch completed total=${result.size} fromAddons=${subtitleAddons.size} in ${System.currentTimeMillis() - startedAtMs}ms"
+            "Subtitle fetch completed total=${merged.size} fromAddons=${addonResult.size} fromNative=${nativeResult.size} in ${System.currentTimeMillis() - startedAtMs}ms"
         )
-        result
+        merged
     }
 
     private fun canonicalSubtitleType(type: String): String {
