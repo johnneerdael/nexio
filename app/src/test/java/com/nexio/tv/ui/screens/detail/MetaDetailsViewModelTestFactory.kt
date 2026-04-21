@@ -43,6 +43,7 @@ fun buildMetaDetailsViewModel(
     meta: Meta,
     itemId: String = meta.id,
     itemType: String = "series",
+    addonBaseUrl: String? = null,
     metaRepository: MetaRepository = defaultMetaRepository(meta),
     tmdbService: TmdbService = defaultTmdbService(),
     tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
@@ -105,7 +106,8 @@ fun buildMetaDetailsViewModel(
         savedStateHandle = SavedStateHandle(
             mapOf(
                 "itemId" to itemId,
-                "itemType" to itemType
+                "itemType" to itemType,
+                "addonBaseUrl" to addonBaseUrl
             )
         )
     )

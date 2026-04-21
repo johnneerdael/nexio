@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.detail
 
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeDetail
@@ -13,17 +14,23 @@ import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -259,6 +266,170 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         assertEquals("Daiki Yamashita", meta.castMembers.single().character)
         assertEquals(true, viewModel.uiState.value.isAnimeDetail)
         coVerify(exactly = 1) { kitsuMetadataService.fetchAdvancedDetail("kitsu:7442", any(), "ja") }
+    }
+
+    @Test
+    fun `anime detail renders characters and related before tmdb bridge hydration completes`() = runTest(dispatcher) {
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "My Hero Academia",
+                language = "ja"
+            )
+        )
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:11469", any(), "ja") } returns KitsuAdvancedAnimeDetail(
+            characters = listOf(
+                KitsuAdvancedAnimeCharacter(
+                    characterId = "1",
+                    characterName = "Izuku Midoriya",
+                    actorId = "2",
+                    actorName = "Daiki Yamashita",
+                    characterImage = "https://kitsu.test/deku.jpg",
+                    language = "Japanese",
+                    featured = true
+                )
+            ),
+            relatedTitles = listOf(
+                KitsuAdvancedRelatedTitle(
+                    mediaId = "12268",
+                    mediaType = "anime",
+                    title = "Boku no Hero Academia 2",
+                    synopsis = "Season 2",
+                    poster = "https://kitsu.test/mha2.jpg",
+                    relationKind = "sequel"
+                )
+            )
+        )
+        coEvery { tmdbMetadataService.findPersonIdByExactName(any()) } coAnswers {
+            delay(10_000)
+            null
+        }
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildAnimeMeta().copy(id = "kitsu:11469"),
+            itemId = "kitsu:11469",
+            itemType = "series",
+            tmdbMetadataService = tmdbMetadataService,
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService
+        )
+
+        runCurrent()
+
+        val meta = viewModel.uiState.value.meta!!
+        assertEquals(true, viewModel.uiState.value.isAnimeDetail)
+        assertEquals("Izuku Midoriya", meta.castMembers.single().name)
+        assertEquals("Daiki Yamashita", meta.castMembers.single().character)
+        assertEquals(null, meta.castMembers.single().tmdbId)
+        assertEquals(1, viewModel.uiState.value.relatedItems.size)
+
+        advanceTimeBy(10_000)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `addon franchise links expand anime detail seasons across linked season metas`() = runTest(dispatcher) {
+        val metaRepository = mockk<com.nexio.tv.domain.repository.MetaRepository>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+
+        val seasonOneMeta = buildAnimeMeta().copy(
+            id = "kitsu:46231",
+            name = "Solo Leveling",
+            links = listOf(
+                MetaLink(
+                    name = "Sequel: Solo Leveling Season 2",
+                    category = "Franchise",
+                    url = "stremio:///detail/series/kitsu:48671"
+                )
+            ),
+            videos = listOf(
+                Video(
+                    id = "tt21209876:1:1",
+                    title = "Season 1 Episode 1",
+                    released = null,
+                    thumbnail = null,
+                    season = 1,
+                    episode = 1,
+                    overview = null
+                )
+            )
+        )
+        val seasonTwoMeta = buildAnimeMeta().copy(
+            id = "kitsu:48671",
+            name = "Solo Leveling Season 2",
+            links = listOf(
+                MetaLink(
+                    name = "Prequel: Solo Leveling",
+                    category = "Franchise",
+                    url = "stremio:///detail/series/kitsu:46231"
+                )
+            ),
+            videos = listOf(
+                Video(
+                    id = "tt21209876:2:1",
+                    title = "Season 2 Episode 1",
+                    released = null,
+                    thumbnail = null,
+                    season = 2,
+                    episode = 1,
+                    overview = null
+                )
+            )
+        )
+
+        every {
+            metaRepository.getMeta(
+                addonBaseUrl = "https://anime-kitsu.strem.fun/manifest.json",
+                type = "series",
+                id = "kitsu:48671",
+                cacheOnDisk = any(),
+                writeToDisk = any(),
+                origin = any()
+            )
+        } returns flowOf(NetworkResult.Success(seasonTwoMeta))
+        every {
+            metaRepository.getMeta(
+                addonBaseUrl = "https://anime-kitsu.strem.fun/manifest.json",
+                type = "series",
+                id = "kitsu:46231",
+                cacheOnDisk = any(),
+                writeToDisk = any(),
+                origin = any()
+            )
+        } returns flowOf(NetworkResult.Success(seasonOneMeta))
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Success(seasonTwoMeta))
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(seriesTvdbId = null, localizedTitle = "Solo Leveling", language = "ja")
+        )
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:48671", any(), "ja") } returns KitsuAdvancedAnimeDetail()
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = seasonTwoMeta,
+            itemId = "kitsu:48671",
+            itemType = "series",
+            addonBaseUrl = "https://anime-kitsu.strem.fun/manifest.json",
+            metaRepository = metaRepository,
+            tmdbMetadataService = tmdbMetadataService,
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(listOf(1, 2), viewModel.uiState.value.seasons)
+        assertEquals(2, viewModel.uiState.value.selectedSeason)
+        assertEquals("Season 2 Episode 1", viewModel.uiState.value.episodesForSeason.single().title)
     }
 
     private fun buildAnimeMeta(): Meta {
