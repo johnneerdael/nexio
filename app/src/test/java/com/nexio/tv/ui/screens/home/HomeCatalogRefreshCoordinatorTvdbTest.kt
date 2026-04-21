@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.content.Context
+import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
@@ -147,7 +148,8 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
             profileBoundary = profileBoundary,
-            appContext = mockk<Context>(relaxed = true)
+            appContext = mockk<Context>(relaxed = true),
+            playbackActivityTracker = mockk<PlaybackActivityTracker>(relaxed = true)
         )
     }
 
