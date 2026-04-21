@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -139,7 +140,9 @@ class SubtitleTranslationService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val httpClient: OkHttpClient,
     internal val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
-        AutoTranslateDiagnosticsLogger.disabled()
+        AutoTranslateDiagnosticsLogger.disabled(),
+    private val reasoningModels: OpenRouterReasoningModels =
+        OpenRouterReasoningModels(context)
 ) {
     companion object {
         val DEFAULT_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
@@ -594,10 +597,15 @@ class SubtitleTranslationService @Inject constructor(
     ): Map<Int, String> = coroutineScope {
         if (batches.isEmpty()) return@coroutineScope emptyMap()
 
-        val parallelism = chunkConfig.maxParallelRequests.coerceIn(1, MAX_TRANSLATION_PARALLELISM)
+        var parallelism = chunkConfig.maxParallelRequests.coerceIn(1, MAX_TRANSLATION_PARALLELISM)
         val batchResponses = ArrayList<Map<Int, String>>(batches.size)
 
-        for (window in batches.chunked(parallelism)) {
+        var index = 0
+        while (index < batches.size) {
+            val windowEnd = (index + parallelism).coerceAtMost(batches.size)
+            val window = batches.subList(index, windowEnd)
+            val sawRateLimited = AtomicBoolean(false)
+            val observer: () -> Unit = { sawRateLimited.set(true) }
             val windowResults = window.map { batch ->
                 async(Dispatchers.IO) {
                     requestChunkTranslationAdaptive(
@@ -606,11 +614,20 @@ class SubtitleTranslationService @Inject constructor(
                         targetLanguageName = targetLanguageName,
                         sourceLanguageName = sourceLanguageName,
                         settings = settings,
-                        chunkConfig = chunkConfig
+                        chunkConfig = chunkConfig,
+                        onRateLimited = observer
                     )
                 }
             }.awaitAll()
             batchResponses += windowResults
+            index = windowEnd
+            if (sawRateLimited.get() && parallelism > 1) {
+                val pulled = (parallelism / 2).coerceAtLeast(1)
+                diagnosticsLogger.log(
+                    "translate_concurrency_pullback from=$parallelism to=$pulled reason=429"
+                )
+                parallelism = pulled
+            }
         }
 
         val merged = mutableMapOf<Int, String>()
@@ -811,7 +828,8 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageName: String,
         sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
-        chunkConfig: SubtitleTranslationChunkConfig
+        chunkConfig: SubtitleTranslationChunkConfig,
+        onRateLimited: () -> Unit = {}
     ): Map<Int, String> {
         return runCatching {
             requestChunkTranslation(
@@ -819,7 +837,8 @@ class SubtitleTranslationService @Inject constructor(
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
-                settings = settings
+                settings = settings,
+                onRateLimited = onRateLimited
             )
         }.getOrElse { error ->
             if (error is SubtitleTranslationProviderException) {
@@ -835,14 +854,16 @@ class SubtitleTranslationService @Inject constructor(
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
-                chunkConfig = chunkConfig
+                chunkConfig = chunkConfig,
+                onRateLimited = onRateLimited
             ) + requestChunkTranslationAdaptive(
                 blocks = blocks.drop(midpoint),
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
-                chunkConfig = chunkConfig
+                chunkConfig = chunkConfig,
+                onRateLimited = onRateLimited
             )
         }
     }
@@ -852,7 +873,8 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageCode: String,
         targetLanguageName: String,
         sourceLanguageName: String,
-        settings: SubtitleTranslationSettings
+        settings: SubtitleTranslationSettings,
+        onRateLimited: () -> Unit = {}
     ): Map<Int, String> {
         if (settings.provider == SubtitleTranslationProvider.DASHSCOPE) {
             val responseText = executeTranslationRequest(
@@ -866,7 +888,8 @@ class SubtitleTranslationService @Inject constructor(
                 sourceLanguageName = sourceLanguageName,
                 markerPayload = buildDashScopeMarkerPayload(blocks),
                 settings = settings,
-                includeSchema = false
+                includeSchema = false,
+                onRateLimited = onRateLimited
             ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
             return parseDashScopeMarkerResponse(responseText, blocks)
@@ -885,7 +908,8 @@ class SubtitleTranslationService @Inject constructor(
             sourceLanguageName = sourceLanguageName,
             markerPayload = null,
             settings = settings,
-            includeSchema = true
+            includeSchema = true,
+            onRateLimited = onRateLimited
         )
             ?: executeTranslationRequest(
                 promptPayload = promptPayload,
@@ -894,7 +918,8 @@ class SubtitleTranslationService @Inject constructor(
                 sourceLanguageName = sourceLanguageName,
                 markerPayload = null,
                 settings = settings,
-                includeSchema = false
+                includeSchema = false,
+                onRateLimited = onRateLimited
             )
             ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
@@ -987,7 +1012,7 @@ class SubtitleTranslationService @Inject constructor(
         includeSchema: Boolean
     ): JSONObject {
         val generationConfig = JSONObject()
-            .put("temperature", 0.2)
+            .put("temperature", 0)
             .put(
                 "thinkingConfig",
                 JSONObject().put("thinkingBudget", 0)
@@ -1046,7 +1071,7 @@ class SubtitleTranslationService @Inject constructor(
         systemPrompt: String
     ): JSONObject {
         val generationConfig = JSONObject()
-            .put("temperature", 0.2)
+            .put("temperature", 0)
             .put(
                 "thinkingConfig",
                 JSONObject().put("thinkingBudget", 0)
@@ -1084,7 +1109,8 @@ class SubtitleTranslationService @Inject constructor(
         markerPayload: String?,
         settings: SubtitleTranslationSettings,
         includeSchema: Boolean,
-        systemPromptOverride: String? = null
+        systemPromptOverride: String? = null,
+        onRateLimited: () -> Unit = {}
     ): String? {
         val systemPrompt = systemPromptOverride
             ?: buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
@@ -1102,7 +1128,8 @@ class SubtitleTranslationService @Inject constructor(
                     systemPrompt = systemPrompt,
                     userPayload = userPayload,
                     includeJsonMode = includeSchema,
-                    strictJsonSchemaItemCount = itemCount
+                    strictJsonSchemaItemCount = itemCount,
+                    isReasoningModel = reasoningModels.isReasoningModel(settings.model)
                 )
                 openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
             }
@@ -1171,6 +1198,9 @@ class SubtitleTranslationService @Inject constructor(
                         return null
                     }
                     if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
+                        if (providerError == SubtitleTranslationProviderError.RateLimited) {
+                            onRateLimited()
+                        }
                         val delayMs = retryDelayMs(
                             responseHeader = response.header("Retry-After"),
                             body = raw,
@@ -1184,6 +1214,9 @@ class SubtitleTranslationService @Inject constructor(
                         sleepBeforeRetry(delayMs)
                         attempt += 1
                         continue
+                    }
+                    if (providerError == SubtitleTranslationProviderError.RateLimited) {
+                        onRateLimited()
                     }
                     throw providerException(settings.provider, response.code, raw)
                 }
@@ -1217,7 +1250,8 @@ class SubtitleTranslationService @Inject constructor(
                     settings = settings,
                     systemPrompt = systemPrompt,
                     userPayload = userPayload,
-                    includeJsonMode = false
+                    includeJsonMode = false,
+                    isReasoningModel = reasoningModels.isReasoningModel(settings.model)
                 )
                 openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
             }

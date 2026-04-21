@@ -289,9 +289,68 @@ val generateAnimeIdMap by tasks.registering {
     }
 }
 
+val openRouterReasoningModelsOutput =
+    layout.projectDirectory.file("src/main/assets/openrouter_reasoning_models.json")
+val openRouterReasoningModelsEndpoint =
+    "https://openrouter.ai/api/v1/models?supported_parameters=reasoning"
+
+fun stripOpenRouterModelVariant(value: Any?): String? =
+    value?.toString()?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.substringBefore(':')
+        ?.lowercase()
+        ?.takeIf { it.isNotEmpty() }
+
+val generateOpenRouterReasoningModels by tasks.registering {
+    group = "build"
+    description = "Refresh the bundled list of OpenRouter models that support reasoning controls."
+    outputs.file(openRouterReasoningModelsOutput)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val outputFile = openRouterReasoningModelsOutput.asFile
+        val payload = try {
+            fetchJson(openRouterReasoningModelsEndpoint) as? Map<*, *>
+                ?: throw IllegalStateException("OpenRouter response was not a JSON object")
+        } catch (cause: Exception) {
+            val fallback = if (outputFile.exists()) "keeping committed asset" else "no committed asset present"
+            logger.warn(
+                "Skipping OpenRouter reasoning-model refresh ({}): {}",
+                fallback,
+                cause.message ?: cause.javaClass.simpleName
+            )
+            return@doLast
+        }
+
+        val rawEntries = payload["data"] as? List<*>
+            ?: throw IllegalStateException("OpenRouter response missing 'data' array")
+
+        val slugs = sortedSetOf<String>()
+        rawEntries.filterIsInstance<Map<*, *>>().forEach { entry ->
+            stripOpenRouterModelVariant(entry["id"])?.let(slugs::add)
+            stripOpenRouterModelVariant(entry["canonical_slug"])?.let(slugs::add)
+        }
+
+        if (slugs.isEmpty()) {
+            logger.warn("OpenRouter response contained zero reasoning models; keeping existing asset.")
+            return@doLast
+        }
+
+        val rendered = JsonOutput.toJson(slugs.toList()) + "\n"
+        if (outputFile.exists() && outputFile.readText() == rendered) {
+            println("OpenRouter reasoning models unchanged (${slugs.size} entries).")
+            return@doLast
+        }
+
+        outputFile.parentFile.mkdirs()
+        outputFile.writeText(rendered)
+        println("Generated ${outputFile.relativeTo(projectDir)} (${slugs.size} entries)")
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
-    dependsOn(generateAnimeIdMap)
+    dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)
     from("src/main/assets")
     into(filteredMainAssetsDir)
 }
