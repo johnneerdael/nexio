@@ -48,7 +48,7 @@ class SyntheticHomeCatalogStore private constructor(
         private const val TAG = "SyntheticHomeCatalog"
         private const val PREFS_NAME = "synthetic_home_catalogs"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 4
+        private const val SCHEMA_VERSION = 5
     }
 
     private val gson = Gson()
@@ -56,7 +56,11 @@ class SyntheticHomeCatalogStore private constructor(
     data class Snapshot(
         val traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val simklGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
-        val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+        val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val kitsuGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val tmdbIncludeAdult: Boolean? = null,
+        val tmdbHideUnreleasedDigital: Boolean? = null
     )
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
@@ -83,6 +87,10 @@ class SyntheticHomeCatalogStore private constructor(
                 add("traktGroups", encodeGroups(snapshot.traktGroups))
                 add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
+                add("kitsuGroups", encodeGroups(snapshot.kitsuGroups))
+                add("tmdbGroups", encodeGroups(snapshot.tmdbGroups))
+                snapshot.tmdbIncludeAdult?.let { addProperty("tmdbIncludeAdult", it) }
+                snapshot.tmdbHideUnreleasedDigital?.let { addProperty("tmdbHideUnreleasedDigital", it) }
             }
             prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
@@ -102,7 +110,7 @@ class SyntheticHomeCatalogStore private constructor(
     private fun decodeSnapshot(raw: String): Snapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-        if (schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion != 4 && schemaVersion != SCHEMA_VERSION) {
             return null
         }
         val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
@@ -112,7 +120,11 @@ class SyntheticHomeCatalogStore private constructor(
         return Snapshot(
             traktGroups = decodeGroups(root.getAsJsonArray("traktGroups")),
             simklGroups = decodeGroups(root.getAsJsonArray("simklGroups")),
-            mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups"))
+            mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups")),
+            kitsuGroups = decodeGroups(root.getAsJsonArray("kitsuGroups")),
+            tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups")),
+            tmdbIncludeAdult = decodeBoolean(root, "tmdbIncludeAdult"),
+            tmdbHideUnreleasedDigital = decodeBoolean(root, "tmdbHideUnreleasedDigital")
         )
     }
 
@@ -158,6 +170,12 @@ class SyntheticHomeCatalogStore private constructor(
             orderKey = orderKey,
             rows = rows
         )
+    }
+
+    private fun decodeBoolean(root: JsonObject, name: String): Boolean? {
+        return root.get(name)
+            ?.takeIf { !it.isJsonNull }
+            ?.let { runCatching { it.asBoolean }.getOrNull() }
     }
 
     private fun decodeRow(element: JsonElement): CatalogRow? {

@@ -18,6 +18,8 @@ import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
+import com.nexio.tv.data.local.KitsuCatalogPreferences
+import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
@@ -30,15 +32,19 @@ import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TrailerSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.KitsuDiscoveryService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
+import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
@@ -83,6 +89,8 @@ class HomeViewModel @Inject constructor(
     internal val metaRepository: MetaRepository,
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    internal val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    internal val kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
     internal val simklSettingsDataStore: SimklSettingsDataStore,
@@ -95,6 +103,8 @@ class HomeViewModel @Inject constructor(
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val simklDiscoveryService: SimklDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
+    internal val tmdbDiscoveryService: TmdbDiscoveryService,
+    internal val kitsuDiscoveryService: KitsuDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
     internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
@@ -147,6 +157,8 @@ class HomeViewModel @Inject constructor(
             "mdblist_pref_change",
             "mdblist_settings_change",
             "mdblist_settings_disabled",
+            "tmdb_discovery",
+            "tmdb_pref_change",
             "window_closed",
             "observe_disabled_home_catalogs",
             "observe_installed_addons"
@@ -220,9 +232,21 @@ class HomeViewModel @Inject constructor(
     internal var persistedMDBListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
         com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
+    internal var tmdbDiscoverySnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot =
+        com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
+    internal var kitsuDiscoverySnapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot =
+        com.nexio.tv.data.repository.KitsuDiscoverySnapshot()
+    internal var tmdbCatalogPreferences: TmdbCatalogPreferences =
+        TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
+    internal var kitsuCatalogPreferences: KitsuCatalogPreferences =
+        KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedKitsuSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedTmdbSyntheticIncludeAdult: Boolean? = null
+    internal var persistedTmdbSyntheticHideUnreleasedDigital: Boolean? = null
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
@@ -269,6 +293,10 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var mdbListDiscoveryRefreshInProgress: Boolean = false
     @Volatile
+    internal var kitsuDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
+    internal var tmdbDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
     internal var installedAddonsObserved: Boolean = false
     @Volatile
     internal var traktDiscoveryObserved: Boolean = false
@@ -276,6 +304,16 @@ class HomeViewModel @Inject constructor(
     internal var simklDiscoveryObserved: Boolean = false
     @Volatile
     internal var mdbListDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var kitsuDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var tmdbDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var kitsuCatalogPreferencesObserved: Boolean = false
+    @Volatile
+    internal var tmdbCatalogPreferencesObserved: Boolean = false
+    @Volatile
+    internal var tmdbCredentialRefreshPending: Boolean = false
     @Volatile
     internal var lastForegroundRefreshMs: Long = 0L
     @Volatile
@@ -350,6 +388,10 @@ class HomeViewModel @Inject constructor(
         observeSimklDiscovery()
         observeMDBListCatalogPreferences()
         observeMDBListDiscovery()
+        observeKitsuCatalogPreferences()
+        observeKitsuDiscovery()
+        observeTmdbCatalogPreferences()
+        observeTmdbDiscovery()
         observeAccountSyncRefresh()
         observePriorityHydration()
         loadContinueWatching()
@@ -397,6 +439,7 @@ class HomeViewModel @Inject constructor(
                     persistedTraktSyntheticGroups = emptyList()
                     persistedSimklSyntheticGroups = emptyList()
                     persistedMDBListSyntheticGroups = emptyList()
+                    clearPersistedTmdbSyntheticGroups()
                     watchProgressRepository.invalidateLocalizedMetadata()
                     continueWatchingSnapshotService.invalidateLocalizedMetadata()
                     logStartupPerf("metadata_language_changed")
@@ -543,6 +586,14 @@ class HomeViewModel @Inject constructor(
 
     private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
 
+    private fun observeKitsuCatalogPreferences() = observeKitsuCatalogPreferencesPipeline()
+
+    private fun observeKitsuDiscovery() = observeKitsuDiscoveryPipeline()
+
+    private fun observeTmdbCatalogPreferences() = observeTmdbCatalogPreferencesPipeline()
+
+    private fun observeTmdbDiscovery() = observeTmdbDiscoveryPipeline()
+
     private fun observeAccountSyncRefresh() = observeAccountSyncRefreshPipeline()
 
     private fun observePriorityHydration() = observePriorityHydrationPipeline()
@@ -618,6 +669,12 @@ class HomeViewModel @Inject constructor(
     internal fun openStartupDeferralWindowIfNeeded(reason: String) {
         if (!diskFirstHomeStartupEnabled) return
         if (startupDeferralCompleted) return
+        if (syntheticHomeCatalogStore.read(profileId = profileManager.activeProfileId.value) == null) {
+            startupDeferralCompleted = true
+            isStartupDeferredRefreshAllowed = true
+            logStartupPerf("disk_first_startup_window_skipped", "reason=$reason cause=no_snapshot")
+            return
+        }
         val now = SystemClock.elapsedRealtime()
         if (startupWindowOpenUntilMs > now) return
         startupWindowOpenUntilMs = now + STARTUP_NETWORK_DEFERRAL_WINDOW_MS

@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbCreditsResponse
 import com.nexio.tv.data.remote.api.TmdbDetailsResponse
+import com.nexio.tv.data.remote.api.TmdbExternalIdsResponse
 import com.nexio.tv.data.remote.api.TmdbFindResponse
 import com.nexio.tv.data.remote.api.TmdbFindResult
 import com.nexio.tv.data.remote.api.TmdbGenre
@@ -164,6 +165,27 @@ class TmdbMetadataPerformanceTest {
         coVerify(exactly = 1) {
             tmdbApi.findByExternalId("tt0137523", "tmdb-key", "imdb_id")
         }
+    }
+
+    @Test
+    fun `tmdbToImdb caches movie and tv ids separately when numeric id matches`() = runTest {
+        val tmdbApi = mockk<TmdbApi>()
+        val settingsDataStore = mockk<TmdbSettingsDataStore>()
+        every { settingsDataStore.settings } returns flowOf(tmdbSettings())
+        coEvery {
+            tmdbApi.getMovieExternalIds(1, "tmdb-key")
+        } returns Response.success(TmdbExternalIdsResponse(id = 1, imdbId = "tt0000001"))
+        coEvery {
+            tmdbApi.getTvExternalIds(1, "tmdb-key")
+        } returns Response.success(TmdbExternalIdsResponse(id = 1, imdbId = "tt9999999"))
+
+        val service = TmdbService(tmdbApi, settingsDataStore)
+
+        assertEquals("tt0000001", service.tmdbToImdb(1, "movie"))
+        assertEquals("tt9999999", service.tmdbToImdb(1, "series"))
+
+        coVerify(exactly = 1) { tmdbApi.getMovieExternalIds(1, "tmdb-key") }
+        coVerify(exactly = 1) { tmdbApi.getTvExternalIds(1, "tmdb-key") }
     }
 
     @Test

@@ -9,6 +9,10 @@ import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
 import com.nexio.tv.data.repository.DefaultTrackingProgressService
 import com.nexio.tv.data.repository.DefaultTrackingScrobbleService
+import com.nexio.tv.data.repository.KitsuDiscoveryClient
+import com.nexio.tv.data.repository.RetrofitKitsuDiscoveryClient
+import com.nexio.tv.data.repository.RetrofitTmdbDiscoveryClient
+import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
@@ -79,6 +83,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindServiceWrapResolver(impl: DebridAvailabilityResolver): ServiceWrapResolver
+
+    @Binds
+    @Singleton
+    abstract fun bindTmdbDiscoveryClient(impl: RetrofitTmdbDiscoveryClient): TmdbDiscoveryClient
+
+    @Binds
+    @Singleton
+    abstract fun bindKitsuDiscoveryClient(impl: RetrofitKitsuDiscoveryClient): KitsuDiscoveryClient
 
     companion object {
         @Provides

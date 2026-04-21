@@ -90,6 +90,11 @@ class KitsuAuthService(
         return true
     }
 
+    suspend fun providerAuthenticated(): Boolean {
+        val current = authStore.state.first()
+        return current.enabled && current.isAuthenticated
+    }
+
     suspend fun disconnect() {
         authStore.clear()
     }
