@@ -13,6 +13,12 @@ private const val ANTHROPIC_VERSION = "2023-06-01"
 private const val OPENAI_NATIVE_BASE_URL = "https://api.openai.com/v1"
 private const val DASHSCOPE_GENERATION_PATH = "/services/aigc/text-generation/generation"
 
+internal fun isOpenRouterEndpoint(settings: SubtitleTranslationSettings): Boolean {
+    val raw = settings.baseUrl.trim().lowercase()
+    if (raw.isEmpty()) return false
+    return raw.contains("openrouter.ai")
+}
+
 internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
     val rawRoot = settings.baseUrl.trim().trimEnd('/').ifBlank {
         when (settings.provider) {
@@ -47,7 +53,8 @@ internal fun buildOpenAiChatCompletionRequest(
     systemPrompt: String,
     userPayload: String,
     includeJsonMode: Boolean = true,
-    strictJsonSchemaItemCount: Int? = null
+    strictJsonSchemaItemCount: Int? = null,
+    isReasoningModel: Boolean = false
 ): JSONObject {
     val systemMessage = JSONObject()
     systemMessage.put("role", "system")
@@ -63,7 +70,7 @@ internal fun buildOpenAiChatCompletionRequest(
 
     val body = JSONObject()
     body.put("model", settings.model)
-    body.put("temperature", 0.2)
+    body.put("temperature", 0)
     body.put("messages", messages)
 
     if (includeJsonMode) {
@@ -77,7 +84,36 @@ internal fun buildOpenAiChatCompletionRequest(
         body.put("response_format", responseFormat)
     }
 
+    if (shouldDisableReasoning(settings, isReasoningModel)) {
+        body.put("reasoning", JSONObject().put("effort", "none"))
+    }
+
+    if (isOpenRouterEndpoint(settings)) {
+        val provider = JSONObject()
+        provider.put("allow_fallbacks", true)
+        provider.put("sort", "throughput")
+        body.put("provider", provider)
+    }
+
     return body
+}
+
+internal fun shouldDisableReasoning(
+    settings: SubtitleTranslationSettings,
+    isReasoningModel: Boolean
+): Boolean {
+    if (settings.provider != SubtitleTranslationProvider.OPENAI) return false
+    if (isReasoningModel) return true
+    if (isOpenRouterEndpoint(settings)) return false
+    return matchesNativeOpenAiReasoningPrefix(settings.model)
+}
+
+private fun matchesNativeOpenAiReasoningPrefix(model: String): Boolean {
+    val normalized = model.trim().lowercase().removePrefix("openai/")
+    return normalized.startsWith("gpt-5") ||
+        normalized.startsWith("o1") ||
+        normalized.startsWith("o3") ||
+        normalized.startsWith("o4")
 }
 
 internal fun supportsStrictJsonSchemaResponseFormat(
@@ -153,7 +189,7 @@ internal fun buildAnthropicMessagesRequest(
     val body = JSONObject()
     body.put("model", settings.model)
     body.put("max_tokens", 8192)
-    body.put("temperature", 0.2)
+    body.put("temperature", 0)
     body.put("system", systemPrompt)
     body.put("messages", messages)
     return body

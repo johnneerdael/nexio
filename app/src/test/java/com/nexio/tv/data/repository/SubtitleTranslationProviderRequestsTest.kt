@@ -150,6 +150,143 @@ class SubtitleTranslationProviderRequestsTest {
     }
 
     @Test
+    fun openAiRequestUsesTemperatureZero() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-5-nano"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        assertEquals(0, body.getInt("temperature"))
+    }
+
+    @Test
+    fun anthropicRequestUsesTemperatureZero() {
+        val body = buildAnthropicMessagesRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.ANTHROPIC,
+                model = "claude-haiku-4-5"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        assertEquals(0, body.getInt("temperature"))
+    }
+
+    @Test
+    fun openRouterBaseUrlEmitsProviderRoutingBlock() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "openai/gpt-4o",
+                baseUrl = "https://openrouter.ai/api/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        val provider = body.getJSONObject("provider")
+        assertTrue(provider.getBoolean("allow_fallbacks"))
+        assertEquals("throughput", provider.getString("sort"))
+    }
+
+    @Test
+    fun nonOpenRouterBaseUrlOmitsProviderRoutingBlock() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-5-nano",
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        assertFalse(body.has("provider"))
+    }
+
+    @Test
+    fun openRouterReasoningModelEmitsReasoningEffortNone() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "some/reasoning-model",
+                baseUrl = "https://openrouter.ai/api/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}""",
+            isReasoningModel = true
+        )
+
+        assertEquals("none", body.getJSONObject("reasoning").getString("effort"))
+    }
+
+    @Test
+    fun openRouterNonReasoningModelOmitsReasoningField() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "some/not-reasoning",
+                baseUrl = "https://openrouter.ai/api/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}""",
+            isReasoningModel = false
+        )
+
+        assertFalse(body.has("reasoning"))
+    }
+
+    @Test
+    fun nativeOpenAiReasoningPrefixEmitsReasoningEffortNone() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "o3-mini",
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        assertEquals("none", body.getJSONObject("reasoning").getString("effort"))
+    }
+
+    @Test
+    fun nativeOpenAiGpt5PrefixEmitsReasoningEffortNone() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-5-nano",
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        assertEquals("none", body.getJSONObject("reasoning").getString("effort"))
+    }
+
+    @Test
+    fun nativeOpenAiNonReasoningModelOmitsReasoningField() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-4o-mini",
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}"""
+        )
+
+        assertFalse(body.has("reasoning"))
+    }
+
+    @Test
     fun openAiRequestAcceptsOpenRouterPrefixedModelIds() {
         val body = buildOpenAiChatCompletionRequest(
             settings = SubtitleTranslationSettings(
