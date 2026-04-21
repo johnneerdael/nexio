@@ -1158,6 +1158,10 @@
     <string name="search_voice_mic_permission">Microphone permission is required for voice search.</string>
     <string name="search_voice_failed">Voice recognition failed. Try again.</string>
     <string name="search_voice_unavailable">Voice search is unavailable on this device.</string>
+    <string name="search_voice_listening_title">Listening…</string>
+    <string name="search_voice_listening_subtitle">Say the title you want to search</string>
+    <string name="search_voice_cancel">Cancel</string>
+    <string name="search_voice_failed_with_code">Voice recognition failed (code %1$d). Try again.</string>
 
     <!-- LibraryScreen -->
     <string name="library_syncing">Syncing library\u2026</string>
