@@ -1,11 +1,7 @@
 package com.nexio.tv.ui.screens.search
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Bundle
 import android.view.KeyEvent
-import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
@@ -67,7 +63,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -131,7 +126,6 @@ fun SearchScreen(
     val view = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val strVoiceNoSpeech = stringResource(R.string.search_voice_no_speech)
-    val strVoiceMicPermission = stringResource(R.string.search_voice_mic_permission)
     val strVoiceFailed = stringResource(R.string.search_voice_failed)
     val strVoiceUnavailable = stringResource(R.string.search_voice_unavailable)
     val voiceFocusRequester = remember { FocusRequester() }
@@ -162,105 +156,46 @@ fun SearchScreen(
             Toast.makeText(context, strVoiceNoSpeech, Toast.LENGTH_SHORT).show()
         }
     }
-    val isVoiceSearchAvailable = remember(context) { SpeechRecognizer.isRecognitionAvailable(context) }
-    val speechRecognizer = remember(context, isVoiceSearchAvailable) {
-        if (isVoiceSearchAvailable) {
-            runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
-        } else {
-            null
+    val voiceRecognizeIntent = remember {
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
         }
     }
-    val hasRecordAudioPermission by remember(context) {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
-        )
+    val isVoiceSearchAvailable = remember(context) {
+        voiceRecognizeIntent.resolveActivity(context.packageManager) != null ||
+            SpeechRecognizer.isRecognitionAvailable(context)
     }
-    var recordAudioPermissionGranted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val requestAudioPermission = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        recordAudioPermissionGranted = granted
-        if (granted) {
-            isVoiceListening = true
-            speechRecognizer?.startListening(
-                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-                }
-            )
-        } else {
-            Toast.makeText(context, strVoiceMicPermission, Toast.LENGTH_SHORT).show()
-        }
-    }
-    LaunchedEffect(hasRecordAudioPermission) {
-        recordAudioPermissionGranted = hasRecordAudioPermission
-    }
-    DisposableEffect(speechRecognizer) {
-        val listener = object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = Unit
-            override fun onBeginningOfSpeech() = Unit
-            override fun onRmsChanged(rmsdB: Float) = Unit
-            override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() = Unit
-            override fun onEvent(eventType: Int, params: Bundle?) = Unit
-
-            override fun onError(error: Int) {
-                isVoiceListening = false
-                if (error != SpeechRecognizer.ERROR_CLIENT) {
-                    Toast.makeText(context, strVoiceFailed, Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onResults(results: Bundle?) {
-                isVoiceListening = false
-                val recognized = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    .orEmpty()
-                    .trim()
-                onVoiceQueryResultState.value(recognized)
-            }
-
-            override fun onPartialResults(partialResults: Bundle?) = Unit
-        }
-
-        speechRecognizer?.setRecognitionListener(listener)
-        onDispose {
-            speechRecognizer?.setRecognitionListener(null)
-            speechRecognizer?.destroy()
+    val voiceSearchLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        isVoiceListening = false
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val recognized = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+                .trim()
+            onVoiceQueryResultState.value(recognized)
+        } else if (result.resultCode != android.app.Activity.RESULT_CANCELED) {
+            Toast.makeText(context, strVoiceFailed, Toast.LENGTH_SHORT).show()
         }
     }
     val topInputFocusRequester = remember(isVoiceSearchAvailable) {
         if (isVoiceSearchAvailable) voiceFocusRequester else searchFocusRequester
     }
     val launchVoiceSearch: () -> Unit = {
-        if (!isVoiceSearchAvailable || speechRecognizer == null) {
+        if (!isVoiceSearchAvailable) {
             Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
-        } else if (!recordAudioPermissionGranted) {
-            requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             isVoiceListening = true
-            runCatching {
-                speechRecognizer.startListening(
-                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-                    }
-                )
-            }.onFailure {
-                isVoiceListening = false
-                Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
-            }
+            runCatching { voiceSearchLauncher.launch(voiceRecognizeIntent) }
+                .onFailure {
+                    isVoiceListening = false
+                    Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
+                }
         }
     }
 
@@ -420,6 +355,21 @@ fun SearchScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val latestLaunchVoiceSearch by rememberUpdatedState(launchVoiceSearch)
+    val latestIsVoiceListening by rememberUpdatedState(isVoiceListening)
+    DisposableEffect(Unit) {
+        val handler: () -> Boolean = {
+            if (!latestIsVoiceListening) latestLaunchVoiceSearch()
+            true
+        }
+        com.nexio.tv.MainActivity.voiceKeyHandler = handler
+        onDispose {
+            if (com.nexio.tv.MainActivity.voiceKeyHandler === handler) {
+                com.nexio.tv.MainActivity.voiceKeyHandler = null
+            }
         }
     }
 
