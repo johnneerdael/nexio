@@ -50,10 +50,6 @@ internal fun PlayerRuntimeController.releasePlayer() {
     nextEpisodeAutoPlayJob = null
     builtInAiSubtitleTranslationJob?.cancel()
     builtInAiSubtitleTranslationJob = null
-    mpvView?.releasePlayer()
-    mpvView = null
-    mpvInitializationInProgress = false
-    mpvTrackRefreshInProgress = false
     _exoPlayer?.release()
     _exoPlayer = null
     DolbyVisionCompatibility.setMapDv7ToHevcEnabled(false)

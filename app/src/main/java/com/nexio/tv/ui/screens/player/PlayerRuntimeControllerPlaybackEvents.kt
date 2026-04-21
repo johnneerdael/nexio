@@ -22,22 +22,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
             val nowUptime = SystemClock.uptimeMillis()
             val pos = backendCurrentPosition().coerceAtLeast(0L)
             val playerDuration = backendDuration().coerceAtLeast(0L)
-            if (isUsingMpvEngine()) {
-                mpvView?.let { view ->
-                    applyPendingMpvSeekIfNeeded(view, currentPositionMs = pos, durationMs = playerDuration)
-                    updateMpvAvailableTracks()
-                    if (!hasRenderedFirstFrame && (pos > 0L || playerDuration > 0L)) {
-                        hasRenderedFirstFrame = true
-                        _uiState.update {
-                            it.copy(
-                                isBuffering = false,
-                                showLoadingOverlay = false,
-                                isPlaying = view.isPlayingNow()
-                            )
-                        }
-                    }
-                }
-            }
             if (playerDuration > lastKnownDuration) {
                 lastKnownDuration = playerDuration
             }
@@ -538,14 +522,9 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
     when (event) {
         PlayerEvent.OnPlayPause -> {
             if (backendIsPlaying()) {
-                val usingMpv = isUsingMpvEngine()
                 userPausedManually = true
                 playbackIdleGateState.onUserPauseStateChanged(isPausedByUser = true)
                 backendPause()
-                if (usingMpv && shouldPersistWatchProgressOnPlaybackStopEvent()) {
-                    emitStopScrobbleForCurrentProgress()
-                    saveWatchProgress()
-                }
                 schedulePauseOverlay()
             } else {
                 userPausedManually = false
@@ -944,9 +923,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 delay(1500)
                 _uiState.update { it.copy(showAspectRatioIndicator = false) }
             }
-        }
-        PlayerEvent.OnSwitchInternalPlayerEngine -> {
-            switchInternalPlayerEngineManually()
         }
     }
 }

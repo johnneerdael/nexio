@@ -160,9 +160,6 @@ enum class IecPackerChannelLayout(val storedValue: String, val kodiChannelLayout
 data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
     val preferredExternalPlayerPackageName: String? = null,
-    val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,
-    val autoSwitchInternalPlayerOnError: Boolean = false,
-    val mpvHardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
     val bufferSettings: BufferSettings = BufferSettings(),
     // Audio settings
@@ -432,19 +429,6 @@ enum class PlayerPreference {
     ASK_EVERY_TIME
 }
 
-enum class InternalPlayerEngine {
-    EXOPLAYER,
-    LIBMPV
-}
-
-enum class MpvHardwareDecodeMode {
-    LEGACY_DIRECT_COPY,
-    AUTO_SAFE,
-    HARDWARE_COPY,
-    HARDWARE_DIRECT,
-    DISABLED
-}
-
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlayerSettingsDataStore @Inject constructor(
@@ -469,11 +453,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val playerPreferenceKey = stringPreferencesKey("player_preference")
     private val preferredExternalPlayerPackageNameKey =
         stringPreferencesKey("preferred_external_player_package_name")
-    private val internalPlayerEngineKey = stringPreferencesKey("internal_player_engine")
-    private val autoSwitchInternalPlayerOnErrorKey =
-        booleanPreferencesKey("auto_switch_internal_player_on_error")
-    private val mpvHardwareDecodeModeKey = stringPreferencesKey("mpv_hardware_decode_mode")
-
     // Audio settings keys
     private val decoderPriorityKey = intPreferencesKey("decoder_priority")
     private val tunnelingEnabledKey = booleanPreferencesKey("tunneling_enabled")
@@ -740,17 +719,11 @@ class PlayerSettingsDataStore @Inject constructor(
     val playerSettings: Flow<PlayerSettings> = profileFlow { prefs ->
             PlayerSettings(
                 playerPreference = prefs[playerPreferenceKey]?.let {
-                    when (it) {
-                        "LIBMPV" -> PlayerPreference.INTERNAL
-                        else -> runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
-                    }
+                    runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
                 } ?: PlayerPreference.INTERNAL,
                 preferredExternalPlayerPackageName = prefs[preferredExternalPlayerPackageNameKey]
                     ?.trim()
                     ?.takeIf { it.isNotBlank() },
-                internalPlayerEngine = parseInternalPlayerEngine(prefs[internalPlayerEngineKey]),
-                autoSwitchInternalPlayerOnError = prefs[autoSwitchInternalPlayerOnErrorKey] ?: false,
-                mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
                 decoderPriority = prefs[decoderPriorityKey] ?: 1,
                 tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
                 dynamicVideoSchedulingEnabled = prefs[dynamicVideoSchedulingEnabledKey] ?: false,
@@ -970,24 +943,6 @@ class PlayerSettingsDataStore @Inject constructor(
             } else {
                 prefs[preferredExternalPlayerPackageNameKey] = normalizedPackageName
             }
-        }
-    }
-
-    suspend fun setInternalPlayerEngine(engine: InternalPlayerEngine) {
-        store().edit { prefs ->
-            prefs[internalPlayerEngineKey] = engine.name
-        }
-    }
-
-    suspend fun setAutoSwitchInternalPlayerOnError(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[autoSwitchInternalPlayerOnErrorKey] = enabled
-        }
-    }
-
-    suspend fun setMpvHardwareDecodeMode(mode: MpvHardwareDecodeMode) {
-        store().edit { prefs ->
-            prefs[mpvHardwareDecodeModeKey] = mode.name
         }
     }
 
@@ -1298,25 +1253,6 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private fun parseSubtitleOrganizationMode(value: String?): SubtitleOrganizationMode {
         return SubtitleOrganizationMode.BY_LANGUAGE
-    }
-
-    private fun parseInternalPlayerEngine(value: String?): InternalPlayerEngine {
-        return when (value) {
-            "LIBMPV", "MVP_PLAYER", "MPV_PLAYER" -> InternalPlayerEngine.LIBMPV
-            "EXOPLAYER" -> InternalPlayerEngine.EXOPLAYER
-            else -> InternalPlayerEngine.EXOPLAYER
-        }
-    }
-
-    private fun parseMpvHardwareDecodeMode(value: String?): MpvHardwareDecodeMode {
-        return when (value) {
-            null, "AUTO_SAFE" -> MpvHardwareDecodeMode.AUTO_SAFE
-            "HARDWARE_COPY" -> MpvHardwareDecodeMode.HARDWARE_COPY
-            "HARDWARE_DIRECT" -> MpvHardwareDecodeMode.HARDWARE_DIRECT
-            "DISABLED" -> MpvHardwareDecodeMode.DISABLED
-            "LEGACY_DIRECT_COPY" -> MpvHardwareDecodeMode.LEGACY_DIRECT_COPY
-            else -> MpvHardwareDecodeMode.AUTO_SAFE
-        }
     }
 
     private fun parseAddonSubtitleStartupMode(value: String?): AddonSubtitleStartupMode {

@@ -5,83 +5,43 @@ import androidx.media3.common.Player
 import kotlinx.coroutines.flow.update
 
 internal fun PlayerRuntimeController.backendCurrentPosition(): Long {
-    return if (isUsingMpvEngine()) {
-        mpvView?.currentPositionMs() ?: 0L
-    } else {
-        _exoPlayer?.currentPosition ?: 0L
-    }
+    return _exoPlayer?.currentPosition ?: 0L
 }
 
 internal fun PlayerRuntimeController.backendDuration(): Long {
-    return if (isUsingMpvEngine()) {
-        mpvView?.durationMs() ?: 0L
-    } else {
-        _exoPlayer?.duration ?: 0L
-    }
+    return _exoPlayer?.duration ?: 0L
 }
 
 internal fun PlayerRuntimeController.backendIsReady(): Boolean {
-    return if (isUsingMpvEngine()) {
-        mpvView != null && !_uiState.value.isBuffering
-    } else {
-        _exoPlayer?.playbackState == Player.STATE_READY
-    }
+    return _exoPlayer?.playbackState == Player.STATE_READY
 }
 
 internal fun PlayerRuntimeController.backendIsPlaying(): Boolean {
-    return if (isUsingMpvEngine()) {
-        mpvView?.isPlayingNow() == true
-    } else {
-        _exoPlayer?.isPlaying == true
-    }
+    return _exoPlayer?.isPlaying == true
 }
 
 internal fun PlayerRuntimeController.backendPause() {
-    if (isUsingMpvEngine()) {
-        mpvView?.setPaused(true)
-    } else {
-        _exoPlayer?.pause()
-    }
+    _exoPlayer?.pause()
 }
 
 internal fun PlayerRuntimeController.backendPlay() {
-    if (isUsingMpvEngine()) {
-        mpvView?.setPaused(false)
-    } else {
-        _exoPlayer?.play()
-    }
+    _exoPlayer?.play()
 }
 
 internal fun PlayerRuntimeController.backendStop() {
-    if (isUsingMpvEngine()) {
-        mpvView?.setPaused(true)
-    } else {
-        _exoPlayer?.stop()
-    }
+    _exoPlayer?.stop()
 }
 
 internal fun PlayerRuntimeController.backendSeekTo(positionMs: Long) {
-    if (isUsingMpvEngine()) {
-        mpvView?.seekToMs(positionMs)
-    } else {
-        _exoPlayer?.seekTo(positionMs)
-    }
+    _exoPlayer?.seekTo(positionMs)
 }
 
 internal fun PlayerRuntimeController.backendSetPlaybackSpeed(speed: Float) {
-    if (isUsingMpvEngine()) {
-        mpvView?.setPlaybackSpeed(speed)
-    } else {
-        _exoPlayer?.setPlaybackSpeed(speed)
-    }
+    _exoPlayer?.setPlaybackSpeed(speed)
 }
 
 internal fun PlayerRuntimeController.backendSetSubtitleDelay(delayMs: Int) {
     subtitleDelayUs.set(delayMs * 1000L)
-    if (isUsingMpvEngine()) {
-        mpvView?.setSubtitleDelayMs(delayMs)
-        return
-    }
     _exoPlayer?.let { player ->
         player.setTrackSelectionParameters(
             player.trackSelectionParameters
@@ -101,17 +61,6 @@ internal fun shouldResumeAutoplayAfterLifecyclePause(
 }
 
 internal fun PlayerRuntimeController.pausePlaybackForLifecycle() {
-    if (isUsingMpvEngine()) {
-        val view = mpvView
-        resumeAutoplayAfterLifecyclePause = view?.isPlayingNow() == true && !hasRenderedFirstFrame && !userPausedManually
-        view?.setPaused(true)
-        _uiState.update { it.copy(isPlaying = false) }
-        if (shouldPersistWatchProgressOnPlaybackStopEvent()) {
-            emitStopScrobbleForCurrentProgress()
-            saveWatchProgress()
-        }
-        return
-    }
     val player = _exoPlayer
     if (player == null) {
         resumeAutoplayAfterLifecyclePause = false
@@ -127,14 +76,6 @@ internal fun PlayerRuntimeController.pausePlaybackForLifecycle() {
 }
 
 internal fun PlayerRuntimeController.resumePlaybackForLifecycle() {
-    if (isUsingMpvEngine()) {
-        if (!resumeAutoplayAfterLifecyclePause) return
-        resumeAutoplayAfterLifecyclePause = false
-        if (_uiState.value.error != null || _uiState.value.playbackEnded) return
-        mpvView?.setPaused(false)
-        _uiState.update { it.copy(isPlaying = true) }
-        return
-    }
     val player = _exoPlayer
     if (player == null) {
         resumeAutoplayAfterLifecyclePause = false
@@ -159,23 +100,18 @@ internal fun PlayerRuntimeController.resumePlaybackForLifecycle() {
 }
 
 internal fun PlayerRuntimeController.isPlaybackCurrentlyPlaying(): Boolean {
-    return if (isUsingMpvEngine()) mpvView?.isPlayingNow() == true else _exoPlayer?.isPlaying == true
+    return _exoPlayer?.isPlaying == true
 }
 
 internal fun PlayerRuntimeController.seekPlaybackTo(positionMs: Long) {
-    if (isUsingMpvEngine()) mpvView?.seekToMs(positionMs) else _exoPlayer?.seekTo(positionMs)
+    _exoPlayer?.seekTo(positionMs)
 }
 
 internal fun PlayerRuntimeController.setPlaybackSpeedInternal(speed: Float) {
-    if (isUsingMpvEngine()) mpvView?.setPlaybackSpeed(speed) else _exoPlayer?.setPlaybackSpeed(speed)
+    _exoPlayer?.setPlaybackSpeed(speed)
 }
 
 internal fun PlayerRuntimeController.setPlaybackPaused(paused: Boolean) {
-    if (isUsingMpvEngine()) {
-        mpvView?.setPaused(paused)
-        _uiState.update { it.copy(isPlaying = !paused) }
-        return
-    }
     _exoPlayer?.let { player ->
         if (paused) player.pause() else player.play()
     }
@@ -183,10 +119,6 @@ internal fun PlayerRuntimeController.setPlaybackPaused(paused: Boolean) {
 
 internal fun PlayerRuntimeController.tryApplyPendingResumeProgressForCurrentBackend() {
     val saved = pendingResumeProgress ?: return
-    if (isUsingMpvEngine()) {
-        mpvView?.let { applyPendingMpvSeekIfNeeded(it) }
-        return
-    }
     val player = _exoPlayer ?: return
     if (!player.isCurrentMediaItemSeekable) {
         pendingResumeProgress = null

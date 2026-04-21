@@ -52,23 +52,6 @@ internal fun PlayerRuntimeController.showSeekOverlayTemporarily() {
 }
 
 internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
-    if (isUsingMpvEngine()) {
-        val track = _uiState.value.audioTracks.getOrNull(trackIndex) ?: return
-        val trackId = track.trackId?.toIntOrNull() ?: return
-        if (mpvView?.selectAudioTrackById(trackId) == true) {
-            _uiState.update { state ->
-                state.copy(
-                    selectedAudioTrackIndex = trackIndex,
-                    audioTracks = state.audioTracks.mapIndexed { index, item ->
-                        item.copy(isSelected = index == trackIndex)
-                    }
-                )
-            }
-            persistRememberedLinkAudioSelection(trackIndex)
-        }
-        return
-    }
-
     _exoPlayer?.let { player ->
         val tracks = player.currentTracks
         var currentAudioIndex = 0
@@ -172,23 +155,6 @@ internal fun PlayerRuntimeController.applyAddonSubtitleOverrideByLanguage(
 }
 
 internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
-    if (isUsingMpvEngine()) {
-        val track = _uiState.value.subtitleTracks.getOrNull(trackIndex) ?: return
-        val trackId = track.trackId?.toIntOrNull() ?: return
-        if (mpvView?.selectSubtitleTrackById(trackId) == true) {
-            _uiState.update { state ->
-                state.copy(
-                    selectedSubtitleTrackIndex = trackIndex,
-                    selectedAddonSubtitle = null,
-                    subtitleTracks = state.subtitleTracks.mapIndexed { index, item ->
-                        item.copy(isSelected = index == trackIndex)
-                    }
-                )
-            }
-        }
-        return
-    }
-
     _exoPlayer?.let { player ->
         Log.d(PlayerRuntimeController.TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex")
         val tracks = player.currentTracks
@@ -216,15 +182,6 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 }
 
 internal fun PlayerRuntimeController.disableSubtitles() {
-    if (isUsingMpvEngine()) {
-        if (mpvView?.disableSubtitles() == true) {
-            _uiState.update {
-                it.copy(selectedSubtitleTrackIndex = -1, selectedAddonSubtitle = null)
-            }
-        }
-        return
-    }
-
     _exoPlayer?.let { player ->
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
@@ -261,25 +218,6 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
     subtitle: Subtitle,
     selectedSubtitle: Subtitle = subtitle
 ) {
-    if (isUsingMpvEngine()) {
-        if (mpvView?.addAndSelectExternalSubtitle(
-                url = subtitle.url,
-                title = buildAddonSubtitleTrackId(subtitle),
-                language = subtitle.lang
-            ) == true
-        ) {
-            _uiState.update {
-                it.copy(
-                    selectedAddonSubtitle = selectedSubtitle,
-                    selectedSubtitleTrackIndex = -1,
-                    addonOverlayCues = emptyList()
-                )
-            }
-            updateMpvAvailableTracks()
-        }
-        return
-    }
-
     _exoPlayer?.let { player ->
         Log.i(
             PlayerRuntimeController.TAG,

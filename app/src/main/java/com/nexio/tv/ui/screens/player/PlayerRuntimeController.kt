@@ -20,8 +20,6 @@ import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.InternalPlayerEngine
-import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
@@ -216,7 +214,6 @@ class PlayerRuntimeController(
     internal var postFirstFrameBufferingWatchdogJob: Job? = null
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null
-    internal var hidePlayerEngineSwitchInfoJob: Job? = null
     internal var watchProgressSaveJob: Job? = null
     internal var scrobbleHeartbeatJob: Job? = null
     internal var seekProgressSyncJob: Job? = null
@@ -268,14 +265,6 @@ class PlayerRuntimeController(
     internal var attachedAddonSubtitleKeys: Set<String> = emptySet()
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false
-    internal var currentInternalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER
-    internal var autoSwitchInternalPlayerOnErrorEnabled: Boolean = false
-    internal var mpvHardwareDecodeModeSetting: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE
-    internal var mpvPreferredAudioLanguages: List<String> = emptyList()
-    internal var mpvView: NexioMpvSurfaceView? = null
-    internal var mpvInitializationInProgress: Boolean = false
-    internal var mpvTrackRefreshInProgress: Boolean = false
-    internal var delayMpvResumeSeekUntilVideoTrack: Boolean = false
     internal var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL
     internal var streamAutoPlayNextEpisodeEnabledSetting: Boolean = false
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
