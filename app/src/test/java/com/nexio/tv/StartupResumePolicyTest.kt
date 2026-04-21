@@ -108,6 +108,21 @@ class StartupResumePolicyTest {
     }
 
     @Test
+    fun `session-lost state does not trigger onboarding QR`() {
+        // SessionLost means we already identified the user as returning but
+        // couldn't restore their session. They should see the Account-panel
+        // reconnect prompt, not the first-run onboarding QR.
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.SessionLost,
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
+            )
+        )
+    }
+
+    @Test
     fun `returning user with prior auth marker never sees onboarding QR`() {
         // Simulates post-upgrade: the onboarding DataStore was wiped or
         // never migrated, so hasSeenAuthQrOnFirstLaunch looks like the

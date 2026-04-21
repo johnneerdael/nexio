@@ -1152,6 +1152,9 @@
     <string name="account_sync_description">Sync your account settings and addons across devices.</string>
     <string name="account_signin_qr_title">Sign In with QR</string>
     <string name="account_signin_qr_subtitle">Scan a QR code and complete email login on your phone</string>
+    <string name="account_session_lost_description">Your account session expired on this device. Your settings and addons are still here locally — reconnect to resume sync.</string>
+    <string name="account_reconnect_qr_title">Reconnect with QR</string>
+    <string name="account_reconnect_qr_subtitle">Scan a QR code on your phone to restore sync</string>
     <string name="account_signed_in_label">Signed in</string>
     <string name="account_total_label">Total</string>
     <string name="account_loading_sync">Loading sync data\u2026</string>
