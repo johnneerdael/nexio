@@ -18,6 +18,8 @@ import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
+import com.nexio.tv.data.local.KitsuCatalogPreferences
+import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
@@ -37,6 +39,7 @@ import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.KitsuDiscoveryService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.SimklDiscoveryService
@@ -87,6 +90,7 @@ class HomeViewModel @Inject constructor(
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    internal val kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
     internal val simklSettingsDataStore: SimklSettingsDataStore,
@@ -100,6 +104,7 @@ class HomeViewModel @Inject constructor(
     internal val simklDiscoveryService: SimklDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
     internal val tmdbDiscoveryService: TmdbDiscoveryService,
+    internal val kitsuDiscoveryService: KitsuDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
     internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
@@ -229,11 +234,16 @@ class HomeViewModel @Inject constructor(
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
     internal var tmdbDiscoverySnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot =
         com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
+    internal var kitsuDiscoverySnapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot =
+        com.nexio.tv.data.repository.KitsuDiscoverySnapshot()
     internal var tmdbCatalogPreferences: TmdbCatalogPreferences =
         TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
+    internal var kitsuCatalogPreferences: KitsuCatalogPreferences =
+        KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedKitsuSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedTmdbSyntheticIncludeAdult: Boolean? = null
     internal var persistedTmdbSyntheticHideUnreleasedDigital: Boolean? = null
@@ -283,6 +293,8 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var mdbListDiscoveryRefreshInProgress: Boolean = false
     @Volatile
+    internal var kitsuDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
     internal var tmdbDiscoveryRefreshInProgress: Boolean = false
     @Volatile
     internal var installedAddonsObserved: Boolean = false
@@ -293,7 +305,11 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var mdbListDiscoveryObserved: Boolean = false
     @Volatile
+    internal var kitsuDiscoveryObserved: Boolean = false
+    @Volatile
     internal var tmdbDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var kitsuCatalogPreferencesObserved: Boolean = false
     @Volatile
     internal var tmdbCatalogPreferencesObserved: Boolean = false
     @Volatile
@@ -372,6 +388,8 @@ class HomeViewModel @Inject constructor(
         observeSimklDiscovery()
         observeMDBListCatalogPreferences()
         observeMDBListDiscovery()
+        observeKitsuCatalogPreferences()
+        observeKitsuDiscovery()
         observeTmdbCatalogPreferences()
         observeTmdbDiscovery()
         observeAccountSyncRefresh()
@@ -567,6 +585,10 @@ class HomeViewModel @Inject constructor(
     private fun observeMDBListCatalogPreferences() = observeMDBListCatalogPreferencesPipeline()
 
     private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
+
+    private fun observeKitsuCatalogPreferences() = observeKitsuCatalogPreferencesPipeline()
+
+    private fun observeKitsuDiscovery() = observeKitsuDiscoveryPipeline()
 
     private fun observeTmdbCatalogPreferences() = observeTmdbCatalogPreferencesPipeline()
 

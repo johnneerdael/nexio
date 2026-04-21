@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.util.Log
+import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogIds
@@ -153,6 +154,7 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
             "Restored synthetic snapshot traktGroups=${snapshot.traktGroups.size} traktRows=${snapshot.traktGroups.sumOf { it.rows.size }} " +
                 "simklGroups=${snapshot.simklGroups.size} simklRows=${snapshot.simklGroups.sumOf { it.rows.size }} " +
                 "mdbGroups=${snapshot.mdbListGroups.size} mdbRows=${snapshot.mdbListGroups.sumOf { it.rows.size }} " +
+                "kitsuGroups=${snapshot.kitsuGroups.size} kitsuRows=${snapshot.kitsuGroups.sumOf { it.rows.size }} " +
                 "tmdbGroups=${snapshot.tmdbGroups.size} tmdbRows=${snapshot.tmdbGroups.sumOf { it.rows.size }} " +
                 "traktAuthenticated=${providerState.traktAuthenticated}"
         )
@@ -160,6 +162,7 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
             persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
+            persistedKitsuSyntheticGroups = snapshot.kitsuGroups
             applyPersistedTmdbSyntheticSnapshot(snapshot)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_synthetic_snapshot")
         }
@@ -180,6 +183,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     persistedTraktSyntheticGroups = emptyList()
     persistedSimklSyntheticGroups = emptyList()
     persistedMDBListSyntheticGroups = emptyList()
+    persistedKitsuSyntheticGroups = emptyList()
     clearPersistedTmdbSyntheticGroups()
     traktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     persistedTraktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
@@ -187,8 +191,11 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     persistedSimklDiscoverySnapshot = com.nexio.tv.data.repository.SimklDiscoverySnapshot()
     mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     persistedMDBListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+    kitsuDiscoverySnapshot = com.nexio.tv.data.repository.KitsuDiscoverySnapshot()
     tmdbDiscoverySnapshot = com.nexio.tv.data.repository.TmdbDiscoverySnapshot()
+    kitsuDiscoveryObserved = false
     tmdbDiscoveryRefreshInProgress = false
+    kitsuCatalogPreferencesObserved = false
     tmdbCatalogPreferencesObserved = false
     tmdbCredentialRefreshPending = false
     inMemoryHomeSnapshot = null
@@ -279,6 +286,7 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
             persistedTraktSyntheticGroups = if (diskState.traktAuthenticated || hasTraktDiskState) snapshot.traktGroups else emptyList()
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
+            persistedKitsuSyntheticGroups = snapshot.kitsuGroups
             applyPersistedTmdbSyntheticSnapshot(snapshot)
         }
         diskState.traktSnapshot?.let { snapshot ->
@@ -663,6 +671,60 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
             startupRefreshPending = true
             if (!shouldDeferStartupNetworkWork()) {
                 runSerializedHomeRefreshIfNeeded("mdblist_pref_change")
+            }
+        }
+    }
+}
+
+internal fun HomeViewModel.observeKitsuDiscoveryPipeline() {
+    viewModelScope.launch {
+        kitsuDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+            val capturedGeneration = homeProfileGeneration
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale Kitsu discovery snapshot generation=$capturedGeneration")
+                return@collectLatest
+            }
+            if (kitsuDiscoveryObserved && snapshot == kitsuDiscoverySnapshot) return@collectLatest
+            kitsuDiscoveryObserved = true
+            kitsuDiscoverySnapshot = snapshot
+            startupRefreshPending = true
+            applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_kitsu_discovery")
+            if (!shouldDeferStartupNetworkWork()) {
+                runCatching { renewKitsuSyntheticSnapshotPipeline(snapshot) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to renew Kitsu synthetic snapshot after discovery update", error)
+                    }
+                runSerializedHomeRefreshIfNeeded("kitsu_discovery")
+            }
+        }
+    }
+}
+
+internal fun HomeViewModel.observeKitsuCatalogPreferencesPipeline() {
+    viewModelScope.launch {
+        kitsuCatalogSettingsDataStore.catalogPreferences.collectLatest { prefs ->
+            val firstObservation = !kitsuCatalogPreferencesObserved
+            if (!firstObservation && prefs == kitsuCatalogPreferences) return@collectLatest
+            kitsuCatalogPreferencesObserved = true
+            kitsuCatalogPreferences = prefs
+            applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_kitsu_prefs")
+            if (shouldRefreshKitsuDiscoveryForState(prefs, kitsuDiscoverySnapshot) &&
+                !shouldSuppressProfileSwitchRefresh("kitsu_pref_change") &&
+                isNonPlaybackHomeWorkAllowed()
+            ) {
+                if (shouldDeferStartupNetworkWork()) {
+                    startupRefreshPending = true
+                    logStartupPerf("catalog_refresh_deferred", "reason=kitsu_pref_change")
+                } else {
+                    runCatching { kitsuDiscoveryService.refreshCatalogs(prefs, force = false) }
+                        .onFailure { error ->
+                            Log.w(HomeViewModel.TAG, "Failed to refresh Kitsu discovery after settings change", error)
+                        }
+                }
+            }
+            startupRefreshPending = true
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("kitsu_pref_change")
             }
         }
     }
@@ -1294,6 +1356,7 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
         persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()
         persistedSimklSyntheticGroups = snapshot.simklGroups
         persistedMDBListSyntheticGroups = snapshot.mdbListGroups
+        persistedKitsuSyntheticGroups = snapshot.kitsuGroups
         applyPersistedTmdbSyntheticSnapshot(snapshot)
     }
 }
@@ -1326,12 +1389,14 @@ private fun HomeViewModel.syntheticHomeSnapshotFallback(
     traktGroups: List<PersistedSyntheticCatalogGroup> = persistedTraktSyntheticGroups,
     simklGroups: List<PersistedSyntheticCatalogGroup> = persistedSimklSyntheticGroups,
     mdbListGroups: List<PersistedSyntheticCatalogGroup> = persistedMDBListSyntheticGroups,
+    kitsuGroups: List<PersistedSyntheticCatalogGroup> = persistedKitsuSyntheticGroups,
     tmdbGroups: List<PersistedSyntheticCatalogGroup> = persistedTmdbSyntheticGroups
 ): SyntheticHomeCatalogStore.Snapshot {
     return SyntheticHomeCatalogStore.Snapshot(
         traktGroups = traktGroups,
         simklGroups = simklGroups,
         mdbListGroups = mdbListGroups,
+        kitsuGroups = kitsuGroups,
         tmdbGroups = tmdbGroups,
         tmdbIncludeAdult = persistedTmdbSyntheticIncludeAdult,
         tmdbHideUnreleasedDigital = persistedTmdbSyntheticHideUnreleasedDigital
@@ -1402,6 +1467,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
                 existingSnapshot.traktGroups +
                     existingSnapshot.simklGroups +
                     existingSnapshot.mdbListGroups +
+                    existingSnapshot.kitsuGroups +
                     existingSnapshot.tmdbGroups
                 )
                 .flatMap { it.rows }
@@ -1472,6 +1538,7 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
                 existingSnapshot.traktGroups +
                     existingSnapshot.simklGroups +
                     existingSnapshot.mdbListGroups +
+                    existingSnapshot.kitsuGroups +
                     existingSnapshot.tmdbGroups
                 )
                 .flatMap { it.rows }
@@ -1529,6 +1596,7 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
                 existingSnapshot.traktGroups +
                     existingSnapshot.simklGroups +
                     existingSnapshot.mdbListGroups +
+                    existingSnapshot.kitsuGroups +
                     existingSnapshot.tmdbGroups
                 )
                 .flatMap { it.rows }
@@ -1562,6 +1630,79 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
     appliedMDBListGroups?.let { groups ->
         withContext(Dispatchers.Main.immediate) {
             persistedMDBListSyntheticGroups = groups
+        }
+    }
+}
+
+internal suspend fun HomeViewModel.renewKitsuSyntheticSnapshotPipeline(
+    snapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot
+) {
+    val profileId = profileManager.activeProfileId.value
+    val kitsuPrefsSnapshot = kitsuCatalogPreferences
+    val telemetryEnabled = startupPerfTelemetryEnabled
+    var appliedKitsuGroups: List<PersistedSyntheticCatalogGroup>? = null
+
+    syntheticCatalogStoreMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
+                ?: syntheticHomeSnapshotFallback()
+            val liveGroups = buildConfiguredCatalogPlan(
+                addons = emptyList(),
+                disabledHomeCatalogKeys = emptySet(),
+                availableAddonOrderKeys = emptySet(),
+                traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+                traktSnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot(),
+                hasTraktUpNextItems = false,
+                simklPrefs = SimklCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+                simklSnapshot = com.nexio.tv.data.repository.SimklDiscoverySnapshot(),
+                mdbPrefs = MDBListCatalogPreferences(),
+                mdbSnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot(),
+                kitsuPrefs = kitsuPrefsSnapshot,
+                kitsuSnapshot = snapshot
+            ).rails
+                .filter { rail -> rail.descriptor.addonId == KITSU_HOME_ADDON_ID }
+                .mapNotNull { rail ->
+                    val rows = rail.toPopulatedRows()
+                    if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
+                }
+            val existingRowsByKey = (
+                existingSnapshot.traktGroups +
+                    existingSnapshot.simklGroups +
+                    existingSnapshot.mdbListGroups +
+                    existingSnapshot.kitsuGroups +
+                    existingSnapshot.tmdbGroups
+                )
+                .flatMap { it.rows }
+                .associateBy(::homeCatalogGlobalKey)
+            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
+                rows = liveGroups.flatMap { it.rows },
+                existingRowsByKey = existingRowsByKey,
+                telemetryEnabled = telemetryEnabled,
+                onLog = { event, details -> logStartupPerf(event, details) }
+            )
+            val renewedKitsuGroups = liveGroups
+                .replaceRows(hydratedRows)
+                .toPersistedSyntheticCatalogGroups()
+            val effectiveKitsuGroups = if (
+                renewedKitsuGroups.isEmpty() &&
+                existingSnapshot.kitsuGroups.isNotEmpty() &&
+                shouldRefreshKitsuDiscoveryForState(kitsuPrefsSnapshot, snapshot)
+            ) {
+                existingSnapshot.kitsuGroups
+            } else {
+                renewedKitsuGroups
+            }
+            val renewedSnapshot = existingSnapshot.copy(kitsuGroups = effectiveKitsuGroups)
+            if (renewedSnapshot == existingSnapshot) {
+                return@withContext
+            }
+            syntheticHomeCatalogStore.write(renewedSnapshot, profileId = profileId)
+            appliedKitsuGroups = effectiveKitsuGroups
+        }
+    }
+    appliedKitsuGroups?.let { groups ->
+        withContext(Dispatchers.Main.immediate) {
+            persistedKitsuSyntheticGroups = groups
         }
     }
 }
@@ -1685,6 +1826,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         if ((activeProfileTraktAuthenticated && persistedTraktSyntheticGroups.isNotEmpty()) ||
             persistedSimklSyntheticGroups.isNotEmpty() ||
             persistedMDBListSyntheticGroups.isNotEmpty() ||
+            persistedKitsuSyntheticGroups.isNotEmpty() ||
             persistedTmdbSyntheticGroups.isNotEmpty()
         ) {
             return true
@@ -1698,6 +1840,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         return mdbListCatalogPreferences.selectedTopListKeys.isNotEmpty() ||
             mdbListDiscoverySnapshot.personalLists.isNotEmpty() ||
             mdbListDiscoverySnapshot.customListCatalogs.isNotEmpty() ||
+            kitsuCatalogPreferences.enabledCatalogs.isNotEmpty() ||
             tmdbCatalogPreferences.enabledCatalogs.isNotEmpty()
     }
 
@@ -1736,6 +1879,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
             simklDiscoveryRefreshInProgress = simklDiscoveryRefreshInProgress,
             mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress,
+            kitsuDiscoveryRefreshInProgress = kitsuDiscoveryRefreshInProgress,
             tmdbDiscoveryRefreshInProgress = tmdbDiscoveryRefreshInProgress
         )
         val refreshInProgress = startupRefreshPending || activeRefreshInProgress
@@ -2077,6 +2221,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         persistedMDBListDiscoverySnapshot
     }
     val effectiveTmdbSnapshot = tmdbSnapshot
+    val effectiveKitsuSnapshot = kitsuDiscoverySnapshot
     val recommendationRefMap = effectiveTraktSnapshot.recommendationRefsByStatusKey
     val addonExpectedOrderKeys = buildExpectedConfiguredAddonOrderKeys(
         addons = addonsCache,
@@ -2094,7 +2239,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot,
         tmdbPrefs = tmdbPrefs,
-        tmdbSnapshot = effectiveTmdbSnapshot
+        tmdbSnapshot = effectiveTmdbSnapshot,
+        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuSnapshot = effectiveKitsuSnapshot
     )
     val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
     val publishableExpectedOrderKeys = catalogPlan.publishableOrderKeys
@@ -2103,6 +2250,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
         simklDiscoveryRefreshInProgress = simklDiscoveryRefreshInProgress,
         mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress,
+        kitsuDiscoveryRefreshInProgress = kitsuDiscoveryRefreshInProgress,
         tmdbDiscoveryRefreshInProgress = tmdbDiscoveryRefreshInProgress
     )
     val refreshInProgress = startupRefreshPending || activeRefreshInProgress
@@ -2163,7 +2311,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
             .toMap(linkedMapOf())
 
-        val persistedSyntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups + syntheticTmdbGroups
+        val syntheticKitsuGroups = persistedKitsuSyntheticGroups.toSyntheticCatalogOrderGroups()
+        val persistedSyntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups + syntheticKitsuGroups + syntheticTmdbGroups
         val persistedSyntheticOrderKeys = persistedSyntheticGroups.mapTo(mutableSetOf()) { it.orderKey }
         val syntheticGroups = persistedSyntheticGroups + liveSyntheticGroups.filterNot { it.orderKey in persistedSyntheticOrderKeys }
         val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
@@ -2188,6 +2337,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             mdbSnapshot = effectiveMDBListSnapshot,
             tmdbPrefs = tmdbPrefs,
             tmdbSnapshot = effectiveTmdbSnapshot,
+            kitsuPrefs = kitsuCatalogPreferences,
+            kitsuSnapshot = effectiveKitsuSnapshot,
             existingRowsByOrderKey = existingRowsByOrderKey
         ).descriptors
             .filterNot { descriptor ->
@@ -2682,6 +2833,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbListDiscoverySnapshot
     )
     val tmdbExpectedOrderKeys = buildExpectedConfiguredTmdbOrderKeys(tmdbCatalogPreferences)
+    val kitsuExpectedOrderKeys = buildExpectedConfiguredKitsuOrderKeys(kitsuCatalogPreferences)
     val restoredSnapshot = filterRestoredHomeSnapshotTmdbRows(
         snapshot = snapshot,
         tmdbPrefs = tmdbCatalogPreferences,
@@ -2700,7 +2852,9 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot,
         tmdbPrefs = tmdbCatalogPreferences,
-        tmdbSnapshot = tmdbDiscoverySnapshot
+        tmdbSnapshot = tmdbDiscoverySnapshot,
+        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuSnapshot = kitsuDiscoverySnapshot
     )
     val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
     val publishableExpectedOrderKeys = catalogPlan.publishableOrderKeys
@@ -2716,6 +2870,9 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbExpectedOrderKeys = mdbExpectedOrderKeys,
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot,
+        kitsuExpectedOrderKeys = kitsuExpectedOrderKeys,
+        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuSnapshot = kitsuDiscoverySnapshot,
         tmdbExpectedOrderKeys = tmdbExpectedOrderKeys,
         tmdbPrefs = tmdbCatalogPreferences,
         tmdbSnapshot = tmdbDiscoverySnapshot

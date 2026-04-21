@@ -9,6 +9,21 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface KitsuApi {
+    @GET("trending/anime")
+    suspend fun getTrendingAnime(
+        @Query("page[limit]") limit: Int = 20,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuAnimeResource>>
+
+    @GET("anime")
+    suspend fun getAnimeCollection(
+        @Header("Authorization") authorization: String? = null,
+        @Query("sort") sort: String? = null,
+        @Query("filter[categories]") category: String? = null,
+        @Query("page[limit]") limit: Int = 20,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuAnimeResource>>
+
     @GET("anime/{id}")
     suspend fun getAnime(
         @Header("Authorization") authorization: String? = null,
