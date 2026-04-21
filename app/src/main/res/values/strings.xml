@@ -1425,4 +1425,12 @@
     <string name="playback_diagnostics_send_to_developer_subtitle">Upload the last session to the developer\'s collector for analysis</string>
     <string name="error_missing_tracking_ids">Missing tracking IDs for check-in</string>
     <string name="error_tracking_check_in_failed">Tracking check-in failed</string>
+    <string name="opensubtitles_title">OpenSubtitles</string>
+    <string name="opensubtitles_subtitle">Native rest.opensubtitles.org subtitle source with file-hash matching</string>
+    <string name="opensubtitles_enabled_title">Enable native source</string>
+    <string name="opensubtitles_enabled_subtitle">Augment subtitles from your installed Stremio addons with rest.opensubtitles.org results</string>
+    <string name="opensubtitles_only_trusted_title">Only trusted uploaders</string>
+    <string name="opensubtitles_only_trusted_subtitle">Hide rows that the uploader has not been marked SubFromTrusted by OpenSubtitles</string>
+    <string name="opensubtitles_include_ai_title">Include AI translations</string>
+    <string name="opensubtitles_include_ai_subtitle">Show machine-translated rows (SubAutoTranslation = 1) alongside human ones</string>
 </resources>

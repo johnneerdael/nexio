@@ -90,7 +90,8 @@ private enum class IntegrationSettingsSection {
     MdbList,
     AnimeSkip,
     SubtitleTranslation,
-    PosterRatings
+    PosterRatings,
+    OpenSubtitles
 }
 
 internal enum class SettingsSectionDestination {
@@ -226,6 +227,7 @@ fun SettingsScreen(
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
     val integrationPosterRatingsFocusRequester = remember { FocusRequester() }
+    val integrationOpenSubtitlesFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -419,6 +421,7 @@ fun SettingsScreen(
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
                             posterRatingsFocusRequester = integrationPosterRatingsFocusRequester,
+                            openSubtitlesFocusRequester = integrationOpenSubtitlesFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
                         )
                         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -650,6 +653,7 @@ private fun IntegrationSettingsContent(
     animeSkipFocusRequester: FocusRequester,
     subtitleTranslationFocusRequester: FocusRequester,
     posterRatingsFocusRequester: FocusRequester,
+    openSubtitlesFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -663,7 +667,8 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Omdb,
             IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
-            IntegrationSettingsSection.PosterRatings
+            IntegrationSettingsSection.PosterRatings,
+            IntegrationSettingsSection.OpenSubtitles
         )
     }
     LaunchedEffect(isPrimaryProfile, selectedSection) {
@@ -690,6 +695,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
             IntegrationSettingsSection.PosterRatings -> posterRatingsFocusRequester
+            IntegrationSettingsSection.OpenSubtitles -> openSubtitlesFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -802,6 +808,13 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.PosterRatings) }
                                 )
                             }
+                            item(key = "integration_hub_opensubtitles") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.opensubtitles_title),
+                                    subtitle = stringResource(R.string.opensubtitles_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.OpenSubtitles) }
+                                )
+                            }
                         }
                     }
                 }
@@ -877,6 +890,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.PosterRatings -> {
             PosterRatingsSettingsContent(
                 initialFocusRequester = posterRatingsFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.OpenSubtitles -> {
+            OpenSubtitlesSettingsContent(
+                initialFocusRequester = openSubtitlesFocusRequester
             )
         }
     }
