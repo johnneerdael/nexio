@@ -111,10 +111,6 @@ class PlayerViewModel @Inject constructor(
         controller.attachHostActivity(activity)
     }
 
-    fun attachMpvView(view: NexioMpvSurfaceView?) {
-        controller.attachMpvView(view)
-    }
-
     internal fun setAssSsaRenderOverlayViewProvider(provider: (() -> AssSsaRenderOverlayView?)?) {
         controller.setAssSsaRenderOverlayViewProvider(provider)
     }

@@ -631,7 +631,6 @@ dependencies {
         implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
     }
 
-    implementation("io.github.abdallahmehiz:mpv-android-lib:0.1.12")
     implementation("dev.chrisbanes.haze:haze-android:0.7.3") {
         exclude(group = "org.jetbrains.compose.ui")
         exclude(group = "org.jetbrains.compose.foundation")

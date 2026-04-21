@@ -52,7 +52,6 @@ import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.IecPackerChannelLayout
-import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -181,7 +180,6 @@ internal fun LazyListScope.audioSettingsItems(
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
-    onShowMpvHardwareDecodeModeDialog: () -> Unit,
     onShowIecPackerChannelLayoutDialog: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
@@ -274,18 +272,6 @@ internal fun LazyListScope.audioSettingsItems(
             title = stringResource(R.string.audio_decoder_priority),
             subtitle = decoderName,
             onClick = onShowDecoderPriorityDialog,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    item(key = "audio_mpv_hardware_decode_mode") {
-        val modeName = mpvHardwareDecodeModeLabel(playerSettings.mpvHardwareDecodeMode)
-        NavigationSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_mpv_hwdec_title),
-            subtitle = modeName,
-            onClick = onShowMpvHardwareDecodeModeDialog,
             onFocused = onItemFocused,
             enabled = enabled
         )
@@ -407,22 +393,18 @@ internal fun AudioSettingsDialogs(
     showAudioLanguageDialog: Boolean,
     showSecondaryAudioLanguageDialog: Boolean,
     showDecoderPriorityDialog: Boolean,
-    showMpvHardwareDecodeModeDialog: Boolean,
     showIecPackerChannelLayoutDialog: Boolean,
     selectedLanguage: String,
     selectedSecondaryLanguage: String?,
     selectedPriority: Int,
-    selectedMpvHardwareDecodeMode: MpvHardwareDecodeMode,
     selectedIecPackerChannelLayout: IecPackerChannelLayout,
     onSetPreferredAudioLanguage: (String) -> Unit,
     onSetSecondaryPreferredAudioLanguage: (String?) -> Unit,
     onSetDecoderPriority: (Int) -> Unit,
-    onSetMpvHardwareDecodeMode: (MpvHardwareDecodeMode) -> Unit,
     onSetIecPackerChannelLayout: (IecPackerChannelLayout) -> Unit,
     onDismissAudioLanguageDialog: () -> Unit,
     onDismissSecondaryAudioLanguageDialog: () -> Unit,
     onDismissDecoderPriorityDialog: () -> Unit,
-    onDismissMpvHardwareDecodeModeDialog: () -> Unit,
     onDismissIecPackerChannelLayoutDialog: () -> Unit
 ) {
     if (showAudioLanguageDialog) {
@@ -460,17 +442,6 @@ internal fun AudioSettingsDialogs(
         )
     }
 
-    if (showMpvHardwareDecodeModeDialog) {
-        MpvHardwareDecodeModeDialog(
-            selectedMode = selectedMpvHardwareDecodeMode,
-            onModeSelected = {
-                onSetMpvHardwareDecodeMode(it)
-                onDismissMpvHardwareDecodeModeDialog()
-            },
-            onDismiss = onDismissMpvHardwareDecodeModeDialog
-        )
-    }
-
     if (showIecPackerChannelLayoutDialog) {
         IecPackerChannelLayoutDialog(
             selectedLayout = selectedIecPackerChannelLayout,
@@ -496,28 +467,6 @@ private fun iecPackerChannelLayoutLabel(layout: IecPackerChannelLayout): String 
         IecPackerChannelLayout.CH_5_1 -> stringResource(R.string.audio_iec_packer_channel_layout_5_1)
         IecPackerChannelLayout.CH_7_0 -> stringResource(R.string.audio_iec_packer_channel_layout_7_0)
         IecPackerChannelLayout.CH_7_1 -> stringResource(R.string.audio_iec_packer_channel_layout_7_1)
-    }
-}
-
-@Composable
-private fun mpvHardwareDecodeModeLabel(mode: MpvHardwareDecodeMode): String {
-    return when (mode) {
-        MpvHardwareDecodeMode.LEGACY_DIRECT_COPY -> stringResource(R.string.audio_mpv_hwdec_legacy_direct_copy)
-        MpvHardwareDecodeMode.AUTO_SAFE -> stringResource(R.string.audio_mpv_hwdec_auto_safe)
-        MpvHardwareDecodeMode.HARDWARE_COPY -> stringResource(R.string.audio_mpv_hwdec_hardware_copy)
-        MpvHardwareDecodeMode.HARDWARE_DIRECT -> stringResource(R.string.audio_mpv_hwdec_hardware_direct)
-        MpvHardwareDecodeMode.DISABLED -> stringResource(R.string.audio_mpv_hwdec_disabled)
-    }
-}
-
-@Composable
-private fun mpvHardwareDecodeModeDescription(mode: MpvHardwareDecodeMode): String {
-    return when (mode) {
-        MpvHardwareDecodeMode.LEGACY_DIRECT_COPY -> stringResource(R.string.audio_mpv_hwdec_legacy_direct_copy_desc)
-        MpvHardwareDecodeMode.AUTO_SAFE -> stringResource(R.string.audio_mpv_hwdec_auto_safe_desc)
-        MpvHardwareDecodeMode.HARDWARE_COPY -> stringResource(R.string.audio_mpv_hwdec_hardware_copy_desc)
-        MpvHardwareDecodeMode.HARDWARE_DIRECT -> stringResource(R.string.audio_mpv_hwdec_hardware_direct_desc)
-        MpvHardwareDecodeMode.DISABLED -> stringResource(R.string.audio_mpv_hwdec_disabled_desc)
     }
 }
 
@@ -685,83 +634,6 @@ private fun DecoderPriorityDialog(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MpvHardwareDecodeModeDialog(
-    selectedMode: MpvHardwareDecodeMode,
-    onModeSelected: (MpvHardwareDecodeMode) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val focusRequester = remember { FocusRequester() }
-    val options = MpvHardwareDecodeMode.entries
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    NexioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(R.string.audio_mpv_hwdec_title),
-        subtitle = stringResource(R.string.audio_mpv_hwdec_dialog_subtitle),
-        width = 460.dp,
-        suppressFirstKeyUp = false
-    ) {
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
-        ) {
-            items(
-                count = options.size,
-                key = { index -> options[index].name }
-            ) { index ->
-                val mode = options[index]
-                val isSelected = mode == selectedMode
-                Card(
-                    onClick = { onModeSelected(mode) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
-                    colors = CardDefaults.colors(
-                        containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
-                        focusedContainerColor = NexioColors.FocusBackground
-                    ),
-                    shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                    scale = CardDefaults.scale(focusedScale = 1f)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = mpvHardwareDecodeModeLabel(mode),
-                                color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = mpvHardwareDecodeModeDescription(mode),
-                                color = NexioColors.TextSecondary,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (isSelected) {
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = stringResource(R.string.cd_selected),
-                                tint = NexioColors.Primary,
-                                modifier = Modifier.size(20.dp)
-                            )
                         }
                     }
                 }

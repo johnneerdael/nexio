@@ -19,17 +19,6 @@ import org.robolectric.RobolectricTestRunner
 class PlayerSettingsDataStoreTest {
 
     @Test
-    fun `internal player engine defaults to exoplayer and persists libmpv selection`() = runTest {
-        val dataStore = playerSettingsDataStoreForTest()
-
-        assertEquals(InternalPlayerEngine.EXOPLAYER, dataStore.playerSettings.first().internalPlayerEngine)
-
-        dataStore.setInternalPlayerEngine(InternalPlayerEngine.LIBMPV)
-
-        assertEquals(InternalPlayerEngine.LIBMPV, dataStore.playerSettings.first().internalPlayerEngine)
-    }
-
-    @Test
     fun `preferred external player package defaults empty persists and clears`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
@@ -46,17 +35,6 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
-    fun `auto switch internal player setting persists`() = runTest {
-        val dataStore = playerSettingsDataStoreForTest()
-
-        assertEquals(false, dataStore.playerSettings.first().autoSwitchInternalPlayerOnError)
-
-        dataStore.setAutoSwitchInternalPlayerOnError(true)
-
-        assertEquals(true, dataStore.playerSettings.first().autoSwitchInternalPlayerOnError)
-    }
-
-    @Test
     fun `trakt scrobble api logging defaults off and persists`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
@@ -65,17 +43,6 @@ class PlayerSettingsDataStoreTest {
         dataStore.setTraktScrobbleApiLoggingEnabled(true)
 
         assertEquals(true, dataStore.playerSettings.first().traktScrobbleApiLoggingEnabled)
-    }
-
-    @Test
-    fun `mpv hardware decode mode defaults to auto safe and persists direct selection`() = runTest {
-        val dataStore = playerSettingsDataStoreForTest()
-
-        assertEquals(MpvHardwareDecodeMode.AUTO_SAFE, dataStore.playerSettings.first().mpvHardwareDecodeMode)
-
-        dataStore.setMpvHardwareDecodeMode(MpvHardwareDecodeMode.HARDWARE_DIRECT)
-
-        assertEquals(MpvHardwareDecodeMode.HARDWARE_DIRECT, dataStore.playerSettings.first().mpvHardwareDecodeMode)
     }
 
     @Test
