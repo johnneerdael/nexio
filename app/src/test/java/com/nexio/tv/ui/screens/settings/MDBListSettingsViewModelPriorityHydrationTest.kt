@@ -3,9 +3,9 @@ package com.nexio.tv.ui.screens.settings
 import com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
-import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.MDBListSettings
 import io.mockk.every
 import io.mockk.mockk
@@ -33,14 +33,14 @@ class MDBListSettingsViewModelPriorityHydrationTest {
 
     private fun buildViewModel(notifier: CatalogPriorityHydrationNotifier): MDBListSettingsViewModel {
         val dataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
-        val api = mockk<MDBListApi>(relaxed = true)
+        val providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true)
         val discoveryService = mockk<MDBListDiscoveryService>(relaxed = true)
 
         every { dataStore.settings } returns MutableStateFlow(MDBListSettings())
         every { dataStore.catalogPreferences } returns MutableStateFlow(MDBListCatalogPreferences())
         every { discoveryService.observeSnapshot() } returns MutableStateFlow(MDBListDiscoverySnapshot())
 
-        return MDBListSettingsViewModel(dataStore, api, discoveryService, notifier)
+        return MDBListSettingsViewModel(dataStore, providerSettingsRepository, discoveryService, notifier)
     }
 
     @Test

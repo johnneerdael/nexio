@@ -3,8 +3,7 @@ package com.nexio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
-import com.nexio.tv.data.remote.api.AnimeSkipApi
-import com.nexio.tv.data.remote.api.AnimeSkipRequest
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AnimeSkipSettingsViewModel @Inject constructor(
     private val dataStore: AnimeSkipSettingsDataStore,
-    private val animeSkipApi: AnimeSkipApi
+    private val providerSettingsRepository: ProviderSettingsRepository
 ) : ViewModel() {
 
     private val _clientId = MutableStateFlow("")
@@ -57,15 +56,7 @@ class AnimeSkipSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validating.value = true
-            val valid = try {
-                val response = animeSkipApi.query(
-                    clientId = trimmed,
-                    body = AnimeSkipRequest(
-                        query = "{ findShowsByExternalId(service: ANILIST, serviceId: \"1\") { id } }"
-                    )
-                )
-                response.isSuccessful && response.body()?.data != null
-            } catch (e: Exception) { false }
+            val valid = providerSettingsRepository.validateAnimeSkipClientId(trimmed)
             _validating.value = false
             if (valid) {
                 dataStore.setClientId(trimmed)

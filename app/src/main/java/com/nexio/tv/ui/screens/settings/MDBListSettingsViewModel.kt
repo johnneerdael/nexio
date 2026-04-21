@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
-import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListListOption
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.MDBListSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,7 +24,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MDBListSettingsViewModel @Inject constructor(
     private val dataStore: MDBListSettingsDataStore,
-    private val mdbListApi: MDBListApi,
+    private val providerSettingsRepository: ProviderSettingsRepository,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
     private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 ) : ViewModel() {
@@ -101,9 +101,7 @@ class MDBListSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validating.value = true
-            val valid = try {
-                mdbListApi.getUser(trimmed).isSuccessful
-            } catch (e: Exception) { false }
+            val valid = providerSettingsRepository.validateMDBListApiKey(trimmed)
             _validating.value = false
             if (valid) {
                 dataStore.setApiKey(trimmed)

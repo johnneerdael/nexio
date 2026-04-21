@@ -6,7 +6,7 @@ import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.TmdbSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,7 +24,7 @@ import javax.inject.Inject
 class TmdbSettingsViewModel @Inject constructor(
     private val dataStore: TmdbSettingsDataStore,
     private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
-    private val tmdbApi: TmdbApi
+    private val providerSettingsRepository: ProviderSettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TmdbSettingsUiState())
@@ -92,11 +92,7 @@ class TmdbSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validating.value = true
-            val valid = try {
-                tmdbApi.getConfiguration(trimmed).isSuccessful
-            } catch (_: Exception) {
-                false
-            }
+            val valid = providerSettingsRepository.validateTmdbApiKey(trimmed)
             _validating.value = false
             if (valid) {
                 dataStore.setApiKey(trimmed)

@@ -3,7 +3,7 @@ package com.nexio.tv.ui.screens.settings
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
@@ -110,7 +110,7 @@ class TmdbSettingsViewModelTest {
         return TmdbSettingsViewModel(
             dataStore = tmdbSettingsDataStore,
             tmdbCatalogSettingsDataStore = catalogSettingsDataStore,
-            tmdbApi = mockk<TmdbApi>(relaxed = true)
+            providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true)
         )
     }
 }

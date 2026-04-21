@@ -19,7 +19,7 @@ import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
-import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.data.trailer.TrailerService
@@ -83,9 +83,8 @@ fun buildMetaDetailsViewModel(
     return MetaDetailsViewModel(
         context = context,
         metaRepository = metaRepository,
-        traktApi = mockk(relaxed = true),
-        traktAuthService = mockk(relaxed = true),
         traktAuthDataStore = traktAuthDataStore,
+        reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         tmdbService = tmdbService,
         tmdbMetadataService = tmdbMetadataService,

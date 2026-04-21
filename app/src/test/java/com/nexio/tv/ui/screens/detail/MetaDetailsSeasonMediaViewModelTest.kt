@@ -16,10 +16,9 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
-import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
@@ -1040,8 +1039,6 @@ class MetaDetailsSeasonMediaViewModelTest {
         )
         val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>(relaxed = true)
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
-        val traktApi = mockk<TraktApi>(relaxed = true)
-        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktScrobbleService = mockk<TrackingScrobbleService>(relaxed = true)
         val addonRepository = mockk<AddonRepository>()
         val context = mockk<Context>(relaxed = true)
@@ -1056,13 +1053,13 @@ class MetaDetailsSeasonMediaViewModelTest {
         return MetaDetailsViewModel(
             context = context,
             metaRepository = metaRepository,
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
             traktAuthDataStore = traktAuthDataStore,
+            reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
             tmdbMetadataService = resolvedTmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = mockk(relaxed = true),
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
             titleRatingOverrideRepository = titleRatingOverrideRepository,
