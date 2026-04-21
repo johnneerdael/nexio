@@ -21,7 +21,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -120,7 +119,7 @@ fun KitsuSettingsContent(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
+                    SettingsActionButton(
                         onClick = {
                             viewModel.login(username, password)
                             password = ""
@@ -128,7 +127,7 @@ fun KitsuSettingsContent(
                     ) {
                         Text("Connect")
                     }
-                    Button(onClick = { viewModel.disconnect() }) {
+                    SettingsActionButton(onClick = { viewModel.disconnect() }) {
                         Text("Disconnect")
                     }
                 }

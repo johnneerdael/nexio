@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -49,6 +50,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -65,6 +68,78 @@ internal val SettingsContainerRadius = 28.dp
 internal val SettingsPillRadius = 999.dp
 internal val SettingsSecondaryCardRadius = 18.dp
 internal val SettingsRailItemHeight = 56.dp
+
+internal enum class SettingsButtonSurface {
+    BackgroundCard,
+    BackgroundElevated
+}
+
+internal data class SettingsButtonStyleSpec(
+    val surface: SettingsButtonSurface,
+    val focusedSurface: SettingsButtonSurface,
+    val focusedScale: Float,
+    val focusedBorderWidthDp: Int
+)
+
+internal fun neutralSettingsButtonStyleSpec(
+    surface: SettingsButtonSurface = SettingsButtonSurface.BackgroundCard
+): SettingsButtonStyleSpec = SettingsButtonStyleSpec(
+    surface = surface,
+    focusedSurface = surface,
+    focusedScale = 1f,
+    focusedBorderWidthDp = 2
+)
+
+@Composable
+private fun settingsButtonSurfaceColor(surface: SettingsButtonSurface): Color = when (surface) {
+    SettingsButtonSurface.BackgroundCard -> NexioColors.BackgroundCard
+    SettingsButtonSurface.BackgroundElevated -> NexioColors.BackgroundElevated
+}
+
+@Composable
+internal fun SettingsActionButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    surface: SettingsButtonSurface = SettingsButtonSurface.BackgroundCard,
+    enabled: Boolean = true,
+    shape: Shape = RoundedCornerShape(12.dp),
+    content: @Composable () -> Unit
+) {
+    val spec = neutralSettingsButtonStyleSpec(surface = surface)
+    val containerColor = settingsButtonSurfaceColor(spec.surface)
+    val focusedContainerColor = settingsButtonSurfaceColor(spec.focusedSurface)
+
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        colors = ButtonDefaults.colors(
+            containerColor = containerColor,
+            focusedContainerColor = focusedContainerColor,
+            contentColor = NexioColors.TextPrimary,
+            focusedContentColor = NexioColors.TextPrimary,
+            disabledContainerColor = containerColor.copy(alpha = 0.55f),
+            disabledContentColor = NexioColors.TextSecondary.copy(alpha = 0.55f)
+        ),
+        border = ButtonDefaults.border(
+            border = Border(
+                border = BorderStroke(1.dp, NexioColors.Border),
+                shape = shape
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(spec.focusedBorderWidthDp.dp, NexioColors.FocusRing),
+                shape = shape
+            )
+        ),
+        scale = ButtonDefaults.scale(
+            focusedScale = spec.focusedScale,
+            pressedScale = 1f
+        ),
+        shape = ButtonDefaults.shape(shape)
+    ) {
+        content()
+    }
+}
 
 @Composable
 internal fun SettingsStandaloneScaffold(
