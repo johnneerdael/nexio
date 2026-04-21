@@ -124,6 +124,7 @@
     <string name="appearance_title">Appearance</string>
     <string name="appearance_subtitle">Choose your color theme, font and language</string>
     <string name="cd_selected">Selected</string>
+    <string name="cd_subtitle_hash_match">Exact match for this video file</string>
 
     <!-- AboutScreen -->
     <string name="about_title">About</string>
