@@ -698,6 +698,10 @@
   <string name="search_voice_mic_permission">Voor gesproken zoekopdrachten is microfoontoestemming vereist.</string>
   <string name="search_voice_failed">Spraakherkenning mislukt. Probeer het opnieuw.</string>
   <string name="search_voice_unavailable">Gesproken zoekopdrachten zijn niet beschikbaar op dit apparaat.</string>
+  <string name="search_voice_listening_title">Luisteren…</string>
+  <string name="search_voice_listening_subtitle">Zeg de titel die je wilt zoeken</string>
+  <string name="search_voice_cancel">Annuleren</string>
+  <string name="search_voice_failed_with_code">Spraakherkenning mislukt (code %1$d). Probeer het opnieuw.</string>
   <string name="library_syncing">Trakt-bibliotheek synchroniseren\u2026</string>
   <string name="library_title">Bibliotheek</string>
   <string name="library_filter_list">Lijst</string>

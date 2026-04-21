@@ -1,10 +1,15 @@
 package com.nexio.tv.ui.screens.search
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
 import android.view.KeyEvent
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +57,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +69,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -126,8 +133,10 @@ fun SearchScreen(
     val view = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val strVoiceNoSpeech = stringResource(R.string.search_voice_no_speech)
+    val strVoiceMicPermission = stringResource(R.string.search_voice_mic_permission)
     val strVoiceFailed = stringResource(R.string.search_voice_failed)
     val strVoiceUnavailable = stringResource(R.string.search_voice_unavailable)
+    val voiceFailedWithCodeTemplate = stringResource(R.string.search_voice_failed_with_code)
     val voiceFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
@@ -156,47 +165,117 @@ fun SearchScreen(
             Toast.makeText(context, strVoiceNoSpeech, Toast.LENGTH_SHORT).show()
         }
     }
-    val voiceRecognizeIntent = remember {
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+    val isVoiceSearchAvailable = remember(context) { SpeechRecognizer.isRecognitionAvailable(context) }
+    val speechRecognizer = remember(context, isVoiceSearchAvailable) {
+        if (isVoiceSearchAvailable) {
+            runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
+        } else {
+            null
         }
     }
-    val isVoiceSearchAvailable = remember(context) {
-        voiceRecognizeIntent.resolveActivity(context.packageManager) != null ||
-            SpeechRecognizer.isRecognitionAvailable(context)
+    var recordAudioPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
     }
-    val voiceSearchLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        isVoiceListening = false
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val recognized = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                .orEmpty()
-                .trim()
-            onVoiceQueryResultState.value(recognized)
-        } else if (result.resultCode != android.app.Activity.RESULT_CANCELED) {
-            Toast.makeText(context, strVoiceFailed, Toast.LENGTH_SHORT).show()
+    val latestOnVoiceQueryResult by rememberUpdatedState(onVoiceQueryResultState.value)
+    val startListeningNow: () -> Unit = remember(speechRecognizer) {
+        {
+            val recognizer = speechRecognizer
+            if (recognizer == null) {
+                isVoiceListening = false
+                Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
+            } else {
+                isVoiceListening = true
+                runCatching {
+                    recognizer.startListening(
+                        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                        }
+                    )
+                }.onFailure {
+                    isVoiceListening = false
+                    Toast.makeText(context, strVoiceFailed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    val requestAudioPermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        recordAudioPermissionGranted = granted
+        if (granted) {
+            startListeningNow()
+        } else {
+            Toast.makeText(context, strVoiceMicPermission, Toast.LENGTH_SHORT).show()
+        }
+    }
+    DisposableEffect(speechRecognizer) {
+        val listener = object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = Unit
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() = Unit
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+
+            override fun onError(error: Int) {
+                isVoiceListening = false
+                when (error) {
+                    SpeechRecognizer.ERROR_CLIENT,
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> Unit
+                    SpeechRecognizer.ERROR_NO_MATCH,
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                        Toast.makeText(context, strVoiceNoSpeech, Toast.LENGTH_SHORT).show()
+                    }
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                        Toast.makeText(context, strVoiceMicPermission, Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        val msg = voiceFailedWithCodeTemplate.format(error)
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            override fun onResults(results: Bundle?) {
+                isVoiceListening = false
+                val recognized = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    .orEmpty()
+                    .trim()
+                latestOnVoiceQueryResult(recognized)
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) = Unit
+        }
+
+        speechRecognizer?.setRecognitionListener(listener)
+        onDispose {
+            speechRecognizer?.setRecognitionListener(null)
+            speechRecognizer?.destroy()
         }
     }
     val topInputFocusRequester = remember(isVoiceSearchAvailable) {
         if (isVoiceSearchAvailable) voiceFocusRequester else searchFocusRequester
     }
     val launchVoiceSearch: () -> Unit = {
-        if (!isVoiceSearchAvailable) {
+        if (!isVoiceSearchAvailable || speechRecognizer == null) {
             Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
+        } else if (!recordAudioPermissionGranted) {
+            requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
-            isVoiceListening = true
-            runCatching { voiceSearchLauncher.launch(voiceRecognizeIntent) }
-                .onFailure {
-                    isVoiceListening = false
-                    Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
-                }
+            startListeningNow()
         }
+    }
+    val cancelVoiceSearch: () -> Unit = {
+        runCatching { speechRecognizer?.cancel() }
+        isVoiceListening = false
     }
 
     val posterCardStyle = remember(uiState.posterCardWidthDp, uiState.posterCardCornerRadiusDp) {
@@ -616,6 +695,15 @@ fun SearchScreen(
         }
     }
 
+    if (isVoiceListening) {
+        VoiceListeningOverlay(
+            title = stringResource(R.string.search_voice_listening_title),
+            subtitle = stringResource(R.string.search_voice_listening_subtitle),
+            cancelLabel = stringResource(R.string.search_voice_cancel),
+            onCancel = cancelVoiceSearch
+        )
+    }
+
     val selectedManualTarget = searchManualStreamSelectionTarget
     if (selectedManualTarget != null) {
         SearchManualStreamSelectionDialog(
@@ -943,6 +1031,67 @@ private fun SearchInputField(
                 cursorColor = NexioColors.FocusRing
             )
         )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VoiceListeningOverlay(
+    title: String,
+    subtitle: String,
+    cancelLabel: String,
+    onCancel: () -> Unit
+) {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "voice-mic-pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(durationMillis = 700),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "voice-mic-pulse-scale"
+    )
+
+    NexioDialog(
+        onDismiss = onCancel,
+        title = title,
+        subtitle = subtitle,
+        width = 420.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                    }
+                    .background(Color(0xFFE53935), RoundedCornerShape(48.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(cancelLabel)
+            }
+        }
     }
 }
 
