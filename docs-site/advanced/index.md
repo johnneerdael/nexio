@@ -4,7 +4,7 @@ Advanced is the optional home for setup detail you only need when the default gu
 
 ## Primary advanced guide
 
-- [Options and Self-Hosting](/advanced/options-and-self-hosting) - long-form companion for Streailer fallback, YouTube trailer login detail, and the self-hosted IMDb ratings API.
+- [Options and Self-Hosting](/advanced/options-and-self-hosting) - long-form companion for Streailer fallback and the self-hosted IMDb ratings API.
 
 ## Recovery and deeper references
 

@@ -86,9 +86,6 @@
 -keep class com.nexio.tv.core.plugin.** { *; }
 -keepclassmembers class com.nexio.tv.core.plugin.** { *; }
 
-# Keep the JavaScriptEngine bridge because yt-dlp resolves it by exact class name from Python.
--keep class com.nexio.tv.data.trailer.helper.YouTubeJavaScriptEngineBridge { *; }
-
 # Keep ASS/SSA JNI bridge entry points available to native libass rendering.
 -keep class com.nexio.tv.ui.screens.player.ass.AssSsaNativeBridge { *; }
 

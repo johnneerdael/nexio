@@ -34,44 +34,6 @@ Streailer is not a separate browsing surface. It only matters when the app is al
 
 That means Streailer is useful when you want broader coverage, but it is not worth turning into a configuration dependency unless you actually see missing trailers.
 
-## YouTube trailer login
-
-YouTube trailer login is the deeper auth path for trailer playback that needs a signed-in Google session. It is the right choice when you want in-app trailer playback for content that would otherwise be blocked, but it is still optional.
-
-### What the login flow looks like
-
-1. Open `Settings > Integration > YouTube Trailer Login` in the app.
-2. Start sign-in from the device you actually watch on.
-3. Nexio shows a TV code and typically a QR or verification path.
-4. On a phone or computer, sign in to Google and approve that device code.
-5. Return to the TV app and wait for the session to flip to signed in.
-
-### What to expect after signing in
-
-- The session is tied to the Nexio account, not just the current screen.
-- Age-restricted trailers have a better chance of resolving directly in the app.
-- Trailer playback stays inside Nexio when the helper can resolve a playable media URL.
-- If the auth session expires or gets cleared, you can run the flow again and mint a new device code.
-
-### Practical tips
-
-- Use a phone or computer for the approval step; the TV device only needs to show the code.
-- If the approval code times out, start over and request a fresh login instead of trying to reuse an expired code.
-- If you sign out of the Google account later, re-run the login flow before you expect trailer playback to work again.
-- If the trailer still does not resolve after login, the title may simply not have a playable YouTube source.
-
-### When it is worth the effort
-
-- You watch titles that frequently surface age-restricted or otherwise authenticated trailers.
-- You care about keeping trailer playback inside Nexio instead of falling back to a browser or external path.
-- You want the best trailer coverage available without making the main trailer guide more complicated.
-
-### When it is probably overkill
-
-- Most of your trailers already resolve without authentication.
-- You do not want to sign a Google account into this device.
-- Trailer playback is nice to have, but not important enough to justify another account-level setup step.
-
 ## Self-hosted IMDb ratings API
 
 The custom IMDb ratings API is the optional path for people who want to run episode ratings from their own infrastructure instead of using the simpler default route.
