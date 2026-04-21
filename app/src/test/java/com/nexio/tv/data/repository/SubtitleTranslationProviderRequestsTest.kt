@@ -4,6 +4,7 @@ import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -105,6 +106,63 @@ class SubtitleTranslationProviderRequestsTest {
         assertEquals("gpt-5-nano", body.getString("model"))
         assertEquals("json_object", body.getJSONObject("response_format").getString("type"))
         assertEquals("system", body.getJSONArray("messages").getJSONObject(0).getString("content"))
+    }
+
+    @Test
+    fun openAiRequestUsesStrictJsonSchemaWhenItemCountAndSupportedModel() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-4o-mini"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[{"id":1,"text":"hi"}]}""",
+            strictJsonSchemaItemCount = 60
+        )
+
+        val responseFormat = body.getJSONObject("response_format")
+        assertEquals("json_schema", responseFormat.getString("type"))
+        val schemaWrapper = responseFormat.getJSONObject("json_schema")
+        assertTrue(schemaWrapper.getBoolean("strict"))
+        val schema = schemaWrapper.getJSONObject("schema")
+        val itemsSchema = schema.getJSONObject("properties").getJSONObject("items")
+        assertEquals(60, itemsSchema.getInt("minItems"))
+        assertEquals(60, itemsSchema.getInt("maxItems"))
+        val itemSchema = itemsSchema.getJSONObject("items")
+        assertFalse(itemSchema.getBoolean("additionalProperties"))
+        val required = itemSchema.getJSONArray("required")
+        assertEquals(2, required.length())
+    }
+
+    @Test
+    fun openAiRequestFallsBackToJsonObjectOnUnsupportedModel() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "gpt-3.5-turbo"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}""",
+            strictJsonSchemaItemCount = 10
+        )
+
+        assertEquals("json_object", body.getJSONObject("response_format").getString("type"))
+    }
+
+    @Test
+    fun openAiRequestAcceptsOpenRouterPrefixedModelIds() {
+        val body = buildOpenAiChatCompletionRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "openai/gpt-4o",
+                baseUrl = "https://openrouter.ai/api/v1"
+            ),
+            systemPrompt = "system",
+            userPayload = """{"items":[]}""",
+            strictJsonSchemaItemCount = 40
+        )
+
+        assertEquals("json_schema", body.getJSONObject("response_format").getString("type"))
     }
 
     @Test
