@@ -11,6 +11,7 @@ import com.nexio.tv.domain.model.StreamBehaviorHints
 fun StreamDto.toDomain(
     addonName: String,
     addonLogo: String?,
+    addonBaseUrl: String? = null,
     addonParserPreset: AddonParserPreset = AddonParserPreset.GENERIC
 ): Stream = Stream(
     name = name,
@@ -25,6 +26,7 @@ fun StreamDto.toDomain(
     sources = sources,
     addonName = addonName,
     addonLogo = addonLogo,
+    addonBaseUrl = addonBaseUrl,
     addonParserPreset = addonParserPreset
 )
 

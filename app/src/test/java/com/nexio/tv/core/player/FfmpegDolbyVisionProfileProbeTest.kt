@@ -65,8 +65,6 @@ class FfmpegDolbyVisionProfileProbeTest {
         var capturedHeaders: String? = null
         val probe = FfmpegDolbyVisionProfileProbe(
             backend = object : NativeDolbyVisionProfileBackend {
-                override fun probe(url: String, requestHeadersBlob: String?): Int = error("unused")
-
                 override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
                     capturedHeaders = requestHeadersBlob
                     return """{"streams":[]}"""
@@ -247,8 +245,6 @@ class FfmpegDolbyVisionProfileProbeTest {
         runBlocking {
             val probe = FfmpegDolbyVisionProfileProbe(
                 backend = object : NativeDolbyVisionProfileBackend {
-                    override fun probe(url: String, requestHeadersBlob: String?): Int = -2
-
                     override fun probeStreamMetadataJson(
                         url: String,
                         requestHeadersBlob: String?
@@ -268,7 +264,6 @@ class FfmpegDolbyVisionProfileProbeTest {
         streamMetadataJson: String?
     ): NativeDolbyVisionProfileBackend {
         return object : NativeDolbyVisionProfileBackend {
-            override fun probe(url: String, requestHeadersBlob: String?): Int = error("unused")
             override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? = streamMetadataJson
         }
     }

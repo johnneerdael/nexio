@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private const val DV_AUTOPLAY_TAG = "DvAutoPlayGate"
-private const val DV_AUTOPLAY_PROBE_TIMEOUT_MS = 5_000L
+private const val DV_AUTOPLAY_PROBE_TIMEOUT_MS = 10_000L
 
 enum class DolbyVisionAutoPlayDecisionReason {
     NOT_AUTOPLAY,
@@ -117,10 +117,7 @@ interface DolbyVisionProfileProbe {
 }
 
 interface NativeDolbyVisionProfileBackend {
-    fun probe(url: String, requestHeadersBlob: String?): Int
-    fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? = null
-    fun probeBlob(url: String, requestHeadersBlob: String?): String? = null
-    fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? = null
+    fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String?
 }
 
 data class DolbyVisionAutoPlayGateResult(
@@ -283,9 +280,18 @@ class DolbyVisionAutoPlayGate(
             )
         }
 
+        // When the primary probe couldn't complete (timeout / network failure), per-candidate
+        // probes are almost certain to hit the same failure mode — previously this burned up to
+        // ~15s of stacked probe cost before landing on NO_FALLBACK_AVAILABLE. Skip the DV probe
+        // loop for those cases; the non-DV early-accept branch below still fires so tag-based
+        // fallbacks are picked up immediately.
+        val skipDvCandidateProbes =
+            reason == DolbyVisionAutoPlayDecisionReason.PROBE_TIMEOUT ||
+                reason == DolbyVisionAutoPlayDecisionReason.PROBE_FAILED
+
         logEvent(
             event = "FALLBACK_SEARCH_STARTED",
-            details = "candidateCount=${candidates.size} reason=$reason"
+            details = "candidateCount=${candidates.size} reason=$reason skipDvProbes=$skipDvCandidateProbes"
         )
 
         for ((index, candidate) in candidates.withIndex()) {
@@ -309,6 +315,14 @@ class DolbyVisionAutoPlayGate(
                 logEvent(
                     event = "FALLBACK_CANDIDATE_SKIPPED",
                     details = "index=$index stream=$candidateKey reason=missing_url"
+                )
+                continue
+            }
+
+            if (skipDvCandidateProbes) {
+                logEvent(
+                    event = "FALLBACK_CANDIDATE_SKIPPED",
+                    details = "index=$index stream=$candidateKey reason=network_probe_unavailable"
                 )
                 continue
             }
@@ -506,18 +520,6 @@ class FfmpegDolbyVisionProfileProbe(
 }
 
 private object DefaultNativeDolbyVisionProfileBackend : NativeDolbyVisionProfileBackend {
-    override fun probe(url: String, requestHeadersBlob: String?): Int {
-        return FfmpegLibrary.probeDolbyVisionProfile(url, requestHeadersBlob)
-    }
-
-    override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? {
-        return FfmpegLibrary.probeDolbyVisionMetadataBlob(url, requestHeadersBlob)
-    }
-
-    override fun probeBlob(url: String, requestHeadersBlob: String?): String? {
-        return FfmpegLibrary.probeDolbyVisionProbeBlob(url, requestHeadersBlob)
-    }
-
     override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
         return FfmpegLibrary.probeDolbyVisionStreamMetadataJson(url, requestHeadersBlob)
     }

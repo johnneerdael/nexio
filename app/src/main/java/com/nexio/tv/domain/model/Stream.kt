@@ -19,6 +19,7 @@ data class Stream(
     val sources: List<String>? = null,
     val addonName: String,
     val addonLogo: String?,
+    val addonBaseUrl: String? = null,
     val addonParserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
     val serviceWrapSourceHash: String? = null,
     val wrappedProviderId: String? = null,
