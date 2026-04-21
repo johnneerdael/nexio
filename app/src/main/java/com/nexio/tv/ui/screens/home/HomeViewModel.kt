@@ -664,6 +664,12 @@ class HomeViewModel @Inject constructor(
     internal fun openStartupDeferralWindowIfNeeded(reason: String) {
         if (!diskFirstHomeStartupEnabled) return
         if (startupDeferralCompleted) return
+        if (syntheticHomeCatalogStore.read(profileId = profileManager.activeProfileId.value) == null) {
+            startupDeferralCompleted = true
+            isStartupDeferredRefreshAllowed = true
+            logStartupPerf("disk_first_startup_window_skipped", "reason=$reason cause=no_snapshot")
+            return
+        }
         val now = SystemClock.elapsedRealtime()
         if (startupWindowOpenUntilMs > now) return
         startupWindowOpenUntilMs = now + STARTUP_NETWORK_DEFERRAL_WINDOW_MS

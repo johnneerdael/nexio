@@ -9,6 +9,8 @@ import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -111,6 +113,7 @@ class CatalogOrderViewModelTest {
         val simklSettingsDataStore = mockk<SimklSettingsDataStore>(relaxed = true)
         val mdbListDiscoveryService = mockk<MDBListDiscoveryService>(relaxed = true)
         val mdbListSettingsDataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
+        val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true)
         val androidTvRecommendationsDataStore = mockk<AndroidTvRecommendationsDataStore>(relaxed = true)
         val androidTvFeedCatalogService = mockk<AndroidTvFeedCatalogService>(relaxed = true)
 
@@ -125,6 +128,7 @@ class CatalogOrderViewModelTest {
         every { simklSettingsDataStore.catalogPreferences } returns MutableStateFlow(SimklCatalogPreferences())
         every { mdbListDiscoveryService.observeSnapshot() } returns MutableStateFlow(MDBListDiscoverySnapshot())
         every { mdbListSettingsDataStore.catalogPreferences } returns MutableStateFlow(MDBListCatalogPreferences())
+        every { tmdbCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(TmdbCatalogPreferences())
         every { androidTvRecommendationsDataStore.preferences } returns MutableStateFlow(
             AndroidTvRecommendationsPreferences()
         )
@@ -138,6 +142,7 @@ class CatalogOrderViewModelTest {
             simklSettingsDataStore = simklSettingsDataStore,
             mdbListDiscoveryService = mdbListDiscoveryService,
             mdbListSettingsDataStore = mdbListSettingsDataStore,
+            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
             androidTvRecommendationsDataStore = androidTvRecommendationsDataStore,
             androidTvFeedCatalogService = androidTvFeedCatalogService,
             catalogPriorityHydrationNotifier = notifier
