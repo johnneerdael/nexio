@@ -113,6 +113,31 @@ class DolbyVisionAutoPlayGateTest {
     }
 
     @Test
+    fun `default autoplay probe timeout is ten seconds`() = runBlocking {
+        val probe = RecordingDolbyVisionProfileProbe(
+            DolbyVisionProfileProbeResult.detected(profileLabel = "dvhe.08", profileNumber = 8)
+        )
+        val gate = DolbyVisionAutoPlayGate(probe)
+
+        gate.resolve(
+            context = context,
+            playbackInfo = primaryPlaybackInfo(),
+            autoPlay = true,
+            displaySupportsDolbyVision = false
+        )
+
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("DV_PROFILE_PROBE_STARTED") &&
+                        message.contains("timeoutMs=10000")
+                }
+            )
+        }
+    }
+
+    @Test
     fun `autoplay falls back when probe fails or returns unknown`() = runBlocking {
         val failingProbe = RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.failed("io"))
         val unknownProbe = RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.unknown())

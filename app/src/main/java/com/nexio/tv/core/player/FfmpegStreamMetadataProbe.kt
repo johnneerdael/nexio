@@ -6,6 +6,8 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 data class FfmpegStreamMetadataProbeResult(
@@ -100,30 +102,46 @@ object FfmpegStreamMetadataProbe {
     ): FfmpegStreamMetadataProbeResult? {
         val startedAtMs = System.currentTimeMillis()
         val headerBlob = headers.toProbeHeaderBlob()
+        // The addon-proxy hop adds a full TLS handshake + server-side buffering for no gain —
+        // the proxy just re-serves CDN bytes. Never probe a proxy URL. When the proxy path
+        // embeds a resolved target we use that directly; otherwise skip the probe entirely.
+        val probeUrl = resolveDirectProbeUrl(url, headers) ?: run {
+            Log.i(
+                TAG,
+                "FFMPEG_PROBE_SKIPPED reason=proxy_url_no_resolved_target url=$url"
+            )
+            return null
+        }
+        if (probeUrl != url && diagnosticsEnabled) {
+            Log.i(
+                TAG,
+                "FFMPEG_PROBE_URL_SUBSTITUTED proxy=$url resolved=$probeUrl"
+            )
+        }
         if (diagnosticsEnabled) {
             Log.i(
                 TAG,
-                "FFMPEG_PROBE_START url=$url command=${buildProbeDebugCommand(url, headerBlob)}"
+                "FFMPEG_PROBE_START url=$probeUrl command=${buildProbeDebugCommand(probeUrl, headerBlob)}"
             )
         }
         return runCatching {
-            val key = ProbeKey(url = url, requestHeadersBlob = headerBlob)
+            val key = ProbeKey(url = probeUrl, requestHeadersBlob = headerBlob)
             synchronized(nativeProbeLock) {
                 cache[key]?.let { cached ->
                     if (diagnosticsEnabled) {
                         Log.i(
                             TAG,
                             "FFMPEG_PROBE_CACHE_HIT elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                                "url=$url streams=${cached.streams.size}"
+                                "url=$probeUrl streams=${cached.streams.size}"
                         )
                     }
                     return cached
                 }
-                val rawJson = backend.probeStreamMetadataJson(url, headerBlob)
+                val rawJson = backend.probeStreamMetadataJson(probeUrl, headerBlob)
                 if (diagnosticsEnabled) {
                     logChunked(
                         prefix = "FFMPEG_PROBE_RAW_RESPONSE elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$url bytes=${rawJson?.length ?: 0}",
+                            "url=$probeUrl bytes=${rawJson?.length ?: 0}",
                         value = rawJson ?: "<null>"
                     )
                 }
@@ -132,7 +150,7 @@ object FfmpegStreamMetadataProbe {
                     Log.w(
                         TAG,
                         "FFmpeg stream metadata probe returned no streams " +
-                            "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$url"
+                            "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$probeUrl"
                     )
                     return null
                 }
@@ -140,7 +158,7 @@ object FfmpegStreamMetadataProbe {
                     Log.i(
                         TAG,
                         "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$url streams=${parsed.streams.size}"
+                            "url=$probeUrl streams=${parsed.streams.size}"
                     )
                 }
                 parsed.also { cache[key] = it }
@@ -149,11 +167,48 @@ object FfmpegStreamMetadataProbe {
             Log.w(
                 TAG,
                 "FFmpeg stream metadata probe failed elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                    "url=$url error=${error.message}",
+                    "url=$probeUrl error=${error.message}",
                 error
             )
             null
         }
+    }
+
+    /**
+     * Returns the URL to use for a native probe:
+     * - Comet `/playback/` proxy URLs try the [CometProxyUrlResolver] cache; on
+     *   a hit we probe the real CDN URL, on a miss we fall back to the proxy
+     *   URL unchanged (callers paid this cost before this wiring existed).
+     * - `/resolve/` proxy URLs: decoded embedded target if present, null
+     *   otherwise (caller must skip).
+     * - Every other URL passes through unchanged.
+     */
+    private fun resolveDirectProbeUrl(url: String, headers: Map<String, String>): String? {
+        if (CometProxyUrlResolver.isCometProxy(url)) {
+            val resolved = CometProxyUrlResolver.resolveBlocking(url, headers)
+            return resolved?.takeIf { it.isNotBlank() } ?: url
+        }
+        if (!isResolveProxyUrl(url)) return url
+        val embedded = extractEmbeddedResolveUrl(url)
+        return embedded?.takeIf { it.isNotBlank() }
+    }
+
+    private fun isResolveProxyUrl(sourceUrl: String): Boolean {
+        val normalized = sourceUrl.substringBefore('?').lowercase(Locale.ROOT)
+        return "/resolve/" in normalized
+    }
+
+    private fun extractEmbeddedResolveUrl(sourceUrl: String): String? {
+        val marker = "/resolve/"
+        val markerIndex = sourceUrl.indexOf(marker, ignoreCase = true)
+        if (markerIndex < 0) return null
+        val afterResolve = sourceUrl.substring(markerIndex + marker.length)
+        val nestedEncoded = afterResolve.substringAfter('/', missingDelimiterValue = "")
+            .substringAfter('/', missingDelimiterValue = "")
+        if (nestedEncoded.isBlank()) return null
+        return runCatching {
+            URLDecoder.decode(nestedEncoded, StandardCharsets.UTF_8.name())
+        }.getOrNull()
     }
 
     internal fun debugProbeCommandForTesting(url: String, requestHeadersBlob: String?): String =

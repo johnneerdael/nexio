@@ -267,8 +267,8 @@ class StreamRepositoryImpl @Inject constructor(
 
         return when (val result = safeApiCall { api.getStreams(streamUrl, requestTag) }) {
             is NetworkResult.Success -> {
-                val streams = result.data.streams?.map { 
-                    it.toDomain(addonName, addonLogo, addonParserPreset)
+                val streams = result.data.streams?.map {
+                    it.toDomain(addonName, addonLogo, baseUrl, addonParserPreset)
                 } ?: emptyList()
                 Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=${sanitizeUrlForLogs(streamUrl)}")
                 NetworkResult.Success(streams)

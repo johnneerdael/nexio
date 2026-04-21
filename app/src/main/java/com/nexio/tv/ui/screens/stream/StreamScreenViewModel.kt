@@ -15,6 +15,7 @@ import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
 import com.nexio.tv.core.player.DolbyVisionAutoPlayDecisionReason
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
@@ -464,6 +465,7 @@ class StreamScreenViewModel @Inject constructor(
                     }
                     if (organizedResult.autoPlayPlaybackInfo != null) {
                         resolvedAutoPlayTarget = true
+                        prewarmCometProxyCandidates(organizedResult.autoPlayPlaybackInfo)
                     }
                     val deterministicFailureMessage = organizedResult.deterministicFailureMessage
 
@@ -974,7 +976,8 @@ class StreamScreenViewModel @Inject constructor(
             resumeDurationMs = resumeDurationMs,
             resumeProgressPercent = resumeProgressPercent,
             resumeLastWatchedMs = resumeLastWatchedMs,
-            resumeSource = resumeSource
+            resumeSource = resumeSource,
+            addonBaseUrl = stream.addonBaseUrl
         )
 
         val url = playbackInfo.url
@@ -1050,6 +1053,19 @@ class StreamScreenViewModel @Inject constructor(
                 "overlayActive=true readyForPlayback=true"
         )
         return result.playbackInfo
+    }
+
+    private fun prewarmCometProxyCandidates(playbackInfo: StreamPlaybackInfo) {
+        val primaryAddonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(playbackInfo.addonBaseUrl)
+        playbackInfo.url?.let {
+            CometProxyUrlResolver.prewarm(it, playbackInfo.headers, primaryAddonHost)
+        }
+        playbackInfo.autoPlayFallbackCandidates.forEach { candidate ->
+            val candidateAddonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(candidate.addonBaseUrl)
+            candidate.url?.let {
+                CometProxyUrlResolver.prewarm(it, candidate.headers, candidateAddonHost)
+            }
+        }
     }
 
     private suspend fun buildDeterministicAutoPlayPlaybackInfo(
@@ -1172,6 +1188,7 @@ class StreamScreenViewModel @Inject constructor(
                 val normalized = tag.lowercase()
                 normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
             },
+            addonBaseUrl = stream.addonBaseUrl,
             autoPlayFallbackCandidates = selectAutoplayFallbackCandidates(
                 selectedKey = selectedKey,
                 fallbackCandidates = fallbackCandidates
@@ -1191,7 +1208,8 @@ class StreamScreenViewModel @Inject constructor(
                         isDolbyVisionCandidate = candidate.parsed.visualTags.any { tag ->
                             val normalized = tag.lowercase()
                             normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
-                        }
+                        },
+                        addonBaseUrl = candidate.stream.addonBaseUrl
                     )
                 }
         )
@@ -1782,6 +1800,7 @@ data class StreamPlaybackInfo(
     val resumeSource: String? = null,
     val isWebDl: Boolean = false,
     val isDolbyVisionCandidate: Boolean = false,
+    val addonBaseUrl: String? = null,
     val autoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList()
 )
 
@@ -1794,5 +1813,6 @@ data class AutoPlayStreamAlternative(
     val videoHash: String? = null,
     val videoSize: Long? = null,
     val isWebDl: Boolean = false,
-    val isDolbyVisionCandidate: Boolean = false
+    val isDolbyVisionCandidate: Boolean = false,
+    val addonBaseUrl: String? = null
 )
