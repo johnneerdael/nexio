@@ -79,6 +79,48 @@ data class TvSeasonEpisode(
     val metadata: TvEpisodeMetadata
 )
 
+data class KitsuAdvancedAnimeDetail(
+    val characters: List<KitsuAdvancedAnimeCharacter> = emptyList(),
+    val staff: List<KitsuAdvancedAnimeStaffMember> = emptyList(),
+    val relatedTitles: List<KitsuAdvancedRelatedTitle> = emptyList(),
+    val productionCompanies: List<KitsuAdvancedProductionCompany> = emptyList(),
+    val franchiseIds: Set<String> = emptySet()
+)
+
+data class KitsuAdvancedAnimeCharacter(
+    val characterId: String,
+    val characterName: String,
+    val role: String? = null,
+    val characterImage: String? = null,
+    val actorId: String? = null,
+    val actorName: String? = null,
+    val actorImage: String? = null,
+    val language: String? = null,
+    val featured: Boolean = false
+)
+
+data class KitsuAdvancedAnimeStaffMember(
+    val personId: String,
+    val personName: String,
+    val role: String? = null
+)
+
+data class KitsuAdvancedRelatedTitle(
+    val mediaId: String,
+    val mediaType: String,
+    val title: String,
+    val synopsis: String? = null,
+    val poster: String? = null,
+    val releaseInfo: String? = null,
+    val relationKind: String
+)
+
+data class KitsuAdvancedProductionCompany(
+    val producerId: String,
+    val producerName: String,
+    val role: String? = null
+)
+
 data class TvdbTrailerCandidate(
     val url: String,
     val name: String? = null,

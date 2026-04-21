@@ -780,6 +780,16 @@ class MetadataDiskCacheStore @Inject constructor(
         val tmdbId = obj.get("tmdbId")
             ?.takeUnless { it.isJsonNull }
             ?.asInt
+        val provider = obj.get("provider")
+            ?.takeUnless { it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val providerId = obj.get("providerId")
+            ?.takeUnless { it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
         val kind = obj.get("kind")
             ?.takeUnless { it.isJsonNull }
             ?.asString
@@ -792,7 +802,9 @@ class MetadataDiskCacheStore @Inject constructor(
             tmdbId = tmdbId,
             name = name,
             logo = logo,
-            kind = kind
+            kind = kind,
+            provider = provider,
+            providerId = providerId
         )
     }
 
@@ -871,6 +883,16 @@ private fun readCompanyFromJson(
     val tmdbId = obj.get("tmdbId")
         ?.takeUnless { it.isJsonNull }
         ?.asInt
+    val provider = obj.get("provider")
+        ?.takeUnless { it.isJsonNull }
+        ?.asString
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+    val providerId = obj.get("providerId")
+        ?.takeUnless { it.isJsonNull }
+        ?.asString
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
     val kind = obj.get("kind")
         ?.takeUnless { it.isJsonNull }
         ?.asString
@@ -883,6 +905,8 @@ private fun readCompanyFromJson(
         tmdbId = tmdbId,
         name = name,
         logo = logo,
-        kind = kind
+        kind = kind,
+        provider = provider,
+        providerId = providerId
     )
 }

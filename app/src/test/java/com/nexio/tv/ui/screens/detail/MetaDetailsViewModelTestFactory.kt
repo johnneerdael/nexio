@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -46,6 +47,7 @@ fun buildMetaDetailsViewModel(
     tmdbService: TmdbService = defaultTmdbService(),
     tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
     tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(),
+    kitsuMetadataService: KitsuMetadataService = mockk(relaxed = true),
     profileBoundary: ProfileBoundary = defaultProfileBoundary(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
@@ -87,6 +89,7 @@ fun buildMetaDetailsViewModel(
         tmdbService = tmdbService,
         tmdbMetadataService = tmdbMetadataService,
         tvMetadataRouter = tvMetadataRouter,
+        kitsuMetadataService = kitsuMetadataService,
         profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),
         titleRatingOverrideRepository = titleRatingOverrideRepository,

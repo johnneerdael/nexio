@@ -45,7 +45,9 @@ data class MetaCastMember(
     val character: String? = null,
     val photo: String? = null,
     val tmdbId: Int? = null,
-    val tvdbPeopleId: Int? = null
+    val tvdbPeopleId: Int? = null,
+    val provider: String? = null,
+    val providerId: String? = null
 )
 
 @Immutable
@@ -53,7 +55,9 @@ data class MetaCompany(
     val tmdbId: Int? = null,
     val name: String,
     val logo: String? = null,
-    val kind: MetaCompanyKind = MetaCompanyKind.COMPANY
+    val kind: MetaCompanyKind = MetaCompanyKind.COMPANY,
+    val provider: String? = null,
+    val providerId: String? = null
 )
 
 @Immutable
