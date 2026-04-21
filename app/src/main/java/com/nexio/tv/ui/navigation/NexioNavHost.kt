@@ -38,7 +38,6 @@ import com.nexio.tv.ui.screens.settings.SettingsScreen
 import com.nexio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nexio.tv.ui.screens.settings.TraktScreen
 import com.nexio.tv.ui.screens.settings.TmdbSettingsScreen
-import com.nexio.tv.ui.screens.settings.YouTubeTrailerLoginScreen
 import com.nexio.tv.ui.screens.stream.StreamScreen
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.account.AuthSignInScreen
@@ -1019,10 +1018,7 @@ fun NexioNavHost(
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToCatalogs = { navController.navigate(Screen.Catalogs.route) },
-                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
-                onNavigateToYouTubeTrailerLogin = {
-                    navController.navigate(Screen.YouTubeTrailerLogin.route)
-                }
+                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) }
             )
         }
 
@@ -1040,12 +1036,6 @@ fun NexioNavHost(
 
         composable(Screen.TmdbSettings.route) {
             TmdbSettingsScreen(
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.YouTubeTrailerLogin.route) {
-            YouTubeTrailerLoginScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }
