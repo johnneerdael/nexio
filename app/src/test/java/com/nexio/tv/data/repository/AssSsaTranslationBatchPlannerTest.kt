@@ -85,19 +85,23 @@ class AssSsaTranslationBatchPlannerTest {
         )
 
         // schedule [5,10,20,...] → core sizes [5, 10, 5]
+        // threshold overlap: 5→1, 10→2, 5→1
         assertEquals(listOf(5, 10, 5), batches.map { it.coreCount })
-        // first batch: no lead, 1 trail; middle: 1 lead + 1 trail; last: 1 lead + 0 trail
-        assertEquals(listOf(0, 1, 1), batches.map { it.leadOverlap })
-        assertEquals(listOf(1, 1, 0), batches.map { it.trailOverlap })
+        assertEquals(listOf(0, 2, 1), batches.map { it.leadOverlap })
+        assertEquals(listOf(1, 2, 0), batches.map { it.trailOverlap })
         // overlap cues match adjacent batches' boundary cues
         val coreLists = batches.map { it.coreUnits.map { u -> u.id } }
         val first = batches[0]
         val second = batches[1]
         val third = batches[2]
-        assertEquals(coreLists[0].last(), second.units.first().id)
+        // first batch's trail (1 cue) = second batch's first core cue
         assertEquals(coreLists[1].first(), first.units.last().id)
+        // second batch's lead (2 cues) = last 2 core cues of first batch
+        assertEquals(coreLists[0].takeLast(2), second.units.take(2).map { it.id })
+        // second batch's trail (2 cues) = first 2 core cues of third batch
+        assertEquals(coreLists[2].take(2), second.units.takeLast(2).map { it.id })
+        // third batch's lead (1 cue) = last core cue of second batch
         assertEquals(coreLists[1].last(), third.units.first().id)
-        assertEquals(coreLists[2].first(), second.units.last().id)
         // core cues are disjoint across batches and their union equals all input
         val allCore = coreLists.flatten()
         assertEquals(units.map { it.id }, allCore)

@@ -67,21 +67,50 @@ class SubtitleTranslationBatchingTest {
         )
 
         // core sizes with schedule [5,10,20,...]: [5, 10, 5]
+        // overlap sizes by threshold: 5→1, 10→2, 5→1
         assertEquals(listOf(5, 10, 5), batches.map { it.coreCount })
-        assertEquals(listOf(0, 1, 1), batches.map { it.leadOverlap })
-        assertEquals(listOf(1, 1, 0), batches.map { it.trailOverlap })
+        assertEquals(listOf(0, 2, 1), batches.map { it.leadOverlap })
+        assertEquals(listOf(1, 2, 0), batches.map { it.trailOverlap })
 
-        // first batch: [0..4] core, then 5 as overlap context
+        // first batch (core=5, overlap=1): [0..4] core, [5] trail overlap
         assertEquals(listOf(0, 1, 2, 3, 4, 5), batches[0].items)
         assertEquals(listOf(0, 1, 2, 3, 4), batches[0].coreItems)
 
-        // middle batch: [4] overlap, [5..14] core, [15] overlap
-        assertEquals(listOf(4) + (5..14) + listOf(15), batches[1].items)
+        // middle batch (core=10, overlap=2): [3,4] lead, [5..14] core, [15,16] trail
+        assertEquals(listOf(3, 4) + (5..14) + listOf(15, 16), batches[1].items)
         assertEquals((5..14).toList(), batches[1].coreItems)
 
-        // last batch: [14] overlap, [15..19] core
+        // last batch (core=5, overlap=1): [14] lead, [15..19] core
         assertEquals(listOf(14) + (15..19), batches[2].items)
         assertEquals((15..19).toList(), batches[2].coreItems)
+    }
+
+    @Test
+    fun overlapSizeScalesWithCoreBatchSize() {
+        // 200 items → [5, 10, 20, 40, 60, 60, 5] core sizes.
+        // Threshold: <8 → 1, [8,30) → 2, [30,50) → 3, ≥50 → 4.
+        val items = (0 until 200).toList()
+
+        val batches = planRampedTranslationBatches(
+            items = items,
+            maxCoreEntries = 60,
+            maxCoreChars = 1_000_000,
+            sizeOf = { 1 },
+            rampUpEnabled = true
+        )
+
+        assertEquals(listOf(5, 10, 20, 40, 60, 60, 5), batches.map { it.coreCount })
+
+        // Expected overlap per batch position, floor 0 at endpoints:
+        //   batch 0 (core=5)  → lead=0 (first),  trail=1 (own size → 1)
+        //   batch 1 (core=10) → lead=2, trail=2
+        //   batch 2 (core=20) → lead=2, trail=2
+        //   batch 3 (core=40) → lead=3, trail=3
+        //   batch 4 (core=60) → lead=4, trail=4
+        //   batch 5 (core=60) → lead=4, trail=4
+        //   batch 6 (core=5)  → lead=1, trail=0 (last)
+        assertEquals(listOf(0, 2, 2, 3, 4, 4, 1), batches.map { it.leadOverlap })
+        assertEquals(listOf(1, 2, 2, 3, 4, 4, 0), batches.map { it.trailOverlap })
     }
 
     @Test
