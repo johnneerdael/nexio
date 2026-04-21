@@ -210,6 +210,63 @@ class AioStrictStreamParserParityTest {
         assertEquals("StreamHub", parsed.indexer)
     }
 
+    // Round-trip guard: native OpenSubtitles oshash matching only works if
+    // behaviorHints.videoHash / behaviorHints.videoSize survive parsing into
+    // the ParsedStreamInfo that downstream code reads. Drift here would
+    // silently break exact-match subtitle search.
+    @Test
+    fun `parser preserves behaviorHints videoHash on the parsed stream`() {
+        val stream = stream(
+            filename = "sample.mkv",
+            description = "📄 sample.mkv\n💾 1.34 GB"
+        ).withVideoHints(videoHash = "8e245d9679d31e12")
+
+        val parsed = AioStrictStreamParser.parse(stream)
+
+        assertEquals("8e245d9679d31e12", parsed.preservedMetadata.videoHash)
+    }
+
+    @Test
+    fun `parser preserves behaviorHints videoSize over description-derived size`() {
+        val stream = stream(
+            filename = "sample.mkv",
+            description = "📄 sample.mkv\n💾 1.34 GB"
+        ).withVideoHints(videoSize = 12_909_756L)
+
+        val parsed = AioStrictStreamParser.parse(stream)
+
+        assertEquals(12_909_756L, parsed.preservedMetadata.videoSize)
+        assertEquals(12_909_756L, parsed.sizeBytes)
+    }
+
+    @Test
+    fun `parser preserves both videoHash and videoSize in tandem`() {
+        val stream = stream(
+            filename = "sample.mkv",
+            description = "📄 sample.mkv\n💾 1.34 GB"
+        ).withVideoHints(videoHash = "8e245d9679d31e12", videoSize = 12_909_756L)
+
+        val parsed = AioStrictStreamParser.parse(stream)
+
+        assertEquals("8e245d9679d31e12", parsed.preservedMetadata.videoHash)
+        assertEquals(12_909_756L, parsed.preservedMetadata.videoSize)
+    }
+
+    private fun Stream.withVideoHints(
+        videoHash: String? = null,
+        videoSize: Long? = null
+    ): Stream = copy(
+        behaviorHints = (behaviorHints ?: StreamBehaviorHints(
+            notWebReady = null,
+            bingeGroup = null,
+            countryWhitelist = null,
+            proxyHeaders = null,
+            videoHash = null,
+            videoSize = null,
+            filename = null
+        )).copy(videoHash = videoHash, videoSize = videoSize)
+    )
+
     private fun stream(
         filename: String,
         description: String,
