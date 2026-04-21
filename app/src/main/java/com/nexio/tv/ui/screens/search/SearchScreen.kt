@@ -9,6 +9,8 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,9 +21,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,17 +56,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -73,6 +81,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nexio.tv.ui.components.CatalogRowSection
@@ -94,6 +103,27 @@ import com.nexio.tv.R
 import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.domain.model.MetaPreview
 
+private val SearchScreenHorizontalPadding = 48.dp
+private val SearchInputButtonSize = 56.dp
+private val SearchInputButtonSpacing = 12.dp
+private val SearchPanelSpacing = 12.dp
+private val SearchSelectableItemShape = RoundedCornerShape(12.dp)
+
+internal enum class SearchFieldDownTarget {
+    None,
+    RecentActions,
+    Results
+}
+
+internal fun resolveSearchFieldDownTarget(
+    canMoveToResults: Boolean,
+    showRecentSearches: Boolean
+): SearchFieldDownTarget = when {
+    canMoveToResults -> SearchFieldDownTarget.Results
+    showRecentSearches -> SearchFieldDownTarget.RecentActions
+    else -> SearchFieldDownTarget.None
+}
+
 internal data class SearchManualStreamSelectionTarget(
     val item: MetaPreview,
     val addonBaseUrl: String
@@ -110,6 +140,23 @@ internal fun shouldShowSearchManualStreamSelection(
 }
 
 internal fun searchKeyboardCompletionLabels(suggestions: List<String>): List<String> = suggestions
+
+internal fun searchDropdownStartPadding(showVoiceSearch: Boolean): Dp {
+    val voiceButtonWidth = if (showVoiceSearch) {
+        SearchInputButtonSize + SearchInputButtonSpacing
+    } else {
+        0.dp
+    }
+    return SearchScreenHorizontalPadding +
+        SearchInputButtonSize +
+        SearchInputButtonSpacing +
+        voiceButtonWidth
+}
+
+private fun searchDropdownHorizontalPadding(showVoiceSearch: Boolean): PaddingValues = PaddingValues(
+    start = searchDropdownStartPadding(showVoiceSearch),
+    end = SearchScreenHorizontalPadding
+)
 
 private fun buildSearchKeyboardCompletions(suggestions: List<String>): Array<CompletionInfo> {
     return searchKeyboardCompletionLabels(suggestions).mapIndexed { index, name ->
@@ -134,10 +181,14 @@ fun SearchScreen(
     val strVoiceMicPermission = stringResource(R.string.search_voice_mic_permission)
     val strVoiceFailed = stringResource(R.string.search_voice_failed)
     val strVoiceUnavailable = stringResource(R.string.search_voice_unavailable)
+    val voiceFailedWithCodeTemplate = stringResource(R.string.search_voice_failed_with_code)
     val voiceFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
+    val recentClearFocusRequester = remember { FocusRequester() }
+    val recentFirstItemFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var isSearchFieldAttached by remember { mutableStateOf(false) }
+    var isSearchAreaFocused by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
     var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
     var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
@@ -170,38 +221,46 @@ fun SearchScreen(
             null
         }
     }
-    val hasRecordAudioPermission by remember(context) {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
-        )
-    }
     var recordAudioPermissionGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
         )
     }
+    val latestOnVoiceQueryResult by rememberUpdatedState(onVoiceQueryResultState.value)
+    val startListeningNow: () -> Unit = remember(speechRecognizer) {
+        {
+            val recognizer = speechRecognizer
+            if (recognizer == null) {
+                isVoiceListening = false
+                Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
+            } else {
+                isVoiceListening = true
+                runCatching {
+                    recognizer.startListening(
+                        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                        }
+                    )
+                }.onFailure {
+                    isVoiceListening = false
+                    Toast.makeText(context, strVoiceFailed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     val requestAudioPermission = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         recordAudioPermissionGranted = granted
         if (granted) {
-            isVoiceListening = true
-            speechRecognizer?.startListening(
-                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-                }
-            )
+            startListeningNow()
         } else {
             Toast.makeText(context, strVoiceMicPermission, Toast.LENGTH_SHORT).show()
         }
-    }
-    LaunchedEffect(hasRecordAudioPermission) {
-        recordAudioPermissionGranted = hasRecordAudioPermission
     }
     DisposableEffect(speechRecognizer) {
         val listener = object : RecognitionListener {
@@ -214,8 +273,20 @@ fun SearchScreen(
 
             override fun onError(error: Int) {
                 isVoiceListening = false
-                if (error != SpeechRecognizer.ERROR_CLIENT) {
-                    Toast.makeText(context, strVoiceFailed, Toast.LENGTH_SHORT).show()
+                when (error) {
+                    SpeechRecognizer.ERROR_CLIENT,
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> Unit
+                    SpeechRecognizer.ERROR_NO_MATCH,
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                        Toast.makeText(context, strVoiceNoSpeech, Toast.LENGTH_SHORT).show()
+                    }
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                        Toast.makeText(context, strVoiceMicPermission, Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        val msg = voiceFailedWithCodeTemplate.format(error)
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
 
@@ -226,7 +297,7 @@ fun SearchScreen(
                     ?.firstOrNull()
                     .orEmpty()
                     .trim()
-                onVoiceQueryResultState.value(recognized)
+                latestOnVoiceQueryResult(recognized)
             }
 
             override fun onPartialResults(partialResults: Bundle?) = Unit
@@ -247,21 +318,12 @@ fun SearchScreen(
         } else if (!recordAudioPermissionGranted) {
             requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
-            isVoiceListening = true
-            runCatching {
-                speechRecognizer.startListening(
-                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-                    }
-                )
-            }.onFailure {
-                isVoiceListening = false
-                Toast.makeText(context, strVoiceUnavailable, Toast.LENGTH_SHORT).show()
-            }
+            startListeningNow()
         }
+    }
+    val cancelVoiceSearch: () -> Unit = {
+        runCatching { speechRecognizer?.cancel() }
+        isVoiceListening = false
     }
 
     val posterCardStyle = remember(uiState.posterCardWidthDp, uiState.posterCardCornerRadiusDp) {
@@ -280,11 +342,14 @@ fun SearchScreen(
     val isDiscoverMode = remember(uiState.discoverEnabled, trimmedSubmittedQuery) {
         uiState.discoverEnabled && trimmedSubmittedQuery.isEmpty()
     }
+    val dropdownContentPadding = remember(isVoiceSearchAvailable) {
+        searchDropdownHorizontalPadding(showVoiceSearch = isVoiceSearchAvailable)
+    }
     val hasPendingUnsubmittedQuery = remember(isDiscoverMode, trimmedQuery, trimmedSubmittedQuery) {
         !isDiscoverMode && trimmedQuery.length >= 2 && trimmedQuery != trimmedSubmittedQuery
     }
-    val showRecentSearches = remember(trimmedQuery, uiState.recentSearches) {
-        trimmedQuery.isEmpty() && uiState.recentSearches.isNotEmpty()
+    val showRecentSearches = remember(isSearchAreaFocused, trimmedQuery, uiState.recentSearches) {
+        isSearchAreaFocused && trimmedQuery.isEmpty() && uiState.recentSearches.isNotEmpty()
     }
     val canMoveToResults = remember(
         isDiscoverMode,
@@ -293,6 +358,12 @@ fun SearchScreen(
         uiState.catalogRows
     ) {
         if (isDiscoverMode) false else trimmedSubmittedQuery.length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
+    }
+    val searchFieldDownTarget = remember(canMoveToResults, showRecentSearches) {
+        resolveSearchFieldDownTarget(
+            canMoveToResults = canMoveToResults,
+            showRecentSearches = showRecentSearches
+        )
     }
     val submitCurrentQuery: (String) -> Unit = { submittedQuery ->
         viewModel.onEvent(SearchEvent.SubmitSearch)
@@ -423,6 +494,21 @@ fun SearchScreen(
         }
     }
 
+    val latestLaunchVoiceSearch by rememberUpdatedState(launchVoiceSearch)
+    val latestIsVoiceListening by rememberUpdatedState(isVoiceListening)
+    DisposableEffect(Unit) {
+        val handler: () -> Boolean = {
+            if (!latestIsVoiceListening) latestLaunchVoiceSearch()
+            true
+        }
+        com.nexio.tv.MainActivity.voiceKeyHandler = handler
+        onDispose {
+            if (com.nexio.tv.MainActivity.voiceKeyHandler === handler) {
+                com.nexio.tv.MainActivity.voiceKeyHandler = null
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -448,10 +534,12 @@ fun SearchScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = 10.dp)
+                    .onFocusChanged { isSearchAreaFocused = it.hasFocus }
             ) {
                 SearchInputField(
                     query = uiState.query,
-                    canMoveToResults = canMoveToResults,
+                    moveDownTarget = searchFieldDownTarget,
+                    recentActionsFocusRequester = if (showRecentSearches) recentClearFocusRequester else null,
                     voiceFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else null,
                     searchFocusRequester = searchFocusRequester,
                     onAttached = { isSearchFieldAttached = true },
@@ -467,6 +555,7 @@ fun SearchScreen(
                 )
 
                 if (uiState.imdbSuggestions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(SearchPanelSpacing))
                     ImdbSuggestionDropdown(
                         suggestions = uiState.imdbSuggestions,
                         posterUrls = uiState.imdbSuggestionPosters,
@@ -474,26 +563,35 @@ fun SearchScreen(
                         onSelect = { suggestion ->
                             val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                             onNavigateToDetail(suggestion.tconst, type, "")
-                        }
+                        },
+                        listMaxHeight = 280.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(dropdownContentPadding)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (showRecentSearches) {
-                        RecentSearchesSection(
-                            recentSearches = uiState.recentSearches,
-                            onRecentSearch = submitRecentSearch,
-                            onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
+                if (showRecentSearches) {
+                    Spacer(modifier = Modifier.height(SearchPanelSpacing))
+                    RecentSearchesSection(
+                        recentSearches = uiState.recentSearches,
+                        onRecentSearch = submitRecentSearch,
+                        onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
+                        searchFocusRequester = searchFocusRequester,
+                        clearFocusRequester = recentClearFocusRequester,
+                        firstRecentSearchFocusRequester = recentFirstItemFocusRequester,
+                        listMaxHeight = 280.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(dropdownContentPadding)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
                         EmptyScreenState(
                             title = stringResource(R.string.search_start_title),
                             subtitle = stringResource(R.string.search_start_subtitle),
@@ -504,14 +602,17 @@ fun SearchScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onFocusChanged { isSearchAreaFocused = it.hasFocus },
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
                     SearchInputField(
                         query = uiState.query,
-                        canMoveToResults = canMoveToResults,
+                        moveDownTarget = searchFieldDownTarget,
+                        recentActionsFocusRequester = if (showRecentSearches) recentClearFocusRequester else null,
                         voiceFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else null,
                         searchFocusRequester = searchFocusRequester,
                         onAttached = { isSearchFieldAttached = true },
@@ -538,7 +639,11 @@ fun SearchScreen(
                             onSelect = { suggestion ->
                                 val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                                 onNavigateToDetail(suggestion.tconst, type, "")
-                            }
+                            },
+                            listMaxHeight = 280.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(dropdownContentPadding)
                         )
                     }
                 }
@@ -562,7 +667,12 @@ fun SearchScreen(
                             recentSearches = uiState.recentSearches,
                             onRecentSearch = submitRecentSearch,
                             onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
-                            modifier = Modifier.fillMaxWidth()
+                            searchFocusRequester = searchFocusRequester,
+                            clearFocusRequester = recentClearFocusRequester,
+                            firstRecentSearchFocusRequester = recentFirstItemFocusRequester,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(dropdownContentPadding)
                         )
                     }
                 }
@@ -666,6 +776,15 @@ fun SearchScreen(
         }
     }
 
+    if (isVoiceListening) {
+        VoiceListeningOverlay(
+            title = stringResource(R.string.search_voice_listening_title),
+            subtitle = stringResource(R.string.search_voice_listening_subtitle),
+            cancelLabel = stringResource(R.string.search_voice_cancel),
+            onCancel = cancelVoiceSearch
+        )
+    }
+
     val selectedManualTarget = searchManualStreamSelectionTarget
     if (selectedManualTarget != null) {
         SearchManualStreamSelectionDialog(
@@ -696,70 +815,71 @@ private fun ImdbSuggestionDropdown(
     posterUrls: Map<String, String> = emptyMap(),
     posterPreviewEnabled: Boolean = false,
     onSelect: (ImdbSuggestion) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    listMaxHeight: Dp? = null
 ) {
-    Column(
-        modifier = modifier
+    val listModifier = if (listMaxHeight != null) {
+        Modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .heightIn(max = listMaxHeight)
+            .verticalScroll(rememberScrollState())
+    } else {
+        Modifier.fillMaxWidth()
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth()
     ) {
-        suggestions.forEach { suggestion ->
-            Button(
-                onClick = { onSelect(suggestion) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
-                val typeLabel = if (suggestion.titleType.equals("movie", ignoreCase = true)) {
-                    "Movie"
-                } else {
-                    "Series"
-                }
-                val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
-                Row(
+        Column(
+            modifier = listModifier,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            suggestions.forEach { suggestion ->
+                Button(
+                    onClick = { onSelect(suggestion) },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    colors = searchSelectableButtonColors(),
+                    border = searchSelectableButtonBorder(),
+                    scale = searchSelectableButtonScale(),
+                    shape = ButtonDefaults.shape(SearchSelectableItemShape)
                 ) {
-                    if (posterPreviewEnabled) {
-                        Box(
-                            modifier = Modifier
-                                .width(28.dp)
-                                .height(42.dp)
-                        ) {
-                            if (posterUrl != null) {
-                                coil.compose.AsyncImage(
-                                    model = coil.request.ImageRequest.Builder(LocalContext.current)
-                                        .data(posterUrl)
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            NexioColors.Background,
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                )
+                    val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
+                    val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (posterPreviewEnabled) {
+                            Box(
+                                modifier = Modifier
+                                    .width(28.dp)
+                                    .height(42.dp)
+                            ) {
+                                if (posterUrl != null) {
+                                    coil.compose.AsyncImage(
+                                        model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                            .data(posterUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                NexioColors.Background,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.width(12.dp))
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = suggestion.primaryTitle + year,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                    Text(
-                        text = suggestion.primaryTitle + year,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = typeLabel,
-                        style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
-                        color = NexioColors.TextSecondary
-                    )
                 }
             }
         }
@@ -771,15 +891,19 @@ private fun RecentSearchesSection(
     recentSearches: List<String>,
     onRecentSearch: (String) -> Unit,
     onClear: () -> Unit,
-    modifier: Modifier = Modifier
+    searchFocusRequester: FocusRequester,
+    clearFocusRequester: FocusRequester,
+    firstRecentSearchFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+    listMaxHeight: Dp? = null
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 52.dp),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -787,32 +911,67 @@ private fun RecentSearchesSection(
                 style = androidx.tv.material3.MaterialTheme.typography.titleMedium,
                 color = NexioColors.TextPrimary
             )
+        }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
             Button(
                 onClick = onClear,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
+                modifier = Modifier
+                    .focusRequester(clearFocusRequester)
+                    .focusProperties {
+                        up = searchFocusRequester
+                        down = firstRecentSearchFocusRequester
+                    },
+                colors = searchSelectableButtonColors(),
+                border = searchSelectableButtonBorder(),
+                scale = searchSelectableButtonScale(),
+                shape = ButtonDefaults.shape(SearchSelectableItemShape)
             ) {
                 Text(stringResource(R.string.search_recent_clear))
             }
         }
 
-        recentSearches.forEach { query ->
-            Button(
-                onClick = { onRecentSearch(query) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                Text(
-                    text = query,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+        val listModifier = if (listMaxHeight != null) {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = listMaxHeight)
+                .verticalScroll(rememberScrollState())
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
+        Column(
+            modifier = listModifier,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            recentSearches.forEachIndexed { index, query ->
+                Button(
+                    onClick = { onRecentSearch(query) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (index == 0) {
+                                Modifier
+                                    .focusRequester(firstRecentSearchFocusRequester)
+                                    .focusProperties { up = clearFocusRequester }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    colors = searchSelectableButtonColors(),
+                    border = searchSelectableButtonBorder(),
+                    scale = searchSelectableButtonScale(),
+                    shape = ButtonDefaults.shape(SearchSelectableItemShape)
+                ) {
+                    Text(
+                        text = query,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -865,7 +1024,8 @@ internal fun SearchManualStreamSelectionDialog(
 @Composable
 private fun SearchInputField(
     query: String,
-    canMoveToResults: Boolean,
+    moveDownTarget: SearchFieldDownTarget,
+    recentActionsFocusRequester: FocusRequester?,
     voiceFocusRequester: FocusRequester?,
     searchFocusRequester: FocusRequester,
     onAttached: () -> Unit,
@@ -883,7 +1043,7 @@ private fun SearchInputField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp)
+            .padding(horizontal = SearchScreenHorizontalPadding)
             .onGloballyPositioned { onAttached() },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -891,7 +1051,7 @@ private fun SearchInputField(
             onClick = onOpenDiscover,
             modifier = Modifier
                 .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
-                .size(56.dp)
+                .size(SearchInputButtonSize)
                 .searchInputButtonChrome(
                     isFocused = isDiscoverButtonFocused,
                     fillColor = NexioColors.BackgroundCard,
@@ -906,7 +1066,7 @@ private fun SearchInputField(
             )
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(SearchInputButtonSpacing))
 
         if (showVoiceSearch) {
             IconButton(
@@ -920,7 +1080,7 @@ private fun SearchInputField(
                         }
                     )
                     .onFocusChanged { isVoiceButtonFocused = it.isFocused }
-                    .size(56.dp)
+                    .size(SearchInputButtonSize)
                     .searchInputButtonChrome(
                         isFocused = isVoiceButtonFocused,
                         fillColor = NexioColors.BackgroundCard,
@@ -935,7 +1095,7 @@ private fun SearchInputField(
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(SearchInputButtonSpacing))
         }
 
         OutlinedTextField(
@@ -944,6 +1104,11 @@ private fun SearchInputField(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(searchFocusRequester)
+                .focusProperties {
+                    if (moveDownTarget == SearchFieldDownTarget.RecentActions && recentActionsFocusRequester != null) {
+                        down = recentActionsFocusRequester
+                    }
+                }
                 .onPreviewKeyEvent { keyEvent ->
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_ENTER,
@@ -955,17 +1120,29 @@ private fun SearchInputField(
                         }
 
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (canMoveToResults) {
-                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                                    onMoveToResults()
+                            when (moveDownTarget) {
+                                SearchFieldDownTarget.Results -> {
+                                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                        onMoveToResults()
+                                    }
+                                    return@onPreviewKeyEvent true
                                 }
-                                return@onPreviewKeyEvent true
+
+                                SearchFieldDownTarget.RecentActions -> {
+                                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                        runCatching { recentActionsFocusRequester?.requestFocus() }
+                                    }
+                                    return@onPreviewKeyEvent true
+                                }
+
+                                SearchFieldDownTarget.None -> Unit
                             }
                         }
                     }
                     false
                 },
             keyboardOptions = KeyboardOptions.Default.copy(
+                keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Search,
                 autoCorrectEnabled = false
             ),
@@ -996,6 +1173,67 @@ private fun SearchInputField(
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VoiceListeningOverlay(
+    title: String,
+    subtitle: String,
+    cancelLabel: String,
+    onCancel: () -> Unit
+) {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "voice-mic-pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(durationMillis = 700),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "voice-mic-pulse-scale"
+    )
+
+    NexioDialog(
+        onDismiss = onCancel,
+        title = title,
+        subtitle = subtitle,
+        width = 420.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                    }
+                    .background(Color(0xFFE53935), RoundedCornerShape(48.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(cancelLabel)
+            }
+        }
+    }
+}
+
 private fun Modifier.searchInputButtonChrome(
     isFocused: Boolean,
     fillColor: Color,
@@ -1019,3 +1257,28 @@ private fun Modifier.searchInputButtonChrome(
         )
     }
 }
+
+@Composable
+private fun searchSelectableButtonColors() = ButtonDefaults.colors(
+    containerColor = NexioColors.BackgroundCard,
+    contentColor = NexioColors.TextPrimary,
+    focusedContainerColor = NexioColors.BackgroundCard,
+    focusedContentColor = NexioColors.TextPrimary
+)
+
+@Composable
+private fun searchSelectableButtonBorder() = ButtonDefaults.border(
+    border = Border(
+        border = BorderStroke(1.dp, NexioColors.Border),
+        shape = SearchSelectableItemShape
+    ),
+    focusedBorder = Border(
+        border = BorderStroke(2.dp, NexioColors.FocusRing),
+        shape = SearchSelectableItemShape
+    )
+)
+
+private fun searchSelectableButtonScale() = ButtonDefaults.scale(
+    focusedScale = 1f,
+    pressedScale = 1f
+)

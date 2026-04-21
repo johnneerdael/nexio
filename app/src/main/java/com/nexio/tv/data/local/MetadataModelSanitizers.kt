@@ -66,10 +66,18 @@ internal fun TvMetadataEnrichment.sanitizedForCache(): TvMetadataEnrichment = co
 
 private fun MetaCastMember.sanitizedOrNull(): MetaCastMember? {
     val cleanName = name.trim().takeIf { it.isNotBlank() } ?: return null
-    return copy(name = cleanName)
+    return copy(
+        name = cleanName,
+        provider = provider?.trim()?.takeIf { it.isNotBlank() },
+        providerId = providerId?.trim()?.takeIf { it.isNotBlank() }
+    )
 }
 
 private fun MetaCompany.sanitizedOrNull(): MetaCompany? {
     val cleanName = name.trim().takeIf { it.isNotBlank() } ?: return null
-    return copy(name = cleanName)
+    return copy(
+        name = cleanName,
+        provider = provider?.trim()?.takeIf { it.isNotBlank() },
+        providerId = providerId?.trim()?.takeIf { it.isNotBlank() }
+    )
 }

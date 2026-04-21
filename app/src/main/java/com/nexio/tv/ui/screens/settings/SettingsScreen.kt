@@ -175,8 +175,7 @@ private fun rememberSettingsSectionSpecs() = listOf(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToCatalogs: () -> Unit = {},
-    onNavigateToAuthQrSignIn: () -> Unit = {},
-    onNavigateToYouTubeTrailerLogin: () -> Unit = {}
+    onNavigateToAuthQrSignIn: () -> Unit = {}
 ) {
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val isPrimaryProfile by settingsViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
@@ -401,7 +400,6 @@ fun SettingsScreen(
                         SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
                             selectedSection = integrationSection,
                             onSelectSection = { integrationSection = it },
-                            onNavigateToYouTubeTrailerLogin = onNavigateToYouTubeTrailerLogin,
                             isPrimaryProfile = isPrimaryProfile,
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.INTEGRATION]
@@ -637,7 +635,6 @@ private fun DeleteProfileDialog(
 private fun IntegrationSettingsContent(
     selectedSection: IntegrationSettingsSection,
     onSelectSection: (IntegrationSettingsSection) -> Unit,
-    onNavigateToYouTubeTrailerLogin: () -> Unit,
     isPrimaryProfile: Boolean,
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
@@ -796,13 +793,6 @@ private fun IntegrationSettingsContent(
                                     title = stringResource(R.string.subtitle_translation_title),
                                     subtitle = stringResource(R.string.settings_subtitle_translation_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
-                                )
-                            }
-                            item(key = "integration_hub_youtube_trailer_login") {
-                                SettingsActionRow(
-                                    title = stringResource(R.string.youtube_trailer_login_title),
-                                    subtitle = stringResource(R.string.youtube_trailer_login_hub_subtitle),
-                                    onClick = onNavigateToYouTubeTrailerLogin
                                 )
                             }
                             item(key = "integration_hub_poster_ratings") {

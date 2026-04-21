@@ -110,13 +110,13 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
-    fun defaultChunkConfigsFavorLargeSerialProviderRequests() {
+    fun defaultChunkConfigsFavorLargeParallelProviderRequests() {
         assertEquals(2_000, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxEntries)
         assertEquals(100_000, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxChars)
-        assertEquals(1, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxParallelRequests)
+        assertEquals(3, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxParallelRequests)
         assertEquals(2_000, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxEntries)
         assertEquals(100_000, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxChars)
-        assertEquals(1, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxParallelRequests)
+        assertEquals(3, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxParallelRequests)
     }
 
     @Test
@@ -380,8 +380,9 @@ class SubtitleTranslationServiceProviderTest {
 
             assertTrue(result.isFailure)
             assertTrue(
-                "Expected terminal failure to stop after retrying one active chunk, but saw ${server.requestCount} requests",
-                server.requestCount <= 4
+                "Expected terminal failure to stop after retrying active parallel chunks (bounded by " +
+                    "parallelism*retries, not full queue drain), but saw ${server.requestCount} requests",
+                server.requestCount <= 12
             )
         } finally {
             server.shutdown()

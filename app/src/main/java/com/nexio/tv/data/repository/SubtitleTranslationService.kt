@@ -27,11 +27,13 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SubtitleTranslation"
 private const val MAX_TRANSLATION_PROVIDER_ATTEMPTS = 4
+private const val MAX_TRANSLATION_PARALLELISM = 6
 private const val DEFAULT_RETRY_DELAY_MS = 1_000L
 private const val MAX_RETRY_DELAY_MS = 8_000L
 private val RAW_ASS_TRANSLATION_SYNTAX_PATTERN =
@@ -129,7 +131,8 @@ data class SubtitleTranslationChunkConfig(
     val maxEntries: Int,
     val maxChars: Int,
     val minSplitEntries: Int = 20,
-    val maxParallelRequests: Int = 3
+    val maxParallelRequests: Int = 3,
+    val rampUpEnabled: Boolean = true
 )
 
 @Singleton
@@ -137,20 +140,22 @@ class SubtitleTranslationService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val httpClient: OkHttpClient,
     internal val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
-        AutoTranslateDiagnosticsLogger.disabled()
+        AutoTranslateDiagnosticsLogger.disabled(),
+    private val reasoningModels: OpenRouterReasoningModels =
+        OpenRouterReasoningModels(context)
 ) {
     companion object {
         val DEFAULT_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 2_000,
             maxChars = 100_000,
             minSplitEntries = 100,
-            maxParallelRequests = 1
+            maxParallelRequests = 3
         )
         val ADDON_OVERLAY_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 2_000,
             maxChars = 100_000,
             minSplitEntries = 100,
-            maxParallelRequests = 1
+            maxParallelRequests = 3
         )
         val RAW_SUBRIP_SYSTEM_PROMPT_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 50,
@@ -211,16 +216,44 @@ class SubtitleTranslationService @Inject constructor(
                             settings = normalizedSettings
                         ).getOrThrow()
                     } else {
+                        val batches = AssSsaTranslationBatchPlanner.plan(document.assSsaProtectedUnits())
+                        val batchResponses = batches.map { batch ->
+                            translateProtectedAssSsaUnits(
+                                units = batch.units,
+                                targetLanguageCode = normalizedTarget,
+                                sourceLanguageCode = sourceLanguageCode,
+                                settings = normalizedSettings
+                            ).getOrThrow()
+                        }
                         val protectedTranslations = mutableMapOf<String, String>()
-                        AssSsaTranslationBatchPlanner.plan(document.assSsaProtectedUnits())
-                            .forEach { batch ->
-                                protectedTranslations += translateProtectedAssSsaUnits(
-                                    units = batch.units,
-                                    targetLanguageCode = normalizedTarget,
-                                    sourceLanguageCode = sourceLanguageCode,
-                                    settings = normalizedSettings
-                                ).getOrThrow()
+                        batches.forEachIndexed { index, batch ->
+                            val response = batchResponses[index]
+                            batch.coreUnits.forEach { unit ->
+                                response[unit.id]?.takeIf { it.isNotBlank() }?.let {
+                                    protectedTranslations[unit.id] = it
+                                }
                             }
+                        }
+                        val allCoreIds = batches.flatMapTo(mutableSetOf()) { batch ->
+                            batch.coreUnits.map { it.id }
+                        }
+                        batches.forEachIndexed { index, batch ->
+                            val response = batchResponses[index]
+                            val overlapUnits = batch.units.take(batch.leadOverlap) +
+                                batch.units.drop(batch.leadOverlap + batch.coreCount)
+                            overlapUnits.forEach { unit ->
+                                if (unit.id in allCoreIds && unit.id !in protectedTranslations) {
+                                    response[unit.id]?.takeIf { it.isNotBlank() }?.let {
+                                        protectedTranslations[unit.id] = it
+                                    }
+                                }
+                            }
+                        }
+                        diagnosticsLogger.log(
+                            "ass_translate_merge batches=${batches.size} " +
+                                "core_units=${allCoreIds.size} " +
+                                "translated=${protectedTranslations.size}"
+                        )
                         document.renderAssSsaProtected(protectedTranslations)
                     }
                 } else {
@@ -482,17 +515,28 @@ class SubtitleTranslationService @Inject constructor(
             }
             val targetLanguageName = displayLanguage(normalizedTarget)
             val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
-            chunkRawSubRipCues(cues, chunkConfig)
-                .joinToString("\n\n") { batch ->
-                    requestRawSubRipBatchAdaptive(
-                        cues = batch,
-                        targetLanguageName = targetLanguageName,
-                        sourceLanguageName = sourceLanguageName,
-                        settings = normalizedSettings,
-                        chunkConfig = chunkConfig
-                    ).trim()
+            val coreTranslatedCues = mutableListOf<RawSubRipCue>()
+            chunkRawSubRipCues(cues, chunkConfig).forEach { batch ->
+                val translatedText = requestRawSubRipBatchAdaptive(
+                    cues = batch.items,
+                    targetLanguageName = targetLanguageName,
+                    sourceLanguageName = sourceLanguageName,
+                    settings = normalizedSettings,
+                    chunkConfig = chunkConfig
+                ).trim()
+                val translatedCues = parseRawSubRipCues(translatedText)
+                if (translatedCues.size == batch.items.size) {
+                    coreTranslatedCues += translatedCues.subList(
+                        batch.leadOverlap,
+                        batch.leadOverlap + batch.coreCount
+                    )
+                } else {
+                    // validateRawSubRipTranslation should have caught this, but be defensive:
+                    // fall back to the untranslated core cues rather than emit a misaligned batch.
+                    coreTranslatedCues += batch.coreItems
                 }
-                .trim() + "\n"
+            }
+            renderRawSubRipCues(coreTranslatedCues)
         }
     }
 
@@ -529,12 +573,12 @@ class SubtitleTranslationService @Inject constructor(
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Map<Int, String> = coroutineScope {
-        val chunks = chunkBlocks(blocks, chunkConfig)
+        val batches = chunkBlocks(blocks, chunkConfig)
         val targetLanguageName = displayLanguage(targetLanguageCode)
         val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
 
         translateChunksFailFast(
-            chunks = chunks,
+            batches = batches,
             targetLanguageCode = targetLanguageCode,
             targetLanguageName = targetLanguageName,
             sourceLanguageName = sourceLanguageName,
@@ -544,59 +588,132 @@ class SubtitleTranslationService @Inject constructor(
     }
 
     private suspend fun translateChunksFailFast(
-        chunks: List<List<TranslatableTimedTextBlock>>,
+        batches: List<RampedTranslationBatch<TranslatableTimedTextBlock>>,
         targetLanguageCode: String,
         targetLanguageName: String,
         sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig
     ): Map<Int, String> = coroutineScope {
-        val parallelism = chunkConfig.maxParallelRequests.coerceIn(1, 1)
-        val translatedByIndex = mutableMapOf<Int, String>()
+        if (batches.isEmpty()) return@coroutineScope emptyMap()
 
-        for (batch in chunks.chunked(parallelism)) {
-            val batchResults = batch.map { chunk ->
+        var parallelism = chunkConfig.maxParallelRequests.coerceIn(1, MAX_TRANSLATION_PARALLELISM)
+        val batchResponses = ArrayList<Map<Int, String>>(batches.size)
+
+        var index = 0
+        while (index < batches.size) {
+            val windowEnd = (index + parallelism).coerceAtMost(batches.size)
+            val window = batches.subList(index, windowEnd)
+            val sawRateLimited = AtomicBoolean(false)
+            val observer: () -> Unit = { sawRateLimited.set(true) }
+            val windowResults = window.map { batch ->
                 async(Dispatchers.IO) {
                     requestChunkTranslationAdaptive(
-                        blocks = chunk,
+                        blocks = batch.items,
+                        targetLanguageCode = targetLanguageCode,
+                        targetLanguageName = targetLanguageName,
+                        sourceLanguageName = sourceLanguageName,
+                        settings = settings,
+                        chunkConfig = chunkConfig,
+                        onRateLimited = observer
+                    )
+                }
+            }.awaitAll()
+            batchResponses += windowResults
+            index = windowEnd
+            if (sawRateLimited.get() && parallelism > 1) {
+                val pulled = (parallelism / 2).coerceAtLeast(1)
+                diagnosticsLogger.log(
+                    "translate_concurrency_pullback from=$parallelism to=$pulled reason=429"
+                )
+                parallelism = pulled
+            }
+        }
+
+        val merged = mutableMapOf<Int, String>()
+
+        batches.forEachIndexed { batchIndex, batch ->
+            val response = batchResponses[batchIndex]
+            batch.coreItems.forEach { block ->
+                response[block.blockId]?.takeIf { it.isNotBlank() }?.let { text ->
+                    merged[block.blockId] = text
+                }
+            }
+        }
+
+        val allCoreIds = batches.asSequence()
+            .flatMap { batch -> batch.coreItems.asSequence().map { it.blockId } }
+            .toSet()
+        val missingAfterPrimary = allCoreIds.asSequence().filter { it !in merged }.toList()
+
+        if (missingAfterPrimary.isNotEmpty()) {
+            batches.forEachIndexed { batchIndex, batch ->
+                val response = batchResponses[batchIndex]
+                val overlapItems = batch.items.take(batch.leadOverlap) +
+                    batch.items.drop(batch.leadOverlap + batch.coreCount)
+                overlapItems.forEach { block ->
+                    if (block.blockId in allCoreIds && block.blockId !in merged) {
+                        response[block.blockId]?.takeIf { it.isNotBlank() }?.let { text ->
+                            merged[block.blockId] = text
+                        }
+                    }
+                }
+            }
+        }
+
+        val missingAfterOverlap = allCoreIds.asSequence().filter { it !in merged }.toList()
+        diagnosticsLogger.log(
+            "translate_chunks batches=${batches.size} " +
+                "core_cues=${allCoreIds.size} " +
+                "missing_after_primary=${missingAfterPrimary.size} " +
+                "missing_after_overlap=${missingAfterOverlap.size}"
+        )
+
+        if (missingAfterOverlap.isNotEmpty()) {
+            val missingSet = missingAfterOverlap.toSet()
+            val missingBlocks = batches.asSequence()
+                .flatMap { it.coreItems.asSequence() }
+                .filter { it.blockId in missingSet }
+                .distinctBy { it.blockId }
+                .toList()
+            if (missingBlocks.isNotEmpty()) {
+                val retryResult = runCatching {
+                    requestChunkTranslationAdaptive(
+                        blocks = missingBlocks,
                         targetLanguageCode = targetLanguageCode,
                         targetLanguageName = targetLanguageName,
                         sourceLanguageName = sourceLanguageName,
                         settings = settings,
                         chunkConfig = chunkConfig
                     )
+                }.getOrElse { emptyMap() }
+                retryResult.forEach { (id, text) ->
+                    if (text.isNotBlank() && id in allCoreIds) {
+                        merged[id] = text
+                    }
                 }
-            }.awaitAll()
-            batchResults.forEach(translatedByIndex::putAll)
+                val missingAfterRetry = allCoreIds.count { it !in merged }
+                diagnosticsLogger.log(
+                    "translate_chunks_retry requested=${missingBlocks.size} " +
+                        "missing_after_retry=$missingAfterRetry"
+                )
+            }
         }
 
-        translatedByIndex
+        merged
     }
 
     private fun chunkBlocks(
         blocks: List<TranslatableTimedTextBlock>,
         chunkConfig: SubtitleTranslationChunkConfig
-    ): List<List<TranslatableTimedTextBlock>> {
-        val result = mutableListOf<List<TranslatableTimedTextBlock>>()
-        var current = mutableListOf<TranslatableTimedTextBlock>()
-        var currentChars = 0
-
-        for (block in blocks) {
-            val nextChars = currentChars + block.text.length
-            if (current.isNotEmpty() && (current.size >= chunkConfig.maxEntries || nextChars > chunkConfig.maxChars)) {
-                result += current.toList()
-                current = mutableListOf()
-                currentChars = 0
-            }
-            current += block
-            currentChars += block.text.length
-        }
-
-        if (current.isNotEmpty()) {
-            result += current.toList()
-        }
-
-        return result
+    ): List<RampedTranslationBatch<TranslatableTimedTextBlock>> {
+        return planRampedTranslationBatches(
+            items = blocks,
+            maxCoreEntries = chunkConfig.maxEntries,
+            maxCoreChars = chunkConfig.maxChars,
+            sizeOf = { block -> block.text.length },
+            rampUpEnabled = chunkConfig.rampUpEnabled
+        )
     }
 
     private fun parseRawSubRipCues(text: String): List<RawSubRipCue> {
@@ -631,27 +748,14 @@ class SubtitleTranslationService @Inject constructor(
     private fun chunkRawSubRipCues(
         cues: List<RawSubRipCue>,
         chunkConfig: SubtitleTranslationChunkConfig
-    ): List<List<RawSubRipCue>> {
-        val result = mutableListOf<List<RawSubRipCue>>()
-        var current = mutableListOf<RawSubRipCue>()
-        var currentChars = 0
-
-        for (cue in cues) {
-            val nextChars = currentChars + cue.raw.length
-            if (current.isNotEmpty() && (current.size >= chunkConfig.maxEntries || nextChars > chunkConfig.maxChars)) {
-                result += current.toList()
-                current = mutableListOf()
-                currentChars = 0
-            }
-            current += cue
-            currentChars += cue.raw.length
-        }
-
-        if (current.isNotEmpty()) {
-            result += current.toList()
-        }
-
-        return result
+    ): List<RampedTranslationBatch<RawSubRipCue>> {
+        return planRampedTranslationBatches(
+            items = cues,
+            maxCoreEntries = chunkConfig.maxEntries,
+            maxCoreChars = chunkConfig.maxChars,
+            sizeOf = { cue -> cue.raw.length },
+            rampUpEnabled = chunkConfig.rampUpEnabled
+        )
     }
 
     private fun requestRawSubRipBatchAdaptive(
@@ -724,7 +828,8 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageName: String,
         sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
-        chunkConfig: SubtitleTranslationChunkConfig
+        chunkConfig: SubtitleTranslationChunkConfig,
+        onRateLimited: () -> Unit = {}
     ): Map<Int, String> {
         return runCatching {
             requestChunkTranslation(
@@ -732,7 +837,8 @@ class SubtitleTranslationService @Inject constructor(
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
-                settings = settings
+                settings = settings,
+                onRateLimited = onRateLimited
             )
         }.getOrElse { error ->
             if (error is SubtitleTranslationProviderException) {
@@ -748,14 +854,16 @@ class SubtitleTranslationService @Inject constructor(
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
-                chunkConfig = chunkConfig
+                chunkConfig = chunkConfig,
+                onRateLimited = onRateLimited
             ) + requestChunkTranslationAdaptive(
                 blocks = blocks.drop(midpoint),
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
                 sourceLanguageName = sourceLanguageName,
                 settings = settings,
-                chunkConfig = chunkConfig
+                chunkConfig = chunkConfig,
+                onRateLimited = onRateLimited
             )
         }
     }
@@ -765,7 +873,8 @@ class SubtitleTranslationService @Inject constructor(
         targetLanguageCode: String,
         targetLanguageName: String,
         sourceLanguageName: String,
-        settings: SubtitleTranslationSettings
+        settings: SubtitleTranslationSettings,
+        onRateLimited: () -> Unit = {}
     ): Map<Int, String> {
         if (settings.provider == SubtitleTranslationProvider.DASHSCOPE) {
             val responseText = executeTranslationRequest(
@@ -779,7 +888,8 @@ class SubtitleTranslationService @Inject constructor(
                 sourceLanguageName = sourceLanguageName,
                 markerPayload = buildDashScopeMarkerPayload(blocks),
                 settings = settings,
-                includeSchema = false
+                includeSchema = false,
+                onRateLimited = onRateLimited
             ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
             return parseDashScopeMarkerResponse(responseText, blocks)
@@ -798,7 +908,8 @@ class SubtitleTranslationService @Inject constructor(
             sourceLanguageName = sourceLanguageName,
             markerPayload = null,
             settings = settings,
-            includeSchema = true
+            includeSchema = true,
+            onRateLimited = onRateLimited
         )
             ?: executeTranslationRequest(
                 promptPayload = promptPayload,
@@ -807,7 +918,8 @@ class SubtitleTranslationService @Inject constructor(
                 sourceLanguageName = sourceLanguageName,
                 markerPayload = null,
                 settings = settings,
-                includeSchema = false
+                includeSchema = false,
+                onRateLimited = onRateLimited
             )
             ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
@@ -830,9 +942,9 @@ class SubtitleTranslationService @Inject constructor(
                 text = text
             )
         }
-        val chunks = chunkBlocks(blocks, chunkConfig)
+        val batches = chunkBlocks(blocks, chunkConfig)
         val translatedByIndex = translateChunksFailFast(
-            chunks = chunks,
+            batches = batches,
             targetLanguageCode = targetLanguageCode,
             targetLanguageName = targetLanguageName,
             sourceLanguageName = sourceLanguageName,
@@ -900,7 +1012,7 @@ class SubtitleTranslationService @Inject constructor(
         includeSchema: Boolean
     ): JSONObject {
         val generationConfig = JSONObject()
-            .put("temperature", 0.2)
+            .put("temperature", 0)
             .put(
                 "thinkingConfig",
                 JSONObject().put("thinkingBudget", 0)
@@ -959,7 +1071,7 @@ class SubtitleTranslationService @Inject constructor(
         systemPrompt: String
     ): JSONObject {
         val generationConfig = JSONObject()
-            .put("temperature", 0.2)
+            .put("temperature", 0)
             .put(
                 "thinkingConfig",
                 JSONObject().put("thinkingBudget", 0)
@@ -997,7 +1109,8 @@ class SubtitleTranslationService @Inject constructor(
         markerPayload: String?,
         settings: SubtitleTranslationSettings,
         includeSchema: Boolean,
-        systemPromptOverride: String? = null
+        systemPromptOverride: String? = null,
+        onRateLimited: () -> Unit = {}
     ): String? {
         val systemPrompt = systemPromptOverride
             ?: buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
@@ -1005,11 +1118,18 @@ class SubtitleTranslationService @Inject constructor(
         val userPayload = promptPayload.toString()
         val (request, requestBodyText) = when (settings.provider) {
             SubtitleTranslationProvider.OPENAI -> {
+                val itemCount = if (includeSchema) {
+                    promptPayload.optJSONArray("items")?.length()
+                } else {
+                    null
+                }
                 val body = buildOpenAiChatCompletionRequest(
                     settings = settings,
                     systemPrompt = systemPrompt,
                     userPayload = userPayload,
-                    includeJsonMode = includeSchema
+                    includeJsonMode = includeSchema,
+                    strictJsonSchemaItemCount = itemCount,
+                    isReasoningModel = reasoningModels.isReasoningModel(settings.model)
                 )
                 openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
             }
@@ -1078,6 +1198,9 @@ class SubtitleTranslationService @Inject constructor(
                         return null
                     }
                     if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
+                        if (providerError == SubtitleTranslationProviderError.RateLimited) {
+                            onRateLimited()
+                        }
                         val delayMs = retryDelayMs(
                             responseHeader = response.header("Retry-After"),
                             body = raw,
@@ -1091,6 +1214,9 @@ class SubtitleTranslationService @Inject constructor(
                         sleepBeforeRetry(delayMs)
                         attempt += 1
                         continue
+                    }
+                    if (providerError == SubtitleTranslationProviderError.RateLimited) {
+                        onRateLimited()
                     }
                     throw providerException(settings.provider, response.code, raw)
                 }
@@ -1124,7 +1250,8 @@ class SubtitleTranslationService @Inject constructor(
                     settings = settings,
                     systemPrompt = systemPrompt,
                     userPayload = userPayload,
-                    includeJsonMode = false
+                    includeJsonMode = false,
+                    isReasoningModel = reasoningModels.isReasoningModel(settings.model)
                 )
                 openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
             }

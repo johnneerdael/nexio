@@ -314,7 +314,7 @@ class HomeCatalogStartupReadinessTest {
 
         val expected = buildExpectedConfiguredAddonOrderKeys(
             addons = addons,
-            disabledHomeCatalogKeys = setOf("https://example.com/cinemeta_movie_popular_Popular Movies")
+            disabledHomeCatalogKeys = setOf("https://example.com_movie_popular_Popular Movies")
         )
 
         assertEquals(emptyList<String>(), expected)

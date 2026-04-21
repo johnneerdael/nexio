@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android <= 11 full-backup rules.
+
+  We exclude anything that stores authentication/session state so that a device
+  restore or Auto Backup can never overwrite a valid local Supabase session
+  with a stale one (post-upgrade / device-swap). User-level settings and
+  preferences are allowed to back up.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="io.github.jan.supabase.xml" />
+    <exclude domain="sharedpref" path="io.github.jan.supabase.auth.xml" />
+    <exclude domain="file" path="datastore/auth_presence.preferences_pb" />
+    <exclude domain="file" path="datastore/app_onboarding.preferences_pb" />
+</full-backup-content>

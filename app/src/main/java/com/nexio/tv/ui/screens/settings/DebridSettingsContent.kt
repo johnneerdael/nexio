@@ -51,8 +51,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Border
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -396,7 +394,10 @@ private fun RealDebridActivationQrDialog(
             textAlign = TextAlign.Center
         )
 
-        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+        SettingsActionButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Text(text = stringResource(R.string.action_cancel))
         }
     }
@@ -458,7 +459,10 @@ internal fun CollectorDashboardQrDialog(
             textAlign = TextAlign.Center
         )
 
-        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+        SettingsActionButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Text(text = stringResource(R.string.action_cancel))
         }
     }
@@ -555,34 +559,25 @@ private fun DebridApiKeyDialog(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            Button(
+            SettingsActionButton(
                 onClick = onDismiss,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundElevated,
-                    contentColor = NexioColors.TextPrimary
-                )
+                surface = SettingsButtonSurface.BackgroundElevated
             ) { Text(stringResource(R.string.action_cancel)) }
 
             Spacer(modifier = Modifier.width(8.dp))
-            Button(
+            SettingsActionButton(
                 onClick = onClear,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundElevated,
-                    contentColor = NexioColors.TextPrimary
-                )
+                surface = SettingsButtonSurface.BackgroundElevated
             ) { Text(stringResource(R.string.action_clear)) }
 
             Spacer(modifier = Modifier.width(8.dp))
-            Button(
+            SettingsActionButton(
                 onClick = {
                     if (!saving) {
                         onSave(value) { onDismiss() }
                     }
                 },
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
+                enabled = !saving
             ) { Text(if (saving) stringResource(R.string.action_saving) else stringResource(R.string.action_save)) }
         }
     }

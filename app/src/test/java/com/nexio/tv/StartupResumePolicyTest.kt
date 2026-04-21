@@ -57,21 +57,24 @@ class StartupResumePolicyTest {
             shouldShowAuthQrOnStartup(
                 hasSeenAuthQrOnFirstLaunch = false,
                 authState = AuthState.SignedOut,
-                onboardingCompletedThisSession = false
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
             )
         )
         assertFalse(
             shouldShowAuthQrOnStartup(
                 hasSeenAuthQrOnFirstLaunch = false,
                 authState = AuthState.Loading,
-                onboardingCompletedThisSession = false
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
             )
         )
         assertFalse(
             shouldShowAuthQrOnStartup(
                 hasSeenAuthQrOnFirstLaunch = false,
                 authState = AuthState.FullAccount(userId = "user", email = "user@example.com"),
-                onboardingCompletedThisSession = false
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
             )
         )
     }
@@ -82,21 +85,70 @@ class StartupResumePolicyTest {
             shouldShowAuthQrOnStartup(
                 hasSeenAuthQrOnFirstLaunch = true,
                 authState = AuthState.SignedOut,
-                onboardingCompletedThisSession = false
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
             )
         )
         assertFalse(
             shouldShowAuthQrOnStartup(
                 hasSeenAuthQrOnFirstLaunch = false,
                 authState = AuthState.SignedOut,
-                onboardingCompletedThisSession = true
+                onboardingCompletedThisSession = true,
+                hadAuthenticatedSession = false
             )
         )
         assertFalse(
             shouldShowAuthQrOnStartup(
                 hasSeenAuthQrOnFirstLaunch = null,
                 authState = AuthState.SignedOut,
-                onboardingCompletedThisSession = false
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
+            )
+        )
+    }
+
+    @Test
+    fun `session-lost state does not trigger onboarding QR`() {
+        // SessionLost means we already identified the user as returning but
+        // couldn't restore their session. They should see the Account-panel
+        // reconnect prompt, not the first-run onboarding QR.
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.SessionLost,
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = false
+            )
+        )
+    }
+
+    @Test
+    fun `returning user with prior auth marker never sees onboarding QR`() {
+        // Simulates post-upgrade: the onboarding DataStore was wiped or
+        // never migrated, so hasSeenAuthQrOnFirstLaunch looks like the
+        // first-run value, and authState briefly flashes SignedOut while
+        // Supabase hydrates storage. The presence marker keeps returning
+        // users out of the QR onboarding regardless.
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.SignedOut,
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = true
+            )
+        )
+    }
+
+    @Test
+    fun `null presence marker falls through to classic onboarding gate`() {
+        // Marker still loading from DataStore: fall back to the pre-marker
+        // behaviour — show QR if this is a first-run SignedOut launch.
+        assertTrue(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.SignedOut,
+                onboardingCompletedThisSession = false,
+                hadAuthenticatedSession = null
             )
         )
     }

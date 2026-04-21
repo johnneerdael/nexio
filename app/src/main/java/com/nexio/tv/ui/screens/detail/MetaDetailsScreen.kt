@@ -89,6 +89,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import com.nexio.tv.core.metadata.episodeRuntimeOrSeriesAverageMinutes
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryListTab
@@ -132,14 +133,14 @@ private enum class RestoreTarget {
     EPISODE,
     SEASON_ENTRY,
     CAST_MEMBER,
-    MORE_LIKE_THIS,
+    RELATED,
     COLLECTION
 }
 
 private enum class PeopleSectionTab {
     CAST,
     RATINGS,
-    MORE_LIKE_THIS,
+    RELATED,
     REVIEWS,
     COLLECTION
 }
@@ -616,7 +617,8 @@ fun MetaDetailsScreen(
                         watchedEpisodes = uiState.watchedEpisodes,
                         episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
                         blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
-                        moreLikeThis = uiState.moreLikeThis,
+                        isAnimeDetail = uiState.isAnimeDetail,
+                        relatedItems = uiState.relatedItems,
                         reviews = uiState.reviews,
                         isReviewsLoading = uiState.isReviewsLoading,
                         reviewsError = uiState.reviewsError,
@@ -969,7 +971,8 @@ private fun MetaDetailsContent(
     watchedEpisodes: Set<Pair<Int, Int>>,
     episodeWatchedPendingKeys: Set<String>,
     blurUnwatchedEpisodes: Boolean,
-    moreLikeThis: List<MetaPreview>,
+    isAnimeDetail: Boolean,
+    relatedItems: List<MetaPreview>,
     reviews: List<MetaReview>,
     isReviewsLoading: Boolean,
     reviewsError: String?,
@@ -1142,7 +1145,7 @@ private fun MetaDetailsContent(
     }
 
     fun markMoreLikeThisRestore(itemId: String) {
-        pendingRestoreType = RestoreTarget.MORE_LIKE_THIS
+        pendingRestoreType = RestoreTarget.RELATED
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = itemId
@@ -1257,7 +1260,9 @@ private fun MetaDetailsContent(
                             is Number -> tmdbId.toInt()
                             is String -> tmdbId.toIntOrNull()
                             else -> null
-                        }
+                        },
+                        provider = (raw["provider"] as? String)?.takeIf { it.isNotBlank() },
+                        providerId = (raw["providerId"] as? String)?.takeIf { it.isNotBlank() }
                     )
                 }
                 else -> null
@@ -1285,7 +1290,8 @@ private fun MetaDetailsContent(
             ?: "${name.trim().lowercase()}|${character?.trim()?.lowercase().orEmpty()}"
     }
 
-    val directorWriterMembers = remember(castMembersToShow) {
+    val directorWriterMembers = remember(castMembersToShow, isAnimeDetail) {
+        if (isAnimeDetail) return@remember emptyList()
         val creators = castMembersToShow.filter { it.character.equals("Creator", ignoreCase = true) }
         val directors = castMembersToShow.filter { it.character.equals("Director", ignoreCase = true) }
         val writers = castMembersToShow.filter { it.character.equals("Writer", ignoreCase = true) }
@@ -1306,17 +1312,17 @@ private fun MetaDetailsContent(
         isSeriesDetailMeta(meta)
     }
     val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
-    val hasMoreLikeThisSection = moreLikeThis.isNotEmpty()
-    val hasReviewsSection = isReviewsLoading || reviews.isNotEmpty() || !reviewsError.isNullOrBlank()
-    val hasRatingsSection = isTvShow
-    val strTabCast = stringResource(R.string.detail_tab_cast)
+    val hasRelatedSection = relatedItems.isNotEmpty()
+    val hasReviewsSection = !isAnimeDetail && (isReviewsLoading || reviews.isNotEmpty() || !reviewsError.isNullOrBlank())
+    val hasRatingsSection = isTvShow && !isAnimeDetail
+    val strTabCast = if (isAnimeDetail) "Characters" else stringResource(R.string.detail_tab_cast)
     val strTabRatings = stringResource(R.string.detail_tab_ratings)
-    val strTabMoreLikeThis = stringResource(R.string.detail_tab_more_like_this)
+    val strTabRelated = if (isAnimeDetail) "Related" else stringResource(R.string.detail_tab_more_like_this)
     val strTabReviews = stringResource(R.string.detail_tab_reviews)
     val strTabCollection = stringResource(R.string.tmdb_collections_title)
     val peopleTabItems = remember(
         hasCastSection,
-        hasMoreLikeThisSection,
+        hasRelatedSection,
         hasReviewsSection,
         hasRatingsSection,
         collection,
@@ -1346,11 +1352,11 @@ private fun MetaDetailsContent(
                     )
                 )
             }
-            if (hasMoreLikeThisSection) {
+            if (hasRelatedSection) {
                 add(
                     PeopleTabItem(
-                        tab = PeopleSectionTab.MORE_LIKE_THIS,
-                        label = strTabMoreLikeThis,
+                        tab = PeopleSectionTab.RELATED,
+                        label = strTabRelated,
                         focusRequester = moreLikeTabFocusRequester
                     )
                 )
@@ -1458,7 +1464,7 @@ private fun MetaDetailsContent(
     val hasActiveLowerContentRestoreTarget = pendingRestoreType == RestoreTarget.SEASON_ENTRY ||
         pendingRestoreType == RestoreTarget.EPISODE ||
         pendingRestoreType == RestoreTarget.CAST_MEMBER ||
-        pendingRestoreType == RestoreTarget.MORE_LIKE_THIS ||
+        pendingRestoreType == RestoreTarget.RELATED ||
         pendingRestoreType == RestoreTarget.COLLECTION
     val lowerContentFocusEnabled = shouldEnableLowerContentFocus(
         hasUserMovedDownFromHero = hasUserMovedDownFromHero,
@@ -1970,12 +1976,12 @@ private fun MetaDetailsContent(
                                 )
                             }
 
-                            PeopleSectionTab.MORE_LIKE_THIS -> {
+                            PeopleSectionTab.RELATED -> {
                                 MoreLikeThisSection(
-                                    items = moreLikeThis,
+                                    items = relatedItems,
                                     upFocusRequester = if (hasPeopleTabs) moreLikeTabFocusRequester else peopleSectionUpFocusRequester,
-                                    restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
-                                    restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
+                                    restoreItemId = if (pendingRestoreType == RestoreTarget.RELATED) pendingRestoreMoreLikeItemId else null,
+                                    restoreFocusToken = if (pendingRestoreType == RestoreTarget.RELATED) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
                                         clearPendingRestore()
                                     },

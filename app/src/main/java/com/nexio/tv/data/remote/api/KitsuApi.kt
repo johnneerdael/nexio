@@ -23,6 +23,95 @@ interface KitsuApi {
         @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeResource>>
+
+    @GET("anime/{id}/anime-characters")
+    suspend fun getAnimeCharacters(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "character",
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>
+
+    @GET("anime/{id}/anime-staff")
+    suspend fun getAnimeStaff(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "person",
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuAnimeStaffResource>>
+
+    @GET("anime/{id}/anime-productions")
+    suspend fun getAnimeProductions(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "producer",
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuAnimeProductionResource>>
+
+    @GET("anime/{id}/media-relationships")
+    suspend fun getAnimeMediaRelationships(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "destination",
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuMediaRelationshipResource>>
+
+    @GET("anime/{id}/installments")
+    suspend fun getAnimeInstallments(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "media",
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuInstallmentResource>>
+
+    @GET("characters")
+    suspend fun getCharacters(
+        @Header("Authorization") authorization: String? = null,
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
+
+    @GET("castings")
+    suspend fun getCastings(
+        @Header("Authorization") authorization: String? = null,
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
+
+    @GET("people")
+    suspend fun getPeople(
+        @Header("Authorization") authorization: String? = null,
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
+
+    @GET("producers")
+    suspend fun getProducers(
+        @Header("Authorization") authorization: String? = null,
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
+
+    @GET("franchises")
+    suspend fun getFranchises(
+        @Header("Authorization") authorization: String? = null,
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
+
+    @GET("castings")
+    suspend fun getCastingsByMedia(
+        @Header("Authorization") authorization: String? = null,
+        @Query("filter[mediaId]") mediaId: String,
+        @Query("include") include: String = "person,character",
+        @Query("page[limit]") limit: Int = 40,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuCastingResource>>
 }
 
 @JsonClass(generateAdapter = true)
@@ -34,6 +123,7 @@ data class KitsuResourceResponse<T>(
 @JsonClass(generateAdapter = true)
 data class KitsuCollectionResponse<T>(
     @Json(name = "data") val data: List<T>? = emptyList(),
+    @Json(name = "included") val included: List<KitsuIncludedResource>? = null,
     @Json(name = "links") val links: KitsuLinks? = null
 )
 
@@ -42,6 +132,54 @@ data class KitsuAnimeResource(
     @Json(name = "id") val id: String? = null,
     @Json(name = "type") val type: String? = null,
     @Json(name = "attributes") val attributes: KitsuAnimeAttributes? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeCharacterResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuAnimeCharacterAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuAnimeCharacterRelationships? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeStaffResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuAnimeStaffAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuAnimeStaffRelationships? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeProductionResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuAnimeProductionAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuAnimeProductionRelationships? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuMediaRelationshipResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuMediaRelationshipAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuMediaRelationshipRelationships? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuInstallmentResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuInstallmentAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuInstallmentRelationships? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuCastingResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuCastingAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuCastingRelationships? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -69,6 +207,39 @@ data class KitsuAnimeAttributes(
 )
 
 @JsonClass(generateAdapter = true)
+data class KitsuAnimeCharacterAttributes(
+    @Json(name = "role") val role: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeStaffAttributes(
+    @Json(name = "role") val role: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeProductionAttributes(
+    @Json(name = "role") val role: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuMediaRelationshipAttributes(
+    @Json(name = "role") val role: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuInstallmentAttributes(
+    @Json(name = "tag") val tag: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuCastingAttributes(
+    @Json(name = "role") val role: String? = null,
+    @Json(name = "voiceActor") val voiceActor: Boolean? = null,
+    @Json(name = "featured") val featured: Boolean? = null,
+    @Json(name = "language") val language: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class KitsuImage(
     @Json(name = "tiny") val tiny: String? = null,
     @Json(name = "small") val small: String? = null,
@@ -82,6 +253,50 @@ data class KitsuIncludedResource(
     @Json(name = "id") val id: String? = null,
     @Json(name = "type") val type: String? = null,
     @Json(name = "attributes") val attributes: Map<String, Any?>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeCharacterRelationships(
+    @Json(name = "character") val character: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeStaffRelationships(
+    @Json(name = "person") val person: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuAnimeProductionRelationships(
+    @Json(name = "producer") val producer: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuMediaRelationshipRelationships(
+    @Json(name = "destination") val destination: KitsuToOneRelationship? = null,
+    @Json(name = "source") val source: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuInstallmentRelationships(
+    @Json(name = "media") val media: KitsuToOneRelationship? = null,
+    @Json(name = "franchise") val franchise: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuCastingRelationships(
+    @Json(name = "person") val person: KitsuToOneRelationship? = null,
+    @Json(name = "character") val character: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuToOneRelationship(
+    @Json(name = "data") val data: KitsuResourceIdentifier? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuResourceIdentifier(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null
 )
 
 @JsonClass(generateAdapter = true)

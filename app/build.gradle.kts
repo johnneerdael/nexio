@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.androidx.baselineprofile)
-    id("com.chaquo.python")
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -290,12 +289,70 @@ val generateAnimeIdMap by tasks.registering {
     }
 }
 
+val openRouterReasoningModelsOutput =
+    layout.projectDirectory.file("src/main/assets/openrouter_reasoning_models.json")
+val openRouterReasoningModelsEndpoint =
+    "https://openrouter.ai/api/v1/models?supported_parameters=reasoning"
+
+fun stripOpenRouterModelVariant(value: Any?): String? =
+    value?.toString()?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.substringBefore(':')
+        ?.lowercase()
+        ?.takeIf { it.isNotEmpty() }
+
+val generateOpenRouterReasoningModels by tasks.registering {
+    group = "build"
+    description = "Refresh the bundled list of OpenRouter models that support reasoning controls."
+    outputs.file(openRouterReasoningModelsOutput)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val outputFile = openRouterReasoningModelsOutput.asFile
+        val payload = try {
+            fetchJson(openRouterReasoningModelsEndpoint) as? Map<*, *>
+                ?: throw IllegalStateException("OpenRouter response was not a JSON object")
+        } catch (cause: Exception) {
+            val fallback = if (outputFile.exists()) "keeping committed asset" else "no committed asset present"
+            logger.warn(
+                "Skipping OpenRouter reasoning-model refresh ({}): {}",
+                fallback,
+                cause.message ?: cause.javaClass.simpleName
+            )
+            return@doLast
+        }
+
+        val rawEntries = payload["data"] as? List<*>
+            ?: throw IllegalStateException("OpenRouter response missing 'data' array")
+
+        val slugs = sortedSetOf<String>()
+        rawEntries.filterIsInstance<Map<*, *>>().forEach { entry ->
+            stripOpenRouterModelVariant(entry["id"])?.let(slugs::add)
+            stripOpenRouterModelVariant(entry["canonical_slug"])?.let(slugs::add)
+        }
+
+        if (slugs.isEmpty()) {
+            logger.warn("OpenRouter response contained zero reasoning models; keeping existing asset.")
+            return@doLast
+        }
+
+        val rendered = JsonOutput.toJson(slugs.toList()) + "\n"
+        if (outputFile.exists() && outputFile.readText() == rendered) {
+            println("OpenRouter reasoning models unchanged (${slugs.size} entries).")
+            return@doLast
+        }
+
+        outputFile.parentFile.mkdirs()
+        outputFile.writeText(rendered)
+        println("Generated ${outputFile.relativeTo(projectDir)} (${slugs.size} entries)")
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
-    dependsOn(generateAnimeIdMap)
+    dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)
     from("src/main/assets")
     into(filteredMainAssetsDir)
-    exclude("trailer-helper/runtime/**")
 }
 
 android {
@@ -418,7 +475,7 @@ android {
         unitTests.isReturnDefaultValues = true
         unitTests.all {
             it.maxHeapSize = "2g"
-            it.forkEvery = 50  // restart JVM every 50 tests to avoid state buildup
+            it.forkEvery = 10  // restart JVM every 10 tests to keep cross-test pollution (MockK global state, leaked coroutines dispatching to Dispatchers.Main) from causing flaky failures; see 2026-04-21 investigation
             it.workingDir = rootProject.projectDir
         }
     }
@@ -476,8 +533,6 @@ android {
                 "src/main/_jni_disabled",
                 "src/main/jniLibs"
             )
-            // Package a filtered copy of the main assets tree so legacy staged
-            // trailer-helper runtimes don't bloat every split APK.
             assets.setSrcDirs(listOf(syncFilteredMainAssets))
         }
     }
@@ -494,12 +549,6 @@ android {
                 "lib/*/libswresample.so"
             )
         }
-    }
-}
-
-chaquopy {
-    defaultConfig {
-        version = "3.11"
     }
 }
 
@@ -558,7 +607,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.tv:tv-material:1.0.1")
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.javascriptengine:javascriptengine:1.0.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation(libs.androidx.tvprovider)
@@ -642,7 +690,6 @@ dependencies {
         implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
     }
 
-    implementation("io.github.abdallahmehiz:mpv-android-lib:0.1.12")
     implementation("dev.chrisbanes.haze:haze-android:0.7.3") {
         exclude(group = "org.jetbrains.compose.ui")
         exclude(group = "org.jetbrains.compose.foundation")

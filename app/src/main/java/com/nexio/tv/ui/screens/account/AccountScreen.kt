@@ -102,6 +102,24 @@ fun AccountScreen(
                 }
             }
 
+            is AuthState.SessionLost -> {
+                item {
+                    Text(
+                        text = stringResource(R.string.account_session_lost_description),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = NexioColors.TextSecondary
+                    )
+                }
+                item {
+                    AccountActionCard(
+                        icon = Icons.Default.VpnKey,
+                        title = stringResource(R.string.account_reconnect_qr_title),
+                        description = stringResource(R.string.account_reconnect_qr_subtitle),
+                        onClick = onNavigateToAuthSignIn
+                    )
+                }
+            }
+
             is AuthState.SignedOut -> {
                 item {
                     Text(

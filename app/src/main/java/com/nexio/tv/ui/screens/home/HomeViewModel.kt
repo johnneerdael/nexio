@@ -36,7 +36,6 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.local.YouTubeTrailerAuthDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
@@ -108,7 +107,6 @@ class HomeViewModel @Inject constructor(
     internal val tvMetadataRouter: TvMetadataRouter,
     internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
-    internal val youTubeTrailerAuthDataStore: YouTubeTrailerAuthDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     internal val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
     internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
@@ -362,7 +360,6 @@ class HomeViewModel @Inject constructor(
         observeModernHomePresentation()
         observeTrailerAutoplaySettings()
         observePlayerSettings()
-        observeYouTubeTrailerAuthSession()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
@@ -511,20 +508,6 @@ class HomeViewModel @Inject constructor(
                             startupRefreshPending = false
                         }
                     }
-                }
-        }
-    }
-
-    private fun observeYouTubeTrailerAuthSession() {
-        viewModelScope.launch {
-            youTubeTrailerAuthDataStore.settings
-                .drop(1)
-                .collectLatest {
-                    trailerPreviewNegativeCache.clear()
-                    trailerPreviewUrlsState.clear()
-                    trailerPreviewAudioUrlsState.clear()
-                    trailerPreviewExternalUrlsState.clear()
-                    trailerService.clearCache()
                 }
         }
     }
