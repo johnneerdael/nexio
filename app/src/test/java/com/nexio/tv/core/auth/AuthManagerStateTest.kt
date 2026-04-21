@@ -41,4 +41,13 @@ class AuthManagerStateTest {
             fullAccountStateForSupabaseUser(userId = "", email = "user@example.com")
         )
     }
+
+    @Test
+    fun `session lost is distinct from signed out`() {
+        // SessionLost must not equal SignedOut so UI branches can render
+        // different copy for returning users whose session was lost.
+        val lost: AuthState = AuthState.SessionLost
+        val out: AuthState = AuthState.SignedOut
+        assertTrue(lost != out)
+    }
 }

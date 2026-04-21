@@ -2,6 +2,7 @@ package com.nexio.tv.core.auth
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
 import com.nexio.tv.data.remote.supabase.TvLoginExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
@@ -38,7 +39,8 @@ class AuthManager @Inject constructor(
     private val auth: Auth,
     private val postgrest: Postgrest,
     private val httpClient: OkHttpClient,
-    private val authPresenceDataStore: AuthPresenceDataStore
+    private val authPresenceDataStore: AuthPresenceDataStore,
+    private val appOnboardingDataStore: AppOnboardingDataStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -100,15 +102,16 @@ class AuthManager @Inject constructor(
                             // No Supabase session in memory. Distinguish a genuine "never
                             // logged in / explicitly signed out" from a transient storage
                             // miss on cold start (post-upgrade, SDK-storage race, OEM
-                            // backup-restore blip). If our own marker says we *were*
-                            // authenticated last run, keep the current auth state and let
-                            // the SDK retry — do NOT flip to SignedOut, which would mint a
-                            // QR re-auth prompt for a valid session.
-                            val wasAuthenticated = readHadAuthenticatedSession()
-                            if (wasAuthenticated) {
+                            // backup-restore blip). If our own marker — or the onboarding
+                            // flag for users who signed in before the marker existed —
+                            // says we *were* authenticated last run, enter silent
+                            // recovery instead of flipping to SignedOut (which would mint
+                            // a spurious QR re-auth prompt for a valid session).
+                            val returning = isReturningUser()
+                            if (returning) {
                                 Log.w(
                                     TAG,
-                                    "Supabase reports no session but marker indicates prior login; keeping state and retrying"
+                                    "Supabase reports no session but returning-user signal is set; keeping state and retrying"
                                 )
                                 scope.launch { attemptSilentSessionRecovery() }
                             } else {
@@ -133,6 +136,28 @@ class AuthManager @Inject constructor(
             Log.w(TAG, "Failed to read auth presence marker; assuming none", e)
             false
         }
+    }
+
+    private suspend fun readHasCompletedOnboardingQr(): Boolean {
+        return try {
+            appOnboardingDataStore.hasSeenAuthQrOnFirstLaunch.first()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read onboarding QR flag; assuming none", e)
+            false
+        }
+    }
+
+    /**
+     * Returns true if any durable signal on-device suggests this user has
+     * authenticated before — either the presence marker (populated on every
+     * Authenticated event since the marker shipped) or the onboarding QR
+     * flag (set when the user completed the first-run QR sign-in, which
+     * predates the marker). Either signal is enough to treat a session-miss
+     * as recoverable rather than a fresh-install SignedOut.
+     */
+    private suspend fun isReturningUser(): Boolean {
+        if (readHadAuthenticatedSession()) return true
+        return readHasCompletedOnboardingQr()
     }
 
     private suspend fun attemptSilentSessionRecovery() {
@@ -161,8 +186,19 @@ class AuthManager @Inject constructor(
         }
         Log.w(
             TAG,
-            "Silent session recovery exhausted without restoring a session; keeping previous auth state until next sessionStatus emit"
+            "Silent session recovery exhausted without restoring a session; marking SessionLost for returning user"
         )
+        transitionToSessionLost()
+    }
+
+    private fun transitionToSessionLost() {
+        _sessionUserId.value = null
+        cachedEffectiveUserId = null
+        cachedEffectiveUserSourceUserId = null
+        _authState.value = AuthState.SessionLost
+        // Intentionally do NOT clear the presence marker — the user has not
+        // explicitly signed out, and the next cold start should still treat
+        // them as returning.
     }
 
     private fun transitionToSignedOut() {

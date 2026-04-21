@@ -85,6 +85,24 @@ fun AccountSettingsContent(
                 }
             }
 
+            is AuthState.SessionLost -> {
+                item(key = "account_session_lost_info") {
+                    Text(
+                        text = stringResource(R.string.account_session_lost_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioColors.TextSecondary
+                    )
+                }
+                item(key = "account_reconnect_qr") {
+                    SettingsActionButton(
+                        icon = Icons.Default.VpnKey,
+                        title = stringResource(R.string.account_reconnect_qr_title),
+                        subtitle = stringResource(R.string.account_reconnect_qr_subtitle),
+                        onClick = onNavigateToAuthQrSignIn
+                    )
+                }
+            }
+
             is AuthState.FullAccount -> {
                 item(key = "account_status") {
                     StatusCard(label = stringResource(R.string.account_signed_in_label), value = authState.email)

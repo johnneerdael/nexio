@@ -56,7 +56,7 @@ class AccountViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         authState = state,
-                        effectiveOwnerId = if (state is AuthState.SignedOut || state is AuthState.Loading) null else it.effectiveOwnerId,
+                        effectiveOwnerId = if (state is AuthState.FullAccount) it.effectiveOwnerId else null,
                         connectedStats = if (state is AuthState.FullAccount) it.connectedStats else null,
                         isStatsLoading = if (state is AuthState.FullAccount) it.isStatsLoading else false
                     )
