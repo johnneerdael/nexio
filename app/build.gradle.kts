@@ -637,6 +637,9 @@ dependencies {
 
     // DataStore
     implementation(libs.datastore.preferences)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // WorkManager
     implementation(libs.work.runtime)
@@ -729,6 +732,7 @@ dependencies {
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("androidx.media3:media3-test-utils:${libs.versions.media3.get()}")
+    testImplementation(libs.androidx.room.testing)
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
