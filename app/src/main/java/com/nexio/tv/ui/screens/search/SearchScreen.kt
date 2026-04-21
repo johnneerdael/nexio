@@ -20,9 +20,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -141,6 +145,7 @@ fun SearchScreen(
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var isSearchFieldAttached by remember { mutableStateOf(false) }
+    var isSearchAreaFocused by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
     var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
     var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
@@ -297,8 +302,8 @@ fun SearchScreen(
     val hasPendingUnsubmittedQuery = remember(isDiscoverMode, trimmedQuery, trimmedSubmittedQuery) {
         !isDiscoverMode && trimmedQuery.length >= 2 && trimmedQuery != trimmedSubmittedQuery
     }
-    val showRecentSearches = remember(trimmedQuery, uiState.recentSearches) {
-        trimmedQuery.isEmpty() && uiState.recentSearches.isNotEmpty()
+    val showRecentSearches = remember(isSearchAreaFocused, trimmedQuery, uiState.recentSearches) {
+        isSearchAreaFocused && trimmedQuery.isEmpty() && uiState.recentSearches.isNotEmpty()
     }
     val canMoveToResults = remember(
         isDiscoverMode,
@@ -477,6 +482,7 @@ fun SearchScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = 10.dp)
+                    .onFocusChanged { isSearchAreaFocused = it.hasFocus }
             ) {
                 SearchInputField(
                     query = uiState.query,
@@ -509,20 +515,21 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (showRecentSearches) {
-                        RecentSearchesSection(
-                            recentSearches = uiState.recentSearches,
-                            onRecentSearch = submitRecentSearch,
-                            onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
+                if (showRecentSearches) {
+                    RecentSearchesSection(
+                        recentSearches = uiState.recentSearches,
+                        onRecentSearch = submitRecentSearch,
+                        onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
+                        listMaxHeight = 280.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
                         EmptyScreenState(
                             title = stringResource(R.string.search_start_title),
                             subtitle = stringResource(R.string.search_start_subtitle),
@@ -533,7 +540,9 @@ fun SearchScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onFocusChanged { isSearchAreaFocused = it.hasFocus },
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -809,7 +818,8 @@ private fun RecentSearchesSection(
     recentSearches: List<String>,
     onRecentSearch: (String) -> Unit,
     onClear: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    listMaxHeight: Dp? = null
 ) {
     Column(
         modifier = modifier.padding(horizontal = 52.dp),
@@ -837,20 +847,34 @@ private fun RecentSearchesSection(
             }
         }
 
-        recentSearches.forEach { query ->
-            Button(
-                onClick = { onRecentSearch(query) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                Text(
-                    text = query,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+        val listModifier = if (listMaxHeight != null) {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = listMaxHeight)
+                .verticalScroll(rememberScrollState())
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
+        Column(
+            modifier = listModifier,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            recentSearches.forEach { query ->
+                Button(
+                    onClick = { onRecentSearch(query) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        text = query,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
@@ -1004,6 +1028,7 @@ private fun SearchInputField(
                     false
                 },
             keyboardOptions = KeyboardOptions.Default.copy(
+                keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Search,
                 autoCorrectEnabled = false
             ),
