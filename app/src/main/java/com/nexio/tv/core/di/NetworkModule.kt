@@ -82,6 +82,33 @@ private fun OkHttpClient.Builder.disableDiskCacheForGetRequests(): OkHttpClient.
         }
 }
 
+private const val KITSU_BROWSER_USER_AGENT =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+private const val KITSU_JSON_API_MEDIA_TYPE = "application/vnd.api+json"
+private const val KITSU_BROWSER_ACCEPT_LANGUAGE = "en-US,en;q=0.9"
+private const val KITSU_BROWSER_ORIGIN = "https://kitsu.io"
+private const val KITSU_BROWSER_REFERER = "https://kitsu.io/"
+
+private fun OkHttpClient.Builder.addKitsuBrowserHeaders(
+    includeJsonApiHeaders: Boolean
+): OkHttpClient.Builder {
+    return this.addInterceptor { chain ->
+        val request = chain.request()
+        val requestBuilder = request.newBuilder()
+            .header("User-Agent", KITSU_BROWSER_USER_AGENT)
+            .header("Accept-Language", KITSU_BROWSER_ACCEPT_LANGUAGE)
+            .header("Origin", KITSU_BROWSER_ORIGIN)
+            .header("Referer", KITSU_BROWSER_REFERER)
+        if (includeJsonApiHeaders) {
+            requestBuilder
+                .header("Accept", KITSU_JSON_API_MEDIA_TYPE)
+                .header("Content-Type", KITSU_JSON_API_MEDIA_TYPE)
+        }
+        chain.proceed(requestBuilder.build())
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
@@ -357,7 +384,26 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("kitsu")
-    fun provideKitsuRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+    fun provideKitsuOkHttpClient(
+        okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .disableDiskCacheForGetRequests()
+        .addKitsuBrowserHeaders(includeJsonApiHeaders = true)
+        .build()
+
+    @Provides
+    @Singleton
+    @Named("kitsuOauth")
+    fun provideKitsuOauthOkHttpClient(
+        okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .addKitsuBrowserHeaders(includeJsonApiHeaders = false)
+        .build()
+
+    @Provides
+    @Singleton
+    @Named("kitsu")
+    fun provideKitsuRetrofit(@Named("kitsu") okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://kitsu.io/api/edge/")
             .client(okHttpClient)
@@ -367,7 +413,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("kitsuOauth")
-    fun provideKitsuOauthRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+    fun provideKitsuOauthRetrofit(@Named("kitsuOauth") okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://kitsu.io/api/oauth/")
             .client(okHttpClient)

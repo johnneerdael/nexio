@@ -272,6 +272,17 @@ class HomeViewModelTvdbProviderRoutingTest {
         )
     }
 
+    private fun episodeEnrichment(overview: String?): TvEpisodeMetadata {
+        return TvEpisodeMetadata(
+            providerEpisodeId = null,
+            title = null,
+            overview = overview,
+            thumbnail = null,
+            airDate = null,
+            runtimeMinutes = null
+        )
+    }
+
     private fun tvdbEnrichment(): TvMetadataEnrichment {
         return TvMetadataEnrichment(
             seriesTvdbId = 121361,
