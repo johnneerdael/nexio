@@ -221,6 +221,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var collectionJob: Job? = null
     private var episodeMetadataJob: Job? = null
     private var episodeRatingsJob: Job? = null
+    private var kitsuBridgeHydrationJob: Job? = null
     private var nextToWatchJob: Job? = null
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
@@ -767,8 +768,22 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
-        val enrichment = enrichMeta(meta, includeEpisodeMetadata = false)
+        val expandedMeta = expandAnimeAddonSeasons(meta)
+        val preferredSeason = meta.videos
+            .mapNotNull { it.season }
+            .distinct()
+            .singleOrNull()
+        val enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false)
         applyMeta(enrichment.meta)
+        if (preferredSeason != null) {
+            _uiState.update { state ->
+                if (preferredSeason !in state.seasons || state.selectedSeason == preferredSeason) {
+                    state
+                } else {
+                    state.withManualSeasonSelection(preferredSeason)
+                }
+            }
+        }
         if (enrichment.isAnimeDetail) {
             _uiState.update { state ->
                 state.copy(
@@ -779,6 +794,7 @@ class MetaDetailsViewModel @Inject constructor(
                     reviewsError = null
                 )
             }
+            hydrateKitsuNavigationTargetsAsync(enrichment.meta)
         } else {
             // Start recommendations fetch early for non-anime titles.
             _uiState.update { it.copy(isAnimeDetail = false) }
@@ -1519,22 +1535,12 @@ class MetaDetailsViewModel @Inject constructor(
                 writer = if (tmdbEnrichment.writer.isNotEmpty()) tmdbEnrichment.writer else updated.writer
             )
         } else if (isKitsuAnimeByProvider && settings.useCredits && kitsuAdvanced?.characters?.isNotEmpty() == true) {
-            val tmdbPersonIdsByActorName = coroutineScope {
-                val lookups = kitsuAdvanced.characters
-                    .mapNotNull { it.actorName?.trim()?.takeIf { name -> name.isNotBlank() } }
-                    .distinct()
-                    .associateWith { actorName ->
-                        async { tmdbMetadataService.findPersonIdByExactName(actorName) }
-                    }
-                lookups.mapValues { (_, deferred) -> deferred.await() }
-            }
-
             val animeCharacters = kitsuAdvanced.characters.map { character ->
                 com.nexio.tv.domain.model.MetaCastMember(
                     name = character.characterName,
                     character = character.actorName,
                     photo = character.characterImage ?: character.actorImage,
-                    tmdbId = character.actorName?.let { tmdbPersonIdsByActorName[it] },
+                    tmdbId = null,
                     provider = "kitsu",
                     providerId = character.actorId
                 )
@@ -1556,20 +1562,10 @@ class MetaDetailsViewModel @Inject constructor(
         if (tmdbEnrichment != null && settings.useProductions && tmdbEnrichment.productionCompanies.isNotEmpty()) {
             updated = updated.copy(productionCompanies = tmdbEnrichment.productionCompanies)
         } else if (isKitsuAnimeByProvider && settings.useProductions && kitsuAdvanced?.productionCompanies?.isNotEmpty() == true) {
-            val tmdbCompanyIdsByName = coroutineScope {
-                val lookups = kitsuAdvanced.productionCompanies
-                    .map { it.producerName.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-                    .associateWith { companyName ->
-                        async { tmdbMetadataService.findCompanyIdByExactName(companyName) }
-                    }
-                lookups.mapValues { (_, deferred) -> deferred.await() }
-            }
             updated = updated.copy(
                 productionCompanies = kitsuAdvanced.productionCompanies.map { company ->
                     com.nexio.tv.domain.model.MetaCompany(
-                        tmdbId = tmdbCompanyIdsByName[company.producerName],
+                        tmdbId = null,
                         name = company.producerName,
                         kind = com.nexio.tv.domain.model.MetaCompanyKind.COMPANY,
                         provider = "kitsu",
@@ -1635,6 +1631,166 @@ class MetaDetailsViewModel @Inject constructor(
 
         return result(updated).copy(animeRelated = animeRelated)
     }
+
+    private fun hydrateKitsuNavigationTargetsAsync(meta: Meta) {
+        kitsuBridgeHydrationJob?.cancel()
+
+        val actorNamesNeedingIds = meta.castMembers
+            .filter { it.provider.equals("kitsu", ignoreCase = true) && it.tmdbId == null }
+            .mapNotNull { it.character?.trim()?.takeIf { name -> name.isNotBlank() } }
+            .distinct()
+        val companyNamesNeedingIds = meta.productionCompanies
+            .filter { it.provider.equals("kitsu", ignoreCase = true) && it.tmdbId == null }
+            .map { it.name.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (actorNamesNeedingIds.isEmpty() && companyNamesNeedingIds.isEmpty()) return
+
+        val expectedMetaId = meta.id
+        kitsuBridgeHydrationJob = viewModelScope.launch {
+            val tmdbPersonIdsByActorName = coroutineScope {
+                actorNamesNeedingIds.associateWith { actorName ->
+                    async { tmdbMetadataService.findPersonIdByExactName(actorName) }
+                }.mapValues { (_, deferred) -> deferred.await() }
+            }
+            val tmdbCompanyIdsByName = coroutineScope {
+                companyNamesNeedingIds.associateWith { companyName ->
+                    async { tmdbMetadataService.findCompanyIdByExactName(companyName) }
+                }.mapValues { (_, deferred) -> deferred.await() }
+            }
+
+            _uiState.update { state ->
+                val currentMeta = state.meta ?: return@update state
+                if (currentMeta.id != expectedMetaId) return@update state
+
+                val updatedCastMembers = currentMeta.castMembers.map { member ->
+                    val actorName = member.character?.trim()
+                    val tmdbId = actorName?.let { tmdbPersonIdsByActorName[it] }
+                    if (tmdbId == null || member.tmdbId == tmdbId) {
+                        member
+                    } else {
+                        member.copy(tmdbId = tmdbId)
+                    }
+                }
+                val updatedProductionCompanies = currentMeta.productionCompanies.map { company ->
+                    val tmdbId = tmdbCompanyIdsByName[company.name.trim()]
+                    if (tmdbId == null || company.tmdbId == tmdbId) {
+                        company
+                    } else {
+                        company.copy(tmdbId = tmdbId)
+                    }
+                }
+                if (
+                    updatedCastMembers == currentMeta.castMembers &&
+                    updatedProductionCompanies == currentMeta.productionCompanies
+                ) {
+                    state
+                } else {
+                    state.copy(
+                        meta = currentMeta.copy(
+                            castMembers = updatedCastMembers,
+                            productionCompanies = updatedProductionCompanies
+                        ),
+                        episodesForSeason = buildEpisodesForSeason(
+                            currentMeta.videos,
+                            state.selectedSeason
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun expandAnimeAddonSeasons(meta: Meta): Meta {
+        val addonBaseUrl = preferredAddonBaseUrl?.takeIf { it.isNotBlank() } ?: return meta
+        if (itemType.lowercase() == "movie") return meta
+        if (AnimeStremioId.parse(meta.id) == null) return meta
+
+        val linkedTargets = extractAddonSeasonTargets(meta.links)
+        if (linkedTargets.isEmpty()) return meta
+
+        val visitedIds = mutableSetOf(meta.id)
+        val pending = ArrayDeque(linkedTargets)
+        val siblingMetas = mutableListOf<Meta>()
+
+        while (pending.isNotEmpty()) {
+            val target = pending.removeFirst()
+            if (!visitedIds.add(target.itemId)) continue
+            val siblingMeta = fetchPreferredAddonMeta(
+                addonBaseUrl = addonBaseUrl,
+                itemType = target.itemType,
+                itemId = target.itemId
+            ) ?: continue
+            siblingMetas += siblingMeta
+            extractAddonSeasonTargets(siblingMeta.links)
+                .filterNot { it.itemId in visitedIds }
+                .forEach { pending.addLast(it) }
+        }
+
+        if (siblingMetas.isEmpty()) return meta
+
+        val mergedVideos = (listOf(meta) + siblingMetas)
+            .flatMap { it.videos }
+            .distinctBy { video ->
+                val season = video.season ?: -1
+                val episode = video.episode ?: -1
+                "$season:$episode:${video.id}"
+            }
+            .sortedWith(compareBy<Video>({ it.season ?: Int.MAX_VALUE }, { it.episode ?: Int.MAX_VALUE }, { it.title }))
+
+        return meta.copy(videos = mergedVideos)
+    }
+
+    private suspend fun fetchPreferredAddonMeta(
+        addonBaseUrl: String,
+        itemType: String,
+        itemId: String
+    ): Meta? {
+        return when (
+            val result = metaRepository.getMeta(
+                addonBaseUrl = addonBaseUrl,
+                type = itemType,
+                id = itemId,
+                cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                origin = detailMetaOrigin
+            ).first { it !is NetworkResult.Loading }
+        ) {
+            is NetworkResult.Success -> result.data
+            else -> null
+        }
+    }
+
+    private fun extractAddonSeasonTargets(links: List<com.nexio.tv.domain.model.MetaLink>): List<LinkedAddonDetailTarget> {
+        return links.asSequence()
+            .filter { it.category.equals("Franchise", ignoreCase = true) }
+            .filter {
+                it.name.startsWith("Prequel:", ignoreCase = true) ||
+                    it.name.startsWith("Sequel:", ignoreCase = true)
+            }
+            .mapNotNull { parseAddonDetailTarget(it.url) }
+            .filter { it.itemType.equals("series", ignoreCase = true) }
+            .toList()
+    }
+
+    private fun parseAddonDetailTarget(url: String): LinkedAddonDetailTarget? {
+        val detailMarker = "detail/"
+        val detailIndex = url.indexOf(detailMarker)
+        if (detailIndex < 0) return null
+        val tail = url.substring(detailIndex + detailMarker.length)
+        val itemType = tail.substringBefore('/').trim()
+        val itemId = tail.substringAfter('/', missingDelimiterValue = "").substringBefore('?').trim()
+        if (itemType.isBlank() || itemId.isBlank()) return null
+        return LinkedAddonDetailTarget(
+            itemType = itemType,
+            itemId = itemId
+        )
+    }
+
+    private data class LinkedAddonDetailTarget(
+        val itemType: String,
+        val itemId: String
+    )
 
     private suspend fun applyTvEpisodeEnrichment(
         targetMeta: Meta,
