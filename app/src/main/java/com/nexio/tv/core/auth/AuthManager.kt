@@ -65,6 +65,11 @@ class AuthManager @Inject constructor(
                         val user = auth.currentUserOrNull()
                         if (user != null) {
                             publishAuthenticatedUser(user.id, user.email)
+                        } else if (isReturningUser()) {
+                            // Session says Authenticated but user hasn't been
+                            // hydrated yet — for a returning user, treat as
+                            // recoverable and show the reconnect nudge.
+                            transitionToSessionLost()
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
@@ -230,13 +235,22 @@ class AuthManager @Inject constructor(
             else -> null
         }
 
-    private fun publishAuthenticatedUser(userId: String, email: String?) {
+    private suspend fun publishAuthenticatedUser(userId: String, email: String?) {
         _sessionUserId.value = userId
         if (cachedEffectiveUserSourceUserId != userId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
         }
-        val newState = fullAccountStateForSupabaseUser(userId = userId, email = email)
+        val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
+        val newState = if (computed !is AuthState.FullAccount && isReturningUser()) {
+            // Supabase reports "authenticated" but with no email — typically a
+            // stale anonymous session left over from a QR-pairing attempt.
+            // For a returning user, this should surface the reconnect nudge,
+            // not the fresh-install sign-in pitch.
+            AuthState.SessionLost
+        } else {
+            computed
+        }
         _authState.value = newState
         if (newState is AuthState.FullAccount) {
             scope.launch {
