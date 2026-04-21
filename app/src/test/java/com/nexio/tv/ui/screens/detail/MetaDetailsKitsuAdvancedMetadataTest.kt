@@ -200,6 +200,67 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         assertEquals(null, meta.productionCompanies.single().tmdbId)
     }
 
+    @Test
+    fun `anime detail uses fallback item id for advanced Kitsu enrichment when meta id is opaque`() = runTest(dispatcher) {
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "My Hero Academia",
+                language = "ja"
+            )
+        )
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:7442", any(), "ja") } returns KitsuAdvancedAnimeDetail(
+            characters = listOf(
+                KitsuAdvancedAnimeCharacter(
+                    characterId = "1",
+                    characterName = "Izuku Midoriya",
+                    actorId = "2",
+                    actorName = "Daiki Yamashita",
+                    characterImage = "https://kitsu.test/deku.jpg",
+                    language = "Japanese",
+                    featured = true
+                )
+            )
+        )
+        coEvery { tmdbMetadataService.findPersonIdByExactName("Daiki Yamashita") } returns null
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildAnimeMeta().copy(id = "hero-academia-opaque"),
+            itemId = "kitsu:7442",
+            itemType = "series",
+            tmdbMetadataService = tmdbMetadataService,
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useBasicInfo = true,
+                useDetails = true,
+                useCredits = true,
+                useProductions = true,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = true,
+                useReviews = true,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        val meta = viewModel.uiState.value.meta!!
+        assertEquals("Izuku Midoriya", meta.castMembers.single().name)
+        assertEquals("Daiki Yamashita", meta.castMembers.single().character)
+        assertEquals(true, viewModel.uiState.value.isAnimeDetail)
+        coVerify(exactly = 1) { kitsuMetadataService.fetchAdvancedDetail("kitsu:7442", any(), "ja") }
+    }
+
     private fun buildAnimeMeta(): Meta {
         return Meta(
             id = "kitsu:7442",

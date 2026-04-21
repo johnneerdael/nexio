@@ -1435,10 +1435,14 @@ class MetaDetailsViewModel @Inject constructor(
             ?: tmdbEnrichment?.genres?.takeIf { it.isNotEmpty() }
         val backdrop = tvEnrichment?.backdrop ?: tmdbEnrichment?.backdrop
         val logo = tvEnrichment?.logo ?: tmdbEnrichment?.logo
-        val isKitsuAnime = isKitsuAnimeMeta(updated)
-        val kitsuAdvanced = if (isKitsuAnime) {
+        val kitsuAdvancedSourceId = if (isKitsuAnimeByProvider) {
+            listOf(meta.id, itemId).firstOrNull { AnimeStremioId.parse(it) != null }
+        } else {
+            null
+        }
+        val kitsuAdvanced = if (kitsuAdvancedSourceId != null) {
             kitsuMetadataService.fetchAdvancedDetail(
-                rawId = updated.id,
+                rawId = kitsuAdvancedSourceId,
                 mediaKind = tmdbContentType.toAnimeMediaKind(),
                 preferredLanguageCode = tvEnrichment?.language
             )
@@ -1514,7 +1518,7 @@ class MetaDetailsViewModel @Inject constructor(
                 director = if (tmdbEnrichment.director.isNotEmpty()) tmdbEnrichment.director else updated.director,
                 writer = if (tmdbEnrichment.writer.isNotEmpty()) tmdbEnrichment.writer else updated.writer
             )
-        } else if (isKitsuAnime && settings.useCredits && kitsuAdvanced?.characters?.isNotEmpty() == true) {
+        } else if (isKitsuAnimeByProvider && settings.useCredits && kitsuAdvanced?.characters?.isNotEmpty() == true) {
             val tmdbPersonIdsByActorName = coroutineScope {
                 val lookups = kitsuAdvanced.characters
                     .mapNotNull { it.actorName?.trim()?.takeIf { name -> name.isNotBlank() } }
@@ -1551,7 +1555,7 @@ class MetaDetailsViewModel @Inject constructor(
         // Group: Productions
         if (tmdbEnrichment != null && settings.useProductions && tmdbEnrichment.productionCompanies.isNotEmpty()) {
             updated = updated.copy(productionCompanies = tmdbEnrichment.productionCompanies)
-        } else if (isKitsuAnime && settings.useProductions && kitsuAdvanced?.productionCompanies?.isNotEmpty() == true) {
+        } else if (isKitsuAnimeByProvider && settings.useProductions && kitsuAdvanced?.productionCompanies?.isNotEmpty() == true) {
             val tmdbCompanyIdsByName = coroutineScope {
                 val lookups = kitsuAdvanced.productionCompanies
                     .map { it.producerName.trim() }
@@ -1704,8 +1708,6 @@ class MetaDetailsViewModel @Inject constructor(
     private fun currentTvdbLanguageTag(): String {
         return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     }
-
-    private fun isKitsuAnimeMeta(meta: Meta): Boolean = AnimeStremioId.parse(meta.id) != null
 
     private fun ContentType.toAnimeMediaKind(): ContentMediaKind =
         if (this == ContentType.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
