@@ -26,27 +26,23 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TraktApi
-import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.AirDateGate
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.parseContentIds
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaReview
-import com.nexio.tv.domain.model.MetaReviewSource
-import com.nexio.tv.domain.model.MetaReviewType
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
@@ -180,9 +176,8 @@ private data class DetailMetadataEnrichment(
 class MetaDetailsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val metaRepository: MetaRepository,
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
+    private val reviewsRepository: ReviewsRepository,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
@@ -1099,24 +1094,13 @@ class MetaDetailsViewModel @Inject constructor(
         page: Int
     ): TraktReviewsPageResult? {
         val endpointLabel = if (query.isShowEndpoint) "show" else "movie"
-        val response = runCatching {
-            traktAuthService.executeAuthorizedRequest { authorization ->
-                if (query.isShowEndpoint) {
-                    traktApi.getShowComments(
-                        authorization = authorization,
-                        id = query.pathId,
-                        page = page,
-                        limit = TRAKT_REVIEWS_PAGE_SIZE
-                    )
-                } else {
-                    traktApi.getMovieComments(
-                        authorization = authorization,
-                        id = query.pathId,
-                        page = page,
-                        limit = TRAKT_REVIEWS_PAGE_SIZE
-                    )
-                }
-            }
+        val reviewPage = runCatching {
+            reviewsRepository.fetchTraktReviewPage(
+                pathId = query.pathId,
+                isShow = query.isShowEndpoint,
+                page = page,
+                limit = TRAKT_REVIEWS_PAGE_SIZE
+            )
         }.getOrElse {
             Log.w(
                 TAG,
@@ -1131,45 +1115,11 @@ class MetaDetailsViewModel @Inject constructor(
             return null
         }
 
-        if (!response.isSuccessful) {
-            Log.w(
-                TAG,
-                "Trakt reviews request failed for $metaIdForLogs with id=${query.pathId} endpoint=$endpointLabel page=$page: HTTP ${response.code()}"
-            )
-            return null
-        }
-
-        val items = response.body().orEmpty()
-        val mapped = items.mapNotNull { it.toMetaReview() }
-        val hasMore = hasMoreTraktReviewPages(
-            response = response,
-            currentPage = page,
-            itemsCount = items.size
-        )
-
         return TraktReviewsPageResult(
-            reviews = mapped,
+            reviews = reviewPage.reviews,
             query = query,
-            hasMore = hasMore
+            hasMore = reviewPage.hasMore
         )
-    }
-
-    private fun hasMoreTraktReviewPages(
-        response: retrofit2.Response<List<TraktCommentItemDto>>,
-        currentPage: Int,
-        itemsCount: Int
-    ): Boolean {
-        val totalPages = response.headers()["X-Pagination-Page-Count"]?.toIntOrNull()
-        if (totalPages != null) {
-            return currentPage < totalPages
-        }
-
-        val totalItems = response.headers()["X-Pagination-Item-Count"]?.toIntOrNull()
-        if (totalItems != null) {
-            return currentPage * TRAKT_REVIEWS_PAGE_SIZE < totalItems
-        }
-
-        return itemsCount >= TRAKT_REVIEWS_PAGE_SIZE
     }
 
     private fun resetReviewsPaginationState() {
@@ -1238,26 +1188,6 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         return ordered.toList()
-    }
-
-    private fun TraktCommentItemDto.toMetaReview(): MetaReview? {
-        val body = comment?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        val author = user?.name?.trim()?.takeIf { it.isNotBlank() }
-            ?: user?.username?.trim()?.takeIf { it.isNotBlank() }
-            ?: "Trakt user"
-        val stableId = id?.toString() ?: body.hashCode().toString()
-
-        return MetaReview(
-            id = stableId,
-            author = author,
-            content = body,
-            rating = userStats?.rating,
-            createdAt = createdAt?.takeIf { it.isNotBlank() },
-            updatedAt = updatedAt?.takeIf { it.isNotBlank() },
-            source = MetaReviewSource.TRAKT,
-            type = if (review == true) MetaReviewType.REVIEW else MetaReviewType.SHOUT,
-            hasSpoiler = spoiler == true
-        )
     }
 
     private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {

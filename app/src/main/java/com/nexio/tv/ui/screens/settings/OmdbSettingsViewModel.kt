@@ -3,7 +3,7 @@ package com.nexio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.OmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.OmdbApi
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class OmdbSettingsViewModel @Inject constructor(
     private val dataStore: OmdbSettingsDataStore,
-    private val omdbApi: OmdbApi
+    private val providerSettingsRepository: ProviderSettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OmdbSettingsUiState())
@@ -57,16 +57,7 @@ class OmdbSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validating.value = true
-            val valid = try {
-                val response = omdbApi.getSeason(
-                    apiKey = trimmed,
-                    seriesImdbId = OMDB_VALIDATION_SERIES_IMDB_ID,
-                    season = OMDB_VALIDATION_SEASON_NUMBER
-                )
-                response.isSuccessful && response.body()?.response.equals("True", ignoreCase = true)
-            } catch (_: Exception) {
-                false
-            }
+            val valid = providerSettingsRepository.validateOmdbApiKey(trimmed)
             _validating.value = false
             if (valid) {
                 dataStore.setApiKey(trimmed)
@@ -89,6 +80,3 @@ data class OmdbSettingsUiState(
 enum class OmdbValidationError {
     InvalidApiKey
 }
-
-private const val OMDB_VALIDATION_SERIES_IMDB_ID = "tt0944947"
-private const val OMDB_VALIDATION_SEASON_NUMBER = 1

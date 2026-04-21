@@ -8,8 +8,7 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
-import com.nexio.tv.data.remote.api.RpdbApi
-import com.nexio.tv.data.remote.api.TopPostersApi
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.PosterRatingsSettings
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
@@ -32,8 +31,7 @@ import javax.inject.Inject
 class PosterRatingsSettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val dataStore: PosterRatingsSettingsDataStore,
-    private val rpdbApi: RpdbApi,
-    private val topPostersApi: TopPostersApi,
+    private val providerSettingsRepository: ProviderSettingsRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
     private val metaRepository: MetaRepository,
@@ -107,17 +105,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validatingRpdb.value = true
-            val valid = try {
-                val response = rpdbApi.verifyApiKey(trimmed)
-                if (!response.isSuccessful) {
-                    false
-                } else {
-                    val body = response.body()?.string()?.trim().orEmpty().lowercase()
-                    body.isBlank() || body.contains("true") || body.contains("valid")
-                }
-            } catch (_: Exception) {
-                false
-            }
+            val valid = providerSettingsRepository.validateRpdbApiKey(trimmed)
             _validatingRpdb.value = false
             if (valid) {
                 dataStore.setRpdbApiKey(trimmed)
@@ -139,17 +127,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validatingTopPosters.value = true
-            val valid = try {
-                val response = topPostersApi.verifyApiKey(trimmed)
-                if (!response.isSuccessful) {
-                    false
-                } else {
-                    val body = response.body()?.string()?.trim().orEmpty().lowercase()
-                    body.isBlank() || body.contains("\"valid\":true") || body.contains("tier")
-                }
-            } catch (_: Exception) {
-                false
-            }
+            val valid = providerSettingsRepository.validateTopPostersApiKey(trimmed)
             _validatingTopPosters.value = false
             if (valid) {
                 dataStore.setTopPostersApiKey(trimmed)
@@ -189,4 +167,3 @@ sealed class PosterRatingsSettingsEvent {
     data class ToggleTopPosters(val enabled: Boolean) : PosterRatingsSettingsEvent()
     data object InvalidatePosterCache : PosterRatingsSettingsEvent()
 }
-

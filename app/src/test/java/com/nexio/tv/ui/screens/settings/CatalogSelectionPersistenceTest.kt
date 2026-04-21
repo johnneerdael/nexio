@@ -8,9 +8,9 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktProgressService
@@ -113,7 +113,7 @@ class CatalogSelectionPersistenceTest {
 
         val viewModel = MDBListSettingsViewModel(
             dataStore = dataStore,
-            mdbListApi = mockk<MDBListApi>(relaxed = true),
+            providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true),
             mdbListDiscoveryService = discoveryService,
             catalogPriorityHydrationNotifier = mockk(relaxed = true)
         )
