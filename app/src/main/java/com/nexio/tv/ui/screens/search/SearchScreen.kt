@@ -509,7 +509,8 @@ fun SearchScreen(
                         onSelect = { suggestion ->
                             val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                             onNavigateToDetail(suggestion.tconst, type, "")
-                        }
+                        },
+                        listMaxHeight = 280.dp
                     )
                 }
 
@@ -576,7 +577,8 @@ fun SearchScreen(
                             onSelect = { suggestion ->
                                 val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                                 onNavigateToDetail(suggestion.tconst, type, "")
-                            }
+                            },
+                            listMaxHeight = 280.dp
                         )
                     }
                 }
@@ -743,70 +745,73 @@ private fun ImdbSuggestionDropdown(
     posterUrls: Map<String, String> = emptyMap(),
     posterPreviewEnabled: Boolean = false,
     onSelect: (ImdbSuggestion) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    listMaxHeight: Dp? = null
 ) {
+    val listModifier = if (listMaxHeight != null) {
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = listMaxHeight)
+            .verticalScroll(rememberScrollState())
+    } else {
+        Modifier.fillMaxWidth()
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 48.dp)
     ) {
-        suggestions.forEach { suggestion ->
-            Button(
-                onClick = { onSelect(suggestion) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
-                val typeLabel = if (suggestion.titleType.equals("movie", ignoreCase = true)) {
-                    "Movie"
-                } else {
-                    "Series"
-                }
-                val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
-                Row(
+        Column(
+            modifier = listModifier,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            suggestions.forEach { suggestion ->
+                Button(
+                    onClick = { onSelect(suggestion) },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    colors = ButtonDefaults.colors(
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
+                    )
                 ) {
-                    if (posterPreviewEnabled) {
-                        Box(
-                            modifier = Modifier
-                                .width(28.dp)
-                                .height(42.dp)
-                        ) {
-                            if (posterUrl != null) {
-                                coil.compose.AsyncImage(
-                                    model = coil.request.ImageRequest.Builder(LocalContext.current)
-                                        .data(posterUrl)
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            NexioColors.Background,
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                )
+                    val year = suggestion.startYear?.let { " ($it)" }.orEmpty()
+                    val posterUrl = if (posterPreviewEnabled) posterUrls[suggestion.tconst] else null
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (posterPreviewEnabled) {
+                            Box(
+                                modifier = Modifier
+                                    .width(28.dp)
+                                    .height(42.dp)
+                            ) {
+                                if (posterUrl != null) {
+                                    coil.compose.AsyncImage(
+                                        model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                            .data(posterUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                NexioColors.Background,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.width(12.dp))
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = suggestion.primaryTitle + year,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                    Text(
-                        text = suggestion.primaryTitle + year,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = typeLabel,
-                        style = androidx.tv.material3.MaterialTheme.typography.labelSmall,
-                        color = NexioColors.TextSecondary
-                    )
                 }
             }
         }
