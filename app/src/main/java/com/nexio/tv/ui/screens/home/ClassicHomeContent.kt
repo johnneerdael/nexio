@@ -212,7 +212,7 @@ fun ClassicHomeContent(
                                 is ContinueWatchingItem.InProgress -> item.progress.contentType
                                 is ContinueWatchingItem.NextUp -> item.info.contentType
                             },
-                            ""
+                            item.addonBaseUrl().orEmpty()
                         )
                     },
                     onRemoveItem = { item ->

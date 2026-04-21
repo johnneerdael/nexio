@@ -519,7 +519,8 @@ fun NexioNavHost(
                                 resumeDurationMs = playbackInfo.resumeDurationMs,
                                 resumeProgressPercent = playbackInfo.resumeProgressPercent,
                                 resumeLastWatchedMs = playbackInfo.resumeLastWatchedMs,
-                                resumeSource = playbackInfo.resumeSource
+                                resumeSource = playbackInfo.resumeSource,
+                                addonBaseUrl = playbackInfo.addonBaseUrl
                             )
                         )
                     }
@@ -561,7 +562,8 @@ fun NexioNavHost(
                                 resumeDurationMs = playbackInfo.resumeDurationMs,
                                 resumeProgressPercent = playbackInfo.resumeProgressPercent,
                                 resumeLastWatchedMs = playbackInfo.resumeLastWatchedMs,
-                                resumeSource = playbackInfo.resumeSource
+                                resumeSource = playbackInfo.resumeSource,
+                                addonBaseUrl = playbackInfo.addonBaseUrl
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -997,7 +999,8 @@ fun NexioNavHost(
                                 filename = entry.playbackFilename,
                                 videoSize = entry.playbackSizeBytes,
                                 headers = entry.playbackHeaders,
-                                launchSource = PlayerLaunchSource.LIBRARY_DIRECT
+                                launchSource = PlayerLaunchSource.LIBRARY_DIRECT,
+                                addonBaseUrl = entry.addonBaseUrl
                             )
                         )
                     } else {

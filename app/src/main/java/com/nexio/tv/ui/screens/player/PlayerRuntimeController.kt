@@ -111,6 +111,7 @@ class PlayerRuntimeController(
     internal val backdrop: String? = navigationArgs.backdrop
     internal val logo: String? = navigationArgs.logo
     internal val videoId: String? = navigationArgs.videoId
+    internal val initialAddonBaseUrl: String? = navigationArgs.addonBaseUrl
     internal val initialSeason: Int? = navigationArgs.initialSeason
     internal val initialEpisode: Int? = navigationArgs.initialEpisode
     internal val initialEpisodeTitle: String? = navigationArgs.initialEpisodeTitle
@@ -154,6 +155,7 @@ class PlayerRuntimeController(
     internal var currentSeason: Int? = initialSeason
     internal var currentEpisode: Int? = initialEpisode
     internal var currentEpisodeTitle: String? = initialEpisodeTitle
+    internal var currentAddonBaseUrl: String? = initialAddonBaseUrl
 
     internal val _uiState = MutableStateFlow(
         PlayerUiState(

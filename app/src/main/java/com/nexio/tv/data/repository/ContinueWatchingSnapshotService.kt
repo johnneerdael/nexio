@@ -952,6 +952,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         contentId: String,
         snapshot: ContinueWatchingSnapshot
     ): HomeDisplayMetadata? {
+        val preferredAddonBaseUrl = snapshot.resumeItems
+            .firstOrNull { it.contentId == contentId }
+            ?.addonBaseUrl
+            ?.takeIf { it.isNotBlank() }
         val typeCandidates = buildList {
             val normalized = contentType.trim().lowercase()
             if (normalized.isNotBlank()) add(normalized)
@@ -969,6 +973,30 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
         typeCandidates.forEach { type ->
             idCandidates.forEach { id ->
+                if (preferredAddonBaseUrl != null) {
+                    val preferredResult = runCatching {
+                        metaRepository.getMeta(
+                            addonBaseUrl = preferredAddonBaseUrl,
+                            type = type,
+                            id = id,
+                            cacheOnDisk = true,
+                            origin = "continue_watching_snapshot"
+                        )
+                    }.getOrNull()
+                    val preferredResolved = runCatching {
+                        preferredResult?.first { it !is NetworkResult.Loading }
+                    }.getOrNull()
+                    val preferredMeta = (preferredResolved as? NetworkResult.Success<*>)?.data as? Meta
+                    if (preferredMeta != null) {
+                        return buildHomeDisplayMetadata(
+                            meta = preferredMeta,
+                            contentType = type,
+                            contentId = contentId,
+                            snapshot = snapshot
+                        )
+                    }
+                }
+
                 val result = runCatching {
                     metaRepository.getMetaFromAllAddons(
                         type = type,

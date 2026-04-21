@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
@@ -12,6 +14,7 @@ import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
@@ -24,6 +27,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -195,27 +199,38 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
     }
     val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     return try {
-        val localizedPreview = overlayProviderLocalizedMetadataForHome(
-            item = item.toContinueWatchingProviderPreview(),
-            fallbackContentId = item.providerFallbackContentId(),
-            tvMetadataRouter = tvMetadataRouter,
-            tmdbSettingsDataStore = tmdbSettingsDataStore,
-            tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService,
-            profileBoundary = profileBoundary
-        )
-        val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
-            item = item,
-            language = tvdbLanguage
-        )
-
         val existing = when (item) {
             is ContinueWatchingItem.InProgress -> item.displayMetadata
             is ContinueWatchingItem.NextUp -> item.info.displayMetadata
         }
+        val preferredMeta = fetchContinueWatchingPreferredMeta(item)
+        val preferredAnimeMeta = preferredMeta?.takeIf { AnimeStremioId.parse(it.id) != null }
 
-        val enrichedMetadata = localizedPreview.toHomeDisplayMetadata().mergeFallback(existing)
+        val localizedPreview = if (preferredAnimeMeta == null) {
+            overlayProviderLocalizedMetadataForHome(
+                item = item.toContinueWatchingProviderPreview(),
+                fallbackContentId = item.providerFallbackContentId(),
+                tvMetadataRouter = tvMetadataRouter,
+                tmdbSettingsDataStore = tmdbSettingsDataStore,
+                tmdbService = tmdbService,
+                tmdbMetadataService = tmdbMetadataService,
+                profileBoundary = profileBoundary
+            )
+        } else {
+            null
+        }
+        val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
+            tvMetadataRouter = tvMetadataRouter,
+            item = item,
+            language = tvdbLanguage,
+            preferredContentId = preferredAnimeMeta?.id
+        )
+
+        val enrichedMetadata = when {
+            preferredAnimeMeta != null -> preferredAnimeMeta.toHomeDisplayMetadata().mergeFallback(existing)
+            localizedPreview != null -> localizedPreview.toHomeDisplayMetadata().mergeFallback(existing)
+            else -> existing ?: HomeDisplayMetadata()
+        }
 
         when (item) {
             is ContinueWatchingItem.InProgress -> item.copy(
@@ -245,6 +260,22 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         Log.w(HomeViewModel.TAG, "Provider enrichment failed for continue watching item $contentId: ${e.message}")
         item
     }
+}
+
+private suspend fun HomeViewModel.fetchContinueWatchingPreferredMeta(item: ContinueWatchingItem): Meta? {
+    val addonBaseUrl = item.addonBaseUrl() ?: return null
+    val contentId = item.contentId().takeIf { it.isNotBlank() } ?: return null
+    val contentType = item.contentType().takeIf { it.isNotBlank() } ?: return null
+    val result = runCatching {
+        metaRepository.getMeta(
+            addonBaseUrl = addonBaseUrl,
+            type = contentType,
+            id = contentId,
+            cacheOnDisk = true,
+            origin = "continue_watching_provider"
+        ).first { it !is NetworkResult.Loading }
+    }.getOrNull()
+    return (result as? NetworkResult.Success)?.data
 }
 
 private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPreview {
@@ -298,7 +329,8 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
 internal suspend fun localizedContinueWatchingEpisodeDescription(
     tvMetadataRouter: com.nexio.tv.core.tvdb.TvMetadataRouter,
     item: ContinueWatchingItem,
-    language: String? = null
+    language: String? = null,
+    preferredContentId: String? = null
 ): String? {
     val season = item.season() ?: return null
     val episode = item.episode() ?: return null
@@ -306,8 +338,8 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
 
     return tvMetadataRouter.fetchEpisodeEnrichment(
         TvMetadataRequest(
-            contentId = item.contentId(),
-            fallbackContentId = item.providerFallbackContentId(),
+            contentId = preferredContentId ?: item.contentId(),
+            fallbackContentId = if (preferredContentId != null) item.contentId() else item.providerFallbackContentId(),
             contentType = ContentType.fromString(item.contentType()),
             language = language,
             seasonNumbers = listOf(season)

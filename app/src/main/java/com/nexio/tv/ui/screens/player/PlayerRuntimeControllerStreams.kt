@@ -384,6 +384,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     }
     currentHeaders = newHeaders
     currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
+    currentAddonBaseUrl = stream.addonBaseUrl
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
@@ -711,6 +712,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     }
     currentHeaders = newHeaders
     currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
+    currentAddonBaseUrl = stream.addonBaseUrl
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize

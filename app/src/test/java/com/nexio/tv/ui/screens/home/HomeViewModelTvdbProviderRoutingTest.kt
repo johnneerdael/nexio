@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -14,6 +15,7 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
@@ -161,6 +163,71 @@ class HomeViewModelTvdbProviderRoutingTest {
         coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
+    @Test
+    fun `continue watching anime prefers preferred addon meta when addon source is available`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val metaRepository = mockk<MetaRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val profileBoundary = mockk<ProfileBoundary>()
+
+        every { viewModel.metaRepository } returns metaRepository
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore
+        every { viewModel.profileBoundary } returns profileBoundary
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
+        every { profileBoundary.currentLanguageTag() } returns "en"
+        every {
+            metaRepository.getMeta(
+                addonBaseUrl = "https://anime-kitsu.strem.fun/manifest.json",
+                type = "series",
+                id = "tt1234567",
+                cacheOnDisk = true,
+                writeToDisk = true,
+                origin = "continue_watching_provider"
+            )
+        } returns flowOf(NetworkResult.Success(animeAddonMeta()))
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = mapOf(
+                (1 to 1) to episodeEnrichment("English episode from Kitsu")
+            )
+        )
+
+        val result = viewModel.enrichContinueWatchingItemWithProvider(
+            item = ContinueWatchingItem.InProgress(
+                progress = WatchProgress(
+                    contentId = "tt1234567",
+                    contentType = "series",
+                    name = "Fallback anime title",
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    videoId = "tt1234567:1:1",
+                    season = 1,
+                    episode = 1,
+                    episodeTitle = "Episode 1",
+                    position = 10_000L,
+                    duration = 20_000L,
+                    lastWatched = 42L,
+                    addonBaseUrl = "https://anime-kitsu.strem.fun/manifest.json"
+                )
+            )
+        ) as ContinueWatchingItem.InProgress
+
+        assertEquals("Bakemonogatari", result.displayMetadata?.title)
+        assertEquals("English addon synopsis", result.displayMetadata?.description)
+        assertEquals("English episode from Kitsu", result.episodeDescription)
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+    }
+
     private fun seriesPreview(): MetaPreview {
         return MetaPreview(
             id = "tt0944947",
@@ -174,6 +241,34 @@ class HomeViewModelTvdbProviderRoutingTest {
             releaseInfo = "2010",
             imdbRating = 7.0f,
             genres = listOf("Fantasy")
+        )
+    }
+
+    private fun animeAddonMeta(): Meta {
+        return Meta(
+            id = "kitsu:5081",
+            type = ContentType.SERIES,
+            rawType = "series",
+            name = "Bakemonogatari",
+            poster = "addon-poster",
+            posterShape = PosterShape.POSTER,
+            background = "addon-backdrop",
+            logo = "addon-logo",
+            description = "English addon synopsis",
+            releaseInfo = "2009",
+            imdbRating = 8.0f,
+            genres = listOf("Fantasy"),
+            runtime = "24 min",
+            director = emptyList(),
+            writer = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
         )
     }
 

@@ -702,6 +702,13 @@ internal fun ContinueWatchingItem.contentId(): String {
     }
 }
 
+internal fun ContinueWatchingItem.addonBaseUrl(): String? {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> progress.addonBaseUrl
+        is ContinueWatchingItem.NextUp -> info.addonBaseUrl
+    }?.takeIf { it.isNotBlank() }
+}
+
 internal fun ContinueWatchingItem.contentType(): String {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.contentType

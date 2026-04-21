@@ -260,6 +260,7 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
         position = position,
         duration = duration,
         lastWatched = System.currentTimeMillis(),
+        addonBaseUrl = currentAddonBaseUrl,
         progressPercent = fallbackPercent
     )
 
