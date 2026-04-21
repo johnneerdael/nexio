@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -90,6 +92,10 @@ private fun missingTvMetadataRouterForManualConstruction(): TvMetadataRouter {
     error("TvMetadataRouter must be provided to MetaDetailsViewModel")
 }
 
+private fun missingKitsuMetadataServiceForManualConstruction(): KitsuMetadataService {
+    error("KitsuMetadataService must be provided to MetaDetailsViewModel")
+}
+
 private fun debugLog(tag: String, message: String) {
     if (!BuildConfig.DEBUG) return
     runCatching { Log.d(tag, message) }
@@ -162,6 +168,8 @@ private data class TraktReviewsPageResult(
 private data class DetailMetadataEnrichment(
     val meta: Meta,
     val tvEnrichment: TvMetadataEnrichment?,
+    val animeRelated: List<com.nexio.tv.domain.model.MetaPreview> = emptyList(),
+    val isAnimeDetail: Boolean = false,
     val tvdbLanguage: String,
     val tmdbContentType: ContentType,
     val isTvContent: Boolean,
@@ -179,6 +187,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val tvMetadataRouter: TvMetadataRouter = missingTvMetadataRouterForManualConstruction(),
+    private val kitsuMetadataService: KitsuMetadataService = missingKitsuMetadataServiceForManualConstruction(),
     private val profileBoundary: ProfileBoundary,
     private val mdbListRepository: MDBListRepository,
     private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
@@ -551,7 +560,7 @@ class MetaDetailsViewModel @Inject constructor(
                     episodeRatingsError = null,
                     mdbListRatings = null,
                     showMdbListImdb = false,
-                    moreLikeThis = emptyList(),
+                    relatedItems = emptyList(),
                     reviews = emptyList(),
                     isReviewsLoading = false,
                     reviewsError = null,
@@ -758,11 +767,24 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
-        // Start recommendations fetch early so it can run in parallel with enrichment.
-        loadMoreLikeThisAsync(meta)
-        loadReviewsAsync(meta)
         val enrichment = enrichMeta(meta, includeEpisodeMetadata = false)
         applyMeta(enrichment.meta)
+        if (enrichment.isAnimeDetail) {
+            _uiState.update { state ->
+                state.copy(
+                    isAnimeDetail = true,
+                    relatedItems = enrichment.animeRelated,
+                    reviews = emptyList(),
+                    isReviewsLoading = false,
+                    reviewsError = null
+                )
+            }
+        } else {
+            // Start recommendations fetch early for non-anime titles.
+            _uiState.update { it.copy(isAnimeDetail = false) }
+            loadMoreLikeThisAsync(meta)
+            loadReviewsAsync(meta)
+        }
         loadEpisodeMetadataAsync(enrichment)
         loadEpisodeRatingsAsync(enrichment.meta)
         loadMDBListRatings(enrichment.meta)
@@ -806,7 +828,7 @@ class MetaDetailsViewModel @Inject constructor(
         moreLikeThisJob = viewModelScope.launch {
             val settings = tmdbSettingsDataStore.settings.first()
             if (!shouldLoadMoreLikeThis(settings)) {
-                _uiState.update { it.copy(moreLikeThis = emptyList()) }
+                _uiState.update { it.copy(relatedItems = emptyList()) }
                 return@launch
             }
 
@@ -815,7 +837,7 @@ class MetaDetailsViewModel @Inject constructor(
             val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
                 ?: tmdbService.ensureTmdbId(itemId, itemType)
             if (tmdbId.isNullOrBlank()) {
-                _uiState.update { it.copy(moreLikeThis = emptyList()) }
+                _uiState.update { it.copy(relatedItems = emptyList()) }
                 return@launch
             }
 
@@ -833,7 +855,7 @@ class MetaDetailsViewModel @Inject constructor(
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
-                    state.copy(moreLikeThis = recommendations)
+                    state.copy(relatedItems = recommendations)
                 } else {
                     state
                 }
@@ -1346,7 +1368,7 @@ class MetaDetailsViewModel @Inject constructor(
             animeId.source != AnimeIdSource.IMDB || tmdbContentType != ContentType.MOVIE
         }
         val tvdbLanguage = currentTvdbLanguageTag()
-        val tvEnrichment = if (isTvContent || hasAnimeId) {
+        val tvDecision = if (isTvContent || hasAnimeId) {
             tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(
                     contentId = meta.id,
@@ -1354,14 +1376,18 @@ class MetaDetailsViewModel @Inject constructor(
                     contentType = tmdbContentType,
                     language = tvdbLanguage
                 )
-            ).value
+            )
         } else {
             null
         }
+        val tvEnrichment = tvDecision?.value
+        val isKitsuAnimeByProvider = tvDecision?.provider == TvProvider.KITSU
         fun result(updatedMeta: Meta): DetailMetadataEnrichment {
             return DetailMetadataEnrichment(
                 meta = updatedMeta,
                 tvEnrichment = tvEnrichment,
+                animeRelated = emptyList(),
+                isAnimeDetail = isKitsuAnimeByProvider,
                 tvdbLanguage = tvdbLanguage,
                 tmdbContentType = tmdbContentType,
                 isTvContent = isTvContent,
@@ -1409,6 +1435,17 @@ class MetaDetailsViewModel @Inject constructor(
             ?: tmdbEnrichment?.genres?.takeIf { it.isNotEmpty() }
         val backdrop = tvEnrichment?.backdrop ?: tmdbEnrichment?.backdrop
         val logo = tvEnrichment?.logo ?: tmdbEnrichment?.logo
+        val isKitsuAnime = isKitsuAnimeMeta(updated)
+        val kitsuAdvanced = if (isKitsuAnime) {
+            kitsuMetadataService.fetchAdvancedDetail(
+                rawId = updated.id,
+                mediaKind = tmdbContentType.toAnimeMediaKind(),
+                preferredLanguageCode = tvEnrichment?.language
+            )
+        } else {
+            null
+        }
+
         val releaseInfo = tvEnrichment?.releaseInfo ?: tmdbEnrichment?.releaseInfo
         val localReleaseInfo = tvEnrichment?.let(::formatTvdbDetailLocalReleaseInfo)
         val rating = tvEnrichment?.rating ?: tmdbEnrichment?.rating
@@ -1477,6 +1514,31 @@ class MetaDetailsViewModel @Inject constructor(
                 director = if (tmdbEnrichment.director.isNotEmpty()) tmdbEnrichment.director else updated.director,
                 writer = if (tmdbEnrichment.writer.isNotEmpty()) tmdbEnrichment.writer else updated.writer
             )
+        } else if (isKitsuAnime && settings.useCredits && kitsuAdvanced?.characters?.isNotEmpty() == true) {
+            val tmdbPersonIdsByActorName = coroutineScope {
+                val lookups = kitsuAdvanced.characters
+                    .mapNotNull { it.actorName?.trim()?.takeIf { name -> name.isNotBlank() } }
+                    .distinct()
+                    .associateWith { actorName ->
+                        async { tmdbMetadataService.findPersonIdByExactName(actorName) }
+                    }
+                lookups.mapValues { (_, deferred) -> deferred.await() }
+            }
+
+            val animeCharacters = kitsuAdvanced.characters.map { character ->
+                com.nexio.tv.domain.model.MetaCastMember(
+                    name = character.characterName,
+                    character = character.actorName,
+                    photo = character.characterImage ?: character.actorImage,
+                    tmdbId = character.actorName?.let { tmdbPersonIdsByActorName[it] },
+                    provider = "kitsu",
+                    providerId = character.actorId
+                )
+            }
+            updated = updated.copy(
+                castMembers = animeCharacters,
+                cast = animeCharacters.map { it.name }
+            )
         } else if (tvEnrichment != null && settings.useCredits) {
             if (tvEnrichment.castMembers.isNotEmpty()) {
                 updated = updated.copy(
@@ -1489,6 +1551,28 @@ class MetaDetailsViewModel @Inject constructor(
         // Group: Productions
         if (tmdbEnrichment != null && settings.useProductions && tmdbEnrichment.productionCompanies.isNotEmpty()) {
             updated = updated.copy(productionCompanies = tmdbEnrichment.productionCompanies)
+        } else if (isKitsuAnime && settings.useProductions && kitsuAdvanced?.productionCompanies?.isNotEmpty() == true) {
+            val tmdbCompanyIdsByName = coroutineScope {
+                val lookups = kitsuAdvanced.productionCompanies
+                    .map { it.producerName.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .associateWith { companyName ->
+                        async { tmdbMetadataService.findCompanyIdByExactName(companyName) }
+                    }
+                lookups.mapValues { (_, deferred) -> deferred.await() }
+            }
+            updated = updated.copy(
+                productionCompanies = kitsuAdvanced.productionCompanies.map { company ->
+                    com.nexio.tv.domain.model.MetaCompany(
+                        tmdbId = tmdbCompanyIdsByName[company.producerName],
+                        name = company.producerName,
+                        kind = com.nexio.tv.domain.model.MetaCompanyKind.COMPANY,
+                        provider = "kitsu",
+                        providerId = company.producerId
+                    )
+                }
+            )
         } else if (tvEnrichment != null && settings.useProductions && tvEnrichment.productionCompanies.isNotEmpty()) {
             updated = updated.copy(productionCompanies = tvEnrichment.productionCompanies)
         }
@@ -1526,8 +1610,26 @@ class MetaDetailsViewModel @Inject constructor(
         if (tmdbEnrichment?.collectionId != null) {
             loadCollectionAsync(tmdbEnrichment.collectionId, tmdbEnrichment.collectionName, settings)
         }
+        val animeRelated = kitsuAdvanced?.relatedTitles
+            .orEmpty()
+            .map { item ->
+                com.nexio.tv.domain.model.MetaPreview(
+                    id = "kitsu:${item.mediaId}",
+                    type = ContentType.SERIES,
+                    rawType = "anime",
+                    name = item.title,
+                    poster = item.poster,
+                    posterShape = PosterShape.POSTER,
+                    background = null,
+                    logo = null,
+                    description = item.synopsis,
+                    releaseInfo = item.releaseInfo?.take(4),
+                    imdbRating = null,
+                    genres = emptyList()
+                )
+            }
 
-        return result(updated)
+        return result(updated).copy(animeRelated = animeRelated)
     }
 
     private suspend fun applyTvEpisodeEnrichment(
@@ -1602,6 +1704,11 @@ class MetaDetailsViewModel @Inject constructor(
     private fun currentTvdbLanguageTag(): String {
         return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     }
+
+    private fun isKitsuAnimeMeta(meta: Meta): Boolean = AnimeStremioId.parse(meta.id) != null
+
+    private fun ContentType.toAnimeMediaKind(): ContentMediaKind =
+        if (this == ContentType.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
 
     private fun resolveTmdbContentType(meta: Meta): ContentType {
         val fromRoute = parseDetailApiTypeToContentType(itemType)
