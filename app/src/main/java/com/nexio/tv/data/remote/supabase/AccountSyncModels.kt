@@ -365,7 +365,7 @@ data class PosterRatingsSyncSettings(
 
 @Serializable
 data class KitsuAuthSyncSettings(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val connected: Boolean = false,
     val username: String = "",
     val accessTokenSecretRef: String? = null,

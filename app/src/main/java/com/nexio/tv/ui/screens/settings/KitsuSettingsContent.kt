@@ -85,7 +85,7 @@ fun KitsuSettingsContent(
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SettingsDetailHeader(
             title = "Kitsu",
-            subtitle = "Connect Kitsu to allow authenticated anime metadata requests."
+            subtitle = "Kitsu anime metadata is always available. Connect an account for authenticated requests."
         )
 
         SettingsGroupCard(

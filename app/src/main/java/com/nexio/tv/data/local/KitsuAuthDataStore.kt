@@ -41,7 +41,7 @@ class KitsuAuthDataStore @Inject constructor(
 
     fun stateForProfile(profileId: Int): Flow<KitsuAuthSnapshot> = store(profileId).data.map { preferences ->
         KitsuAuthSnapshot(
-            enabled = preferences[enabledKey] ?: false,
+            enabled = preferences[enabledKey] ?: true,
             username = preferences[usernameKey],
             accessToken = preferences[accessTokenKey],
             refreshToken = preferences[refreshTokenKey],

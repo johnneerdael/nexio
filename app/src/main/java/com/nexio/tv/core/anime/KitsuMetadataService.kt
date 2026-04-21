@@ -25,7 +25,6 @@ class KitsuMetadataService @Inject constructor(
 ) {
     suspend fun fetchEnrichment(rawId: String, mediaKind: ContentMediaKind): TvMetadataEnrichment? =
         withContext(Dispatchers.IO) {
-            if (!kitsuAuthService.providerEnabled()) return@withContext null
             val animeId = AnimeStremioId.parse(rawId) ?: return@withContext null
             val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
             val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
@@ -59,7 +58,6 @@ class KitsuMetadataService @Inject constructor(
         mediaKind: ContentMediaKind,
         seasonNumbers: List<Int>
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> = withContext(Dispatchers.IO) {
-        if (!kitsuAuthService.providerEnabled()) return@withContext emptyMap()
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext emptyMap()
         val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
         val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
