@@ -2,6 +2,7 @@ package com.nexio.tv.core.auth
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.local.AuthPresenceDataStore
 import com.nexio.tv.data.remote.supabase.TvLoginExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
@@ -11,6 +12,7 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
@@ -23,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -34,7 +37,8 @@ private const val TAG = "AuthManager"
 class AuthManager @Inject constructor(
     private val auth: Auth,
     private val postgrest: Postgrest,
-    private val httpClient: OkHttpClient
+    private val httpClient: OkHttpClient,
+    private val authPresenceDataStore: AuthPresenceDataStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -82,10 +86,7 @@ class AuthManager @Inject constructor(
                                     // or the next sync attempt will retry.
                                     if (e.isAuthoritativeRefreshRejection()) {
                                         Log.w(TAG, "Refresh token rejected; signing out", e)
-                                        _sessionUserId.value = null
-                                        cachedEffectiveUserId = null
-                                        cachedEffectiveUserSourceUserId = null
-                                        _authState.value = AuthState.SignedOut
+                                        transitionToSignedOut()
                                     } else {
                                         Log.w(
                                             TAG,
@@ -96,10 +97,23 @@ class AuthManager @Inject constructor(
                                 }
                             }
                         } else {
-                            _sessionUserId.value = null
-                            cachedEffectiveUserId = null
-                            cachedEffectiveUserSourceUserId = null
-                            _authState.value = AuthState.SignedOut
+                            // No Supabase session in memory. Distinguish a genuine "never
+                            // logged in / explicitly signed out" from a transient storage
+                            // miss on cold start (post-upgrade, SDK-storage race, OEM
+                            // backup-restore blip). If our own marker says we *were*
+                            // authenticated last run, keep the current auth state and let
+                            // the SDK retry — do NOT flip to SignedOut, which would mint a
+                            // QR re-auth prompt for a valid session.
+                            val wasAuthenticated = readHadAuthenticatedSession()
+                            if (wasAuthenticated) {
+                                Log.w(
+                                    TAG,
+                                    "Supabase reports no session but marker indicates prior login; keeping state and retrying"
+                                )
+                                scope.launch { attemptSilentSessionRecovery() }
+                            } else {
+                                transitionToSignedOut()
+                            }
                         }
                     }
                     is SessionStatus.Initializing -> {
@@ -108,6 +122,59 @@ class AuthManager @Inject constructor(
                     }
                     else -> { /* NetworkError etc. — keep current state */ }
                 }
+            }
+        }
+    }
+
+    private suspend fun readHadAuthenticatedSession(): Boolean {
+        return try {
+            authPresenceDataStore.hadAuthenticatedSession.first()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read auth presence marker; assuming none", e)
+            false
+        }
+    }
+
+    private suspend fun attemptSilentSessionRecovery() {
+        // Give the SDK's own storage layer a few chances to hydrate the session
+        // before we commit to any SignedOut transition. Each iteration re-checks
+        // init, user, and session. If the user re-appears, Supabase will emit
+        // Authenticated on its own and we'll pick it up in the collector.
+        repeat(3) { attempt ->
+            delay(500L * (attempt + 1))
+            try {
+                auth.awaitInitialization()
+                if (auth.currentUserOrNull() != null) return
+                val session = auth.currentSessionOrNull()
+                if (session?.refreshToken?.isNotBlank() == true) {
+                    auth.refreshCurrentSession()
+                    return
+                }
+            } catch (e: Exception) {
+                if (e.isAuthoritativeRefreshRejection()) {
+                    Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
+                    transitionToSignedOut()
+                    return
+                }
+                Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
+            }
+        }
+        Log.w(
+            TAG,
+            "Silent session recovery exhausted without restoring a session; keeping previous auth state until next sessionStatus emit"
+        )
+    }
+
+    private fun transitionToSignedOut() {
+        _sessionUserId.value = null
+        cachedEffectiveUserId = null
+        cachedEffectiveUserSourceUserId = null
+        _authState.value = AuthState.SignedOut
+        scope.launch {
+            try {
+                authPresenceDataStore.clear()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to clear auth presence marker", e)
             }
         }
     }
@@ -133,7 +200,17 @@ class AuthManager @Inject constructor(
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
         }
-        _authState.value = fullAccountStateForSupabaseUser(userId = userId, email = email)
+        val newState = fullAccountStateForSupabaseUser(userId = userId, email = email)
+        _authState.value = newState
+        if (newState is AuthState.FullAccount) {
+            scope.launch {
+                try {
+                    authPresenceDataStore.markAuthenticated(userId)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to persist auth presence marker", e)
+                }
+            }
+        }
     }
 
     /**
@@ -241,6 +318,11 @@ class AuthManager @Inject constructor(
         }
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
+        try {
+            authPresenceDataStore.clear()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
+        }
     }
 
     fun clearEffectiveUserIdCache() {

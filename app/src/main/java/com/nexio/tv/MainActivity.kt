@@ -255,6 +255,9 @@ class MainActivity : ComponentActivity() {
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
     @Inject
+    lateinit var authPresenceDataStore: com.nexio.tv.data.local.AuthPresenceDataStore
+
+    @Inject
     lateinit var catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 
     @Inject
@@ -406,6 +409,10 @@ class MainActivity : ComponentActivity() {
                 .hasSeenAuthQrOnFirstLaunch
                 .map<Boolean, Boolean?> { it }
                 .collectAsState(initial = cachedHasSeenAuthQrOnFirstLaunch)
+            val hadAuthenticatedSession by authPresenceDataStore
+                .hadAuthenticatedSession
+                .map<Boolean, Boolean?> { it }
+                .collectAsState(initial = null)
             val authState by authManager.authState.collectAsState()
 
             LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
@@ -468,7 +475,8 @@ class MainActivity : ComponentActivity() {
                         shouldShowAuthQrOnStartup(
                             hasSeenAuthQrOnFirstLaunch = hasSeenAuthQrOnFirstLaunch,
                             authState = authState,
-                            onboardingCompletedThisSession = onboardingCompletedThisSession
+                            onboardingCompletedThisSession = onboardingCompletedThisSession,
+                            hadAuthenticatedSession = hadAuthenticatedSession
                         )
                     ) {
                         AuthQrSignInScreen(
