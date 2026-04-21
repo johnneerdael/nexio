@@ -32,6 +32,7 @@ import javax.inject.Singleton
 
 private const val TAG = "SubtitleTranslation"
 private const val MAX_TRANSLATION_PROVIDER_ATTEMPTS = 4
+private const val MAX_TRANSLATION_PARALLELISM = 6
 private const val DEFAULT_RETRY_DELAY_MS = 1_000L
 private const val MAX_RETRY_DELAY_MS = 8_000L
 private val RAW_ASS_TRANSLATION_SYNTAX_PATTERN =
@@ -145,13 +146,13 @@ class SubtitleTranslationService @Inject constructor(
             maxEntries = 2_000,
             maxChars = 100_000,
             minSplitEntries = 100,
-            maxParallelRequests = 1
+            maxParallelRequests = 3
         )
         val ADDON_OVERLAY_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 2_000,
             maxChars = 100_000,
             minSplitEntries = 100,
-            maxParallelRequests = 1
+            maxParallelRequests = 3
         )
         val RAW_SUBRIP_SYSTEM_PROMPT_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 50,
@@ -593,7 +594,7 @@ class SubtitleTranslationService @Inject constructor(
     ): Map<Int, String> = coroutineScope {
         if (batches.isEmpty()) return@coroutineScope emptyMap()
 
-        val parallelism = chunkConfig.maxParallelRequests.coerceIn(1, 1)
+        val parallelism = chunkConfig.maxParallelRequests.coerceIn(1, MAX_TRANSLATION_PARALLELISM)
         val batchResponses = ArrayList<Map<Int, String>>(batches.size)
 
         for (window in batches.chunked(parallelism)) {
@@ -1091,11 +1092,17 @@ class SubtitleTranslationService @Inject constructor(
         val userPayload = promptPayload.toString()
         val (request, requestBodyText) = when (settings.provider) {
             SubtitleTranslationProvider.OPENAI -> {
+                val itemCount = if (includeSchema) {
+                    promptPayload.optJSONArray("items")?.length()
+                } else {
+                    null
+                }
                 val body = buildOpenAiChatCompletionRequest(
                     settings = settings,
                     systemPrompt = systemPrompt,
                     userPayload = userPayload,
-                    includeJsonMode = includeSchema
+                    includeJsonMode = includeSchema,
+                    strictJsonSchemaItemCount = itemCount
                 )
                 openAiRequest(endpoint = endpoint, apiKey = settings.apiKey, body = body) to body.toString()
             }
