@@ -31,8 +31,13 @@ internal fun resolveStartupLaunchDisposition(
 internal fun shouldShowAuthQrOnStartup(
     hasSeenAuthQrOnFirstLaunch: Boolean?,
     authState: AuthState,
-    onboardingCompletedThisSession: Boolean
+    onboardingCompletedThisSession: Boolean,
+    hadAuthenticatedSession: Boolean?
 ): Boolean {
+    // A returning user is anyone we've previously seen authenticated on this
+    // install — never show the onboarding QR to them, regardless of what the
+    // onboarding DataStore says (it can be wiped/corrupted on upgrade).
+    if (hadAuthenticatedSession == true) return false
     return hasSeenAuthQrOnFirstLaunch == false &&
         authState is AuthState.SignedOut &&
         !onboardingCompletedThisSession

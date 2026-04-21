@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ data-extraction rules (split into cloud/device-transfer).
+
+  We exclude anything that stores authentication/session state from both
+  cloud backups and device-to-device transfers so that a restore can never
+  overwrite a valid local Supabase session with a stale one.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="io.github.jan.supabase.xml" />
+        <exclude domain="sharedpref" path="io.github.jan.supabase.auth.xml" />
+        <exclude domain="file" path="datastore/auth_presence.preferences_pb" />
+        <exclude domain="file" path="datastore/app_onboarding.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="io.github.jan.supabase.xml" />
+        <exclude domain="sharedpref" path="io.github.jan.supabase.auth.xml" />
+        <exclude domain="file" path="datastore/auth_presence.preferences_pb" />
+        <exclude domain="file" path="datastore/app_onboarding.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>
