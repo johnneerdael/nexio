@@ -46,10 +46,10 @@ class SubtitleTranslationRampUpTest {
         server.start()
         try {
             val texts = sourceTexts(15) // ramp-up schedule [5,10,...] → 2 core batches
-            // Batch 1 items: [0..4] core + [5] overlap = 6 items
-            // Batch 2 items: [4] overlap + [5..14] core = 11 items
+            // Batch 1 items: [0..4] core (size 5 → overlap 1) + [5] trail overlap = 6 items
+            // Batch 2 items: [3,4] lead overlap (size 10 → overlap 2) + [5..14] core = 12 items
             server.enqueue(openAiChatResponse((0..5).map { it to expectedTranslation(it) }))
-            server.enqueue(openAiChatResponse((listOf(4) + (5..14)).map { it to expectedTranslation(it) }))
+            server.enqueue(openAiChatResponse((3..14).map { it to expectedTranslation(it) }))
 
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
@@ -64,7 +64,9 @@ class SubtitleTranslationRampUpTest {
                     apiKey = "test-key",
                     model = "gpt-5-nano",
                     baseUrl = server.url("/v1").toString()
-                )
+                ),
+                chunkConfig = SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG
+                    .copy(maxParallelRequests = 1)
             ).getOrThrow()
 
             // All 15 texts translated
@@ -81,7 +83,7 @@ class SubtitleTranslationRampUpTest {
 
             val secondBody = server.takeRequest().body.readUtf8()
             val secondIds = extractRequestedIds(secondBody)
-            assertEquals(listOf(4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), secondIds)
+            assertEquals((3..14).toList(), secondIds)
         } finally {
             server.shutdown()
         }
@@ -116,7 +118,9 @@ class SubtitleTranslationRampUpTest {
                     apiKey = "test-key",
                     model = "gpt-5-nano",
                     baseUrl = server.url("/v1").toString()
-                )
+                ),
+                chunkConfig = SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG
+                    .copy(maxParallelRequests = 1)
             ).getOrThrow()
 
             // id 5 comes from batch 1's trail-overlap translation — no retry needed
@@ -159,7 +163,9 @@ class SubtitleTranslationRampUpTest {
                     apiKey = "test-key",
                     model = "gpt-5-nano",
                     baseUrl = server.url("/v1").toString()
-                )
+                ),
+                chunkConfig = SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG
+                    .copy(maxParallelRequests = 1)
             ).getOrThrow()
 
             assertEquals(15, result.size)

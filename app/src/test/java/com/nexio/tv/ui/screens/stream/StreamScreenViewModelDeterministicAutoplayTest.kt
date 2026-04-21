@@ -655,6 +655,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns cachedLink
         coEvery { streamLinkCacheDataStore.invalidate(any()) } just runs
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { debugSettingsDataStore.dolbyVisionDiagnosticsEnabled } returns flowOf(false)
         coEvery { deviceCapabilityRepository.snapshotForAutoplay() } returns null
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(installedAddon()))
         every {
