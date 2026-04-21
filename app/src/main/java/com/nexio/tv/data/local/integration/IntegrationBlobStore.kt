@@ -7,7 +7,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class IntegrationBlobStore private constructor(
+class IntegrationBlobStore internal constructor(
     private val root: File
 ) {
     @Inject
