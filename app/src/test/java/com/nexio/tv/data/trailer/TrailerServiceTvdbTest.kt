@@ -11,7 +11,6 @@ import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TrailerApi
-import com.nexio.tv.data.trailer.helper.TrailerAvailabilityService
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -205,9 +204,6 @@ class TrailerServiceTvdbTest {
         tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
         addonRepository: AddonRepository = mockk(relaxed = true),
         streamRepository: StreamRepository = mockk(relaxed = true),
-        trailerAvailabilityService: TrailerAvailabilityService = mockk<TrailerAvailabilityService>().also {
-            coEvery { it.isSignedIn() } returns false
-        },
         tvdbTrailerResolver: TvdbTrailerResolver? = null
     ): TrailerService {
         return TrailerService(
@@ -219,7 +215,6 @@ class TrailerServiceTvdbTest {
             tmdbMetadataService = tmdbMetadataService,
             addonRepository = addonRepository,
             streamRepository = streamRepository,
-            trailerAvailabilityService = trailerAvailabilityService,
             clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC),
             tvdbTrailerResolver = tvdbTrailerResolver
         )
@@ -229,9 +224,6 @@ class TrailerServiceTvdbTest {
     fun `tvdb trailer is tried before streailer fallback ids and tmdb`() = runTest {
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-
-        coEvery { trailerAvailabilityService.isSignedIn() } returns false
 
         val tvdbTrailerYouTubeUrl = "https://www.youtube.com/watch?v=FakeTrailer1"
         val playbackSource = TrailerPlaybackSource(
@@ -249,7 +241,6 @@ class TrailerServiceTvdbTest {
         val service = createTrailerService(
             tmdbApi = tmdbApi,
             inAppYouTubeExtractor = inAppYouTubeExtractor,
-            trailerAvailabilityService = trailerAvailabilityService,
             tvdbTrailerResolver = tvdbTrailerResolver
         )
 
@@ -272,8 +263,6 @@ class TrailerServiceTvdbTest {
     @Test
     fun `tmdb tv trailer fallback runs only when tvdb has no usable trailer`() = runTest {
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-        coEvery { trailerAvailabilityService.isSignedIn() } returns false
 
         val tvdbResolvedResolver = mockk<TvdbTrailerResolver>()
         coEvery { tvdbResolvedResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
@@ -284,7 +273,6 @@ class TrailerServiceTvdbTest {
         // When TVDB resolves successfully, TMDB TV videos must not be called
         val serviceWithTvdb = createTrailerService(
             tmdbApi = tmdbApi,
-            trailerAvailabilityService = trailerAvailabilityService,
             tvdbTrailerResolver = tvdbResolvedResolver
         )
 
@@ -306,7 +294,6 @@ class TrailerServiceTvdbTest {
 
         val serviceWithoutTvdb = createTrailerService(
             tmdbApi = tmdbApi2,
-            trailerAvailabilityService = trailerAvailabilityService,
             tvdbTrailerResolver = tvdbMissingResolver
         )
 
@@ -325,8 +312,6 @@ class TrailerServiceTvdbTest {
     @Test
     fun `unsupported tvdb trailer url is diagnosed and fallback continues`() = runTest {
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
-        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
-        coEvery { trailerAvailabilityService.isSignedIn() } returns false
 
         val tvdbTrailerResolver = mockk<TvdbTrailerResolver>()
         coEvery { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
@@ -334,7 +319,6 @@ class TrailerServiceTvdbTest {
 
         val service = createTrailerService(
             tmdbApi = tmdbApi,
-            trailerAvailabilityService = trailerAvailabilityService,
             tvdbTrailerResolver = tvdbTrailerResolver
         )
 

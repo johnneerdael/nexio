@@ -123,8 +123,6 @@ class ProfileSettingsScopeContractTest {
             "TvdbTokenStore",
             "WatchProgressPreferences",
             "WatchedItemsPreferences",
-            "YouTubeTrailerAuthDataStore",
-            "YouTubeTrailerTokenStore",
             "UpdatePreferences",
             "profile_cleanup_state"
         )
@@ -224,8 +222,6 @@ class ProfileSettingsScopeContractTest {
             "StreamLinkCacheDataStore",
             "TrailerSettingsDataStore",
             "TvdbIdentityCacheStore",
-            "YouTubeTrailerAuthDataStore",
-            "YouTubeTrailerTokenStore",
             "UpdatePreferences",
             "profile_cleanup_state"
         ).forEach { store ->
