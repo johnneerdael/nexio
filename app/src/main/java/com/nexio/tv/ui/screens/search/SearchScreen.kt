@@ -100,6 +100,11 @@ import com.nexio.tv.R
 import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.domain.model.MetaPreview
 
+private val SearchScreenHorizontalPadding = 48.dp
+private val SearchInputButtonSize = 56.dp
+private val SearchInputButtonSpacing = 12.dp
+private val SearchPanelSpacing = 12.dp
+
 internal data class SearchManualStreamSelectionTarget(
     val item: MetaPreview,
     val addonBaseUrl: String
@@ -116,6 +121,23 @@ internal fun shouldShowSearchManualStreamSelection(
 }
 
 internal fun searchKeyboardCompletionLabels(suggestions: List<String>): List<String> = suggestions
+
+internal fun searchDropdownStartPadding(showVoiceSearch: Boolean): Dp {
+    val voiceButtonWidth = if (showVoiceSearch) {
+        SearchInputButtonSize + SearchInputButtonSpacing
+    } else {
+        0.dp
+    }
+    return SearchScreenHorizontalPadding +
+        SearchInputButtonSize +
+        SearchInputButtonSpacing +
+        voiceButtonWidth
+}
+
+private fun searchDropdownHorizontalPadding(showVoiceSearch: Boolean): PaddingValues = PaddingValues(
+    start = searchDropdownStartPadding(showVoiceSearch),
+    end = SearchScreenHorizontalPadding
+)
 
 private fun buildSearchKeyboardCompletions(suggestions: List<String>): Array<CompletionInfo> {
     return searchKeyboardCompletionLabels(suggestions).mapIndexed { index, name ->
@@ -298,6 +320,9 @@ fun SearchScreen(
     val trimmedSubmittedQuery = remember(uiState.submittedQuery) { uiState.submittedQuery.trim() }
     val isDiscoverMode = remember(uiState.discoverEnabled, trimmedSubmittedQuery) {
         uiState.discoverEnabled && trimmedSubmittedQuery.isEmpty()
+    }
+    val dropdownContentPadding = remember(isVoiceSearchAvailable) {
+        searchDropdownHorizontalPadding(showVoiceSearch = isVoiceSearchAvailable)
     }
     val hasPendingUnsubmittedQuery = remember(isDiscoverMode, trimmedQuery, trimmedSubmittedQuery) {
         !isDiscoverMode && trimmedQuery.length >= 2 && trimmedQuery != trimmedSubmittedQuery
@@ -502,6 +527,7 @@ fun SearchScreen(
                 )
 
                 if (uiState.imdbSuggestions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(SearchPanelSpacing))
                     ImdbSuggestionDropdown(
                         suggestions = uiState.imdbSuggestions,
                         posterUrls = uiState.imdbSuggestionPosters,
@@ -510,19 +536,23 @@ fun SearchScreen(
                             val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                             onNavigateToDetail(suggestion.tconst, type, "")
                         },
-                        listMaxHeight = 280.dp
+                        listMaxHeight = 280.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(dropdownContentPadding)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
                 if (showRecentSearches) {
+                    Spacer(modifier = Modifier.height(SearchPanelSpacing))
                     RecentSearchesSection(
                         recentSearches = uiState.recentSearches,
                         onRecentSearch = submitRecentSearch,
                         onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
                         listMaxHeight = 280.dp,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(dropdownContentPadding)
                     )
                 } else {
                     Box(
@@ -578,7 +608,10 @@ fun SearchScreen(
                                 val type = if (suggestion.titleType.equals("movie", ignoreCase = true)) "movie" else "series"
                                 onNavigateToDetail(suggestion.tconst, type, "")
                             },
-                            listMaxHeight = 280.dp
+                            listMaxHeight = 280.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(dropdownContentPadding)
                         )
                     }
                 }
@@ -602,7 +635,9 @@ fun SearchScreen(
                             recentSearches = uiState.recentSearches,
                             onRecentSearch = submitRecentSearch,
                             onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(dropdownContentPadding)
                         )
                     }
                 }
@@ -758,9 +793,7 @@ private fun ImdbSuggestionDropdown(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 48.dp)
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = listModifier,
@@ -827,7 +860,7 @@ private fun RecentSearchesSection(
     listMaxHeight: Dp? = null
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 52.dp),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
@@ -950,7 +983,7 @@ private fun SearchInputField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp)
+            .padding(horizontal = SearchScreenHorizontalPadding)
             .onGloballyPositioned { onAttached() },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -958,7 +991,7 @@ private fun SearchInputField(
             onClick = onOpenDiscover,
             modifier = Modifier
                 .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
-                .size(56.dp)
+                .size(SearchInputButtonSize)
                 .searchInputButtonChrome(
                     isFocused = isDiscoverButtonFocused,
                     fillColor = NexioColors.BackgroundCard,
@@ -973,7 +1006,7 @@ private fun SearchInputField(
             )
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(SearchInputButtonSpacing))
 
         if (showVoiceSearch) {
             IconButton(
@@ -987,7 +1020,7 @@ private fun SearchInputField(
                         }
                     )
                     .onFocusChanged { isVoiceButtonFocused = it.isFocused }
-                    .size(56.dp)
+                    .size(SearchInputButtonSize)
                     .searchInputButtonChrome(
                         isFocused = isVoiceButtonFocused,
                         fillColor = NexioColors.BackgroundCard,
@@ -1002,7 +1035,7 @@ private fun SearchInputField(
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(SearchInputButtonSpacing))
         }
 
         OutlinedTextField(
