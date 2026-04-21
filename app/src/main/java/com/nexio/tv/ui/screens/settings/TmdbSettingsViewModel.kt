@@ -2,6 +2,9 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.data.local.TmdbCatalogIds
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.domain.model.TmdbSettings
@@ -20,6 +23,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TmdbSettingsViewModel @Inject constructor(
     private val dataStore: TmdbSettingsDataStore,
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
     private val tmdbApi: TmdbApi
 ) : ViewModel() {
 
@@ -34,6 +38,11 @@ class TmdbSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
                 _uiState.update { it.fromSettings(settings) }
+            }
+        }
+        viewModelScope.launch {
+            tmdbCatalogSettingsDataStore.catalogPreferences.collectLatest { catalogPreferences ->
+                _uiState.update { it.fromCatalogPreferences(catalogPreferences) }
             }
         }
     }
@@ -53,6 +62,21 @@ class TmdbSettingsViewModel @Inject constructor(
             is TmdbSettingsEvent.ToggleMoreLikeThis -> update { dataStore.setUseMoreLikeThis(event.enabled) }
             is TmdbSettingsEvent.ToggleReviews -> update { dataStore.setUseReviews(event.enabled) }
             is TmdbSettingsEvent.ToggleCollections -> update { dataStore.setUseCollections(event.enabled) }
+            is TmdbSettingsEvent.ToggleCatalog -> update {
+                tmdbCatalogSettingsDataStore.setCatalogEnabled(event.catalogId, event.enabled)
+            }
+            is TmdbSettingsEvent.MoveCatalogUp -> update {
+                tmdbCatalogSettingsDataStore.moveCatalog(event.catalogId, -1)
+            }
+            is TmdbSettingsEvent.MoveCatalogDown -> update {
+                tmdbCatalogSettingsDataStore.moveCatalog(event.catalogId, 1)
+            }
+            is TmdbSettingsEvent.ToggleAdultContent -> update {
+                tmdbCatalogSettingsDataStore.setIncludeAdult(event.enabled)
+            }
+            is TmdbSettingsEvent.ToggleDigitalReleaseFilter -> update {
+                tmdbCatalogSettingsDataStore.setHideUnreleasedDigital(event.enabled)
+            }
         }
     }
 
@@ -100,10 +124,17 @@ data class TmdbSettingsUiState(
     val useEpisodes: Boolean = true,
     val useMoreLikeThis: Boolean = true,
     val useReviews: Boolean = true,
-    val useCollections: Boolean = true
+    val useCollections: Boolean = true,
+    val catalogOrder: List<String> = TmdbCatalogIds.BUILT_IN_ORDER,
+    val enabledCatalogKeys: Set<String> = TmdbCatalogIds.DEFAULT_ENABLED,
+    val includeAdult: Boolean = false,
+    val hideUnreleasedDigital: Boolean = true
 ) {
     val isActive: Boolean
         get() = enabled
+
+    val catalogControlsEditable: Boolean
+        get() = true
 
     fun fromSettings(settings: TmdbSettings): TmdbSettingsUiState = copy(
         enabled = settings.enabled,
@@ -119,6 +150,13 @@ data class TmdbSettingsUiState(
         useReviews = settings.useReviews,
         useCollections = settings.useCollections
     )
+
+    fun fromCatalogPreferences(catalogPreferences: TmdbCatalogPreferences): TmdbSettingsUiState = copy(
+        catalogOrder = catalogPreferences.catalogOrder,
+        enabledCatalogKeys = catalogPreferences.enabledCatalogs,
+        includeAdult = catalogPreferences.includeAdult,
+        hideUnreleasedDigital = catalogPreferences.hideUnreleasedDigital
+    )
 }
 
 sealed class TmdbSettingsEvent {
@@ -133,6 +171,11 @@ sealed class TmdbSettingsEvent {
     data class ToggleMoreLikeThis(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleReviews(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleCollections(val enabled: Boolean) : TmdbSettingsEvent()
+    data class ToggleCatalog(val catalogId: String, val enabled: Boolean) : TmdbSettingsEvent()
+    data class MoveCatalogUp(val catalogId: String) : TmdbSettingsEvent()
+    data class MoveCatalogDown(val catalogId: String) : TmdbSettingsEvent()
+    data class ToggleAdultContent(val enabled: Boolean) : TmdbSettingsEvent()
+    data class ToggleDigitalReleaseFilter(val enabled: Boolean) : TmdbSettingsEvent()
 }
 
 enum class TmdbValidationError {

@@ -6,6 +6,9 @@ import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogIds
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -17,6 +20,8 @@ import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoveryService
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
@@ -70,6 +75,8 @@ class AndroidTvFeedCatalogService @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    private val tmdbDiscoveryService: TmdbDiscoveryService,
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
     private val continueWatchingSnapshotService: ContinueWatchingSnapshotService
 ) {
     companion object {
@@ -83,7 +90,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
             traktDiscoveryService.observeSnapshot(),
             traktSettingsDataStore.catalogPreferences,
             mdbListDiscoveryService.observeSnapshot(),
-            mdbListSettingsDataStore.catalogPreferences
+            mdbListSettingsDataStore.catalogPreferences,
+            tmdbDiscoveryService.observeSnapshot(),
+            tmdbCatalogSettingsDataStore.catalogPreferences
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             val addons = values[0] as List<Addon>
@@ -93,13 +102,17 @@ class AndroidTvFeedCatalogService @Inject constructor(
             val traktPrefs = values[3] as TraktCatalogPreferences
             val mdbListSnapshot = values[4] as MDBListDiscoverySnapshot
             val mdbListPrefs = values[5] as MDBListCatalogPreferences
+            val tmdbSnapshot = values[6] as TmdbDiscoverySnapshot
+            val tmdbPrefs = values[7] as TmdbCatalogPreferences
             buildFeedOptions(
                 addons = addons,
                 disabledKeys = disabledKeys.toSet(),
                 traktSnapshot = traktSnapshot,
                 traktPrefs = traktPrefs,
                 mdbListSnapshot = mdbListSnapshot,
-                mdbListPrefs = mdbListPrefs
+                mdbListPrefs = mdbListPrefs,
+                tmdbSnapshot = tmdbSnapshot,
+                tmdbPrefs = tmdbPrefs
             )
         }
     }
@@ -122,6 +135,18 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+        val tmdbPrefs = tmdbCatalogSettingsDataStore.catalogPreferences.first()
+        val selectedTmdbCatalogIds = normalizedKeys.mapNotNull(::tmdbCatalogIdForFeedKey).toSet()
+        if (selectedTmdbCatalogIds.isNotEmpty()) {
+            runCatching {
+                tmdbDiscoveryService.refreshCatalogs(
+                    tmdbPrefs,
+                    force = false,
+                    catalogIds = selectedTmdbCatalogIds
+                )
+            }
+        }
+        val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
 
         val optionByKey = buildFeedOptions(
@@ -130,7 +155,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
             traktSnapshot = traktSnapshot,
             traktPrefs = traktPrefs,
             mdbListSnapshot = mdbListSnapshot,
-            mdbListPrefs = mdbListPrefs
+            mdbListPrefs = mdbListPrefs,
+            tmdbSnapshot = tmdbSnapshot,
+            tmdbPrefs = tmdbPrefs
         ).associateBy { it.key }
 
         val syntheticRowsByKey = buildSyntheticRows(
@@ -138,6 +165,8 @@ class AndroidTvFeedCatalogService @Inject constructor(
             traktPrefs = traktPrefs,
             mdbListSnapshot = mdbListSnapshot,
             mdbListPrefs = mdbListPrefs,
+            tmdbSnapshot = tmdbSnapshot,
+            tmdbPrefs = tmdbPrefs,
             continueWatchingSnapshot = continueWatchingSnapshot
         ).associateBy { row -> catalogGlobalKey(row.addonId, row.apiType, row.catalogId) }
 
@@ -181,6 +210,18 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+        val tmdbPrefs = tmdbCatalogSettingsDataStore.catalogPreferences.first()
+        val selectedTmdbCatalogId = tmdbCatalogIdForFeedKey(normalizedKey)
+        if (selectedTmdbCatalogId != null) {
+            runCatching {
+                tmdbDiscoveryService.refreshCatalogs(
+                    tmdbPrefs,
+                    force = false,
+                    catalogIds = setOf(selectedTmdbCatalogId)
+                )
+            }
+        }
+        val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
 
         val optionByKey = buildFeedOptions(
@@ -189,7 +230,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
             traktSnapshot = traktSnapshot,
             traktPrefs = traktPrefs,
             mdbListSnapshot = mdbListSnapshot,
-            mdbListPrefs = mdbListPrefs
+            mdbListPrefs = mdbListPrefs,
+            tmdbSnapshot = tmdbSnapshot,
+            tmdbPrefs = tmdbPrefs
         ).associateBy { it.key }
 
         if (normalizedKey == CONTINUE_WATCHING_FEED_KEY) {
@@ -205,6 +248,8 @@ class AndroidTvFeedCatalogService @Inject constructor(
             traktPrefs = traktPrefs,
             mdbListSnapshot = mdbListSnapshot,
             mdbListPrefs = mdbListPrefs,
+            tmdbSnapshot = tmdbSnapshot,
+            tmdbPrefs = tmdbPrefs,
             continueWatchingSnapshot = continueWatchingSnapshot
         ).firstOrNull { row ->
             catalogGlobalKey(row.addonId, row.apiType, row.catalogId) == normalizedKey
@@ -275,7 +320,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
         traktSnapshot: TraktDiscoverySnapshot,
         traktPrefs: TraktCatalogPreferences,
         mdbListSnapshot: MDBListDiscoverySnapshot,
-        mdbListPrefs: MDBListCatalogPreferences
+        mdbListPrefs: MDBListCatalogPreferences,
+        tmdbSnapshot: TmdbDiscoverySnapshot,
+        tmdbPrefs: TmdbCatalogPreferences
     ): List<AndroidTvFeedOption> {
         val options = mutableListOf<AndroidTvFeedOption>()
 
@@ -323,6 +370,8 @@ class AndroidTvFeedCatalogService @Inject constructor(
             traktPrefs = traktPrefs,
             mdbListSnapshot = mdbListSnapshot,
             mdbListPrefs = mdbListPrefs,
+            tmdbSnapshot = tmdbSnapshot,
+            tmdbPrefs = tmdbPrefs,
             continueWatchingSnapshot = null
         ).forEach { row ->
             options += AndroidTvFeedOption(
@@ -348,6 +397,8 @@ class AndroidTvFeedCatalogService @Inject constructor(
         traktPrefs: TraktCatalogPreferences,
         mdbListSnapshot: MDBListDiscoverySnapshot,
         mdbListPrefs: MDBListCatalogPreferences,
+        tmdbSnapshot: TmdbDiscoverySnapshot,
+        tmdbPrefs: TmdbCatalogPreferences,
         continueWatchingSnapshot: ContinueWatchingSnapshot?
     ): List<CatalogRow> {
         val nextUpItems = continueWatchingSnapshot
@@ -358,6 +409,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         return buildList {
             addAll(buildSyntheticTraktRows(traktSnapshot, traktPrefs, nextUpItems))
             addAll(buildSyntheticMdbListRows(mdbListSnapshot, mdbListPrefs))
+            addAll(buildSyntheticTmdbRows(tmdbSnapshot, tmdbPrefs))
         }
     }
 
@@ -425,8 +477,24 @@ class AndroidTvFeedCatalogService @Inject constructor(
             .map { catalog -> catalog.toCatalogRow() }
     }
 
+    private fun buildSyntheticTmdbRows(
+        snapshot: TmdbDiscoverySnapshot,
+        prefs: TmdbCatalogPreferences
+    ): List<CatalogRow> {
+        val currentRows = snapshot.currentRowsFor(prefs)
+        return prefs.catalogOrder
+            .filter { key -> key in prefs.enabledCatalogs }
+            .mapNotNull { key -> currentRows[key] }
+            .filter { row -> row.items.isNotEmpty() }
+    }
+
     private fun buildContinueWatchingItems(snapshot: ContinueWatchingSnapshot): List<MetaPreview> {
         return buildContinueWatchingItemsForAndroidTvFeed(snapshot)
+    }
+
+    private fun tmdbCatalogIdForFeedKey(key: String): String? {
+        if (!key.startsWith("tmdb_")) return null
+        return TmdbCatalogIds.BUILT_IN_ORDER.firstOrNull { catalogId -> key.endsWith("_$catalogId") }
     }
 }
 

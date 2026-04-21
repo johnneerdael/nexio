@@ -11,6 +11,8 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DEFAULT_MAX_RECENT_SEARCHES
 import com.nexio.tv.data.local.SearchHistoryDataStore
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
+import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -44,7 +46,9 @@ class SearchViewModel @Inject constructor(
     private val searchHistoryDataStore: SearchHistoryDataStore,
     private val imdbSearchService: ImdbSearchService,
     private val imdbPosterLookupService: ImdbPosterLookupService,
-    private val debugSettingsDataStore: DebugSettingsDataStore
+    private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val tmdbDiscoveryService: TmdbDiscoveryService,
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -54,6 +58,7 @@ class SearchViewModel @Inject constructor(
     private val catalogOrder = mutableListOf<String>()
 
     private var activeSearchJobs: List<Job> = emptyList()
+    private var searchJob: Job? = null
     private var discoverJob: Job? = null
     private var catalogRowsUpdateJob: Job? = null
     private var suggestionJob: Job? = null
@@ -219,8 +224,12 @@ class SearchViewModel @Inject constructor(
         }
 
         // Search is explicit on submit only; stop any in-flight requests while editing.
+        searchJob?.cancel()
+        searchJob = null
         activeSearchJobs.forEach { it.cancel() }
         activeSearchJobs = emptyList()
+        catalogRowsUpdateJob?.cancel()
+        catalogRowsUpdateJob = null
 
         fetchSuggestions(query.trim())
     }
@@ -381,6 +390,8 @@ class SearchViewModel @Inject constructor(
         }
 
         // Cancel any in-flight work from the previous query.
+        searchJob?.cancel()
+        searchJob = null
         activeSearchJobs.forEach { it.cancel() }
         activeSearchJobs = emptyList()
         catalogRowsUpdateJob?.cancel()
@@ -406,13 +417,45 @@ class SearchViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isSearching = true, error = null, catalogRows = emptyList()) }
+
+            val tmdbJob = launch {
+                val tmdbRows = runCatching {
+                    val preferences = tmdbCatalogSettingsDataStore.catalogPreferences.first()
+                    tmdbDiscoveryService.search(query, preferences)
+                }.getOrElse { error ->
+                    if (error is CancellationException) throw error
+                    emptyList()
+                }
+
+                if (!isCurrentSubmittedSearch(query)) {
+                    return@launch
+                }
+
+                if (tmdbRows.isNotEmpty()) {
+                    publishTmdbRows(tmdbRows)
+                }
+            }
 
             val addons = try {
                 addonRepository.getInstalledAddons().first()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSearching = false, error = e.message ?: "Failed to load addons") }
+                tmdbJob.join()
+                if (isCurrentSubmittedSearch(query)) {
+                    _uiState.update {
+                        it.copy(
+                            isSearching = false,
+                            error = if (catalogsMap.isEmpty()) e.message ?: "Failed to load addons" else null
+                        )
+                    }
+                }
+                return@launch
+            }
+
+            if (!isCurrentSubmittedSearch(query)) {
                 return@launch
             }
 
@@ -421,12 +464,22 @@ class SearchViewModel @Inject constructor(
             val searchTargets = buildSearchTargets(addons)
 
             if (searchTargets.isEmpty()) {
-                _uiState.update {
-                    it.copy(
-                        isSearching = false,
-                        error = "No searchable catalogs found in installed addons",
-                        catalogRows = emptyList()
-                    )
+                tmdbJob.join()
+                if (catalogsMap.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isSearching = false,
+                            error = "No searchable catalogs found in installed addons",
+                            catalogRows = emptyList()
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isSearching = false,
+                            error = null
+                        )
+                    }
                 }
                 return@launch
             }
@@ -440,7 +493,7 @@ class SearchViewModel @Inject constructor(
             }
 
             val jobs = searchTargets.map { (addon, catalog) ->
-                viewModelScope.launch {
+                launch {
                     loadCatalog(addon, catalog, query)
                 }
             }
@@ -448,18 +501,26 @@ class SearchViewModel @Inject constructor(
             activeSearchJobs = jobs
 
             // Wait for all jobs to complete so we can stop showing the global loading state.
-            viewModelScope.launch {
-                try {
-                    jobs.joinAll()
-                } catch (_: Exception) {
-                    // Cancellations are expected when query changes.
-                } finally {
-                    if (uiState.value.submittedQuery.trim() == query) {
-                        _uiState.update { it.copy(isSearching = false) }
-                    }
+            try {
+                (jobs + tmdbJob).joinAll()
+            } finally {
+                if (isCurrentSubmittedSearch(query)) {
+                    _uiState.update { it.copy(isSearching = false) }
                 }
             }
         }
+    }
+
+    private fun publishTmdbRows(rows: List<CatalogRow>) {
+        rows.forEachIndexed { index, row ->
+            val key = catalogKey(addonId = row.addonId, type = row.apiType, catalogId = row.catalogId)
+            catalogsMap[key] = row
+            if (key !in catalogOrder) {
+                catalogOrder.add(index.coerceAtMost(catalogOrder.size), key)
+            }
+        }
+        hasRenderedFirstCatalog = true
+        updateCatalogRowsNow()
     }
 
     private suspend fun loadCatalog(addon: Addon, catalog: CatalogDescriptor, query: String) {
@@ -479,7 +540,7 @@ class SearchViewModel @Inject constructor(
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    if (uiState.value.submittedQuery.trim() != query) return@collect
+                    if (!isCurrentSubmittedSearch(query)) return@collect
                     val key = catalogKey(
                         addonId = addon.id,
                         type = catalog.apiType,
@@ -488,16 +549,16 @@ class SearchViewModel @Inject constructor(
                     val filteredItems = result.data.items.filter { it.type in SEARCH_ALLOWED_TYPES }
                     catalogsMap[key] = result.data.copy(items = filteredItems)
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
-                    scheduleCatalogRowsUpdate()
+                    scheduleCatalogRowsUpdate(query)
                 }
                 is NetworkResult.Error -> {
-                    if (uiState.value.submittedQuery.trim() != query) return@collect
+                    if (!isCurrentSubmittedSearch(query)) return@collect
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     // Ignore per-catalog errors unless we have nothing to show.
                     if (catalogsMap.isEmpty()) {
                         _uiState.update { it.copy(error = result.message) }
                     }
-                    scheduleCatalogRowsUpdate()
+                    scheduleCatalogRowsUpdate(query)
                 }
                 NetworkResult.Loading -> {
                     // No-op; screen shows global loading when empty.
@@ -566,9 +627,10 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun scheduleCatalogRowsUpdate() {
+    private fun scheduleCatalogRowsUpdate(query: String? = null) {
         catalogRowsUpdateJob?.cancel()
         catalogRowsUpdateJob = viewModelScope.launch {
+            if (query != null && !isCurrentSubmittedSearch(query)) return@launch
             if (!hasRenderedFirstCatalog && catalogsMap.isNotEmpty()) {
                 hasRenderedFirstCatalog = true
                 updateCatalogRowsNow()
@@ -580,8 +642,14 @@ class SearchViewModel @Inject constructor(
                 else -> 90L
             }
             kotlinx.coroutines.delay(debounceMs)
+            if (query != null && !isCurrentSubmittedSearch(query)) return@launch
             updateCatalogRowsNow()
         }
+    }
+
+    private fun isCurrentSubmittedSearch(query: String): Boolean {
+        val state = uiState.value
+        return state.submittedQuery.trim() == query && state.query.trim() == query
     }
 
     private fun updateCatalogRowsNow() {

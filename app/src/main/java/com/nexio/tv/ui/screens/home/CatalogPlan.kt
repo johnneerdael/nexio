@@ -1,14 +1,19 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.KitsuDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
@@ -46,6 +51,79 @@ internal fun CatalogPlan.toPersistedSyntheticCatalogGroups(): List<PersistedSynt
     }
 }
 
+internal fun SyntheticHomeCatalogStore.Snapshot.tmdbGroupsMatchingPreferences(
+    prefs: TmdbCatalogPreferences,
+    preferencesObserved: Boolean = true
+): List<PersistedSyntheticCatalogGroup> {
+    return tmdbGroupsMatchPreferences(
+        groups = tmdbGroups,
+        includeAdult = tmdbIncludeAdult,
+        hideUnreleasedDigital = tmdbHideUnreleasedDigital,
+        prefs = prefs,
+        preferencesObserved = preferencesObserved
+    )
+}
+
+internal fun tmdbGroupsMatchPreferences(
+    groups: List<PersistedSyntheticCatalogGroup>,
+    includeAdult: Boolean?,
+    hideUnreleasedDigital: Boolean?,
+    prefs: TmdbCatalogPreferences,
+    preferencesObserved: Boolean = true
+): List<PersistedSyntheticCatalogGroup> {
+    if (!preferencesObserved) return emptyList()
+    val sanitized = prefs.sanitized()
+    return if (
+        includeAdult == sanitized.includeAdult &&
+        hideUnreleasedDigital == sanitized.hideUnreleasedDigital
+    ) {
+        groups.filterTmdbGroupsEnabledUnder(sanitized)
+    } else {
+        emptyList()
+    }
+}
+
+internal fun resolveEffectiveTmdbSyntheticGroups(
+    renewedTmdbGroups: List<PersistedSyntheticCatalogGroup>,
+    existingSnapshot: SyntheticHomeCatalogStore.Snapshot,
+    prefs: TmdbCatalogPreferences,
+    snapshot: TmdbDiscoverySnapshot
+): List<PersistedSyntheticCatalogGroup> {
+    val sanitized = prefs.sanitized()
+    val currentRenewedGroups = renewedTmdbGroups.filterTmdbGroupsEnabledUnder(sanitized)
+    if (currentRenewedGroups.isNotEmpty()) return currentRenewedGroups
+    val existingCurrentGroups = existingSnapshot.tmdbGroupsMatchingPreferences(prefs)
+    if (existingCurrentGroups.isEmpty()) return emptyList()
+    return if (shouldPreserveExistingTmdbGroupsDuringRefresh(sanitized, snapshot)) {
+        existingCurrentGroups
+    } else {
+        emptyList()
+    }
+}
+
+internal fun List<PersistedSyntheticCatalogGroup>.filterTmdbGroupsEnabledUnder(
+    prefs: TmdbCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    val enabledCatalogIds = prefs.enabledCatalogIds()
+    return mapNotNull { group ->
+        if (group.orderKey !in enabledCatalogIds) return@mapNotNull null
+        val enabledRows = group.rows.filter { row -> row.catalogId in enabledCatalogIds }
+        if (enabledRows.isEmpty()) null else group.copy(rows = enabledRows)
+    }
+}
+
+internal fun shouldPreserveExistingTmdbGroupsDuringRefresh(
+    prefs: TmdbCatalogPreferences,
+    snapshot: TmdbDiscoverySnapshot
+): Boolean {
+    val expectedKeys = buildExpectedConfiguredTmdbOrderKeys(prefs)
+    if (expectedKeys.isEmpty()) return false
+    val snapshotHasCurrentPreferenceProvenance = snapshot.updatedAtMs > 0L &&
+        snapshot.matchesPreferences(prefs)
+    if (!snapshotHasCurrentPreferenceProvenance) return true
+    return expectedKeys.any { key -> key !in snapshot.catalogIdsWithCurrentPreferences }
+}
+
 internal fun buildConfiguredCatalogPlan(
     addons: List<Addon>,
     disabledHomeCatalogKeys: Set<String>,
@@ -58,15 +136,23 @@ internal fun buildConfiguredCatalogPlan(
     simklSnapshot: SimklDiscoverySnapshot,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot,
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
+    kitsuPrefs: KitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    kitsuSnapshot: KitsuDiscoverySnapshot = KitsuDiscoverySnapshot(),
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): CatalogPlan {
+    val currentTmdbRows = tmdbSnapshot.currentRowsFor(tmdbPrefs)
+    val currentKitsuRows = kitsuSnapshot.currentRowsFor(kitsuPrefs)
     val expectedOrderKeys = buildExpectedConfiguredHomeOrderKeys(
         addons = addons,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         traktPrefs = traktPrefs,
         simklPrefs = simklPrefs,
         mdbPrefs = mdbPrefs,
-        mdbSnapshot = mdbSnapshot
+        mdbSnapshot = mdbSnapshot,
+        tmdbPrefs = tmdbPrefs,
+        kitsuPrefs = kitsuPrefs
     )
     val publishableOrderKeys = buildPublishableConfiguredHomeOrderKeys(
         addons = addons,
@@ -78,7 +164,11 @@ internal fun buildConfiguredCatalogPlan(
         simklPrefs = simklPrefs,
         simklSnapshot = simklSnapshot,
         mdbPrefs = mdbPrefs,
-        mdbSnapshot = mdbSnapshot
+        mdbSnapshot = mdbSnapshot,
+        tmdbPrefs = tmdbPrefs,
+        tmdbSnapshot = tmdbSnapshot,
+        kitsuPrefs = kitsuPrefs,
+        kitsuSnapshot = kitsuSnapshot
     )
     val descriptors = buildConfiguredHomeCatalogDescriptors(
         addons = addons,
@@ -89,6 +179,10 @@ internal fun buildConfiguredCatalogPlan(
         simklPrefs = simklPrefs,
         mdbPrefs = mdbPrefs,
         mdbSnapshot = mdbSnapshot,
+        tmdbPrefs = tmdbPrefs,
+        tmdbSnapshot = tmdbSnapshot,
+        kitsuPrefs = kitsuPrefs,
+        kitsuSnapshot = kitsuSnapshot,
         existingRowsByOrderKey = existingRowsByOrderKey
     )
     val descriptorByKey = descriptors.associateBy { it.orderKey }
@@ -109,6 +203,14 @@ internal fun buildConfiguredCatalogPlan(
                 key = key,
                 snapshot = mdbSnapshot
             )
+            TMDB_HOME_ADDON_ID -> currentTmdbRows[key]
+                ?.takeIf { row -> row.items.isNotEmpty() }
+                ?.let(::listOf)
+                .orEmpty()
+            KITSU_HOME_ADDON_ID -> currentKitsuRows[key]
+                ?.takeIf { row -> row.items.isNotEmpty() }
+                ?.let(::listOf)
+                .orEmpty()
             else -> emptyList()
         }
         PlannedCatalogRail(

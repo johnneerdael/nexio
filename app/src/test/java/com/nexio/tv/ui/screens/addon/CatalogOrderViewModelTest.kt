@@ -4,11 +4,16 @@ import com.nexio.tv.core.recommendations.AndroidTvFeedCatalogService
 import com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.AndroidTvRecommendationsPreferences
+import com.nexio.tv.data.local.KitsuCatalogIds
+import com.nexio.tv.data.local.KitsuCatalogPreferences
+import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -101,9 +106,37 @@ class CatalogOrderViewModelTest {
         job.cancel()
     }
 
+    @Test
+    fun `enabling a kitsu rail uses kitsu settings store and leaves layout disabled keys alone`() = runTest(dispatcher) {
+        val notifier = CatalogPriorityHydrationNotifier()
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val kitsuCatalogSettingsDataStore = mockk<KitsuCatalogSettingsDataStore>(relaxed = true)
+        every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
+        every { kitsuCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(KitsuCatalogPreferences())
+
+        val viewModel = buildViewModel(
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            notifier = notifier,
+            kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore
+        )
+        advanceUntilIdle()
+
+        viewModel.toggleCatalogEnabled(KitsuCatalogIds.TRENDING_ANIME)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            kitsuCatalogSettingsDataStore.setCatalogEnabled(KitsuCatalogIds.TRENDING_ANIME, true)
+        }
+        coVerify(exactly = 0) {
+            layoutPreferenceDataStore.setDisabledHomeCatalogKeys(any())
+        }
+    }
+
     private fun buildViewModel(
         layoutPreferenceDataStore: LayoutPreferenceDataStore,
-        notifier: CatalogPriorityHydrationNotifier
+        notifier: CatalogPriorityHydrationNotifier,
+        kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore = mockk(relaxed = true)
     ): CatalogOrderViewModel {
         val addonRepository = mockk<AddonRepository>(relaxed = true)
         val traktDiscoveryService = mockk<TraktDiscoveryService>(relaxed = true)
@@ -111,6 +144,7 @@ class CatalogOrderViewModelTest {
         val simklSettingsDataStore = mockk<SimklSettingsDataStore>(relaxed = true)
         val mdbListDiscoveryService = mockk<MDBListDiscoveryService>(relaxed = true)
         val mdbListSettingsDataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
+        val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true)
         val androidTvRecommendationsDataStore = mockk<AndroidTvRecommendationsDataStore>(relaxed = true)
         val androidTvFeedCatalogService = mockk<AndroidTvFeedCatalogService>(relaxed = true)
 
@@ -125,6 +159,8 @@ class CatalogOrderViewModelTest {
         every { simklSettingsDataStore.catalogPreferences } returns MutableStateFlow(SimklCatalogPreferences())
         every { mdbListDiscoveryService.observeSnapshot() } returns MutableStateFlow(MDBListDiscoverySnapshot())
         every { mdbListSettingsDataStore.catalogPreferences } returns MutableStateFlow(MDBListCatalogPreferences())
+        every { kitsuCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(KitsuCatalogPreferences())
+        every { tmdbCatalogSettingsDataStore.catalogPreferences } returns MutableStateFlow(TmdbCatalogPreferences())
         every { androidTvRecommendationsDataStore.preferences } returns MutableStateFlow(
             AndroidTvRecommendationsPreferences()
         )
@@ -138,6 +174,8 @@ class CatalogOrderViewModelTest {
             simklSettingsDataStore = simklSettingsDataStore,
             mdbListDiscoveryService = mdbListDiscoveryService,
             mdbListSettingsDataStore = mdbListSettingsDataStore,
+            kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore,
+            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
             androidTvRecommendationsDataStore = androidTvRecommendationsDataStore,
             androidTvFeedCatalogService = androidTvFeedCatalogService,
             catalogPriorityHydrationNotifier = notifier
