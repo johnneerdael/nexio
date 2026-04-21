@@ -45,7 +45,6 @@ NEXIO is built to shine when you combine:
 
 Strongly recommended extras:
 
-- **YouTube Trailer Login** for better trailer playback, including age-restricted trailers
 - **MDBList** for richer external ratings
 - **Poster Ratings** with **TOPPosters** or **RatingPostersDB (RPDB)** if you want rated posters
 - **Service Wrap** + **Deterministic Autoplay** for the most console-like experience
@@ -61,7 +60,6 @@ Prepare these accounts or keys:
 - a **Trakt** account
 - optional: **MDBList** API key
 - optional: **TOPPosters** or **RPDB** API key
-- optional: Google sign-in for **YouTube Trailer Login**
 
 Helpful official links:
 
@@ -286,25 +284,7 @@ TMDB is the core metadata upgrade in the current app. It improves the quality of
 
 ---
 
-## 7. Sign in to YouTube Trailer Login for the best trailer experience
-
-Menu path:
-
-- **Settings → Integration → YouTube Trailer Login**
-
-Use:
-
-- **Sign In** to generate the TV code / QR flow
-
-### Why this matters
-
-TMDB helps NEXIO find trailers, but **YouTube Trailer Login** helps NEXIO play them more reliably inside the app, including age-restricted trailer content.
-
-If trailers matter to you, this is worth doing.
-
----
-
-## 8. Sign in to Trakt if you want NEXIO to feel "alive"
+## 7. Sign in to Trakt if you want NEXIO to feel "alive"
 
 Menu path:
 
@@ -346,7 +326,7 @@ If you skip Trakt, NEXIO still works, but the experience is noticeably less pers
 
 ---
 
-## 9. Add MDBList for richer ratings, not core metadata
+## 8. Add MDBList for richer ratings, not core metadata
 
 Menu path:
 
@@ -376,7 +356,7 @@ Use **MDBList** when you want richer external ratings and optional MDBList rails
 
 ---
 
-## 10. Choose your poster provider
+## 9. Choose your poster provider
 
 Menu path:
 
@@ -402,7 +382,7 @@ If you do not care about rated posters, you can skip this step entirely.
 
 ---
 
-## 11. Tidy up Player & Stream Selection
+## 10. Tidy up Player & Stream Selection
 
 Menu path:
 
@@ -427,7 +407,7 @@ If you **do** use **Deterministic Autoplay**:
 
 ---
 
-## 12. Leave DV7 conversion enabled unless you have a reason not to
+## 11. Leave DV7 conversion enabled unless you have a reason not to
 
 Menu path:
 
@@ -449,7 +429,7 @@ Only treat **DV7 - Preserve Mapping** as an advanced experiment.
 
 ---
 
-## 13. Enable Auto Frame Rate for serious movie playback
+## 12. Enable Auto Frame Rate for serious movie playback
 
 Menu path:
 
@@ -473,7 +453,7 @@ For power users, this is strongly recommended.
 
 ---
 
-## 14. Enable Trailer Screensaver if you want a more premium idle experience
+## 13. Enable Trailer Screensaver if you want a more premium idle experience
 
 Menu path:
 
@@ -496,7 +476,7 @@ This is not essential for playback quality, but it makes NEXIO feel much more po
 
 ---
 
-## 15. Optional: keep the Universal formatter selected in the portal
+## 14. Optional: keep the Universal formatter selected in the portal
 
 If you use the NEXIO account portal, open:
 
@@ -527,7 +507,6 @@ Use this as your "done right" checklist:
 - [ ] Enabled **Service Wrap**
 - [ ] Enabled **Deterministic Autoplay**
 - [ ] Added a **TMDB** API key
-- [ ] Signed in to **YouTube Trailer Login**
 - [ ] Signed in to **Trakt**
 - [ ] Added **MDBList** if you want richer ratings
 - [ ] Chose **TOPPosters** or **RPDB** if you want rated posters
@@ -547,7 +526,6 @@ For most power users, this is the sweet spot:
 - **Service Wrap** on
 - **Deterministic Autoplay** on
 - **TMDB** on
-- **YouTube Trailer Login** signed in
 - **Trakt** signed in
 - **Filter Wrong Episodes** on
 - **Filter Wrong Movie Year** on

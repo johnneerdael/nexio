@@ -133,7 +133,6 @@ That includes:
 - focused-poster trailer autoplay
 - trailer delay controls
 - season trailers and recaps
-- authenticated **YouTube Trailer Login**
 - trailer screensaver mode
 - idle screensaver caching and preparation
 - Trakt-powered idle trailer sources

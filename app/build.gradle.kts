@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.androidx.baselineprofile)
-    id("com.chaquo.python")
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -295,7 +294,6 @@ val syncFilteredMainAssets by tasks.registering(Sync::class) {
     dependsOn(generateAnimeIdMap)
     from("src/main/assets")
     into(filteredMainAssetsDir)
-    exclude("trailer-helper/runtime/**")
 }
 
 android {
@@ -476,8 +474,6 @@ android {
                 "src/main/_jni_disabled",
                 "src/main/jniLibs"
             )
-            // Package a filtered copy of the main assets tree so legacy staged
-            // trailer-helper runtimes don't bloat every split APK.
             assets.setSrcDirs(listOf(syncFilteredMainAssets))
         }
     }
@@ -494,12 +490,6 @@ android {
                 "lib/*/libswresample.so"
             )
         }
-    }
-}
-
-chaquopy {
-    defaultConfig {
-        version = "3.11"
     }
 }
 
@@ -558,7 +548,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.tv:tv-material:1.0.1")
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.javascriptengine:javascriptengine:1.0.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation(libs.androidx.tvprovider)

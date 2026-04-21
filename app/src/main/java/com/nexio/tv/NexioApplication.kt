@@ -6,8 +6,6 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -39,9 +37,6 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
 
     override fun onCreate() {
         super.onCreate()
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
         appScope.launch {
             ObsoletePlaybackCacheCleanup.cleanup(cacheDir)
             retainPosterCacheOnStartup()
