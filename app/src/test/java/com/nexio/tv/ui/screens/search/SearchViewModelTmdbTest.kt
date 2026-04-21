@@ -3,8 +3,12 @@ package com.nexio.tv.ui.screens.search
 import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
+import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.remote.api.ImdbSearchService
+import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.data.remote.api.TmdbMediaResult
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryService
@@ -25,6 +29,9 @@ import com.nexio.tv.testutil.playerSettingsDataStoreForTest
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.searchHistoryDataStoreForTest
 import com.nexio.tv.testutil.testProfileManager
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -173,6 +180,15 @@ class SearchViewModelTmdbTest {
             layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
             playerSettingsDataStore = playerSettingsDataStoreForTest(),
             searchHistoryDataStore = searchHistoryDataStoreForTest(),
+            imdbSearchService = object : ImdbSearchService {
+                override suspend fun search(query: String, types: Set<String>): List<ImdbSuggestion> = emptyList()
+            },
+            imdbPosterLookupService = mockk<ImdbPosterLookupService>().apply {
+                coEvery { lookupPosterUrl(any(), any(), any()) } returns null
+            },
+            debugSettingsDataStore = mockk<DebugSettingsDataStore>().apply {
+                every { searchPosterPreviewEnabled } returns flowOf(false)
+            },
             tmdbDiscoveryService = tmdbDiscoveryService,
             tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore
         )

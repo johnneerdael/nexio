@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
@@ -10,6 +11,7 @@ import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.KitsuDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktCustomListCatalog
@@ -136,9 +138,12 @@ internal fun buildConfiguredCatalogPlan(
     mdbSnapshot: MDBListDiscoverySnapshot,
     tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
     tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
+    kitsuPrefs: KitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    kitsuSnapshot: KitsuDiscoverySnapshot = KitsuDiscoverySnapshot(),
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): CatalogPlan {
     val currentTmdbRows = tmdbSnapshot.currentRowsFor(tmdbPrefs)
+    val currentKitsuRows = kitsuSnapshot.currentRowsFor(kitsuPrefs)
     val expectedOrderKeys = buildExpectedConfiguredHomeOrderKeys(
         addons = addons,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
@@ -146,7 +151,8 @@ internal fun buildConfiguredCatalogPlan(
         simklPrefs = simklPrefs,
         mdbPrefs = mdbPrefs,
         mdbSnapshot = mdbSnapshot,
-        tmdbPrefs = tmdbPrefs
+        tmdbPrefs = tmdbPrefs,
+        kitsuPrefs = kitsuPrefs
     )
     val publishableOrderKeys = buildPublishableConfiguredHomeOrderKeys(
         addons = addons,
@@ -160,7 +166,9 @@ internal fun buildConfiguredCatalogPlan(
         mdbPrefs = mdbPrefs,
         mdbSnapshot = mdbSnapshot,
         tmdbPrefs = tmdbPrefs,
-        tmdbSnapshot = tmdbSnapshot
+        tmdbSnapshot = tmdbSnapshot,
+        kitsuPrefs = kitsuPrefs,
+        kitsuSnapshot = kitsuSnapshot
     )
     val descriptors = buildConfiguredHomeCatalogDescriptors(
         addons = addons,
@@ -173,6 +181,8 @@ internal fun buildConfiguredCatalogPlan(
         mdbSnapshot = mdbSnapshot,
         tmdbPrefs = tmdbPrefs,
         tmdbSnapshot = tmdbSnapshot,
+        kitsuPrefs = kitsuPrefs,
+        kitsuSnapshot = kitsuSnapshot,
         existingRowsByOrderKey = existingRowsByOrderKey
     )
     val descriptorByKey = descriptors.associateBy { it.orderKey }
@@ -194,6 +204,10 @@ internal fun buildConfiguredCatalogPlan(
                 snapshot = mdbSnapshot
             )
             TMDB_HOME_ADDON_ID -> currentTmdbRows[key]
+                ?.takeIf { row -> row.items.isNotEmpty() }
+                ?.let(::listOf)
+                .orEmpty()
+            KITSU_HOME_ADDON_ID -> currentKitsuRows[key]
                 ?.takeIf { row -> row.items.isNotEmpty() }
                 ?.let(::listOf)
                 .orEmpty()

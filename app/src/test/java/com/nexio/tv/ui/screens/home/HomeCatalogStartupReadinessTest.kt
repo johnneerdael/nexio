@@ -533,6 +533,7 @@ class HomeCatalogStartupReadinessTest {
                 traktDiscoveryRefreshInProgress = false,
                 simklDiscoveryRefreshInProgress = false,
                 mdbListDiscoveryRefreshInProgress = false,
+                kitsuDiscoveryRefreshInProgress = false,
                 tmdbDiscoveryRefreshInProgress = true
             )
         )
@@ -542,6 +543,7 @@ class HomeCatalogStartupReadinessTest {
                 traktDiscoveryRefreshInProgress = false,
                 simklDiscoveryRefreshInProgress = false,
                 mdbListDiscoveryRefreshInProgress = false,
+                kitsuDiscoveryRefreshInProgress = false,
                 tmdbDiscoveryRefreshInProgress = false
             )
         )

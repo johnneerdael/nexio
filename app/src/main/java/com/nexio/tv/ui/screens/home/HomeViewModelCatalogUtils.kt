@@ -5,6 +5,8 @@ import com.nexio.tv.core.sync.addonCatalogKey
 import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.core.sync.normalizePublicAddonBaseUrl
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.KitsuCatalogIds
+import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogIds
@@ -12,9 +14,11 @@ import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.KitsuDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.data.repository.kitsuCatalogTitle
 import com.nexio.tv.data.repository.tmdbCatalogTitle
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -28,10 +32,12 @@ internal const val TRAKT_HOME_ADDON_ID = "trakt"
 internal const val SIMKL_HOME_ADDON_ID = "simkl"
 internal const val MDBLIST_HOME_ADDON_ID = "mdblist"
 internal const val TMDB_HOME_ADDON_ID = "tmdb"
+internal const val KITSU_HOME_ADDON_ID = "kitsu"
 private const val TRAKT_HOME_KEY_PREFIX = "trakt_"
 private const val SIMKL_HOME_KEY_PREFIX = "simkl_"
 private const val MDBLIST_HOME_KEY_PREFIX = "mdblist_"
 private const val TMDB_HOME_KEY_PREFIX = "tmdb_"
+private const val KITSU_HOME_KEY_PREFIX = "kitsu_"
 
 internal data class ConfiguredHomeCatalogDescriptor(
     val orderKey: String,
@@ -70,6 +76,7 @@ internal fun homeCatalogGlobalKey(row: CatalogRow): String {
         SIMKL_HOME_ADDON_ID -> if (row.catalogId.startsWith(SIMKL_HOME_KEY_PREFIX)) row.catalogId else "$SIMKL_HOME_KEY_PREFIX${row.catalogId}"
         MDBLIST_HOME_ADDON_ID -> if (row.catalogId.startsWith(MDBLIST_HOME_KEY_PREFIX)) row.catalogId else "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
         TMDB_HOME_ADDON_ID -> if (row.catalogId.startsWith(TMDB_HOME_KEY_PREFIX)) row.catalogId else "$TMDB_HOME_KEY_PREFIX${row.catalogId}"
+        KITSU_HOME_ADDON_ID -> if (row.catalogId.startsWith(KITSU_HOME_KEY_PREFIX)) row.catalogId else "$KITSU_HOME_KEY_PREFIX${row.catalogId}"
         else -> "${row.addonId}_${row.apiType}_${row.catalogId}"
     }
 }
@@ -101,10 +108,13 @@ internal fun buildConfiguredHomeCatalogDescriptors(
     mdbSnapshot: MDBListDiscoverySnapshot,
     tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
     tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
+    kitsuPrefs: KitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    kitsuSnapshot: KitsuDiscoverySnapshot = KitsuDiscoverySnapshot(),
     existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
 ): List<ConfiguredHomeCatalogDescriptor> {
     val descriptorsByKey = linkedMapOf<String, ConfiguredHomeCatalogDescriptor>()
     val currentTmdbRows = tmdbSnapshot.currentRowsFor(tmdbPrefs)
+    val currentKitsuRows = kitsuSnapshot.currentRowsFor(kitsuPrefs)
 
     fun existingTitle(key: String): String? {
         return existingRowsByOrderKey[key]?.catalogName?.takeIf { it.isNotBlank() }
@@ -177,6 +187,26 @@ internal fun buildConfiguredHomeCatalogDescriptors(
                 catalogName = existingTitle(key)
                     ?: row?.catalogName?.takeIf { it.isNotBlank() }
                     ?: tmdbCatalogTitle(key)
+                    ?: humanizeCatalogKey(key),
+                type = type,
+                rawType = type.toApiString("catalog")
+            )
+        }
+
+    buildExpectedConfiguredKitsuOrderKeys(kitsuPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+        .forEach { key ->
+            val row = currentKitsuRows[key]
+            val type = row?.type ?: ContentType.SERIES
+            descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
+                orderKey = key,
+                addonId = KITSU_HOME_ADDON_ID,
+                addonName = "Kitsu",
+                addonBaseUrl = "https://kitsu.io/api/edge",
+                catalogId = key,
+                catalogName = existingTitle(key)
+                    ?: row?.catalogName?.takeIf { it.isNotBlank() }
+                    ?: kitsuCatalogTitle(key)
                     ?: humanizeCatalogKey(key),
                 type = type,
                 rawType = type.toApiString("catalog")
@@ -260,7 +290,8 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
     simklPrefs: SimklCatalogPreferences,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot,
-    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
+    tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    kitsuPrefs: KitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList())
 ): List<String> {
     val traktKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
@@ -270,8 +301,10 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val tmdbKeys = buildExpectedConfiguredTmdbOrderKeys(tmdbPrefs)
         .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+    val kitsuKeys = buildExpectedConfiguredKitsuOrderKeys(kitsuPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
-    return (traktKeys + simklKeys + mdbKeys + tmdbKeys + addonKeys).distinct()
+    return (traktKeys + simklKeys + mdbKeys + tmdbKeys + kitsuKeys + addonKeys).distinct()
 }
 
 internal fun buildPublishableConfiguredHomeOrderKeys(
@@ -286,7 +319,9 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot,
     tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
-    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot()
+    tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot(),
+    kitsuPrefs: KitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    kitsuSnapshot: KitsuDiscoverySnapshot = KitsuDiscoverySnapshot()
 ): List<String> {
     val traktKeys = buildPublishableConfiguredTraktOrderKeys(
         prefs = traktPrefs,
@@ -305,9 +340,13 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
         prefs = tmdbPrefs,
         snapshot = tmdbSnapshot
     ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+    val kitsuKeys = buildPublishableConfiguredKitsuOrderKeys(
+        prefs = kitsuPrefs,
+        snapshot = kitsuSnapshot
+    ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
         .filter { it in availableAddonOrderKeys }
-    return (traktKeys + simklKeys + mdbKeys + tmdbKeys + addonKeys).distinct()
+    return (traktKeys + simklKeys + mdbKeys + tmdbKeys + kitsuKeys + addonKeys).distinct()
 }
 
 internal fun buildExpectedConfiguredTraktOrderKeys(
@@ -403,12 +442,24 @@ internal fun buildExpectedConfiguredTmdbOrderKeys(prefs: TmdbCatalogPreferences)
     return prefs.enabledCatalogIds().toList()
 }
 
+internal fun buildExpectedConfiguredKitsuOrderKeys(prefs: KitsuCatalogPreferences): List<String> {
+    return prefs.enabledCatalogIds().toList()
+}
+
 internal fun buildPublishableConfiguredTmdbOrderKeys(
     prefs: TmdbCatalogPreferences,
     snapshot: TmdbDiscoverySnapshot
 ): List<String> {
     val available = snapshot.currentRowsFor(prefs).filterValues { it.items.isNotEmpty() }.keys
     return buildExpectedConfiguredTmdbOrderKeys(prefs).filter { it in available }
+}
+
+internal fun buildPublishableConfiguredKitsuOrderKeys(
+    prefs: KitsuCatalogPreferences,
+    snapshot: KitsuDiscoverySnapshot
+): List<String> {
+    val available = snapshot.currentRowsFor(prefs).filterValues { it.items.isNotEmpty() }.keys
+    return buildExpectedConfiguredKitsuOrderKeys(prefs).filter { it in available }
 }
 
 internal fun buildExpectedConfiguredAddonOrderKeys(
@@ -457,6 +508,9 @@ internal fun areConfiguredHomeSourceCachesReady(
     mdbExpectedOrderKeys: List<String>,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot,
+    kitsuExpectedOrderKeys: List<String> = emptyList(),
+    kitsuPrefs: KitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+    kitsuSnapshot: KitsuDiscoverySnapshot = KitsuDiscoverySnapshot(),
     tmdbExpectedOrderKeys: List<String> = emptyList(),
     tmdbPrefs: TmdbCatalogPreferences = TmdbCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
     tmdbSnapshot: TmdbDiscoverySnapshot = TmdbDiscoverySnapshot()
@@ -477,12 +531,17 @@ internal fun areConfiguredHomeSourceCachesReady(
     } else {
         !shouldRefreshMDBListDiscoveryForState(mdbPrefs, mdbSnapshot)
     }
+    val kitsuReady = if (kitsuExpectedOrderKeys.isEmpty()) {
+        true
+    } else {
+        !shouldRefreshKitsuDiscoveryForState(kitsuPrefs, kitsuSnapshot)
+    }
     val tmdbReady = if (tmdbExpectedOrderKeys.isEmpty()) {
         true
     } else {
         !shouldRefreshTmdbDiscoveryForState(tmdbPrefs, tmdbSnapshot)
     }
-    return addonsReady && traktReady && simklReady && mdbReady && tmdbReady
+    return addonsReady && traktReady && simklReady && mdbReady && kitsuReady && tmdbReady
 }
 
 internal fun areConfiguredHomePublishSourcesReady(
@@ -494,6 +553,8 @@ internal fun areConfiguredHomePublishSourcesReady(
     simklObserved: Boolean,
     mdbExpectedOrderKeys: List<String>,
     mdbObserved: Boolean,
+    kitsuExpectedOrderKeys: List<String> = emptyList(),
+    kitsuObserved: Boolean = true,
     tmdbExpectedOrderKeys: List<String> = emptyList(),
     tmdbObserved: Boolean = true
 ): Boolean {
@@ -501,8 +562,9 @@ internal fun areConfiguredHomePublishSourcesReady(
     val traktReady = traktExpectedOrderKeys.isEmpty() || traktObserved
     val simklReady = simklExpectedOrderKeys.isEmpty() || simklObserved
     val mdbReady = mdbExpectedOrderKeys.isEmpty() || mdbObserved
+    val kitsuReady = kitsuExpectedOrderKeys.isEmpty() || kitsuObserved
     val tmdbReady = tmdbExpectedOrderKeys.isEmpty() || tmdbObserved
-    return addonsReady && traktReady && simklReady && mdbReady && tmdbReady
+    return addonsReady && traktReady && simklReady && mdbReady && kitsuReady && tmdbReady
 }
 
 internal fun isConfiguredHomeRefreshInProgress(
@@ -510,12 +572,14 @@ internal fun isConfiguredHomeRefreshInProgress(
     traktDiscoveryRefreshInProgress: Boolean,
     simklDiscoveryRefreshInProgress: Boolean,
     mdbListDiscoveryRefreshInProgress: Boolean,
+    kitsuDiscoveryRefreshInProgress: Boolean,
     tmdbDiscoveryRefreshInProgress: Boolean
 ): Boolean {
     return catalogsLoadInProgress ||
         traktDiscoveryRefreshInProgress ||
         simklDiscoveryRefreshInProgress ||
         mdbListDiscoveryRefreshInProgress ||
+        kitsuDiscoveryRefreshInProgress ||
         tmdbDiscoveryRefreshInProgress
 }
 
@@ -527,6 +591,18 @@ internal fun shouldRefreshTmdbDiscoveryForState(
     if (expectedKeys.isEmpty()) return false
     if (snapshot.updatedAtMs <= 0L) return true
     if (!snapshot.matchesPreferences(prefs)) return true
+    return expectedKeys.any { key ->
+        key !in snapshot.catalogIdsWithCurrentPreferences
+    }
+}
+
+internal fun shouldRefreshKitsuDiscoveryForState(
+    prefs: KitsuCatalogPreferences,
+    snapshot: KitsuDiscoverySnapshot
+): Boolean {
+    val expectedKeys = buildExpectedConfiguredKitsuOrderKeys(prefs)
+    if (expectedKeys.isEmpty()) return false
+    if (snapshot.updatedAtMs <= 0L) return true
     return expectedKeys.any { key ->
         key !in snapshot.catalogIdsWithCurrentPreferences
     }

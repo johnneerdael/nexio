@@ -48,7 +48,7 @@ class SyntheticHomeCatalogStore private constructor(
         private const val TAG = "SyntheticHomeCatalog"
         private const val PREFS_NAME = "synthetic_home_catalogs"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 4
+        private const val SCHEMA_VERSION = 5
     }
 
     private val gson = Gson()
@@ -57,6 +57,7 @@ class SyntheticHomeCatalogStore private constructor(
         val traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val simklGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val kitsuGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val tmdbIncludeAdult: Boolean? = null,
         val tmdbHideUnreleasedDigital: Boolean? = null
@@ -86,6 +87,7 @@ class SyntheticHomeCatalogStore private constructor(
                 add("traktGroups", encodeGroups(snapshot.traktGroups))
                 add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
+                add("kitsuGroups", encodeGroups(snapshot.kitsuGroups))
                 add("tmdbGroups", encodeGroups(snapshot.tmdbGroups))
                 snapshot.tmdbIncludeAdult?.let { addProperty("tmdbIncludeAdult", it) }
                 snapshot.tmdbHideUnreleasedDigital?.let { addProperty("tmdbHideUnreleasedDigital", it) }
@@ -108,7 +110,7 @@ class SyntheticHomeCatalogStore private constructor(
     private fun decodeSnapshot(raw: String): Snapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-        if (schemaVersion != SCHEMA_VERSION) {
+        if (schemaVersion != 4 && schemaVersion != SCHEMA_VERSION) {
             return null
         }
         val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
@@ -119,6 +121,7 @@ class SyntheticHomeCatalogStore private constructor(
             traktGroups = decodeGroups(root.getAsJsonArray("traktGroups")),
             simklGroups = decodeGroups(root.getAsJsonArray("simklGroups")),
             mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups")),
+            kitsuGroups = decodeGroups(root.getAsJsonArray("kitsuGroups")),
             tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups")),
             tmdbIncludeAdult = decodeBoolean(root, "tmdbIncludeAdult"),
             tmdbHideUnreleasedDigital = decodeBoolean(root, "tmdbHideUnreleasedDigital")

@@ -3,8 +3,12 @@ package com.nexio.tv.ui.screens.search
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
+import com.nexio.tv.data.repository.TmdbDiscoveryClient
+import com.nexio.tv.data.repository.TmdbDiscoveryService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -21,7 +25,9 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.testutil.layoutPreferenceDataStoreForTest
 import com.nexio.tv.testutil.playerSettingsDataStoreForTest
+import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.searchHistoryDataStoreForTest
+import com.nexio.tv.testutil.testProfileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -185,7 +191,23 @@ class SearchViewModelTypeFilterTest {
             },
             debugSettingsDataStore = mockk<DebugSettingsDataStore>().apply {
                 every { searchPosterPreviewEnabled } returns flowOf(false)
-            }
+            },
+            tmdbDiscoveryService = TmdbDiscoveryService(
+                object : TmdbDiscoveryClient {
+                    override suspend fun credential() = com.nexio.tv.core.metadata.MetadataProviderCredential(
+                        "",
+                        source = com.nexio.tv.core.metadata.MetadataCredentialSource.MISSING
+                    )
+                    override suspend fun searchMovies(query: String, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMediaResult>()
+                    override suspend fun searchTv(query: String, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMediaResult>()
+                    override suspend fun fetchCatalog(catalogId: String, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMediaResult>()
+                    override suspend fun imdbId(tmdbId: Int, contentType: com.nexio.tv.domain.model.ContentType) = null
+                }
+            ),
+            tmdbCatalogSettingsDataStore = TmdbCatalogSettingsDataStore(
+                factory = profileDataStoreFactoryForTest(),
+                profileManager = testProfileManager()
+            )
         )
     }
 
