@@ -65,7 +65,9 @@ class TvdbAdvancedMetadataMapper @Inject constructor() {
                     character = character.name.trimmed() ?: character.peopleType.trimmed()?.toCreditRoleLabel(),
                     photo = character.personImgURL.trimmed(),
                     tmdbId = null,
-                    tvdbPeopleId = character.peopleId
+                    tvdbPeopleId = character.peopleId,
+                    provider = "tvdb",
+                    providerId = character.peopleId?.toString()
                 )
             }
     }
@@ -88,7 +90,8 @@ class TvdbAdvancedMetadataMapper @Inject constructor() {
                 result.add(
                     MetaCompany(
                         name = name,
-                        kind = MetaCompanyKind.NETWORK
+                        kind = MetaCompanyKind.NETWORK,
+                        provider = "tvdb"
                     )
                 )
             }
@@ -115,7 +118,8 @@ class TvdbAdvancedMetadataMapper @Inject constructor() {
                 result.add(
                     MetaCompany(
                         name = name,
-                        kind = MetaCompanyKind.COMPANY
+                        kind = MetaCompanyKind.COMPANY,
+                        provider = "tvdb"
                     )
                 )
             }

@@ -110,6 +110,7 @@ class MetaDetailsTvdbProviderRoutingTest {
         assertEquals("TV-MA", meta?.ageRating)
         assertEquals("United States", meta?.country)
         assertEquals("en", meta?.language)
+        assertEquals(false, viewModel.uiState.value.isAnimeDetail)
 
         val enrichmentRequest = slot<TvMetadataRequest>()
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(capture(enrichmentRequest)) }

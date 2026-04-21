@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
@@ -72,6 +73,7 @@ fun CompanyLogosSection(
             ) { _, company ->
                 CompanyLogoCard(
                     company = company,
+                    clickable = company.tmdbId != null,
                     onClick = { onCompanyClick(company) }
                 )
             }
@@ -82,6 +84,7 @@ fun CompanyLogosSection(
 @Composable
 private fun CompanyLogoCard(
     company: MetaCompany,
+    clickable: Boolean,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -100,10 +103,17 @@ private fun CompanyLogoCard(
     var logoLoadFailed by remember(company.logo) { mutableStateOf(false) }
 
     Card(
-        onClick = onClick,
+        onClick = {
+            if (clickable) {
+                onClick()
+            }
+        },
         modifier = Modifier
             .width(140.dp)
-            .height(56.dp),
+            .height(56.dp)
+            .focusProperties {
+                canFocus = clickable
+            },
         colors = CardDefaults.colors(
             containerColor = NexioColors.BackgroundCard,
             focusedContainerColor = NexioColors.Secondary

@@ -96,12 +96,6 @@ fun CastSection(
     val itemWidth = 150.dp
     val cardSize = 100.dp
     val hasTitle = title.isNotBlank()
-    val itemFocusPropertiesModifier = Modifier.focusProperties {
-        canFocus = enableFocus
-        if (upFocusRequester != null) {
-            up = upFocusRequester
-        }
-    }
 
     Column(
         modifier = modifier
@@ -141,6 +135,7 @@ fun CastSection(
                     val isRestoreTarget = member.tmdbId == restorePersonId
                     val isFirstItem = index == 0
                     val focusKey = "leading:${member.tmdbId ?: member.name}:${member.character.orEmpty()}"
+                    val isClickable = canNavigateToCastMember(member)
                     val focusRequester = when {
                         isRestoreTarget -> restoreFocusRequester
                         isFirstItem -> firstItemFocusRequester
@@ -152,9 +147,15 @@ fun CastSection(
                             member = member,
                             modifier = Modifier
                                 .focusRequester(focusRequester)
-                                .then(itemFocusPropertiesModifier),
+                                .focusProperties {
+                                    canFocus = enableFocus && isClickable
+                                    if (upFocusRequester != null) {
+                                        up = upFocusRequester
+                                    }
+                                },
                             itemWidth = itemWidth,
                             cardSize = cardSize,
+                            clickable = isClickable,
                             onFocused = {
                                 detailFocusDebug(
                                     "castMemberFocused name=${member.name} role=${member.character.orEmpty()} tmdbId=${member.tmdbId}"
@@ -196,6 +197,7 @@ fun CastSection(
                 val isRestoreTarget = member.tmdbId == restorePersonId
                 val isFirstCastItem = index == 0 && leadingCast.isEmpty()
                 val focusKey = "cast:${member.tmdbId ?: member.name}:${member.character.orEmpty()}"
+                val isClickable = canNavigateToCastMember(member)
                 val focusRequester = when {
                     isRestoreTarget -> restoreFocusRequester
                     isFirstCastItem -> firstItemFocusRequester
@@ -207,9 +209,15 @@ fun CastSection(
                         member = member,
                         modifier = Modifier
                             .focusRequester(focusRequester)
-                            .then(itemFocusPropertiesModifier),
+                            .focusProperties {
+                                canFocus = enableFocus && isClickable
+                                if (upFocusRequester != null) {
+                                    up = upFocusRequester
+                                }
+                            },
                         itemWidth = itemWidth,
                         cardSize = cardSize,
+                        clickable = isClickable,
                         onFocused = {
                             detailFocusDebug(
                                 "castMemberFocused name=${member.name} role=${member.character.orEmpty()} tmdbId=${member.tmdbId}"
@@ -227,6 +235,10 @@ fun CastSection(
     }
 }
 
+private fun canNavigateToCastMember(member: MetaCastMember): Boolean {
+    return member.tmdbId != null || member.tvdbPeopleId != null
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CastMemberItem(
@@ -234,6 +246,7 @@ private fun CastMemberItem(
     modifier: Modifier = Modifier,
     itemWidth: Dp = 150.dp,
     cardSize: Dp = 100.dp,
+    clickable: Boolean = true,
     onFocused: () -> Unit = {},
     onClick: () -> Unit = {}
 ) {
@@ -262,7 +275,11 @@ private fun CastMemberItem(
         horizontalAlignment = Alignment.Start
     ) {
         Card(
-            onClick = onClick,
+            onClick = {
+                if (clickable) {
+                    onClick()
+                }
+            },
             modifier = modifier
                 .size(cardSize)
                 .align(Alignment.Start)

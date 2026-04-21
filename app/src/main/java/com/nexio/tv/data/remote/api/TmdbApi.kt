@@ -174,6 +174,14 @@ interface TmdbApi {
         @Query("language") language: String? = null
     ): Response<TmdbPersonCreditsResponse>
 
+    @GET("search/person")
+    suspend fun searchPeople(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("page") page: Int = 1,
+        @Query("include_adult") includeAdult: Boolean = false
+    ): Response<TmdbPersonSearchResponse>
+
     @GET("company/{company_id}")
     suspend fun getCompanyDetails(
         @Path("company_id") companyId: Int,
@@ -185,6 +193,13 @@ interface TmdbApi {
         @Path("network_id") networkId: Int,
         @Query("api_key") apiKey: String
     ): Response<TmdbNetworkDetailsResponse>
+
+    @GET("search/company")
+    suspend fun searchCompanies(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("page") page: Int = 1
+    ): Response<TmdbCompanySearchResponse>
 
     @GET("discover/movie")
     suspend fun discoverMoviesByCompany(
@@ -479,6 +494,31 @@ data class TmdbPersonResponse(
 data class TmdbPersonCreditsResponse(
     @Json(name = "cast") val cast: List<TmdbPersonCreditCast>? = null,
     @Json(name = "crew") val crew: List<TmdbPersonCreditCrew>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonSearchResponse(
+    @Json(name = "results") val results: List<TmdbPersonSearchResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonSearchResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "known_for_department") val knownForDepartment: String? = null,
+    @Json(name = "profile_path") val profilePath: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCompanySearchResponse(
+    @Json(name = "results") val results: List<TmdbCompanySearchResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCompanySearchResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "logo_path") val logoPath: String? = null
 )
 
 @JsonClass(generateAdapter = true)
