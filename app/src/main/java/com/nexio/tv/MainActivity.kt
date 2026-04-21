@@ -231,6 +231,9 @@ class MainActivity : ComponentActivity() {
 
         @Volatile
         private var processProfileSelectionGatePassed: Boolean = false
+
+        @Volatile
+        var voiceKeyHandler: (() -> Boolean)? = null
     }
 
     @Inject
@@ -1144,6 +1147,13 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             idleScreensaverController.registerInteraction()
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_VOICE_ASSIST,
+                KeyEvent.KEYCODE_ASSIST,
+                KeyEvent.KEYCODE_SEARCH -> {
+                    if (voiceKeyHandler?.invoke() == true) return true
+                }
+            }
         }
         return super.dispatchKeyEvent(event)
     }
