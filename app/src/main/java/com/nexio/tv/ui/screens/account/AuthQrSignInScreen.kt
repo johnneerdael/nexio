@@ -352,7 +352,7 @@ internal fun shouldLaunchQrLogin(
     hasQrLoginCode: Boolean,
     isLoading: Boolean
 ): Boolean {
-    val needsQr = authState is AuthState.SignedOut || authState is AuthState.SessionLost
+    val needsQr = authState is AuthState.SignedOut
     return needsQr && !isSignedIn && !hasQrLoginCode && !isLoading
 }
 

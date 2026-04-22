@@ -19,8 +19,8 @@ class AuthQrLaunchPolicyTest {
     }
 
     @Test
-    fun `launch also starts for returning users in session lost state`() {
-        assertTrue(
+    fun `launch stays blocked for returning users in session lost state`() {
+        assertFalse(
             shouldLaunchQrLogin(
                 authState = AuthState.SessionLost,
                 isSignedIn = false,

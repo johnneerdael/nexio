@@ -78,58 +78,54 @@ class AuthManager @Inject constructor(
                     }
                     is SessionStatus.NotAuthenticated -> {
                         auth.awaitInitialization()
-                        val restoredUser = auth.currentUserOrNull()
-                        if (restoredUser != null) {
-                            publishAuthenticatedUser(restoredUser.id, restoredUser.email)
-                            return@collect
-                        }
+                        val hasCachedIdentity = auth.currentUserOrNull() != null
                         val session = auth.currentSessionOrNull()
                         val hasRefreshToken = session?.refreshToken?.isNotBlank() == true
-                        if (hasRefreshToken) {
-                            scope.launch {
-                                try {
-                                    auth.refreshCurrentSession()
-                                } catch (e: Exception) {
-                                    // Only sign the user out if the refresh token was
-                                    // *authoritatively* rejected by the server. Transient
-                                    // failures (network down, DNS warm-up after an upgrade,
-                                    // 5xx, timeouts) must NOT clear the session — the SDK
-                                    // or the next sync attempt will retry.
-                                    if (e.isAuthoritativeRefreshRejection()) {
-                                        Log.w(TAG, "Refresh token rejected; signing out", e)
-                                        transitionToSignedOut()
-                                    } else {
-                                        Log.w(
-                                            TAG,
-                                            "Transient session refresh failure; keeping current auth state",
-                                            e
-                                        )
+                        val returning = isReturningUser()
+                        when (
+                            resolveNotAuthenticatedStartupAction(
+                                hasCachedIdentity = hasCachedIdentity,
+                                hasRefreshToken = hasRefreshToken,
+                                isReturningUser = returning
+                            )
+                        ) {
+                            NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION -> {
+                                scope.launch {
+                                    try {
+                                        auth.refreshCurrentSession()
+                                    } catch (e: Exception) {
+                                        // Only sign the user out if the refresh token was
+                                        // *authoritatively* rejected by the server. Transient
+                                        // failures (network down, DNS warm-up after an upgrade,
+                                        // 5xx, timeouts) must NOT clear the session — the SDK
+                                        // or the next sync attempt will retry.
+                                        if (e.isAuthoritativeRefreshRejection()) {
+                                            Log.w(TAG, "Refresh token rejected; signing out", e)
+                                            transitionToSignedOut()
+                                        } else {
+                                            Log.w(
+                                                TAG,
+                                                "Transient session refresh failure; keeping current auth state",
+                                                e
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        } else {
-                            // No Supabase session in memory. Distinguish a genuine "never
-                            // logged in / explicitly signed out" from a transient storage
-                            // miss on cold start (post-upgrade, SDK-storage race, OEM
-                            // backup-restore blip). If our own marker — or the onboarding
-                            // flag for users who signed in before the marker existed —
-                            // says we *were* authenticated last run, enter silent
-                            // recovery instead of flipping to SignedOut (which would mint
-                            // a spurious QR re-auth prompt for a valid session).
-                            val returning = isReturningUser()
-                            if (returning) {
+                            NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY -> {
                                 Log.w(
                                     TAG,
-                                    "Supabase reports no session but returning-user signal is set; keeping state and retrying"
+                                    "Supabase reports no live session; cached identity alone is insufficient, attempting returning-user recovery"
                                 )
                                 scope.launch { attemptSilentSessionRecovery() }
-                            } else {
+                            }
+                            NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT -> {
                                 transitionToSignedOut()
                             }
                         }
                     }
                     is SessionStatus.Initializing -> {
-                        _sessionUserId.value = auth.currentUserOrNull()?.id
+                        _sessionUserId.value = null
                         _authState.value = AuthState.Loading
                     }
                     else -> { /* NetworkError etc. — keep current state */ }
@@ -567,6 +563,22 @@ internal fun shouldAttemptDurableSessionRecovery(
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
     return isReturningUser && !hasRefreshToken && credential.isComplete
+}
+
+internal enum class NotAuthenticatedStartupAction {
+    REFRESH_LIVE_SESSION,
+    ATTEMPT_RETURNING_USER_RECOVERY,
+    TRANSITION_SIGNED_OUT
+}
+
+internal fun resolveNotAuthenticatedStartupAction(
+    hasCachedIdentity: Boolean,
+    hasRefreshToken: Boolean,
+    isReturningUser: Boolean
+): NotAuthenticatedStartupAction {
+    if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
+    if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
+    return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
 }
 
 internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {

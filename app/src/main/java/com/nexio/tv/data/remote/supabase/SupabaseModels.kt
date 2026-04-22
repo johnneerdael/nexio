@@ -46,8 +46,17 @@ data class SupabaseLinkedDevice(
     val id: String? = null,
     @SerialName("owner_id") val ownerId: String,
     @SerialName("device_user_id") val deviceUserId: String,
+    @SerialName("device_public_id") val devicePublicId: String? = null,
+    @SerialName("display_name") val displayName: String? = null,
     @SerialName("device_name") val deviceName: String? = null,
-    @SerialName("linked_at") val linkedAt: String? = null
+    @SerialName("device_model") val deviceModel: String? = null,
+    @SerialName("device_platform") val devicePlatform: String? = null,
+    val status: String? = null,
+    @SerialName("linked_device_id") val linkedDeviceId: String? = null,
+    @SerialName("linked_at") val linkedAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("last_seen_at") val lastSeenAt: String? = null,
+    @SerialName("revoked_at") val revokedAt: String? = null
 )
 
 @Serializable
