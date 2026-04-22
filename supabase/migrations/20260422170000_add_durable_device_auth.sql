@@ -9,11 +9,15 @@ create table if not exists public.device_credentials (
   device_model text,
   device_platform text,
   status text not null default 'active'
-    check (status in ('active', 'revoked', 'rotated')),
+    check (status in ('active', 'revoked')),
   linked_device_id uuid null references public.linked_devices(id) on delete set null,
   created_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
-  revoked_at timestamptz null
+  revoked_at timestamptz null,
+  check (
+    (status = 'revoked' and revoked_at is not null)
+    or (status <> 'revoked' and revoked_at is null)
+  )
 );
 
 create unique index if not exists device_credentials_public_id_uidx
