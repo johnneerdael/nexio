@@ -25,6 +25,42 @@ class DefaultIntegrationRuntime @Inject constructor(
         }
     }
 
+    override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> {
+        val policy = registry.policyFor(spec.provider)
+        if (playbackGate.isBlocked(policy, spec.workClass)) return IntegrationCallResult.Missing
+        if (backoffManager.isBlocked(spec.provider, spec.scope)) return IntegrationCallResult.Missing
+
+        return requestGate.withPermit(spec.provider) {
+            when (val result = spec.call()) {
+                is IntegrationCallResult.HttpError -> {
+                    if (result.statusCode == 429 || result.statusCode >= 500) {
+                        backoffManager.noteHttpFailure(
+                            provider = spec.provider,
+                            scope = spec.scope,
+                            statusCode = result.statusCode,
+                            retryAfterMs = result.retryAfterMs,
+                            reason = result.reason
+                        )
+                    }
+                    result
+                }
+                is IntegrationCallResult.NetworkError -> result
+                is IntegrationCallResult.Success -> result
+                IntegrationCallResult.Missing -> IntegrationCallResult.Missing
+            }
+        }
+    }
+
+    override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? {
+        val policy = registry.policyFor(spec.provider)
+        if (playbackGate.isBlocked(policy, spec.workClass)) return null
+        if (backoffManager.isBlocked(spec.provider, spec.scope)) return null
+
+        return requestGate.withPermit(spec.provider) {
+            spec.open()
+        }
+    }
+
     private suspend fun <T> executeWithoutCache(
         spec: IntegrationSpec<T>,
         options: IntegrationFetchOptions

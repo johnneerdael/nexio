@@ -49,19 +49,39 @@ data class RealRuntimeFixture(
 
 class RecordingIntegrationRuntime<T>(
     private val successValue: T? = null,
-    private val nextResult: IntegrationFetchResult<T>? = null
+    private val nextResult: IntegrationFetchResult<T>? = null,
+    private val nextCallResult: IntegrationCallResult<T>? = null,
+    private val nextStreamHandle: IntegrationStreamHandle<T>? = null
 ) : IntegrationRuntime {
     val keys = mutableListOf<String>()
+    val specs = mutableListOf<IntegrationSpec<*>>()
+    val callSpecs = mutableListOf<IntegrationCallSpec<*>>()
+    val streamSpecs = mutableListOf<IntegrationStreamSpec<*>>()
 
     override suspend fun <R> get(
         spec: IntegrationSpec<R>,
         options: IntegrationFetchOptions
     ): IntegrationFetchResult<R> {
         keys += spec.cacheKey
+        specs += spec
         @Suppress("UNCHECKED_CAST")
         return nextResult as? IntegrationFetchResult<R>
             ?: successValue?.let { IntegrationFetchResult.Updated(it as R) }
             ?: IntegrationFetchResult.Missing
+    }
+
+    override suspend fun <R> call(spec: IntegrationCallSpec<R>): IntegrationCallResult<R> {
+        callSpecs += spec
+        @Suppress("UNCHECKED_CAST")
+        return nextCallResult as? IntegrationCallResult<R>
+            ?: successValue?.let { IntegrationCallResult.Success(it as R) }
+            ?: IntegrationCallResult.Missing
+    }
+
+    override suspend fun <R> open(spec: IntegrationStreamSpec<R>): IntegrationStreamHandle<R>? {
+        streamSpecs += spec
+        @Suppress("UNCHECKED_CAST")
+        return nextStreamHandle as? IntegrationStreamHandle<R>
     }
 }
 
