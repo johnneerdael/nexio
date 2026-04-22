@@ -15,6 +15,7 @@ import java.nio.file.Files
 data class RealRuntimeFixture(
     val runtime: DefaultIntegrationRuntime,
     val backoffManager: IntegrationBackoffManager,
+    val playbackGate: IntegrationPlaybackGate,
     val backoffDao: IntegrationProviderBackoffDao,
     val cacheDao: IntegrationCacheDao,
     val blobStore: IntegrationBlobStore,
@@ -105,17 +106,19 @@ fun realRuntimeFixture(): RealRuntimeFixture {
     val registry = defaultIntegrationPolicyRegistry()
     val requestGate = ProviderRequestGate(registry)
     val backoffManager = IntegrationBackoffManager(backoffDao)
+    val playbackGate = IntegrationPlaybackGate()
     val runtime = DefaultIntegrationRuntime(
         cacheStore = cacheStore,
         requestGate = requestGate,
         backoffManager = backoffManager,
         singleFlight = IntegrationSingleFlight(),
-        playbackGate = IntegrationPlaybackGate(),
+        playbackGate = playbackGate,
         registry = registry
     )
     return RealRuntimeFixture(
         runtime = runtime,
         backoffManager = backoffManager,
+        playbackGate = playbackGate,
         backoffDao = backoffDao,
         cacheDao = cacheDao,
         blobStore = blobStore,

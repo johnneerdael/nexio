@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,6 +32,28 @@ class IntegrationStreamRuntimeTest {
         assertEquals(1, fixture.requestGate.acquireCount)
         assertSame(handle, result)
         assertEquals("stream", result?.value)
+    }
+
+    @Test
+    fun `playback blocked open returns null without entering gate`() = runTest {
+        val fixture = realRuntimeFixture()
+        fixture.playbackGate.setPlaybackActive(true)
+        val opens = AtomicInteger(0)
+
+        val result = fixture.runtime.open(
+            IntegrationStreamSpec(
+                provider = IntegrationProvider.REAL_DEBRID,
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                open = {
+                    opens.incrementAndGet()
+                    TestStreamHandle("stream")
+                }
+            )
+        )
+
+        assertEquals(0, opens.get())
+        assertEquals(0, fixture.requestGate.acquireCount)
+        assertNull(result)
     }
 
     private data class TestStreamHandle<T>(
