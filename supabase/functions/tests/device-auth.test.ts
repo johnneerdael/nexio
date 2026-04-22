@@ -34,6 +34,13 @@ create or replace function public.approve_tv_login_session(
   p_display_name text default null
 )
 requested_display_name = nullif(trim(coalesce(p_display_name, '')), ''),
+create or replace function public.start_tv_login_session(
+  p_device_nonce text,
+  p_redirect_base_url text,
+  p_device_name text default null
+)
+v_web_url := v_base_url || '/approve?code=' || v_code || '&nonce=' || replace(v_nonce, '+', '%2B');
+v_web_url := v_web_url || '&device_name=' || replace(replace(replace(v_device_name, '%', '%25'), ' ', '%20'), '+', '%2B');
 `;
 
 test("hashDeviceCredential is deterministic for the same raw secret", async () => {
@@ -321,5 +328,20 @@ test("durable device auth migration persists requested display name on tv login 
   assert.match(
     migrationContractText,
     /requested_display_name = nullif\(trim\(coalesce\(p_display_name, ''\)\), ''\)/,
+  );
+});
+
+test("tv login start migration includes device name in the approval url", () => {
+  assert.match(
+    migrationContractText,
+    /create or replace function public\.start_tv_login_session\(\s*p_device_nonce text,\s*p_redirect_base_url text,\s*p_device_name text default null/s,
+  );
+  assert.match(
+    migrationContractText,
+    /v_web_url := v_base_url \|\| '\/approve\?code=' \|\| v_code \|\| '&nonce=' \|\| replace\(v_nonce, '\+', '%2B'\);/,
+  );
+  assert.match(
+    migrationContractText,
+    /v_web_url := v_web_url \|\| '&device_name=' \|\| replace\(replace\(replace\(v_device_name, '%', '%25'\), ' ', '%20'\), '\+', '%2B'\);/,
   );
 });
