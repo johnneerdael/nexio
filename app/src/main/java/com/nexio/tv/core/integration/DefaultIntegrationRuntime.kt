@@ -32,27 +32,29 @@ class DefaultIntegrationRuntime @Inject constructor(
         if (backoffManager.isBlocked(spec.provider, spec.scope)) return IntegrationCallResult.Missing
 
         return requestGate.withPermit(spec.provider) {
-            try {
-                when (val result = spec.call()) {
-                    is IntegrationCallResult.HttpError -> {
-                        if (result.statusCode == 429 || result.statusCode >= 500) {
-                            backoffManager.noteHttpFailure(
-                                provider = spec.provider,
-                                scope = spec.scope,
-                                statusCode = result.statusCode,
-                                retryAfterMs = result.retryAfterMs,
-                                reason = result.reason
-                            )
-                        }
-                        result
-                    }
-                    is IntegrationCallResult.NetworkError -> result
-                    is IntegrationCallResult.Success -> result
-                    IntegrationCallResult.Missing -> IntegrationCallResult.Missing
-                }
+            val result = try {
+                spec.call()
             } catch (exception: Exception) {
                 if (exception is CancellationException) throw exception
-                IntegrationCallResult.NetworkError(exception)
+                return@withPermit IntegrationCallResult.NetworkError(exception)
+            }
+
+            when (result) {
+                is IntegrationCallResult.HttpError -> {
+                    if (result.statusCode == 429 || result.statusCode >= 500) {
+                        backoffManager.noteHttpFailure(
+                            provider = spec.provider,
+                            scope = spec.scope,
+                            statusCode = result.statusCode,
+                            retryAfterMs = result.retryAfterMs,
+                            reason = result.reason
+                        )
+                    }
+                    result
+                }
+                is IntegrationCallResult.NetworkError -> result
+                is IntegrationCallResult.Success -> result
+                IntegrationCallResult.Missing -> IntegrationCallResult.Missing
             }
         }
     }
