@@ -17,6 +17,13 @@ test('hashDeviceCredential depends on the credential inputs', async () => {
   assert.notEqual(base, differentPublicId)
 })
 
+test('hashDeviceCredential does not collide for colon-containing credential pairs', async () => {
+  const a = await hashDeviceCredential('foo', 'bar:baz')
+  const b = await hashDeviceCredential('foo:bar', 'baz')
+
+  assert.notEqual(a, b)
+})
+
 test('normalizeDeviceExchangeBody returns trimmed credential strings', () => {
   assert.deepEqual(
     normalizeDeviceExchangeBody({

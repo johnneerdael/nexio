@@ -3,7 +3,7 @@ export async function hashDeviceCredential(
   deviceSecret: string,
 ): Promise<string> {
   const payload = new TextEncoder().encode(
-    `${devicePublicId.trim()}:${deviceSecret.trim()}`,
+    JSON.stringify([devicePublicId.trim(), deviceSecret.trim()]),
   )
   const digest = await crypto.subtle.digest('SHA-256', payload)
 
