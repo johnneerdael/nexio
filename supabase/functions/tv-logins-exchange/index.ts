@@ -29,6 +29,7 @@ type DurableCredentialRecord = {
   device_platform: string | null;
   status: "active";
   last_seen_at: string;
+  revoked_at: null;
 };
 
 type DurableCredentialClientPayload = {
@@ -129,6 +130,7 @@ export async function buildApprovalExchangePayload(input: {
     device_platform: input.sessionRow.device_platform ?? null,
     status: "active",
     last_seen_at: new Date().toISOString(),
+    revoked_at: null,
   };
 }
 

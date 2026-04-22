@@ -1,3 +1,39 @@
+create or replace function public.url_encode(input text)
+returns text
+language plpgsql
+immutable
+as $$
+declare
+  bytes bytea;
+  byte_value integer;
+  idx integer;
+  output text := '';
+begin
+  if input is null then
+    return null;
+  end if;
+
+  bytes := convert_to(input, 'UTF8');
+
+  for idx in 0..length(bytes) - 1 loop
+    byte_value := get_byte(bytes, idx);
+
+    if
+      (byte_value between 48 and 57) or
+      (byte_value between 65 and 90) or
+      (byte_value between 97 and 122) or
+      byte_value in (45, 46, 95, 126)
+    then
+      output := output || chr(byte_value);
+    else
+      output := output || '%' || upper(lpad(to_hex(byte_value), 2, '0'));
+    end if;
+  end loop;
+
+  return output;
+end;
+$$;
+
 create or replace function public.start_tv_login_session(
   p_device_nonce text,
   p_redirect_base_url text,
@@ -45,8 +81,7 @@ begin
   v_web_url := v_base_url || '/approve?code=' || v_code || '&nonce=' || replace(v_nonce, '+', '%2B');
 
   if v_device_name is not null then
-    v_web_url := v_web_url || '&device_name=' ||
-      replace(replace(replace(v_device_name, '%', '%25'), ' ', '%20'), '+', '%2B');
+    v_web_url := v_web_url || '&device_name=' || public.url_encode(v_device_name);
   end if;
 
   insert into public.tv_login_sessions (
