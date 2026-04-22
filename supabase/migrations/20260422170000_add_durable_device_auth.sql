@@ -2,9 +2,9 @@ create table if not exists public.device_credentials (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   device_user_id uuid not null references auth.users(id) on delete cascade,
-  device_public_id text not null,
-  credential_hash text not null,
-  display_name text not null,
+  device_public_id text not null check (length(trim(device_public_id)) > 0),
+  credential_hash text not null check (length(trim(credential_hash)) > 0),
+  display_name text not null check (length(trim(display_name)) > 0),
   device_name text,
   device_model text,
   device_platform text,
@@ -46,16 +46,30 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $$
+declare
+  v_device_public_id text := trim(coalesce(p_device_public_id, ''));
+  v_revoked_count integer := 0;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
+  end if;
+
+  if v_device_public_id = '' then
+    raise exception 'Invalid durable device credential';
   end if;
 
   update public.device_credentials
      set status = 'revoked',
          revoked_at = now()
    where owner_id = auth.uid()
-     and device_public_id = trim(coalesce(p_device_public_id, ''));
+     and device_public_id = v_device_public_id
+     and status <> 'revoked';
+
+  get diagnostics v_revoked_count = row_count;
+
+  if v_revoked_count = 0 then
+    raise exception 'Device credential not found or already revoked';
+  end if;
 end;
 $$;
 

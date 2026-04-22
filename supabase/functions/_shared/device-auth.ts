@@ -12,9 +12,29 @@ export async function hashDeviceCredential(
     .join('')
 }
 
-export function normalizeDeviceExchangeBody(body: Record<string, unknown>) {
-  const devicePublicId = String(body.device_public_id ?? '').trim()
-  const deviceSecret = String(body.device_secret ?? '').trim()
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+export function normalizeDeviceExchangeBody(body: unknown) {
+  if (!isPlainObject(body)) {
+    throw new Error('Invalid durable device credential')
+  }
+
+  if (
+    typeof body.device_public_id !== 'string' ||
+    typeof body.device_secret !== 'string'
+  ) {
+    throw new Error('Invalid durable device credential')
+  }
+
+  const devicePublicId = body.device_public_id.trim()
+  const deviceSecret = body.device_secret.trim()
 
   if (!devicePublicId || !deviceSecret) {
     throw new Error('Invalid durable device credential')
