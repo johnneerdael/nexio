@@ -74,6 +74,22 @@ data class TvLoginExchangeResult(
 )
 
 @Serializable
+data class DurableDeviceCredentialIssueResult(
+    @SerialName("device_public_id") val devicePublicId: String,
+    @SerialName("device_secret") val deviceSecret: String,
+    @SerialName("access_token") val accessToken: String,
+    @SerialName("refresh_token") val refreshToken: String
+)
+
+@Serializable
+data class DurableDeviceSessionExchangeResult(
+    @SerialName("access_token") val accessToken: String,
+    @SerialName("refresh_token") val refreshToken: String,
+    @SerialName("token_type") val tokenType: String? = null,
+    @SerialName("expires_in") val expiresIn: Long? = null
+)
+
+@Serializable
 data class SupabaseProfilePinVerifyResult(
     val unlocked: Boolean = false,
     @SerialName("retry_after_seconds") val retryAfterSeconds: Int = 0,

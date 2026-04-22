@@ -77,23 +77,26 @@ fun AuthQrSignInScreen(
     }
 
     LaunchedEffect(uiState.authState, isSignedIn, uiState.qrLoginCode, uiState.isLoading) {
-        val needsQr = uiState.authState is AuthState.SignedOut || uiState.authState is AuthState.SessionLost
         if (
-            needsQr &&
-            !isSignedIn &&
-            uiState.qrLoginCode.isNullOrBlank() &&
-            !uiState.isLoading
+            shouldLaunchQrLogin(
+                authState = uiState.authState,
+                isSignedIn = isSignedIn,
+                hasQrLoginCode = !uiState.qrLoginCode.isNullOrBlank(),
+                isLoading = uiState.isLoading
+            )
         ) {
             // Debounce: only mint a QR code if we stay in SignedOut/SessionLost for a moment.
             // On cold-start / post-upgrade, AuthState can briefly flash one of these
             // while Supabase's session storage hydrates — starting a QR login on
             // that flash is exactly the spurious re-auth prompt we want to avoid.
             delay(1500)
-            val stillNeedsQr = uiState.authState is AuthState.SignedOut || uiState.authState is AuthState.SessionLost
             if (
-                stillNeedsQr &&
-                uiState.qrLoginCode.isNullOrBlank() &&
-                !uiState.isLoading
+                shouldLaunchQrLogin(
+                    authState = uiState.authState,
+                    isSignedIn = isSignedIn,
+                    hasQrLoginCode = !uiState.qrLoginCode.isNullOrBlank(),
+                    isLoading = uiState.isLoading
+                )
             ) {
                 viewModel.startQrLogin()
             }
@@ -341,6 +344,16 @@ fun AuthQrSignInScreen(
             }
         }
     }
+}
+
+internal fun shouldLaunchQrLogin(
+    authState: AuthState,
+    isSignedIn: Boolean,
+    hasQrLoginCode: Boolean,
+    isLoading: Boolean
+): Boolean {
+    val needsQr = authState is AuthState.SignedOut || authState is AuthState.SessionLost
+    return needsQr && !isSignedIn && !hasQrLoginCode && !isLoading
 }
 
 @Composable

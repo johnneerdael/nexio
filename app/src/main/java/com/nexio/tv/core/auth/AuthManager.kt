@@ -4,7 +4,10 @@ import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
-import com.nexio.tv.data.remote.supabase.TvLoginExchangeResult
+import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
+import com.nexio.tv.data.local.DurableDeviceCredentialStore
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
+import com.nexio.tv.data.remote.supabase.DurableDeviceSessionExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
 import com.nexio.tv.domain.model.AuthState
@@ -40,7 +43,8 @@ class AuthManager @Inject constructor(
     private val postgrest: Postgrest,
     private val httpClient: OkHttpClient,
     private val authPresenceDataStore: AuthPresenceDataStore,
-    private val appOnboardingDataStore: AppOnboardingDataStore
+    private val appOnboardingDataStore: AppOnboardingDataStore,
+    private val durableDeviceCredentialStore: DurableDeviceCredentialStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -189,6 +193,19 @@ class AuthManager @Inject constructor(
                 Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
             }
         }
+        if (
+            shouldAttemptDurableSessionRecovery(
+                isReturningUser = true,
+                hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
+                credential = durableDeviceCredentialStore.snapshot()
+            )
+        ) {
+            try {
+                if (restoreSupabaseSessionFromDurableCredential()) return
+            } catch (e: Exception) {
+                Log.w(TAG, "Durable credential session recovery failed", e)
+            }
+        }
         Log.w(
             TAG,
             "Silent session recovery exhausted without restoring a session; marking SessionLost for returning user"
@@ -216,6 +233,11 @@ class AuthManager @Inject constructor(
                 authPresenceDataStore.clear()
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to clear auth presence marker", e)
+            }
+            try {
+                durableDeviceCredentialStore.clear()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to clear durable device credential", e)
             }
         }
     }
@@ -373,6 +395,11 @@ class AuthManager @Inject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
         }
+        try {
+            durableDeviceCredentialStore.clear()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear durable device credential on sign-out", e)
+        }
     }
 
     fun clearEffectiveUserIdCache() {
@@ -488,14 +515,58 @@ class AuthManager @Inject constructor(
                     responseBody
                 }
             }
-            val result = json.decodeFromString<TvLoginExchangeResult>(body)
+            val result = json.decodeFromString<DurableDeviceCredentialIssueResult>(body)
             auth.importAuthToken(result.accessToken, result.refreshToken)
+            durableDeviceCredentialStore.save(
+                devicePublicId = result.devicePublicId,
+                deviceSecret = result.deviceSecret
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to exchange TV login session", e)
             Result.failure(e)
         }
     }
+
+    private suspend fun restoreSupabaseSessionFromDurableCredential(): Boolean {
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (!credential.isComplete) return false
+
+        val payload = buildJsonObject {
+            put("device_public_id", credential.devicePublicId)
+            put("device_secret", credential.deviceSecret)
+        }.toString()
+        val request = Request.Builder()
+            .url("${BuildConfig.SUPABASE_URL}/functions/v1/device-session-exchange")
+            .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        val body = withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    if (response.code == 401 || response.code == 403) {
+                        durableDeviceCredentialStore.clear()
+                    }
+                    throw IllegalStateException(
+                        "Durable device session exchange failed (${response.code}): $responseBody"
+                    )
+                }
+                responseBody
+            }
+        }
+        val result = json.decodeFromString<DurableDeviceSessionExchangeResult>(body)
+        auth.importAuthToken(result.accessToken, result.refreshToken)
+        return true
+    }
+}
+
+internal fun shouldAttemptDurableSessionRecovery(
+    isReturningUser: Boolean,
+    hasRefreshToken: Boolean,
+    credential: DurableDeviceCredentialSnapshot
+): Boolean {
+    return isReturningUser && !hasRefreshToken && credential.isComplete
 }
 
 internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {
