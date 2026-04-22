@@ -1,5 +1,6 @@
 package com.nexio.tv.core.integration
 
+import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,22 +32,27 @@ class DefaultIntegrationRuntime @Inject constructor(
         if (backoffManager.isBlocked(spec.provider, spec.scope)) return IntegrationCallResult.Missing
 
         return requestGate.withPermit(spec.provider) {
-            when (val result = spec.call()) {
-                is IntegrationCallResult.HttpError -> {
-                    if (result.statusCode == 429 || result.statusCode >= 500) {
-                        backoffManager.noteHttpFailure(
-                            provider = spec.provider,
-                            scope = spec.scope,
-                            statusCode = result.statusCode,
-                            retryAfterMs = result.retryAfterMs,
-                            reason = result.reason
-                        )
+            runCatching { spec.call() }.getOrElse { throwable ->
+                if (throwable is CancellationException) throw throwable
+                return@withPermit IntegrationCallResult.NetworkError(throwable)
+            }.let { result ->
+                when (result) {
+                    is IntegrationCallResult.HttpError -> {
+                        if (result.statusCode == 429 || result.statusCode >= 500) {
+                            backoffManager.noteHttpFailure(
+                                provider = spec.provider,
+                                scope = spec.scope,
+                                statusCode = result.statusCode,
+                                retryAfterMs = result.retryAfterMs,
+                                reason = result.reason
+                            )
+                        }
+                        result
                     }
-                    result
+                    is IntegrationCallResult.NetworkError -> result
+                    is IntegrationCallResult.Success -> result
+                    IntegrationCallResult.Missing -> IntegrationCallResult.Missing
                 }
-                is IntegrationCallResult.NetworkError -> result
-                is IntegrationCallResult.Success -> result
-                IntegrationCallResult.Missing -> IntegrationCallResult.Missing
             }
         }
     }
@@ -57,7 +63,12 @@ class DefaultIntegrationRuntime @Inject constructor(
         if (backoffManager.isBlocked(spec.provider, spec.scope)) return null
 
         return requestGate.withPermit(spec.provider) {
-            spec.open()
+            try {
+                spec.open()
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                null
+            }
         }
     }
 
