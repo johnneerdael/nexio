@@ -55,6 +55,34 @@ class IntegrationCallRuntimeTest {
     }
 
     @Test
+    fun `backoff blocked call returns missing without entering gate`() = runTest {
+        val fixture = realRuntimeFixture()
+        fixture.backoffManager.noteHttpFailure(
+            provider = IntegrationProvider.TMDB,
+            scope = IntegrationScope.Global,
+            statusCode = 429,
+            retryAfterMs = 60_000L,
+            reason = "retry later"
+        )
+        val calls = AtomicInteger(0)
+
+        val result = fixture.runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TMDB,
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                call = {
+                    calls.incrementAndGet()
+                    IntegrationCallResult.Success("network")
+                }
+            )
+        )
+
+        assertEquals(0, calls.get())
+        assertEquals(0, fixture.requestGate.acquireCount)
+        assertEquals(IntegrationCallResult.Missing, result)
+    }
+
+    @Test
     fun `unexpected call exception becomes typed network error`() = runTest {
         val fixture = realRuntimeFixture()
         val failure = IllegalStateException("boom")

@@ -32,11 +32,8 @@ class DefaultIntegrationRuntime @Inject constructor(
         if (backoffManager.isBlocked(spec.provider, spec.scope)) return IntegrationCallResult.Missing
 
         return requestGate.withPermit(spec.provider) {
-            runCatching { spec.call() }.getOrElse { throwable ->
-                if (throwable is CancellationException) throw throwable
-                return@withPermit IntegrationCallResult.NetworkError(throwable)
-            }.let { result ->
-                when (result) {
+            try {
+                when (val result = spec.call()) {
                     is IntegrationCallResult.HttpError -> {
                         if (result.statusCode == 429 || result.statusCode >= 500) {
                             backoffManager.noteHttpFailure(
@@ -53,6 +50,9 @@ class DefaultIntegrationRuntime @Inject constructor(
                     is IntegrationCallResult.Success -> result
                     IntegrationCallResult.Missing -> IntegrationCallResult.Missing
                 }
+            } catch (exception: Exception) {
+                if (exception is CancellationException) throw exception
+                IntegrationCallResult.NetworkError(exception)
             }
         }
     }
@@ -65,8 +65,8 @@ class DefaultIntegrationRuntime @Inject constructor(
         return requestGate.withPermit(spec.provider) {
             try {
                 spec.open()
-            } catch (throwable: Throwable) {
-                if (throwable is CancellationException) throw throwable
+            } catch (exception: Exception) {
+                if (exception is CancellationException) throw exception
                 null
             }
         }

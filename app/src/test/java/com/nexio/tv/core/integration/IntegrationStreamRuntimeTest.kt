@@ -56,6 +56,34 @@ class IntegrationStreamRuntimeTest {
         assertNull(result)
     }
 
+    @Test
+    fun `backoff blocked open returns null without entering gate`() = runTest {
+        val fixture = realRuntimeFixture()
+        fixture.backoffManager.noteHttpFailure(
+            provider = IntegrationProvider.REAL_DEBRID,
+            scope = IntegrationScope.Global,
+            statusCode = 429,
+            retryAfterMs = 60_000L,
+            reason = "retry later"
+        )
+        val opens = AtomicInteger(0)
+
+        val result = fixture.runtime.open(
+            IntegrationStreamSpec(
+                provider = IntegrationProvider.REAL_DEBRID,
+                workClass = IntegrationWorkClass.PLAYBACK_CRITICAL,
+                open = {
+                    opens.incrementAndGet()
+                    TestStreamHandle("stream")
+                }
+            )
+        )
+
+        assertEquals(0, opens.get())
+        assertEquals(0, fixture.requestGate.acquireCount)
+        assertNull(result)
+    }
+
     private data class TestStreamHandle<T>(
         override val value: T
     ) : IntegrationStreamHandle<T> {
