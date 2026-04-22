@@ -6,6 +6,7 @@ import {
 } from "../_shared/device-auth.ts";
 import {
   buildApprovalExchangePayload,
+  buildApprovalResponsePayload,
   buildDurableCredential,
 } from "../tv-logins-exchange/index.ts";
 import {
@@ -26,6 +27,13 @@ check (
 )
 raise exception 'Invalid durable device credential';
 raise exception 'Device credential not found or already revoked';
+add column if not exists requested_display_name text;
+create or replace function public.approve_tv_login_session(
+  p_code text,
+  p_device_nonce text,
+  p_display_name text default null
+)
+requested_display_name = nullif(trim(coalesce(p_display_name, '')), ''),
 `;
 
 test("hashDeviceCredential is deterministic for the same raw secret", async () => {
@@ -173,6 +181,32 @@ test("buildDeviceSessionPayload returns Supabase token fields", () => {
   });
 });
 
+test("buildApprovalResponsePayload returns session fields plus durable credential fields", () => {
+  const payload = buildApprovalResponsePayload({
+    session: {
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+    },
+    credential: {
+      device_public_id: "tv_public_id",
+      device_secret: "device-secret",
+      display_name: "Living Room TV",
+    },
+  });
+
+  assert.deepEqual(payload, {
+    access_token: "access-token",
+    refresh_token: "refresh-token",
+    token_type: "bearer",
+    expires_in: 3600,
+    device_public_id: "tv_public_id",
+    device_secret: "device-secret",
+    display_name: "Living Room TV",
+  });
+});
+
 test("invalidCredentialResponse is a 401 contract for revoked or invalid credentials", async () => {
   const response = invalidCredentialResponse();
 
@@ -272,5 +306,20 @@ test("durable device auth migration keeps revoke explicit and non-silent", () =>
   assert.match(
     migrationContractText,
     /raise exception 'Device credential not found or already revoked';/,
+  );
+});
+
+test("durable device auth migration persists requested display name on tv login approval", () => {
+  assert.match(
+    migrationContractText,
+    /add column if not exists requested_display_name text;/,
+  );
+  assert.match(
+    migrationContractText,
+    /create or replace function public\.approve_tv_login_session\(\s*p_code text,\s*p_device_nonce text,\s*p_display_name text default null/s,
+  );
+  assert.match(
+    migrationContractText,
+    /requested_display_name = nullif\(trim\(coalesce\(p_display_name, ''\)\), ''\)/,
   );
 });

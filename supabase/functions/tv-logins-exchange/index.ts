@@ -36,6 +36,13 @@ type DurableCredentialClientPayload = {
   device_secret: string;
 };
 
+type SessionResult = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -125,6 +132,21 @@ export async function buildApprovalExchangePayload(input: {
   };
 }
 
+export function buildApprovalResponsePayload(input: {
+  session: SessionResult;
+  credential: DurableCredentialClientPayload & { display_name: string };
+}) {
+  return {
+    access_token: input.session.access_token,
+    refresh_token: input.session.refresh_token,
+    token_type: input.session.token_type,
+    expires_in: input.session.expires_in,
+    device_public_id: input.credential.device_public_id,
+    device_secret: input.credential.device_secret,
+    display_name: input.credential.display_name,
+  };
+}
+
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
@@ -150,7 +172,9 @@ async function handleRequest(req: Request): Promise<Response> {
       return json({ error: "Not authenticated" }, 401);
     }
 
-    const { userClient, adminClient } = createSupabaseClients(authHeader);
+    const { userClient, adminClient, publicClient } = createSupabaseClients(
+      authHeader,
+    );
 
     const {
       data: { user: requesterUser },
@@ -211,6 +235,20 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     const ownerUserId = sessionRow.approved_by_user_id;
+    const { data: ownerResult, error: ownerError } = await adminClient.auth
+      .admin.getUserById(ownerUserId);
+    if (ownerError || !ownerResult.user) {
+      return json({ error: "Failed to load approved account" }, 500);
+    }
+
+    const ownerEmail = ownerResult.user.email;
+    if (!ownerEmail) {
+      return json(
+        { error: "Approved account has no email; QR exchange unsupported" },
+        409,
+      );
+    }
+
     const linkedAt = new Date().toISOString();
     const { data: linkedDeviceRow, error: linkedDeviceError } =
       await adminClient
@@ -259,17 +297,57 @@ async function handleRequest(req: Request): Promise<Response> {
       }, 500);
     }
 
+    const { data: magicData, error: magicError } = await adminClient.auth.admin
+      .generateLink({
+        type: "magiclink",
+        email: ownerEmail,
+        options: {
+          redirectTo: "http://localhost",
+        },
+      });
+
+    if (magicError || !magicData.properties?.hashed_token) {
+      return json(
+        {
+          error: `Failed to generate owner session link: ${
+            magicError?.message ?? "unknown"
+          }`,
+        },
+        500,
+      );
+    }
+
+    const { data: verifyData, error: verifyError } = await publicClient.auth
+      .verifyOtp({
+        type: "magiclink",
+        token_hash: magicData.properties.hashed_token,
+      });
+
+    if (verifyError || !verifyData.session) {
+      return json(
+        {
+          error: `Failed to mint owner session: ${
+            verifyError?.message ?? "unknown"
+          }`,
+        },
+        500,
+      );
+    }
+
     await adminClient
       .from("tv_login_sessions")
       .update({ status: "used", used_at: new Date().toISOString() })
       .eq("id", sessionRow.id);
 
     return json(
-      {
-        device_public_id: durableCredential.client.device_public_id,
-        device_secret: durableCredential.client.device_secret,
-        display_name: credentialRow.display_name,
-      },
+      buildApprovalResponsePayload({
+        session: verifyData.session,
+        credential: {
+          device_public_id: durableCredential.client.device_public_id,
+          device_secret: durableCredential.client.device_secret,
+          display_name: credentialRow.display_name,
+        },
+      }),
       200,
     );
   } catch (error) {
