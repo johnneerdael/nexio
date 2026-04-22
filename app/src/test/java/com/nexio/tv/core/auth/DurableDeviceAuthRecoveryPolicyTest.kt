@@ -3,10 +3,16 @@ package com.nexio.tv.core.auth
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DurableDeviceAuthRecoveryPolicyTest {
+    @Test
+    fun `unavailable session clears live sync marker during recovery`() {
+        assertNull(sessionUserIdWhileSessionUnavailable())
+    }
+
     @Test
     fun `not authenticated startup ignores cached identity without a live session`() {
         assertEquals(

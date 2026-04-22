@@ -77,6 +77,7 @@ class AuthManager @Inject constructor(
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
+                        _sessionUserId.value = sessionUserIdWhileSessionUnavailable()
                         auth.awaitInitialization()
                         val hasCachedIdentity = auth.currentUserOrNull() != null
                         val session = auth.currentSessionOrNull()
@@ -125,7 +126,7 @@ class AuthManager @Inject constructor(
                         }
                     }
                     is SessionStatus.Initializing -> {
-                        _sessionUserId.value = null
+                        _sessionUserId.value = sessionUserIdWhileSessionUnavailable()
                         _authState.value = AuthState.Loading
                     }
                     else -> { /* NetworkError etc. — keep current state */ }
@@ -564,6 +565,8 @@ internal fun shouldAttemptDurableSessionRecovery(
 ): Boolean {
     return isReturningUser && !hasRefreshToken && credential.isComplete
 }
+
+internal fun sessionUserIdWhileSessionUnavailable(): String? = null
 
 internal enum class NotAuthenticatedStartupAction {
     REFRESH_LIVE_SESSION,
