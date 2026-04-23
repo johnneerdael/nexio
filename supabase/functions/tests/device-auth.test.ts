@@ -16,6 +16,7 @@ import {
 import {
   buildBackfillResponsePayload,
   findUniqueLegacyLinkedDeviceMatch,
+  shouldBackfillDurableCredential,
   normalizeBackfillBody,
 } from "../device-credential-backfill/index.ts";
 
@@ -313,6 +314,24 @@ test("buildBackfillResponsePayload distinguishes successful backfill from reconn
       reason: "ambiguous_legacy_match",
     },
   );
+});
+
+test("shouldBackfillDurableCredential refuses to reactivate revoked durable authority", () => {
+  assert.equal(
+    shouldBackfillDurableCredential({
+      device_public_id: "tv_11111111-1111-4111-8111-111111111111",
+      status: "revoked",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldBackfillDurableCredential({
+      device_public_id: "tv_11111111-1111-4111-8111-111111111111",
+      status: "active",
+    }),
+    true,
+  );
+  assert.equal(shouldBackfillDurableCredential(null), true);
 });
 
 test("buildApprovalResponsePayload returns session fields plus durable credential fields", () => {

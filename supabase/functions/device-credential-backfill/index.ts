@@ -47,8 +47,16 @@ type BackfillResult =
     }
   | {
       status: "needs_reconnect";
-      reason: "no_legacy_match" | "ambiguous_legacy_match";
+      reason:
+        | "no_legacy_match"
+        | "ambiguous_legacy_match"
+        | "revoked_durable_credential";
     };
+
+type ExistingCredentialRow = {
+  device_public_id?: string | null;
+  status?: "active" | "revoked" | null;
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -162,6 +170,12 @@ export function buildBackfillResponsePayload(input: BackfillResult) {
   };
 }
 
+export function shouldBackfillDurableCredential(
+  existingCredential: ExistingCredentialRow | null,
+): boolean {
+  return existingCredential?.status !== "revoked";
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -212,6 +226,33 @@ async function handleRequest(req: Request): Promise<Response> {
           reason: duplicateNameMatches > 1
             ? "ambiguous_legacy_match"
             : "no_legacy_match",
+        }),
+        200,
+      );
+    }
+
+    const { data: existingCredential, error: existingCredentialError } =
+      await adminClient
+        .from("device_credentials")
+        .select("device_public_id, status")
+        .eq("owner_id", user.id)
+        .eq("device_user_id", matchedRow.device_user_id)
+        .maybeSingle();
+
+    if (existingCredentialError) {
+      return json(
+        {
+          error: `Durable credential lookup failed: ${existingCredentialError.message}`,
+        },
+        500,
+      );
+    }
+
+    if (!shouldBackfillDurableCredential(existingCredential)) {
+      return json(
+        buildBackfillResponsePayload({
+          status: "needs_reconnect",
+          reason: "revoked_durable_credential",
         }),
         200,
       );
