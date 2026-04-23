@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
 import com.nexio.tv.core.sync.AccountSettingsSyncService
@@ -446,11 +447,15 @@ class AccountViewModel @Inject constructor(
     }
 
     private suspend fun pushLocalDataToRemote() {
+        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) return
         accountSettingsSyncService.pushToRemote()
         addonSyncService.pushToRemote()
     }
 
     private suspend fun pullRemoteData(): Result<Unit> {
+        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+            return Result.failure(IllegalStateException("No live full account session"))
+        }
         addonRepository.beginRemoteSyncReconcile()
         try {
             val remoteAddonConfigs = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }

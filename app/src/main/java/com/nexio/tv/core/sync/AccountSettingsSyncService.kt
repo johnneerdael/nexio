@@ -3,6 +3,8 @@ package com.nexio.tv.core.sync
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
+import com.nexio.tv.core.auth.liveFullAccountSessionUserId
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
@@ -306,7 +308,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     private fun schedulePush() {
         if (isApplyingRemote || suppressPushForSwitchGeneration != 0L) return
-        val userId = authManager.currentSessionUserId ?: return
+        val userId = liveSessionUserId() ?: return
         if (!startupPushGate.canPush(userId)) {
             Log.d(TAG, "Skipping account settings push before startup remote pull completes")
             return
@@ -355,7 +357,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (!authManager.hasSyncSession) {
+            if (!hasLiveFullAccountSession()) {
                 return@withContext Result.success(Unit)
             }
 
@@ -446,6 +448,9 @@ class AccountSettingsSyncService @Inject constructor(
         clearPendingChanges: Boolean = true
     ): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
+            if (!hasLiveFullAccountSession()) {
+                return@withContext Result.failure(IllegalStateException("No live full account session"))
+            }
             val pullStartedGeneration = synchronized(pendingChangedPaths) { pendingChangedPathsGeneration }
             val switchGenAtPullStart = suppressPushForSwitchGeneration
             val snapshot = withJwtRefreshRetry {
@@ -479,6 +484,20 @@ class AccountSettingsSyncService @Inject constructor(
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
             Result.failure(e)
         }
+    }
+
+    private fun hasLiveFullAccountSession(): Boolean {
+        return hasLiveFullAccountSyncSession(
+            authState = authManager.authState.value,
+            sessionUserId = authManager.currentSessionUserId
+        )
+    }
+
+    private fun liveSessionUserId(): String? {
+        return liveFullAccountSessionUserId(
+            authState = authManager.authState.value,
+            sessionUserId = authManager.currentSessionUserId
+        )
     }
 
     private suspend fun buildLocalPayload(): AccountConfigSyncPayload {

@@ -407,6 +407,23 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `account and addon sync entrypoints require a live full account session`() {
+        val accountViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/account/AccountViewModel.kt").readText()
+        val accountSettingsSyncSource = accountSettingsSyncService.readText()
+        val addonRepositorySource = File("app/src/main/java/com/nexio/tv/data/repository/AddonRepositoryImpl.kt").readText()
+        val addonSyncSource = File("app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt").readText()
+
+        assertTrue(accountViewModelSource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(accountViewModelSource.contains("authManager.currentSessionUserId"))
+        assertTrue(accountSettingsSyncSource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(accountSettingsSyncSource.contains("authManager.currentSessionUserId"))
+        assertTrue(addonRepositorySource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(addonRepositorySource.contains("authManager.currentSessionUserId"))
+        assertTrue(addonSyncSource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(addonSyncSource.contains("authManager.currentSessionUserId"))
+    }
+
+    @Test
     fun `tracking provider state reads auth through profile routes`() {
         val source = trackingProviderStateService.readText()
 
