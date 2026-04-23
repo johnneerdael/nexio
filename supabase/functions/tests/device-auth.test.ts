@@ -15,8 +15,6 @@ import {
 } from "../device-session-exchange/index.ts";
 import {
   buildBackfillResponsePayload,
-  findUniqueLegacyLinkedDeviceMatch,
-  shouldBackfillDurableCredential,
   normalizeBackfillBody,
 } from "../device-credential-backfill/index.ts";
 
@@ -222,116 +220,17 @@ test("normalizeBackfillBody trims metadata and requires at least one usable iden
   );
 });
 
-test("findUniqueLegacyLinkedDeviceMatch narrows duplicate legacy rows until one remains", () => {
-  const row = findUniqueLegacyLinkedDeviceMatch(
-    [
-      {
-        id: "legacy-1",
-        device_user_id: "device-user-1",
-        device_name: "Living Room TV",
-        device_model: "Chromecast",
-        device_platform: "Android TV",
-      },
-      {
-        id: "legacy-2",
-        device_user_id: "device-user-2",
-        device_name: "Living Room TV",
-        device_model: "Shield",
-        device_platform: "Android TV",
-      },
-    ],
-    {
-      deviceName: "Living Room TV",
-      deviceModel: "Shield",
-      devicePlatform: "Android TV",
-    },
-  );
-
-  assert.equal(row?.id, "legacy-2");
-});
-
-test("findUniqueLegacyLinkedDeviceMatch returns null for zero or ambiguous matches", () => {
-  const rows = [
-    {
-      id: "legacy-1",
-      device_user_id: "device-user-1",
-      device_name: "Living Room TV",
-      device_model: "Chromecast",
-      device_platform: "Android TV",
-    },
-    {
-      id: "legacy-2",
-      device_user_id: "device-user-2",
-      device_name: "Living Room TV",
-      device_model: "Chromecast",
-      device_platform: "Android TV",
-    },
-  ];
-
-  assert.equal(
-    findUniqueLegacyLinkedDeviceMatch(rows, {
-      deviceName: "Bedroom TV",
-      deviceModel: null,
-      devicePlatform: null,
-    }),
-    null,
-  );
-  assert.equal(
-    findUniqueLegacyLinkedDeviceMatch(rows, {
-      deviceName: "Living Room TV",
-      deviceModel: null,
-      devicePlatform: "Android TV",
-    }),
-    null,
-  );
-});
-
-test("buildBackfillResponsePayload distinguishes successful backfill from reconnect fallback", () => {
-  assert.deepEqual(
-    buildBackfillResponsePayload({
-      status: "backfilled",
-      credential: {
-        device_public_id: "tv_public_id",
-        device_secret: "device-secret",
-        display_name: "Living Room TV",
-      },
-    }),
-    {
-      status: "backfilled",
-      device_public_id: "tv_public_id",
-      device_secret: "device-secret",
-      display_name: "Living Room TV",
-    },
-  );
-
+test("buildBackfillResponsePayload always returns reconnect guidance", () => {
   assert.deepEqual(
     buildBackfillResponsePayload({
       status: "needs_reconnect",
-      reason: "ambiguous_legacy_match",
+      reason: "legacy_backfill_disabled",
     }),
     {
       status: "needs_reconnect",
-      reason: "ambiguous_legacy_match",
+      reason: "legacy_backfill_disabled",
     },
   );
-});
-
-test("shouldBackfillDurableCredential refuses to reactivate revoked durable authority", () => {
-  assert.equal(
-    shouldBackfillDurableCredential({
-      device_public_id: "tv_11111111-1111-4111-8111-111111111111",
-      status: "revoked",
-    }),
-    false,
-  );
-  assert.equal(
-    shouldBackfillDurableCredential({
-      device_public_id: "tv_11111111-1111-4111-8111-111111111111",
-      status: "active",
-    }),
-    true,
-  );
-  assert.equal(shouldBackfillDurableCredential(null), true);
 });
 
 test("buildApprovalResponsePayload returns session fields plus durable credential fields", () => {

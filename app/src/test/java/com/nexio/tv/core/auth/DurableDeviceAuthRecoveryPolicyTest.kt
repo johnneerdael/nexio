@@ -1,7 +1,6 @@
 package com.nexio.tv.core.auth
 
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
-import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialBackfillResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
 import java.io.File
 import kotlinx.coroutines.test.runTest
@@ -238,23 +237,17 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `legacy live session requests durable credential backfill when credential is missing`() {
-        assertTrue(
+    fun `runtime never requests metadata-only durable credential backfill`() {
+        assertFalse(
             shouldRequestDurableCredentialBackfill(
                 hasRefreshToken = true,
-                credential = DurableDeviceCredentialSnapshot(
-                    devicePublicId = null,
-                    deviceSecret = null
-                )
+                credential = DurableDeviceCredentialSnapshot()
             )
         )
         assertFalse(
             shouldRequestDurableCredentialBackfill(
                 hasRefreshToken = false,
-                credential = DurableDeviceCredentialSnapshot(
-                    devicePublicId = null,
-                    deviceSecret = null
-                )
+                credential = DurableDeviceCredentialSnapshot()
             )
         )
         assertFalse(
@@ -264,63 +257,6 @@ class DurableDeviceAuthRecoveryPolicyTest {
                     devicePublicId = "device-public-id",
                     deviceSecret = "device-secret"
                 )
-            )
-        )
-    }
-
-    @Test
-    fun `backfill failure is contained and returns false`() = runTest {
-        var reachedEnd = false
-
-        val result = runDurableCredentialBackfillSafely {
-            error("backend offline")
-        }
-        reachedEnd = true
-
-        assertFalse(result)
-        assertTrue(reachedEnd)
-    }
-
-    @Test
-    fun `sign out beats in flight backfill and leaves no durable credential to save`() {
-        var saved = false
-
-        val shouldPersist = shouldPersistBackfilledCredential(
-            result = DurableDeviceCredentialBackfillResult(
-                status = "backfilled",
-                devicePublicId = "device-public-id",
-                deviceSecret = "device-secret"
-            ),
-            isLocalSignOutInProgress = true
-        )
-
-        if (shouldPersist) {
-            saved = true
-        }
-
-        assertFalse(saved)
-        assertFalse(shouldPersist)
-    }
-
-    @Test
-    fun `complete backfill persists only when still signed in`() {
-        assertTrue(
-            shouldPersistBackfilledCredential(
-                result = DurableDeviceCredentialBackfillResult(
-                    status = "backfilled",
-                    devicePublicId = "device-public-id",
-                    deviceSecret = "device-secret"
-                ),
-                isLocalSignOutInProgress = false
-            )
-        )
-        assertFalse(
-            shouldPersistBackfilledCredential(
-                result = DurableDeviceCredentialBackfillResult(
-                    status = "needs_reconnect",
-                    reason = "no_legacy_match"
-                ),
-                isLocalSignOutInProgress = false
             )
         )
     }

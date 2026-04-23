@@ -1,14 +1,11 @@
 package com.nexio.tv.core.auth
 
-import android.os.Build
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import com.nexio.tv.data.local.DurableDeviceCredentialStore
-import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialBackfillRequest
-import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialBackfillResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceSessionExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
@@ -18,10 +15,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -58,10 +52,6 @@ class AuthManager @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     @Volatile
     private var localSignOutInProgress = false
-    @Volatile
-    private var durableCredentialBackfillAttemptedUserId: String? = null
-    @Volatile
-    private var durableCredentialBackfillJob: Job? = null
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -287,7 +277,6 @@ class AuthManager @Inject constructor(
         _sessionUserId.value = null
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
-        durableCredentialBackfillAttemptedUserId = null
         _authState.value = AuthState.SessionLost
         // Intentionally do NOT clear the presence marker — the user has not
         // explicitly signed out, and the next cold start should still treat
@@ -298,7 +287,6 @@ class AuthManager @Inject constructor(
         _sessionUserId.value = null
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
-        durableCredentialBackfillAttemptedUserId = null
         _authState.value = AuthState.SignedOut
         if (clearPresenceMarker) {
             scope.launch {
@@ -331,7 +319,6 @@ class AuthManager @Inject constructor(
         if (cachedEffectiveUserSourceUserId != userId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
-            durableCredentialBackfillAttemptedUserId = null
         }
         val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
         val newState = if (computed !is AuthState.FullAccount && isReturningUser()) {
@@ -366,19 +353,6 @@ class AuthManager @Inject constructor(
                     credential = durableDeviceCredentialStore.snapshot()
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed binding durable credential owner for authenticated user $userId", e)
-                }
-            }
-            if (
-                shouldRequestDurableCredentialBackfill(
-                    hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
-                    credential = credential
-                ) &&
-                durableCredentialBackfillAttemptedUserId != userId
-            ) {
-                durableCredentialBackfillAttemptedUserId = userId
-                durableCredentialBackfillJob?.cancel()
-                durableCredentialBackfillJob = scope.launch {
-                    runDurableCredentialBackfillSafely { requestDurableCredentialBackfill() }
                 }
             }
         }
@@ -489,8 +463,6 @@ class AuthManager @Inject constructor(
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         try {
-            durableCredentialBackfillJob?.cancelAndJoin()
-            durableCredentialBackfillJob = null
             try {
                 authPresenceDataStore.clear()
             } catch (e: Exception) {
@@ -716,77 +688,6 @@ class AuthManager @Inject constructor(
         return true
     }
 
-    private suspend fun requestDurableCredentialBackfill() {
-        val accessToken = auth.currentAccessTokenOrNull()
-        if (accessToken.isNullOrBlank()) {
-            Log.w(TAG, "Skipping durable credential backfill without an access token")
-            return
-        }
-
-        val payload = json.encodeToString(
-            DurableDeviceCredentialBackfillRequest.serializer(),
-            durableCredentialBackfillRequest()
-        )
-        val request = Request.Builder()
-            .url("${BuildConfig.SUPABASE_URL}/functions/v1/device-credential-backfill")
-            .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
-            .header("Authorization", "Bearer $accessToken")
-            .post(payload.toRequestBody("application/json".toMediaType()))
-            .build()
-        val body = withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    throw IllegalStateException(
-                        "Durable credential backfill failed (${response.code}): $responseBody"
-                    )
-                }
-                responseBody
-            }
-        }
-        val result = json.decodeFromString<DurableDeviceCredentialBackfillResult>(body)
-        if (
-            shouldPersistBackfilledCredential(
-                result = result,
-                isLocalSignOutInProgress = localSignOutInProgress
-            )
-        ) {
-            val ownerUserId = auth.currentUserOrNull()?.id
-            durableDeviceCredentialStore.save(
-                devicePublicId = result.devicePublicId.orEmpty(),
-                deviceSecret = result.deviceSecret.orEmpty(),
-                ownerUserId = ownerUserId
-            )
-            Log.i(TAG, "Backfilled durable credential for legacy linked device")
-            return
-        }
-
-        Log.i(
-            TAG,
-            "Legacy durable credential backfill requires reconnect: ${result.reason ?: "unknown"}"
-        )
-    }
-
-    private fun durableCredentialBackfillRequest(): DurableDeviceCredentialBackfillRequest {
-        val model = Build.MODEL?.trim()?.takeIf { it.isNotBlank() }
-        val manufacturer = Build.MANUFACTURER?.trim()?.takeIf { it.isNotBlank() }
-        val formattedModel = listOfNotNull(manufacturer, model)
-            .distinct()
-            .joinToString(" ")
-            .trim()
-            .takeIf { it.isNotBlank() }
-        val platform = if (manufacturer.equals("Amazon", ignoreCase = true)) {
-            "Fire TV"
-        } else {
-            "Android TV"
-        }
-        return DurableDeviceCredentialBackfillRequest(
-            deviceName = model,
-            deviceModel = formattedModel,
-            devicePlatform = platform
-        )
-    }
-
     private suspend fun reconcileDurableCredentialAfterManualAccountAuth() {
         val authenticatedUserId = auth.currentUserOrNull()?.id?.trim().orEmpty()
         if (authenticatedUserId.isBlank()) return
@@ -815,7 +716,7 @@ internal fun shouldRequestDurableCredentialBackfill(
     hasRefreshToken: Boolean,
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
-    return hasRefreshToken && !credential.isComplete
+    return false
 }
 
 internal fun shouldBindDurableCredentialOwner(
@@ -848,30 +749,6 @@ internal fun shouldClearDurableCredentialForManualAccountAuth(
     if (normalizedAuthenticatedUserId.isBlank()) return false
     val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() }
     return normalizedOwnerUserId != normalizedAuthenticatedUserId
-}
-
-internal fun shouldPersistBackfilledCredential(
-    result: DurableDeviceCredentialBackfillResult,
-    isLocalSignOutInProgress: Boolean
-): Boolean {
-    return !isLocalSignOutInProgress &&
-        result.status == "backfilled" &&
-        !result.devicePublicId.isNullOrBlank() &&
-        !result.deviceSecret.isNullOrBlank()
-}
-
-internal suspend fun runDurableCredentialBackfillSafely(
-    block: suspend () -> Unit
-): Boolean {
-    return try {
-        block()
-        true
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Log.w(TAG, "Legacy durable credential backfill failed", e)
-        false
-    }
 }
 
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null

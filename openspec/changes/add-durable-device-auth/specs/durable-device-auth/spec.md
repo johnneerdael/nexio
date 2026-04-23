@@ -42,3 +42,20 @@ sign-in or sign-up to a different account.
 - **THEN** the app clears the stored durable credential
 - **AND** any later cold start must rely on the current account's own durable credential or a fresh
   reconnect flow
+
+### Requirement: Legacy Migration Must Not Mint Durable Authority From Metadata Alone
+
+The Android TV app and supporting server functions SHALL NOT silently create a durable device
+credential for a legacy device from only an owner session plus metadata matching.
+
+#### Scenario: Direct sign-in does not promote legacy metadata into durable authority
+- **WHEN** a device completes a normal direct sign-in or sign-up
+- **AND** no durable credential is already stored on disk
+- **THEN** the runtime does not request metadata-only durable credential backfill
+- **AND** a future cold start requires an existing durable credential or an explicit reconnect flow
+
+#### Scenario: Legacy backfill endpoint refuses metadata-only promotion
+- **WHEN** the legacy backfill server path is called with an authenticated owner session and device
+  metadata only
+- **THEN** it returns reconnect guidance instead of minting a durable credential
+- **AND** no new durable authority is created from that request

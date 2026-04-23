@@ -25,6 +25,11 @@
 - [ ] Verify portal revoke behavior, session reissue denial after revoke, and bounded post-revoke access-token expiry behavior.
 
 ### Migration Note
-- Legacy approved TVs that still possess a live Supabase session are backfilled in-place with a durable device credential on their next successful startup only when the legacy `linked_devices` row can be matched unambiguously from current device metadata.
-- Legacy TVs that have already lost all live session state, or whose legacy linkage cannot be matched unambiguously, must reconnect once to receive a durable credential.
+- Legacy approved TVs are not silently backfilled into durable authority from owner session plus metadata alone.
+- Legacy TVs without a pre-existing durable credential must reconnect once to receive a durable credential unless a stronger proof path is added later.
 - Existing legacy `device_name` values become the initial stable display name when no approval-time custom name exists yet.
+
+### Validation Status For This Fix
+- [x] Narrow unit test coverage updated for Android auth policy and Supabase function contract.
+- [ ] Android cold-start / upgrade / token-loss / revoked-device manual flows re-exercised end-to-end in this fix.
+- [ ] Portal revoke behavior re-verified manually in this fix.

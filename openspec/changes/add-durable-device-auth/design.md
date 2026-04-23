@@ -38,8 +38,8 @@ Today the TV QR approval flow records a `linked_devices` row but returns a norma
 - Decision: Persist a stable display name chosen at approval time and treat it as the primary human-readable device label.
   - Rationale: model/platform strings alone are weak identifiers in households with multiple similar TVs or sticks, and revocation UX depends on the user recognizing the correct device.
 
-- Decision: Legacy approved devices remain supported through in-place durable-credential backfill when they still possess a live Supabase session.
-  - Rationale: this gives real backward compatibility for active devices while staying honest that devices which have already lost all auth state cannot be promoted from nothing.
+- Decision: Disable metadata-only legacy durable-credential backfill from the app/runtime path until a stronger proof path exists.
+  - Rationale: owner session plus legacy device metadata does not prove that the current TV is the previously approved device, so silently minting durable authority across that boundary is unsafe.
 
 ## Architecture
 - `device_credentials` table
@@ -84,13 +84,14 @@ Today the TV QR approval flow records a `linked_devices` row but returns a norma
 3. Update Android startup recovery to use durable exchange before reconnect UI.
 4. Expose durable device status and revoke in the portal.
 5. Define how legacy already-linked TVs migrate:
-   - A legacy TV with a still-live Supabase session mints and stores its durable credential in-place on the next successful startup, with no user action.
-   - A legacy TV that has already lost all auth state before rollout cannot be silently upgraded and must reconnect once to receive a durable credential.
+   - A legacy TV that already holds a durable credential continues using it normally.
+   - A legacy TV that only has a legacy owner session and metadata does not receive silent durable promotion.
+   - A legacy TV without a pre-existing durable credential must reconnect once to receive one.
 6. After rollout, make durable credential presence the expected path for every approved TV.
 
 ## Migration Note
-- Legacy approved TVs that still possess a live Supabase session are backfilled in-place with a durable device credential on their next successful startup only when the legacy `linked_devices` row can be matched unambiguously from current device metadata.
-- Legacy TVs that have already lost all live session state, or whose legacy linkage cannot be matched unambiguously, cannot be promoted silently and must reconnect once to receive a durable credential.
+- Legacy approved TVs are not silently backfilled into durable authority from owner session plus metadata alone.
+- Legacy TVs without a pre-existing durable credential must reconnect once to receive a durable credential unless a stronger proof path is added later.
 - Existing legacy `device_name` values become the initial stable display name when no approval-time custom name exists yet.
 
 ## Risks / Trade-offs
