@@ -807,8 +807,8 @@ internal fun resolveNotAuthenticatedStartupAction(
     isReturningUser: Boolean,
     hasDurableCredential: Boolean
 ): NotAuthenticatedStartupAction {
-    if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
+    if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
 }
@@ -817,8 +817,8 @@ internal fun resolveJwtExpiryRecoveryAction(
     hasRefreshToken: Boolean,
     credential: DurableDeviceCredentialSnapshot
 ): JwtExpiryRecoveryAction {
-    if (credential.isComplete) return JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY
     if (hasRefreshToken) return JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION
+    if (credential.isComplete) return JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY
     return JwtExpiryRecoveryAction.NO_RECOVERY_PATH
 }
 

@@ -118,9 +118,9 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `not authenticated startup prefers durable validation over stale refresh token when credential exists`() {
+    fun `not authenticated startup prefers refresh token over durable credential when both exist`() {
         assertEquals(
-            NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,
+            NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION,
             resolveNotAuthenticatedStartupAction(
                 hasRefreshToken = true,
                 isReturningUser = true,
@@ -139,9 +139,9 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `jwt expiry recovery prefers durable validation over stale refresh token when credential exists`() {
+    fun `jwt expiry recovery prefers refresh token over durable credential when both exist`() {
         assertEquals(
-            JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY,
+            JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION,
             resolveJwtExpiryRecoveryAction(
                 hasRefreshToken = true,
                 credential = DurableDeviceCredentialSnapshot(

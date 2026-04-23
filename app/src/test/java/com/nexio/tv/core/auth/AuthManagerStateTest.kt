@@ -75,4 +75,16 @@ class AuthManagerStateTest {
         assertEquals(AuthState.SessionLost, publication.authState)
         assertNull(publication.sessionUserId)
     }
+
+    @Test
+    fun `non full account authenticated session never publishes sync owner id`() {
+        val publication = resolveAuthenticatedSessionPublication(
+            userId = "user-123",
+            email = "   ",
+            isReturningUser = false
+        )
+
+        assertEquals(AuthState.SignedOut, publication.authState)
+        assertNull(publication.sessionUserId)
+    }
 }
