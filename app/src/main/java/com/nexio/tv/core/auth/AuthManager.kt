@@ -210,6 +210,10 @@ class AuthManager @Inject constructor(
             try {
                 auth.awaitInitialization()
                 if (auth.currentUserOrNull() != null) return
+                val credential = durableDeviceCredentialStore.snapshot()
+                if (credential.isComplete) {
+                    break
+                }
                 val session = auth.currentSessionOrNull()
                 if (session?.refreshToken?.isNotBlank() == true) {
                     auth.refreshCurrentSession()
@@ -476,6 +480,16 @@ class AuthManager @Inject constructor(
 
     suspend fun refreshSessionIfJwtExpired(error: Throwable): Boolean {
         if (!error.isJwtExpiredError()) return false
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (credential.isComplete) {
+            return try {
+                Log.w(TAG, "JWT expired; restoring Supabase session from durable credential")
+                restoreSupabaseSessionFromDurableCredential()
+            } catch (recoveryError: Exception) {
+                Log.e(TAG, "Failed durable session recovery after JWT expiry", recoveryError)
+                false
+            }
+        }
         val hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true
         if (!hasRefreshToken) {
             Log.w(TAG, "JWT expired but no refresh token available; cannot refresh session")
@@ -708,7 +722,7 @@ internal fun shouldAttemptDurableSessionRecovery(
     hasRefreshToken: Boolean,
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
-    return !hasRefreshToken && credential.isComplete
+    return credential.isComplete
 }
 
 internal fun shouldRequestDurableCredentialBackfill(
@@ -763,8 +777,8 @@ internal fun resolveNotAuthenticatedStartupAction(
     isReturningUser: Boolean,
     hasDurableCredential: Boolean
 ): NotAuthenticatedStartupAction {
-    if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
     if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
+    if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
     if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
 }

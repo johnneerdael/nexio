@@ -1272,6 +1272,7 @@
     <string name="account_sync_code_title">Sync Code</string>
     <string name="account_sync_code_description">Sync across devices without creating an account.</string>
     <string name="account_linked_devices">Linked Devices (%1$d)</string>
+    <string name="account_linked_devices_info">Manage device revocation from the account portal for now. This TV screen is informational until durable revoke is fully wired here.</string>
     <string name="account_no_linked_devices">No linked devices</string>
     <string name="account_unlink">Unlink</string>
 

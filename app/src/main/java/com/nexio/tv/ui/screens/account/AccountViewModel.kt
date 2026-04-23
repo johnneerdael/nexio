@@ -183,13 +183,6 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    fun unlinkDevice(deviceUserId: String) {
-        viewModelScope.launch {
-            syncRepository.unlinkDevice(deviceUserId)
-            loadLinkedDevices()
-        }
-    }
-
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
