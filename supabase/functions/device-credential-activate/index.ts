@@ -40,6 +40,16 @@ function createSupabaseClients(authHeader: string) {
   };
 }
 
+export function isCredentialHandoffExpired(
+  expiresAt: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!expiresAt) return true;
+  const parsed = new Date(expiresAt);
+  const expiresAtMs = parsed.getTime();
+  return Number.isNaN(expiresAtMs) || expiresAtMs <= now;
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -81,35 +91,23 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!handoffRow || handoffRow.credential_hash !== candidateHash) {
       return json({ error: "Invalid durable device credential" }, 401);
     }
-
-    const { error: credentialError } = await adminClient
-      .from("device_credentials")
-      .upsert(
-        {
-          owner_id: handoffRow.owner_id,
-          device_user_id: handoffRow.device_user_id,
-          linked_device_id: handoffRow.linked_device_id,
-          device_public_id: handoffRow.device_public_id,
-          credential_hash: handoffRow.credential_hash,
-          display_name: handoffRow.display_name,
-          device_name: handoffRow.device_name,
-          device_model: handoffRow.device_model,
-          device_platform: handoffRow.device_platform,
-          status: "active",
-          last_seen_at: new Date().toISOString(),
-          revoked_at: null,
-        },
-        { onConflict: "device_user_id" },
-      );
-
-    if (credentialError) {
-      return json({ error: `Credential activation failed: ${credentialError.message}` }, 500);
+    if (isCredentialHandoffExpired(handoffRow.expires_at)) {
+      return json({ error: "Durable device credential handoff expired" }, 409);
     }
 
-    await adminClient
-      .from("device_credential_handoffs")
-      .update({ used_at: new Date().toISOString() })
-      .eq("id", handoffRow.id);
+    const { data: activated, error: activationError } = await adminClient
+      .rpc("activate_device_credential_handoff", {
+        p_device_user_id: requesterUser.id,
+        p_device_public_id: body.devicePublicId,
+        p_credential_hash: candidateHash,
+      });
+
+    if (activationError) {
+      return json({ error: `Credential activation failed: ${activationError.message}` }, 500);
+    }
+    if (!activated) {
+      return json({ error: "Durable device credential handoff is no longer valid" }, 409);
+    }
 
     return json({ activated: true }, 200);
   } catch (error) {

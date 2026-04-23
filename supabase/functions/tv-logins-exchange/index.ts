@@ -32,7 +32,18 @@ type DurableCredentialRecord = {
   revoked_at: null;
 };
 
-type DurableCredentialHandoffRecord = DurableCredentialRecord & {
+type DurableCredentialHandoffRecord = Pick<
+  DurableCredentialRecord,
+  | "owner_id"
+  | "device_user_id"
+  | "linked_device_id"
+  | "device_public_id"
+  | "credential_hash"
+  | "display_name"
+  | "device_name"
+  | "device_model"
+  | "device_platform"
+> & {
   expires_at: string;
   used_at: null;
 };
@@ -133,9 +144,6 @@ export async function buildApprovalExchangePayload(input: {
     device_name: input.sessionRow.device_name ?? null,
     device_model: input.sessionRow.device_model ?? null,
     device_platform: input.sessionRow.device_platform ?? null,
-    status: "active",
-    last_seen_at: new Date().toISOString(),
-    revoked_at: null,
     expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
     used_at: null,
   };

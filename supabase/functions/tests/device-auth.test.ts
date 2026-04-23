@@ -9,6 +9,7 @@ import {
   buildApprovalResponsePayload,
   buildDurableCredential,
 } from "../tv-logins-exchange/index.ts";
+import { isCredentialHandoffExpired } from "../device-credential-activate/index.ts";
 import {
   buildDeviceSessionPayload,
   invalidCredentialResponse,
@@ -49,6 +50,11 @@ v_web_url := v_base_url || '/approve?code=' || v_code || '&nonce=' || replace(v_
 v_web_url := v_web_url || '&device_name=' || public.url_encode(v_device_name);
 create table if not exists public.device_credential_handoffs
 create unique index if not exists device_credential_handoffs_device_user_unused_uidx
+create or replace function public.activate_device_credential_handoff(
+  p_device_user_id uuid,
+  p_device_public_id text,
+  p_credential_hash text
+)
 `;
 
 test("hashDeviceCredential is deterministic for the same raw secret", async () => {
@@ -118,9 +124,11 @@ test("buildApprovalExchangePayload prefers requested display name and trims it",
   assert.equal(payload.device_name, "Session Device");
   assert.equal(payload.device_model, "Chromecast");
   assert.equal(payload.device_platform, "Android TV");
-  assert.equal(payload.revoked_at, null);
   assert.equal(payload.used_at, null);
   assert.ok(typeof payload.expires_at === "string" && payload.expires_at.length > 0);
+  assert.equal("status" in payload, false);
+  assert.equal("last_seen_at" in payload, false);
+  assert.equal("revoked_at" in payload, false);
   assert.match(payload.device_public_id, /^tv_[0-9a-f-]{36}$/);
   assert.match(payload.credential_hash, /^[0-9a-f]{64}$/);
 });
@@ -191,6 +199,24 @@ test("durable auth migration creates a pending handoff table", () => {
   assert.match(
     migrationContractText,
     /create unique index if not exists device_credential_handoffs_device_user_unused_uidx/i,
+  );
+  assert.match(
+    migrationContractText,
+    /create or replace function public\.activate_device_credential_handoff\(/i,
+  );
+});
+
+test("isCredentialHandoffExpired rejects missing, invalid, and past handoffs", () => {
+  assert.equal(isCredentialHandoffExpired(undefined), true);
+  assert.equal(isCredentialHandoffExpired(null), true);
+  assert.equal(isCredentialHandoffExpired("not-a-date"), true);
+  assert.equal(
+    isCredentialHandoffExpired("2026-04-23T10:00:00.000Z", Date.parse("2026-04-23T10:00:00.000Z")),
+    true,
+  );
+  assert.equal(
+    isCredentialHandoffExpired("2026-04-23T10:00:01.000Z", Date.parse("2026-04-23T10:00:00.000Z")),
+    false,
   );
 });
 
