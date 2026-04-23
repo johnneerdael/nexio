@@ -1076,7 +1076,8 @@ fun NexioNavHost(
 
         composable(Screen.Account.route) {
             AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
+                onBackPress = { navController.popBackStack() },
+                allowReconnectLaunch = true
             )
         }
 
@@ -1090,7 +1091,8 @@ fun NexioNavHost(
 
         composable(Screen.AuthQrSignIn.route) {
             AuthQrSignInScreen(
-                onBackPress = { navController.popBackStack() }
+                onBackPress = { navController.popBackStack() },
+                allowReconnectLaunch = true
             )
         }
 

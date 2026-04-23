@@ -6,25 +6,85 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthQrLaunchPolicyTest {
-
     @Test
-    fun `signed out auto starts qr login`() {
-        assertTrue(shouldAutoStartQrLogin(AuthState.SignedOut))
+    fun `launch starts only when signed out session still needs qr`() {
+        assertTrue(
+            shouldLaunchQrLogin(
+                authState = AuthState.SignedOut,
+                isSignedIn = false,
+                hasQrLoginCode = false,
+                isLoading = false,
+                allowReconnectLaunch = false
+            )
+        )
     }
 
     @Test
-    fun `session lost does not auto start qr login`() {
-        assertFalse(shouldAutoStartQrLogin(AuthState.SessionLost))
-    }
-
-    @Test
-    fun `full account does not auto start qr login`() {
+    fun `launch stays blocked for returning users in session lost state without explicit reconnect`() {
         assertFalse(
-            shouldAutoStartQrLogin(
-                AuthState.FullAccount(
-                    userId = "user-123",
-                    email = "user@example.com"
-                )
+            shouldLaunchQrLogin(
+                authState = AuthState.SessionLost,
+                isSignedIn = false,
+                hasQrLoginCode = false,
+                isLoading = false,
+                allowReconnectLaunch = false
+            )
+        )
+    }
+
+    @Test
+    fun `launch starts for session lost when reconnect flow explicitly requests it`() {
+        assertTrue(
+            shouldLaunchQrLogin(
+                authState = AuthState.SessionLost,
+                isSignedIn = false,
+                hasQrLoginCode = false,
+                isLoading = false,
+                allowReconnectLaunch = true
+            )
+        )
+    }
+
+    @Test
+    fun `launch stays blocked while auth is still loading or already restored`() {
+        assertFalse(
+            shouldLaunchQrLogin(
+                authState = AuthState.Loading,
+                isSignedIn = false,
+                hasQrLoginCode = false,
+                isLoading = false,
+                allowReconnectLaunch = false
+            )
+        )
+        assertFalse(
+            shouldLaunchQrLogin(
+                authState = AuthState.FullAccount(userId = "user-123", email = "user@example.com"),
+                isSignedIn = true,
+                hasQrLoginCode = false,
+                isLoading = false,
+                allowReconnectLaunch = true
+            )
+        )
+    }
+
+    @Test
+    fun `launch stays blocked when qr session already exists or exchange is in flight`() {
+        assertFalse(
+            shouldLaunchQrLogin(
+                authState = AuthState.SignedOut,
+                isSignedIn = false,
+                hasQrLoginCode = true,
+                isLoading = false,
+                allowReconnectLaunch = false
+            )
+        )
+        assertFalse(
+            shouldLaunchQrLogin(
+                authState = AuthState.SignedOut,
+                isSignedIn = false,
+                hasQrLoginCode = false,
+                isLoading = true,
+                allowReconnectLaunch = true
             )
         )
     }

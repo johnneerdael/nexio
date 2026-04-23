@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sync
@@ -180,8 +179,7 @@ fun AccountScreen(
                 }
                 item {
                     LinkedDevicesSection(
-                        devices = uiState.linkedDevices,
-                        onUnlink = { viewModel.unlinkDevice(it) }
+                        devices = uiState.linkedDevices
                     )
                 }
                 if (SHOW_SYNC_CODE_FEATURES) {
@@ -280,8 +278,7 @@ private fun AccountInfoCard(label: String, value: String) {
 
 @Composable
 private fun LinkedDevicesSection(
-    devices: List<com.nexio.tv.data.remote.supabase.SupabaseLinkedDevice>,
-    onUnlink: (String) -> Unit
+    devices: List<com.nexio.tv.data.remote.supabase.SupabaseLinkedDevice>
 ) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -299,6 +296,12 @@ private fun LinkedDevicesSection(
                 fontWeight = FontWeight.Medium
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.account_linked_devices_info),
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextTertiary
+        )
         Spacer(modifier = Modifier.height(8.dp))
         if (devices.isEmpty()) {
             Text(
@@ -320,29 +323,11 @@ private fun LinkedDevicesSection(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = device.deviceName ?: "Unknown Device",
+                        text = device.displayName ?: device.deviceName ?: "Unknown Device",
                         style = MaterialTheme.typography.bodyMedium,
                         color = NexioColors.TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
-                    Button(
-                        onClick = { onUnlink(device.deviceUserId) },
-                        colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFFC62828).copy(alpha = 0.2f),
-                            focusedContainerColor = Color(0xFFC62828).copy(alpha = 0.4f),
-                            contentColor = Color(0xFFF44336),
-                            focusedContentColor = Color(0xFFF44336)
-                        ),
-                        shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LinkOff,
-                            contentDescription = stringResource(R.string.cd_unlink),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.account_unlink), style = MaterialTheme.typography.labelSmall)
-                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -380,4 +365,3 @@ private fun SignOutButton(onClick: () -> Unit) {
         }
     }
 }
-

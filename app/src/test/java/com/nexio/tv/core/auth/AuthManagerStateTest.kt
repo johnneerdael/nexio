@@ -2,6 +2,7 @@ package com.nexio.tv.core.auth
 
 import com.nexio.tv.domain.model.AuthState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,5 +50,29 @@ class AuthManagerStateTest {
         val lost: AuthState = AuthState.SessionLost
         val out: AuthState = AuthState.SignedOut
         assertTrue(lost != out)
+    }
+
+    @Test
+    fun `anonymous authenticated session does not open sync gate`() {
+        val publication = resolveAuthenticatedSessionPublication(
+            userId = "anon-uuid",
+            email = null,
+            isReturningUser = false
+        )
+
+        assertEquals(AuthState.SignedOut, publication.authState)
+        assertNull(publication.sessionUserId)
+    }
+
+    @Test
+    fun `stale anonymous returning user does not keep sync session user id`() {
+        val publication = resolveAuthenticatedSessionPublication(
+            userId = "anon-uuid",
+            email = null,
+            isReturningUser = true
+        )
+
+        assertEquals(AuthState.SessionLost, publication.authState)
+        assertNull(publication.sessionUserId)
     }
 }

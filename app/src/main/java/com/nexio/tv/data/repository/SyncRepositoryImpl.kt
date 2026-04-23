@@ -73,18 +73,6 @@ class SyncRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun unlinkDevice(deviceUserId: String): Result<Unit> {
-        return try {
-            val params = buildJsonObject { put("p_device_user_id", deviceUserId) }
-            postgrest.rpc("unlink_device", params)
-            authManager.clearEffectiveUserIdCache()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to unlink device", e)
-            Result.failure(e)
-        }
-    }
-
     override suspend fun getLinkedDevices(): Result<List<SupabaseLinkedDevice>> {
         return try {
             val userId = authManager.getEffectiveUserId()
