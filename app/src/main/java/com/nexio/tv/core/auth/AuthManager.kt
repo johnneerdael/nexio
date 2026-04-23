@@ -204,14 +204,14 @@ class AuthManager @Inject constructor(
             try {
                 auth.awaitInitialization()
                 if (auth.currentUserOrNull() != null) return
-                val credential = durableDeviceCredentialStore.snapshot()
-                if (credential.isComplete) {
-                    break
-                }
                 val session = auth.currentSessionOrNull()
                 if (session?.refreshToken?.isNotBlank() == true) {
                     auth.refreshCurrentSession()
                     return
+                }
+                val credential = durableDeviceCredentialStore.snapshot()
+                if (credential.isComplete) {
+                    break
                 }
             } catch (e: Exception) {
                 if (e.isAuthoritativeRefreshRejection()) {
@@ -729,7 +729,7 @@ internal fun shouldAttemptDurableSessionRecovery(
     hasRefreshToken: Boolean,
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
-    return credential.isComplete
+    return !hasRefreshToken && credential.isComplete
 }
 
 internal fun shouldRequestDurableCredentialBackfill(
@@ -801,8 +801,8 @@ internal fun resolveNotAuthenticatedStartupAction(
     isReturningUser: Boolean,
     hasDurableCredential: Boolean
 ): NotAuthenticatedStartupAction {
-    if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
+    if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
 }

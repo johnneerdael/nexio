@@ -120,14 +120,14 @@ class DurableDeviceAuthRecoveryPolicyTest {
     @Test
     fun `not authenticated startup prefers refreshable live session over durable recovery`() {
         assertEquals(
-            NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,
+            NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION,
             resolveNotAuthenticatedStartupAction(
                 hasRefreshToken = true,
                 isReturningUser = true,
                 hasDurableCredential = true
             )
         )
-        assertTrue(
+        assertFalse(
             shouldAttemptDurableSessionRecovery(
                 hasRefreshToken = true,
                 credential = DurableDeviceCredentialSnapshot(
@@ -165,7 +165,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
 
     @Test
     fun `durable recovery stays disabled when refresh token already exists`() {
-        assertTrue(
+        assertFalse(
             shouldAttemptDurableSessionRecovery(
                 hasRefreshToken = true,
                 credential = DurableDeviceCredentialSnapshot(
