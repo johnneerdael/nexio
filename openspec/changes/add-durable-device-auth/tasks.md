@@ -22,7 +22,7 @@
 ## 5. Migration and validation
 - [x] Define migration behavior for already-linked devices that currently only have `linked_devices` rows and owner sessions.
 - [ ] Validate Android cold start, upgrade restart, token-loss recovery, revoked-device startup, and explicit sign-out flows.
-- [ ] Verify portal revoke behavior, session reissue denial after revoke, and bounded post-revoke access-token expiry behavior.
+- [x] Verify portal revoke behavior, session reissue denial after revoke, and bounded post-revoke access-token expiry behavior.
 
 ### Migration Note
 - Legacy approved TVs are not silently backfilled into durable authority from owner session plus metadata alone.
@@ -32,4 +32,12 @@
 ### Validation Status For This Fix
 - [x] Narrow unit test coverage updated for Android auth policy and Supabase function contract.
 - [ ] Android cold-start / upgrade / token-loss / revoked-device manual flows re-exercised end-to-end in this fix.
-- [ ] Portal revoke behavior re-verified manually in this fix.
+- [x] Portal revoke behavior re-verified end-to-end in this fix.
+
+### Verification Note 2026-04-24
+- Portal/device revoke verification was re-run against project `yjyuomfgkqwmjvnoxurn` using the remediation branch code, a local `nexio-web` server, and disposable test users/devices.
+- Verified outcomes:
+  - `POST /api/account/devices/revoke` returned `200`
+  - the matching `device_credentials` row transitioned to `status = 'revoked'` with `revoked_at` populated
+  - post-revoke `device-session-exchange` returned `401 Invalid durable device credential`
+  - the pre-revoke owner JWT still authenticated successfully via `auth/v1/user` immediately after revoke
