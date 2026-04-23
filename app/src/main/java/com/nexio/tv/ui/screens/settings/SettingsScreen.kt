@@ -491,6 +491,7 @@ private fun AccountSettingsInline(
     val accountUiState by accountViewModel.uiState.collectAsStateWithLifecycle()
     val activeProfile by settingsViewModel.activeProfile.collectAsStateWithLifecycle()
     val isPrimaryProfile by settingsViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
+    val hasFullAccountSession by settingsViewModel.hasFullAccountSession.collectAsStateWithLifecycle()
     val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
 
     Column(
@@ -505,10 +506,12 @@ private fun AccountSettingsInline(
             modifier = Modifier.fillMaxWidth(),
             title = "Profiles"
         ) {
-            SyncNowRow(
-                syncStatus = syncStatus,
-                onSyncNow = { settingsViewModel.triggerSyncNow() }
-            )
+            if (hasFullAccountSession) {
+                SyncNowRow(
+                    syncStatus = syncStatus,
+                    onSyncNow = { settingsViewModel.triggerSyncNow() }
+                )
+            }
             activeProfile?.takeUnless { isPrimaryProfile }?.let { profile ->
                 Button(
                     onClick = { settingsViewModel.requestDeleteProfile(profile) },

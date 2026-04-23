@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRouter
@@ -13,6 +14,7 @@ import com.nexio.tv.data.local.ProfileDataStoreFactory
 import io.github.jan.supabase.postgrest.Postgrest
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -474,5 +476,51 @@ class ProfileSettingsSyncServiceTest {
         assertTrue("primary profile pull should return success", pullText.contains("Result.success(Unit)"))
         assertTrue("primary profile should not push profile settings blob", pushText.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue("primary profile push should return success", pushText.contains("Result.success(Unit)"))
+    }
+
+    @Test
+    fun `pushBlobForProfile requires full account session`() = runTest {
+        val authManager = mockk<AuthManager> {
+            every { authState } returns MutableStateFlow(AuthState.SessionLost)
+        }
+        val postgrest = mockk<Postgrest>(relaxed = true)
+        val profileManager = profileManagerForTest(MutableStateFlow(2))
+        val profileDataStoreFactory = mockk<ProfileDataStoreFactory>(relaxed = true)
+        val settingsSyncService = ProfileSettingsSyncService(
+            authManager = authManager,
+            postgrest = postgrest,
+            profileManager = profileManager,
+            profileDataStoreFactory = profileDataStoreFactory,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+        )
+
+        val result = settingsSyncService.pushBlobForProfile(2)
+
+        assertTrue(result.isFailure)
+        verify(exactly = 0) { profileDataStoreFactory.get(any(), any()) }
+    }
+
+    @Test
+    fun `pullBlobForProfile requires full account session`() = runTest {
+        val authManager = mockk<AuthManager> {
+            every { authState } returns MutableStateFlow(AuthState.SessionLost)
+        }
+        val postgrest = mockk<Postgrest>(relaxed = true)
+        val profileManager = profileManagerForTest(MutableStateFlow(2))
+        val profileDataStoreFactory = mockk<ProfileDataStoreFactory>(relaxed = true)
+        val settingsSyncService = ProfileSettingsSyncService(
+            authManager = authManager,
+            postgrest = postgrest,
+            profileManager = profileManager,
+            profileDataStoreFactory = profileDataStoreFactory,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+        )
+
+        val result = settingsSyncService.pullBlobForProfile(2)
+
+        assertTrue(result.isFailure)
+        verify(exactly = 0) { profileDataStoreFactory.get(any(), any()) }
     }
 }

@@ -359,6 +359,7 @@ class ProfileSettingsScopeContractTest {
     fun `profile web auth sync does not own primary profile integrations`() {
         val source = profileWebSyncService.readText()
 
+        assertTrue(source.contains("authManager.authState.value !is AuthState.FullAccount"))
         assertTrue(source.contains("profileModeRouter.routeFor(profileIndex)"))
         assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue(source.contains("profileBoundary.authRoute"))
@@ -382,11 +383,27 @@ class ProfileSettingsScopeContractTest {
     fun `startup sync routes default legacy away from secondary profile sync`() {
         val source = startupSyncService.readText()
 
+        assertTrue(source.contains("authManager.authState.collect"))
+        assertTrue(source.contains("val userId = (authState as? AuthState.FullAccount)?.userId"))
+        assertTrue(source.contains("authManager.authState.value !is AuthState.FullAccount"))
         assertTrue(source.contains("profileModeRouter.routeFor(activeId)"))
         assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue(source.contains("Skipping secondary profile startup sync for default legacy profile"))
         assertTrue(source.contains("profileSettingsSyncService.pullBlobForProfile(route.profileId)"))
         assertTrue(source.contains("profileWebSyncService.syncActiveProfile(route.profileId)"))
+    }
+
+    @Test
+    fun `manual sync is gated on full account session in settings ui and view model`() {
+        val screenSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt").readText()
+        val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsViewModel.kt").readText()
+
+        assertTrue(viewModelSource.contains("val hasFullAccountSession: StateFlow<Boolean> = authManager.authState"))
+        assertTrue(viewModelSource.contains("map { it is AuthState.FullAccount }"))
+        assertTrue(viewModelSource.contains("if (!authManager.isAuthenticated) return"))
+        assertTrue(screenSource.contains("val hasFullAccountSession by settingsViewModel.hasFullAccountSession.collectAsStateWithLifecycle()"))
+        assertTrue(screenSource.contains("if (hasFullAccountSession) {"))
+        assertTrue(screenSource.contains("SyncNowRow("))
     }
 
     @Test

@@ -1,8 +1,10 @@
 package com.nexio.tv.ui.screens.settings
 
+import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.ProfileSettingsSyncService
 import com.nexio.tv.core.sync.ProfileSyncService
+import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.domain.model.UserProfile
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -38,6 +40,7 @@ class SettingsViewModelSyncTest {
     @Test
     fun `sync now pulls remote profiles before pushing local metadata`() = runTest(dispatcher) {
         val activeProfileId = MutableStateFlow(3)
+        val authManager = authManager(authState = AuthState.FullAccount("user-1", "user@example.com"))
         val profileSyncService = mockk<ProfileSyncService>()
         val profileSettingsSyncService = mockk<ProfileSettingsSyncService>()
         val profileManager = profileManager(activeProfileId)
@@ -50,6 +53,7 @@ class SettingsViewModelSyncTest {
         coEvery { profileSettingsSyncService.pushBlobForProfile(1) } returns Result.success(Unit)
 
         val viewModel = SettingsViewModel(
+            authManager = authManager,
             profileSyncService = profileSyncService,
             profileSettingsSyncService = profileSettingsSyncService,
             profileManager = profileManager
@@ -68,6 +72,7 @@ class SettingsViewModelSyncTest {
     @Test
     fun `sync now does not re-push stale profile metadata when remote pull fails`() = runTest(dispatcher) {
         val activeProfileId = MutableStateFlow(3)
+        val authManager = authManager(authState = AuthState.FullAccount("user-1", "user@example.com"))
         val profileSyncService = mockk<ProfileSyncService>()
         val profileSettingsSyncService = mockk<ProfileSettingsSyncService>()
         val profileManager = profileManager(activeProfileId)
@@ -76,6 +81,7 @@ class SettingsViewModelSyncTest {
         coEvery { profileSettingsSyncService.pushBlobForProfile(3) } returns Result.success(Unit)
 
         val viewModel = SettingsViewModel(
+            authManager = authManager,
             profileSyncService = profileSyncService,
             profileSettingsSyncService = profileSettingsSyncService,
             profileManager = profileManager
@@ -86,6 +92,36 @@ class SettingsViewModelSyncTest {
 
         coVerify(exactly = 0) { profileSyncService.pushToRemote() }
         coVerify(exactly = 1) { profileSettingsSyncService.pushBlobForProfile(3) }
+    }
+
+    @Test
+    fun `sync now is a no-op without a full account session`() = runTest(dispatcher) {
+        val activeProfileId = MutableStateFlow(3)
+        val authManager = authManager(authState = AuthState.SessionLost)
+        val profileSyncService = mockk<ProfileSyncService>(relaxed = true)
+        val profileSettingsSyncService = mockk<ProfileSettingsSyncService>(relaxed = true)
+        val profileManager = profileManager(activeProfileId)
+
+        val viewModel = SettingsViewModel(
+            authManager = authManager,
+            profileSyncService = profileSyncService,
+            profileSettingsSyncService = profileSettingsSyncService,
+            profileManager = profileManager
+        )
+
+        viewModel.triggerSyncNow()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { profileSyncService.pullFromRemote() }
+        coVerify(exactly = 0) { profileSyncService.pushToRemote() }
+        coVerify(exactly = 0) { profileSettingsSyncService.pushBlobForProfile(any()) }
+    }
+
+    private fun authManager(authState: AuthState): AuthManager {
+        return mockk {
+            every { this@mockk.authState } returns MutableStateFlow(authState)
+            every { this@mockk.isAuthenticated } returns (authState is AuthState.FullAccount)
+        }
     }
 
     private fun profileManager(activeProfileId: MutableStateFlow<Int>): ProfileManager {

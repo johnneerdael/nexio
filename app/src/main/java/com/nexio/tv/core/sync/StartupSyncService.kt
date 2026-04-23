@@ -3,6 +3,7 @@ package com.nexio.tv.core.sync
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.profile.ProfileManager
@@ -49,7 +50,8 @@ class StartupSyncService @Inject constructor(
 
     init {
         scope.launch {
-            authManager.sessionUserId.collect { userId ->
+            authManager.authState.collect { authState ->
+                val userId = (authState as? AuthState.FullAccount)?.userId
                 accountSettingsSyncService.onStartupSyncUserChanged(userId)
                 if (userId != null) {
                     val force = forceSyncRequested
@@ -70,6 +72,10 @@ class StartupSyncService @Inject constructor(
         }
         scope.launch {
             profileManager.profileSwitched.collect { activeId ->
+                if (authManager.authState.value !is AuthState.FullAccount) {
+                    Log.d(TAG, "Skipping secondary profile sync for profile $activeId without a full account session")
+                    return@collect
+                }
                 when (val route = profileModeRouter.routeFor(activeId)) {
                     ProfileModeRoute.DefaultLegacyRoute -> {
                         Log.d(TAG, "Skipping secondary profile sync for default legacy profile $activeId")
@@ -97,8 +103,12 @@ class StartupSyncService @Inject constructor(
     }
 
     fun requestSyncNow() {
+        if (authManager.authState.value !is AuthState.FullAccount) {
+            Log.d(TAG, "Ignoring startup sync request without a full account session")
+            return
+        }
         forceSyncRequested = true
-        authManager.currentSessionUserId?.let { userId ->
+        authManager.currentUserId?.let { userId ->
             val started = scheduleStartupPull(userId, force = true)
             if (started) forceSyncRequested = false
         }

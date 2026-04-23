@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
@@ -132,6 +133,7 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     suspend fun pushBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        requireFullAccountSession()?.let { return@withContext it }
         val route = profileModeRouter.routeFor(profileId)
         when (route) {
             ProfileModeRoute.DefaultLegacyRoute -> return@withContext Result.success(Unit)
@@ -174,6 +176,7 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     suspend fun pullBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        requireFullAccountSession()?.let { return@withContext it }
         val route = profileModeRouter.routeFor(profileId)
         when (route) {
             ProfileModeRoute.DefaultLegacyRoute -> return@withContext Result.success(Unit)
@@ -216,6 +219,14 @@ class ProfileSettingsSyncService @Inject constructor(
                 Log.e(TAG, "Failed to pull settings blob for profile $scopedProfileId", e)
                 Result.failure(e)
             }
+        }
+    }
+
+    private fun requireFullAccountSession(): Result<Unit>? {
+        return if (authManager.authState.value is AuthState.FullAccount) {
+            null
+        } else {
+            Result.failure(IllegalStateException("Profile settings sync requires a full account session"))
         }
     }
 

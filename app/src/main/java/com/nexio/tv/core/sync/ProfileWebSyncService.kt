@@ -1,6 +1,8 @@
 package com.nexio.tv.core.sync
 
 import android.util.Log
+import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
@@ -39,6 +41,7 @@ data class ProfileAuthToken(
 
 @Singleton
 class ProfileWebSyncService @Inject constructor(
+    private val authManager: AuthManager,
     private val postgrest: Postgrest,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val simklAuthDataStore: SimklAuthDataStore,
@@ -47,6 +50,11 @@ class ProfileWebSyncService @Inject constructor(
 ) {
     suspend fun syncActiveProfile(profileIndex: Int): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            if (authManager.authState.value !is AuthState.FullAccount) {
+                return@withContext Result.failure(
+                    IllegalStateException("Profile web auth sync requires a full account session")
+                )
+            }
             val route = profileModeRouter.routeFor(profileIndex)
             if (route is ProfileModeRoute.DefaultLegacyRoute) {
                 Log.d(
