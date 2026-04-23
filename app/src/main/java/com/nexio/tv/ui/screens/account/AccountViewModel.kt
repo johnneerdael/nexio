@@ -106,7 +106,7 @@ class AccountViewModel @Inject constructor(
     fun generateSyncCode(pin: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            if (!authManager.isAuthenticated) {
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
                 _uiState.update { it.copy(isLoading = false, error = "Sign in with an account first.") }
                 return@launch
             }
@@ -139,7 +139,7 @@ class AccountViewModel @Inject constructor(
     fun claimSyncCode(code: String, pin: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            if (!authManager.isAuthenticated) {
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
                 _uiState.update { it.copy(isLoading = false, error = "Sign in with an account first.") }
                 return@launch
             }

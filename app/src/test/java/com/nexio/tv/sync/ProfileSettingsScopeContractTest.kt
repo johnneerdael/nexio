@@ -412,15 +412,22 @@ class ProfileSettingsScopeContractTest {
         val accountSettingsSyncSource = accountSettingsSyncService.readText()
         val addonRepositorySource = File("app/src/main/java/com/nexio/tv/data/repository/AddonRepositoryImpl.kt").readText()
         val addonSyncSource = File("app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt").readText()
+        val syncRepositorySource = File("app/src/main/java/com/nexio/tv/data/repository/SyncRepositoryImpl.kt").readText()
 
         assertTrue(accountViewModelSource.contains("hasLiveFullAccountSyncSession("))
         assertTrue(accountViewModelSource.contains("authManager.currentSessionUserId"))
+        assertTrue(accountViewModelSource.contains("fun generateSyncCode(pin: String)"))
+        assertTrue(accountViewModelSource.contains("fun claimSyncCode(code: String, pin: String)"))
         assertTrue(accountSettingsSyncSource.contains("hasLiveFullAccountSyncSession("))
         assertTrue(accountSettingsSyncSource.contains("authManager.currentSessionUserId"))
         assertTrue(addonRepositorySource.contains("hasLiveFullAccountSyncSession("))
         assertTrue(addonRepositorySource.contains("authManager.currentSessionUserId"))
         assertTrue(addonSyncSource.contains("hasLiveFullAccountSyncSession("))
         assertTrue(addonSyncSource.contains("authManager.currentSessionUserId"))
+        assertTrue(syncRepositorySource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(syncRepositorySource.contains("authManager.currentSessionUserId"))
+        assertTrue(syncRepositorySource.contains("override suspend fun generateSyncCode(pin: String)"))
+        assertTrue(syncRepositorySource.contains("override suspend fun claimSyncCode("))
     }
 
     @Test
