@@ -48,6 +48,8 @@ class AuthManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
+    @Volatile
+    private var localSignOutInProgress = false
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -78,6 +80,10 @@ class AuthManager @Inject constructor(
                     }
                     is SessionStatus.NotAuthenticated -> {
                         _sessionUserId.value = sessionUserIdWhileSessionUnavailable()
+                        if (shouldSuppressRecoveryForLocalSignOut(localSignOutInProgress)) {
+                            transitionToSignedOut(clearPresenceMarker = false)
+                            return@collect
+                        }
                         auth.awaitInitialization()
                         val session = auth.currentSessionOrNull()
                         val hasRefreshToken = session?.refreshToken?.isNotBlank() == true
@@ -101,8 +107,24 @@ class AuthManager @Inject constructor(
                                         // 5xx, timeouts) must NOT clear the session — the SDK
                                         // or the next sync attempt will retry.
                                         if (e.isAuthoritativeRefreshRejection()) {
-                                            Log.w(TAG, "Refresh token rejected; signing out", e)
-                                            transitionToSignedOut()
+                                            when (
+                                                resolveAuthoritativeRefreshRejectionAction(
+                                                    hasDurableCredential = hasDurableCredential
+                                                )
+                                            ) {
+                                                AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY -> {
+                                                    Log.w(
+                                                        TAG,
+                                                        "Refresh token rejected; falling through to durable recovery",
+                                                        e
+                                                    )
+                                                    attemptSilentSessionRecovery()
+                                                }
+                                                AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT -> {
+                                                    Log.w(TAG, "Refresh token rejected; signing out", e)
+                                                    transitionToSignedOut()
+                                                }
+                                            }
                                         } else {
                                             Log.w(
                                                 TAG,
@@ -171,7 +193,9 @@ class AuthManager @Inject constructor(
         // before we commit to any SignedOut transition. Each iteration re-checks
         // init, user, and session. If the user re-appears, Supabase will emit
         // Authenticated on its own and we'll pick it up in the collector.
-        repeat(3) { attempt ->
+        var shouldAttemptDurableAfterRefreshRejection = false
+        for (attempt in 0 until 3) {
+            if (shouldAttemptDurableAfterRefreshRejection) break
             delay(500L * (attempt + 1))
             try {
                 auth.awaitInitialization()
@@ -183,9 +207,26 @@ class AuthManager @Inject constructor(
                 }
             } catch (e: Exception) {
                 if (e.isAuthoritativeRefreshRejection()) {
-                    Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
-                    transitionToSignedOut()
-                    return
+                    when (
+                        resolveAuthoritativeRefreshRejectionAction(
+                            hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                        )
+                    ) {
+                        AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY -> {
+                            Log.w(
+                                TAG,
+                                "Authoritative rejection during silent recovery; attempting durable recovery",
+                                e
+                            )
+                            shouldAttemptDurableAfterRefreshRejection = true
+                            continue
+                        }
+                        AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT -> {
+                            Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
+                            transitionToSignedOut()
+                            return
+                        }
+                    }
                 }
                 Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
             }
@@ -219,21 +260,18 @@ class AuthManager @Inject constructor(
         // them as returning.
     }
 
-    private fun transitionToSignedOut() {
+    private fun transitionToSignedOut(clearPresenceMarker: Boolean = true) {
         _sessionUserId.value = null
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         _authState.value = AuthState.SignedOut
-        scope.launch {
-            try {
-                authPresenceDataStore.clear()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clear auth presence marker", e)
-            }
-            try {
-                durableDeviceCredentialStore.clear()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clear durable device credential", e)
+        if (clearPresenceMarker) {
+            scope.launch {
+                try {
+                    authPresenceDataStore.clear()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to clear auth presence marker", e)
+                }
             }
         }
     }
@@ -379,22 +417,26 @@ class AuthManager @Inject constructor(
     }
 
     suspend fun signOut() {
-        try {
-            auth.signOut()
-        } catch (e: Exception) {
-            Log.e(TAG, "Sign out failed", e)
-        }
+        localSignOutInProgress = true
+        transitionToSignedOut(clearPresenceMarker = false)
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         try {
-            authPresenceDataStore.clear()
+            try {
+                authPresenceDataStore.clear()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
+            }
+            try {
+                durableDeviceCredentialStore.clear()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to clear durable device credential on sign-out", e)
+            }
+            auth.signOut()
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
-        }
-        try {
-            durableDeviceCredentialStore.clear()
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to clear durable device credential on sign-out", e)
+            Log.e(TAG, "Sign out failed", e)
+        } finally {
+            localSignOutInProgress = false
         }
     }
 
@@ -573,9 +615,17 @@ internal fun shouldAttemptDurableSessionRecovery(
 
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null
 
+internal fun shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress: Boolean): Boolean =
+    isLocalSignOutInProgress
+
 internal enum class NotAuthenticatedStartupAction {
     REFRESH_LIVE_SESSION,
     ATTEMPT_RETURNING_USER_RECOVERY,
+    TRANSITION_SIGNED_OUT
+}
+
+internal enum class AuthoritativeRefreshRejectionAction {
+    ATTEMPT_DURABLE_RECOVERY,
     TRANSITION_SIGNED_OUT
 }
 
@@ -588,6 +638,16 @@ internal fun resolveNotAuthenticatedStartupAction(
     if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
+}
+
+internal fun resolveAuthoritativeRefreshRejectionAction(
+    hasDurableCredential: Boolean
+): AuthoritativeRefreshRejectionAction {
+    return if (hasDurableCredential) {
+        AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY
+    } else {
+        AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT
+    }
 }
 
 internal suspend fun finalizeTvLoginExchange(

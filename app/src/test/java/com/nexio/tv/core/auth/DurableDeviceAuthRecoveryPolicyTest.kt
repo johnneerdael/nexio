@@ -16,6 +16,28 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `authoritative refresh rejection with durable credential falls through to durable recovery`() {
+        assertEquals(
+            AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY,
+            resolveAuthoritativeRefreshRejectionAction(hasDurableCredential = true)
+        )
+    }
+
+    @Test
+    fun `authoritative refresh rejection without durable credential signs user out`() {
+        assertEquals(
+            AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT,
+            resolveAuthoritativeRefreshRejectionAction(hasDurableCredential = false)
+        )
+    }
+
+    @Test
+    fun `local sign out suppresses recovery branching`() {
+        assertTrue(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = true))
+        assertFalse(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = false))
+    }
+
+    @Test
     fun `not authenticated startup ignores cached identity without a live session`() {
         assertEquals(
             NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,
