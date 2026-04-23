@@ -18,7 +18,10 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -55,6 +58,8 @@ class AuthManager @Inject constructor(
     private var localSignOutInProgress = false
     @Volatile
     private var durableCredentialBackfillAttemptedUserId: String? = null
+    @Volatile
+    private var durableCredentialBackfillJob: Job? = null
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -333,7 +338,10 @@ class AuthManager @Inject constructor(
                 durableCredentialBackfillAttemptedUserId != userId
             ) {
                 durableCredentialBackfillAttemptedUserId = userId
-                scope.launch { requestDurableCredentialBackfill() }
+                durableCredentialBackfillJob?.cancel()
+                durableCredentialBackfillJob = scope.launch {
+                    runDurableCredentialBackfillSafely { requestDurableCredentialBackfill() }
+                }
             }
         }
     }
@@ -441,6 +449,8 @@ class AuthManager @Inject constructor(
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         try {
+            durableCredentialBackfillJob?.cancelAndJoin()
+            durableCredentialBackfillJob = null
             try {
                 authPresenceDataStore.clear()
             } catch (e: Exception) {
@@ -654,13 +664,14 @@ class AuthManager @Inject constructor(
         }
         val result = json.decodeFromString<DurableDeviceCredentialBackfillResult>(body)
         if (
-            result.status == "backfilled" &&
-            !result.devicePublicId.isNullOrBlank() &&
-            !result.deviceSecret.isNullOrBlank()
+            shouldPersistBackfilledCredential(
+                result = result,
+                isLocalSignOutInProgress = localSignOutInProgress
+            )
         ) {
             durableDeviceCredentialStore.save(
-                devicePublicId = result.devicePublicId,
-                deviceSecret = result.deviceSecret
+                devicePublicId = result.devicePublicId.orEmpty(),
+                deviceSecret = result.deviceSecret.orEmpty()
             )
             Log.i(TAG, "Backfilled durable credential for legacy linked device")
             return
@@ -705,6 +716,30 @@ internal fun shouldRequestDurableCredentialBackfill(
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
     return hasRefreshToken && !credential.isComplete
+}
+
+internal fun shouldPersistBackfilledCredential(
+    result: DurableDeviceCredentialBackfillResult,
+    isLocalSignOutInProgress: Boolean
+): Boolean {
+    return !isLocalSignOutInProgress &&
+        result.status == "backfilled" &&
+        !result.devicePublicId.isNullOrBlank() &&
+        !result.deviceSecret.isNullOrBlank()
+}
+
+internal suspend fun runDurableCredentialBackfillSafely(
+    block: suspend () -> Unit
+): Boolean {
+    return try {
+        block()
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "Legacy durable credential backfill failed", e)
+        false
+    }
 }
 
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null
