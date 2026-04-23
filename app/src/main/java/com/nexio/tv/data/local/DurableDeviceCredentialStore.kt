@@ -32,7 +32,8 @@ private const val CIPHER_TRANSFORMATION = "AES/GCM/NoPadding"
 
 data class DurableDeviceCredentialSnapshot(
     val devicePublicId: String? = null,
-    val deviceSecret: String? = null
+    val deviceSecret: String? = null,
+    val ownerUserId: String? = null
 ) {
     val isComplete: Boolean
         get() = !devicePublicId.isNullOrBlank() && !deviceSecret.isNullOrBlank()
@@ -100,6 +101,7 @@ class DurableDeviceCredentialStore internal constructor(
 
     private val devicePublicIdKey = stringPreferencesKey("device_public_id")
     private val deviceSecretKey = stringPreferencesKey("device_secret")
+    private val ownerUserIdKey = stringPreferencesKey("owner_user_id")
 
     suspend fun snapshot(): DurableDeviceCredentialSnapshot {
         val prefs = dataStore.data.first()
@@ -118,13 +120,15 @@ class DurableDeviceCredentialStore internal constructor(
 
         return DurableDeviceCredentialSnapshot(
             devicePublicId = prefs[devicePublicIdKey]?.trim()?.takeIf { it.isNotBlank() },
-            deviceSecret = secret
+            deviceSecret = secret,
+            ownerUserId = prefs[ownerUserIdKey]?.trim()?.takeIf { it.isNotBlank() }
         )
     }
 
-    suspend fun save(devicePublicId: String, deviceSecret: String) {
+    suspend fun save(devicePublicId: String, deviceSecret: String, ownerUserId: String? = null) {
         val normalizedPublicId = devicePublicId.trim()
         val normalizedSecret = deviceSecret.trim()
+        val normalizedOwnerUserId = ownerUserId?.trim()?.takeIf { it.isNotBlank() }
         dataStore.edit { prefs ->
             if (normalizedPublicId.isBlank()) {
                 prefs.remove(devicePublicIdKey)
@@ -136,13 +140,45 @@ class DurableDeviceCredentialStore internal constructor(
             } else {
                 prefs[deviceSecretKey] = secretProtector.encrypt(normalizedSecret)
             }
+            if (normalizedOwnerUserId == null) {
+                prefs.remove(ownerUserIdKey)
+            } else {
+                prefs[ownerUserIdKey] = normalizedOwnerUserId
+            }
         }
+    }
+
+    suspend fun bindOwnerIfMissing(ownerUserId: String) {
+        val normalizedOwnerUserId = ownerUserId.trim()
+        if (normalizedOwnerUserId.isBlank()) return
+        dataStore.edit { prefs ->
+            val existing = prefs[ownerUserIdKey]?.trim()?.takeIf { it.isNotBlank() }
+            val hasCredential =
+                !prefs[devicePublicIdKey].isNullOrBlank() && !prefs[deviceSecretKey].isNullOrBlank()
+            if (existing == null && hasCredential) {
+                prefs[ownerUserIdKey] = normalizedOwnerUserId
+            }
+        }
+    }
+
+    suspend fun clearIfOwnerMissingOrMismatch(expectedOwnerUserId: String): Boolean {
+        val normalizedExpectedOwnerUserId = expectedOwnerUserId.trim()
+        if (normalizedExpectedOwnerUserId.isBlank()) return false
+
+        val snapshot = snapshot()
+        if (!snapshot.isComplete) return false
+        val normalizedStoredOwnerUserId = snapshot.ownerUserId?.trim()?.takeIf { it.isNotBlank() }
+        if (normalizedStoredOwnerUserId == normalizedExpectedOwnerUserId) return false
+
+        clear()
+        return true
     }
 
     suspend fun clear() {
         dataStore.edit { prefs ->
             prefs.remove(devicePublicIdKey)
             prefs.remove(deviceSecretKey)
+            prefs.remove(ownerUserIdKey)
         }
     }
 

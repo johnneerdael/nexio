@@ -19,6 +19,7 @@ import org.robolectric.RobolectricTestRunner
 class DurableDeviceCredentialStoreTest {
     private val devicePublicIdKey = stringPreferencesKey("device_public_id")
     private val deviceSecretKey = stringPreferencesKey("device_secret")
+    private val ownerUserIdKey = stringPreferencesKey("owner_user_id")
 
     @Test
     fun `save encrypts device secret before writing preferences`() = runTest {
@@ -26,12 +27,14 @@ class DurableDeviceCredentialStoreTest {
 
         fixture.store.save(
             devicePublicId = "device-public-id",
-            deviceSecret = "plain-secret"
+            deviceSecret = "plain-secret",
+            ownerUserId = "owner-a"
         )
 
         val prefs = fixture.dataStore.data.first()
         assertEquals("device-public-id", prefs[devicePublicIdKey])
         assertEquals("enc::plain-secret::cipher", prefs[deviceSecretKey])
+        assertEquals("owner-a", prefs[ownerUserIdKey])
         assertFalse(prefs[deviceSecretKey] == "plain-secret")
     }
 
@@ -41,12 +44,14 @@ class DurableDeviceCredentialStoreTest {
         fixture.dataStore.edit { prefs ->
             prefs[devicePublicIdKey] = "device-public-id"
             prefs[deviceSecretKey] = "enc::plain-secret::cipher"
+            prefs[ownerUserIdKey] = "owner-a"
         }
 
         val snapshot = fixture.store.snapshot()
 
         assertEquals("device-public-id", snapshot.devicePublicId)
         assertEquals("plain-secret", snapshot.deviceSecret)
+        assertEquals("owner-a", snapshot.ownerUserId)
         assertTrue(snapshot.isComplete)
     }
 
@@ -78,6 +83,39 @@ class DurableDeviceCredentialStoreTest {
         assertEquals("device-public-id", snapshot.devicePublicId)
         assertEquals(null, snapshot.deviceSecret)
         assertFalse(snapshot.isComplete)
+    }
+
+    @Test
+    fun `clearIfOwnerMissingOrMismatch removes stale durable credential`() = runTest {
+        val fixture = storeFixture()
+        fixture.store.save(
+            devicePublicId = "device-public-id",
+            deviceSecret = "plain-secret"
+        )
+
+        assertTrue(fixture.store.clearIfOwnerMissingOrMismatch("owner-b"))
+
+        val snapshot = fixture.store.snapshot()
+        assertEquals(null, snapshot.devicePublicId)
+        assertEquals(null, snapshot.deviceSecret)
+        assertEquals(null, snapshot.ownerUserId)
+    }
+
+    @Test
+    fun `clearIfOwnerMissingOrMismatch keeps matching owner-bound credential`() = runTest {
+        val fixture = storeFixture()
+        fixture.store.save(
+            devicePublicId = "device-public-id",
+            deviceSecret = "plain-secret",
+            ownerUserId = "owner-a"
+        )
+
+        assertFalse(fixture.store.clearIfOwnerMissingOrMismatch("owner-a"))
+
+        val snapshot = fixture.store.snapshot()
+        assertEquals("device-public-id", snapshot.devicePublicId)
+        assertEquals("plain-secret", snapshot.deviceSecret)
+        assertEquals("owner-a", snapshot.ownerUserId)
     }
 
     private fun storeFixture(): StoreFixture {

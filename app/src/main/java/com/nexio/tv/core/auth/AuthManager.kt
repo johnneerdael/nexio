@@ -333,7 +333,22 @@ class AuthManager @Inject constructor(
                     Log.w(TAG, "Failed to persist auth presence marker", e)
                 }
             }
-            val credential = durableDeviceCredentialStore.snapshot()
+            var credential = durableDeviceCredentialStore.snapshot()
+            if (shouldClearDurableCredentialForAuthenticatedSession(credential, userId)) {
+                try {
+                    durableDeviceCredentialStore.clear()
+                    credential = durableDeviceCredentialStore.snapshot()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed clearing stale durable credential for authenticated user $userId", e)
+                }
+            } else if (shouldBindDurableCredentialOwner(credential, userId)) {
+                try {
+                    durableDeviceCredentialStore.bindOwnerIfMissing(userId)
+                    credential = durableDeviceCredentialStore.snapshot()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed binding durable credential owner for authenticated user $userId", e)
+                }
+            }
             if (
                 shouldRequestDurableCredentialBackfill(
                     hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
@@ -404,6 +419,7 @@ class AuthManager @Inject constructor(
                 this.email = email
                 this.password = password
             }
+            reconcileDurableCredentialAfterManualAccountAuth()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Sign up failed", e)
@@ -417,6 +433,7 @@ class AuthManager @Inject constructor(
                 this.email = email
                 this.password = password
             }
+            reconcileDurableCredentialAfterManualAccountAuth()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Sign in failed", e)
@@ -683,9 +700,11 @@ class AuthManager @Inject constructor(
                 isLocalSignOutInProgress = localSignOutInProgress
             )
         ) {
+            val ownerUserId = auth.currentUserOrNull()?.id
             durableDeviceCredentialStore.save(
                 devicePublicId = result.devicePublicId.orEmpty(),
-                deviceSecret = result.deviceSecret.orEmpty()
+                deviceSecret = result.deviceSecret.orEmpty(),
+                ownerUserId = ownerUserId
             )
             Log.i(TAG, "Backfilled durable credential for legacy linked device")
             return
@@ -716,6 +735,22 @@ class AuthManager @Inject constructor(
             devicePlatform = platform
         )
     }
+
+    private suspend fun reconcileDurableCredentialAfterManualAccountAuth() {
+        val authenticatedUserId = auth.currentUserOrNull()?.id?.trim().orEmpty()
+        if (authenticatedUserId.isBlank()) return
+
+        if (durableDeviceCredentialStore.clearIfOwnerMissingOrMismatch(authenticatedUserId)) {
+            Log.i(TAG, "Cleared stale durable credential after manual account auth for $authenticatedUserId")
+            return
+        }
+
+        try {
+            durableDeviceCredentialStore.bindOwnerIfMissing(authenticatedUserId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed binding durable credential owner after manual account auth", e)
+        }
+    }
 }
 
 internal fun shouldAttemptDurableSessionRecovery(
@@ -730,6 +765,38 @@ internal fun shouldRequestDurableCredentialBackfill(
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
     return hasRefreshToken && !credential.isComplete
+}
+
+internal fun shouldBindDurableCredentialOwner(
+    credential: DurableDeviceCredentialSnapshot,
+    authenticatedUserId: String
+): Boolean {
+    if (!credential.isComplete) return false
+    val normalizedAuthenticatedUserId = authenticatedUserId.trim()
+    if (normalizedAuthenticatedUserId.isBlank()) return false
+    return credential.ownerUserId.isNullOrBlank()
+}
+
+internal fun shouldClearDurableCredentialForAuthenticatedSession(
+    credential: DurableDeviceCredentialSnapshot,
+    authenticatedUserId: String
+): Boolean {
+    if (!credential.isComplete) return false
+    val normalizedAuthenticatedUserId = authenticatedUserId.trim()
+    if (normalizedAuthenticatedUserId.isBlank()) return false
+    val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    return normalizedOwnerUserId != normalizedAuthenticatedUserId
+}
+
+internal fun shouldClearDurableCredentialForManualAccountAuth(
+    credential: DurableDeviceCredentialSnapshot,
+    authenticatedUserId: String
+): Boolean {
+    if (!credential.isComplete) return false
+    val normalizedAuthenticatedUserId = authenticatedUserId.trim()
+    if (normalizedAuthenticatedUserId.isBlank()) return false
+    val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() }
+    return normalizedOwnerUserId != normalizedAuthenticatedUserId
 }
 
 internal fun shouldPersistBackfilledCredential(

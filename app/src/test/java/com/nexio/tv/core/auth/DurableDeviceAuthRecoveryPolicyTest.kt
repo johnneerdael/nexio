@@ -3,6 +3,7 @@ package com.nexio.tv.core.auth
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialBackfillResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
+import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,6 +12,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DurableDeviceAuthRecoveryPolicyTest {
+    @Test
+    fun `supabase auth module disables background auto refresh`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/di/SupabaseModule.kt").readText()
+
+        assertTrue(source.contains("alwaysAutoRefresh = false"))
+        assertFalse(source.contains("alwaysAutoRefresh = true"))
+    }
+
     @Test
     fun `unavailable session clears live sync marker during recovery`() {
         assertNull(sessionUserIdWhileSessionUnavailable())
@@ -143,6 +152,40 @@ class DurableDeviceAuthRecoveryPolicyTest {
                     devicePublicId = "device-public-id",
                     deviceSecret = null
                 )
+            )
+        )
+    }
+
+    @Test
+    fun `manual account auth clears legacy or mismatched durable credential`() {
+        assertTrue(
+            shouldClearDurableCredentialForManualAccountAuth(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b"
+            )
+        )
+        assertTrue(
+            shouldClearDurableCredentialForManualAccountAuth(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = "owner-a"
+                ),
+                authenticatedUserId = "owner-b"
+            )
+        )
+        assertFalse(
+            shouldClearDurableCredentialForManualAccountAuth(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = "owner-b"
+                ),
+                authenticatedUserId = "owner-b"
             )
         )
     }
