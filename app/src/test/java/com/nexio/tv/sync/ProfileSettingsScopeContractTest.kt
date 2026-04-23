@@ -413,8 +413,8 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(viewModelSource.contains("hasLiveFullAccountSyncSession("))
         assertTrue(viewModelSource.contains("profileManager.deleteProfile("))
-        assertTrue(viewModelSource.contains("if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) return"))
-        assertTrue(viewModelSource.contains("syncRemoteDelete = true"))
+        assertTrue(viewModelSource.contains("val syncRemoteDelete = hasLiveFullAccountSyncSession("))
+        assertTrue(viewModelSource.contains("syncRemoteDelete = syncRemoteDelete"))
         assertTrue(viewModelSource.contains("authManager.authState.value"))
         assertTrue(viewModelSource.contains("authManager.currentSessionUserId"))
         assertTrue(profileManagerSource.contains("suspend fun deleteProfile(id: Int, syncRemoteDelete: Boolean = false): Boolean"))

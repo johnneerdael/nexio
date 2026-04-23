@@ -96,13 +96,16 @@ internal class SettingsViewModel @Inject constructor(
     fun confirmDeleteProfile() {
         val profile = _showDeleteDialog.value ?: return
         if (_deleteInProgress.value) return
-        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) return
+        val syncRemoteDelete = hasLiveFullAccountSyncSession(
+            authManager.authState.value,
+            authManager.currentSessionUserId
+        )
         viewModelScope.launch {
             _deleteInProgress.value = true
             try {
                 profileManager.deleteProfile(
                     profile.id,
-                    syncRemoteDelete = true
+                    syncRemoteDelete = syncRemoteDelete
                 )
                 _showDeleteDialog.value = null
             } finally {

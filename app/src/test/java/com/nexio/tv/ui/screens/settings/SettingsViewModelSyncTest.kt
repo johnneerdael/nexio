@@ -168,12 +168,13 @@ class SettingsViewModelSyncTest {
     }
 
     @Test
-    fun `confirm delete profile refuses delete without a live full account session`() = runTest(dispatcher) {
+    fun `confirm delete profile still deletes locally without a live full account session`() = runTest(dispatcher) {
         val authManager = authManager(authState = AuthState.SessionLost)
         val profileSyncService = mockk<ProfileSyncService>(relaxed = true)
         val profileSettingsSyncService = mockk<ProfileSettingsSyncService>(relaxed = true)
         val profileManager = profileManager(MutableStateFlow(3))
         val profile = UserProfile(id = 3, name = "Profile 3", avatarColorHex = "#8E24AA")
+        coEvery { profileManager.deleteProfile(profile.id, syncRemoteDelete = false) } returns true
 
         val viewModel = SettingsViewModel(
             authManager = authManager,
@@ -186,8 +187,9 @@ class SettingsViewModelSyncTest {
         viewModel.confirmDeleteProfile()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { profileManager.deleteProfile(any(), any()) }
-        org.junit.Assert.assertEquals(profile, viewModel.showDeleteDialog.value)
+        coVerify(exactly = 1) { profileManager.deleteProfile(profile.id, syncRemoteDelete = false) }
+        coVerify(exactly = 0) { profileManager.deleteProfile(profile.id, syncRemoteDelete = true) }
+        org.junit.Assert.assertEquals(null, viewModel.showDeleteDialog.value)
         org.junit.Assert.assertEquals(false, viewModel.deleteInProgress.value)
     }
 
