@@ -32,6 +32,11 @@ type DurableCredentialRecord = {
   revoked_at: null;
 };
 
+type DurableCredentialHandoffRecord = DurableCredentialRecord & {
+  expires_at: string;
+  used_at: null;
+};
+
 type DurableCredentialClientPayload = {
   device_public_id: string;
   device_secret: string;
@@ -111,7 +116,7 @@ export async function buildApprovalExchangePayload(input: {
   linkedDeviceId: string | null;
   requestedDisplayName?: string | null;
   sessionRow: SessionRow;
-}): Promise<DurableCredentialRecord> {
+}): Promise<DurableCredentialHandoffRecord> {
   const durableCredential = await buildDurableCredential();
   const stableDisplayName = input.requestedDisplayName?.trim() ||
     input.sessionRow.device_name ||
@@ -131,6 +136,8 @@ export async function buildApprovalExchangePayload(input: {
     status: "active",
     last_seen_at: new Date().toISOString(),
     revoked_at: null,
+    expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+    used_at: null,
   };
 }
 
@@ -290,12 +297,12 @@ async function handleRequest(req: Request): Promise<Response> {
     credentialRow.credential_hash = durableCredential.server.credential_hash;
 
     const { error: credentialError } = await adminClient
-      .from("device_credentials")
+      .from("device_credential_handoffs")
       .upsert(credentialRow, { onConflict: "device_user_id" });
 
     if (credentialError) {
       return json({
-        error: `Failed to issue durable credential: ${credentialError.message}`,
+        error: `Failed to stage durable credential handoff: ${credentialError.message}`,
       }, 500);
     }
 

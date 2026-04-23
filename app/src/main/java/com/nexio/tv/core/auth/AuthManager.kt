@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.AuthPresenceDataStore
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import com.nexio.tv.data.local.DurableDeviceCredentialStore
 import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialActivationResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceSessionExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
@@ -728,6 +729,13 @@ class AuthManager @Inject constructor(
                         deviceSecret = deviceSecret
                     )
                 },
+                activateCredential = { devicePublicId, deviceSecret ->
+                    activateDurableDeviceCredential(
+                        requesterToken = token,
+                        devicePublicId = devicePublicId,
+                        deviceSecret = deviceSecret
+                    )
+                },
                 importAuthTokens = { accessToken, refreshToken ->
                     auth.importAuthToken(accessToken, refreshToken)
                 }
@@ -771,6 +779,34 @@ class AuthManager @Inject constructor(
         val result = json.decodeFromString<DurableDeviceSessionExchangeResult>(body)
         auth.importAuthToken(result.accessToken, result.refreshToken)
         return true
+    }
+
+    private suspend fun activateDurableDeviceCredential(
+        requesterToken: String,
+        devicePublicId: String,
+        deviceSecret: String
+    ) {
+        val payload = buildJsonObject {
+            put("device_public_id", devicePublicId)
+            put("device_secret", deviceSecret)
+        }.toString()
+        val request = Request.Builder()
+            .url("${BuildConfig.SUPABASE_URL}/functions/v1/device-credential-activate")
+            .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .header("Authorization", "Bearer $requesterToken")
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        val body = withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("Device credential activation failed (${response.code}): $responseBody")
+                }
+                responseBody
+            }
+        }
+        val result = json.decodeFromString<DurableDeviceCredentialActivationResult>(body)
+        check(result.activated) { "Device credential activation did not succeed" }
     }
 
     private suspend fun reconcileDurableCredentialAfterManualAccountAuth() {
@@ -959,9 +995,11 @@ internal suspend fun handleAuthoritativeDurableCredentialRejection(
 internal suspend fun finalizeTvLoginExchange(
     result: DurableDeviceCredentialIssueResult,
     saveCredential: suspend (String, String) -> Unit,
+    activateCredential: suspend (String, String) -> Unit,
     importAuthTokens: suspend (String, String) -> Unit
 ) {
     saveCredential(result.devicePublicId, result.deviceSecret)
+    activateCredential(result.devicePublicId, result.deviceSecret)
     importAuthTokens(result.accessToken, result.refreshToken)
 }
 

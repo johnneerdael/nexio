@@ -47,6 +47,8 @@ create or replace function public.start_tv_login_session(
 )
 v_web_url := v_base_url || '/approve?code=' || v_code || '&nonce=' || replace(v_nonce, '+', '%2B');
 v_web_url := v_web_url || '&device_name=' || public.url_encode(v_device_name);
+create table if not exists public.device_credential_handoffs
+create unique index if not exists device_credential_handoffs_device_user_unused_uidx
 `;
 
 test("hashDeviceCredential is deterministic for the same raw secret", async () => {
@@ -117,6 +119,8 @@ test("buildApprovalExchangePayload prefers requested display name and trims it",
   assert.equal(payload.device_model, "Chromecast");
   assert.equal(payload.device_platform, "Android TV");
   assert.equal(payload.revoked_at, null);
+  assert.equal(payload.used_at, null);
+  assert.ok(typeof payload.expires_at === "string" && payload.expires_at.length > 0);
   assert.match(payload.device_public_id, /^tv_[0-9a-f-]{36}$/);
   assert.match(payload.credential_hash, /^[0-9a-f]{64}$/);
 });
@@ -176,6 +180,17 @@ test("buildDurableCredential returns a client payload plus hashed server payload
       credential.client.device_public_id,
       credential.client.device_secret,
     ),
+  );
+});
+
+test("durable auth migration creates a pending handoff table", () => {
+  assert.match(
+    migrationContractText,
+    /create table if not exists public\.device_credential_handoffs/i,
+  );
+  assert.match(
+    migrationContractText,
+    /create unique index if not exists device_credential_handoffs_device_user_unused_uidx/i,
   );
 });
 

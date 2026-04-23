@@ -354,6 +354,9 @@ class DurableDeviceAuthRecoveryPolicyTest {
             saveCredential = { publicId, secret ->
                 calls += "save:$publicId:$secret"
             },
+            activateCredential = { publicId, secret ->
+                calls += "activate:$publicId:$secret"
+            },
             importAuthTokens = { accessToken, refreshToken ->
                 calls += "import:$accessToken:$refreshToken"
             }
@@ -362,6 +365,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         assertEquals(
             listOf(
                 "save:device-public-id:device-secret",
+                "activate:device-public-id:device-secret",
                 "import:access-token:refresh-token"
             ),
             calls
@@ -381,6 +385,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
                     refreshToken = "refresh-token"
                 ),
                 saveCredential = { _, _ -> error("disk full") },
+                activateCredential = { _, _ -> imported = true },
                 importAuthTokens = { _, _ -> imported = true }
             )
         }

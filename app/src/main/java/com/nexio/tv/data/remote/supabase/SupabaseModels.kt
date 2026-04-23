@@ -91,6 +91,11 @@ data class DurableDeviceCredentialIssueResult(
 )
 
 @Serializable
+data class DurableDeviceCredentialActivationResult(
+    val activated: Boolean = false
+)
+
+@Serializable
 data class DurableDeviceCredentialBackfillRequest(
     @SerialName("device_name") val deviceName: String? = null,
     @SerialName("device_model") val deviceModel: String? = null,
