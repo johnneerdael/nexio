@@ -1,0 +1,114 @@
+### /sys/module/aml_media/parameters/debug_dolby
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/debug_dolby
+0
+### /sys/module/aml_media/parameters/debug_dolby_frame
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/debug_dolby_frame
+65535
+### /sys/module/aml_media/parameters/dolby3_path_sel
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby3_path_sel
+0
+### /sys/module/aml_media/parameters/dolby_core1_en
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_core1_en
+0
+### /sys/module/aml_media/parameters/dolby_core1_ext_mode
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_core1_ext_mode
+0
+### /sys/module/aml_media/parameters/dolby_core2_en
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_core2_en
+0
+### /sys/module/aml_media/parameters/dolby_core2_ext_mode
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_core2_ext_mode
+0
+### /sys/module/aml_media/parameters/dolby_vision_enable
+-rw-rw-r-- 1 system system 4096 1970-01-01 00:00 /sys/module/aml_media/parameters/dolby_vision_enable
+N
+### /sys/module/aml_media/parameters/dolby_vision_flags
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_vision_flags
+536870917
+### /sys/module/aml_media/parameters/dolby_vision_graphics_priority
+-rw-rw-r-- 1 system system 4096 1970-01-01 00:00 /sys/module/aml_media/parameters/dolby_vision_graphics_priority
+0
+### /sys/module/aml_media/parameters/dolby_vision_hdr10_policy
+-rw-rw-r-- 1 system system 4096 1970-01-01 00:00 /sys/module/aml_media/parameters/dolby_vision_hdr10_policy
+41
+### /sys/module/aml_media/parameters/dolby_vision_level
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_vision_level
+255
+### /sys/module/aml_media/parameters/dolby_vision_ll_policy
+-rw-rw-r-- 1 system system 4096 1970-01-01 00:00 /sys/module/aml_media/parameters/dolby_vision_ll_policy
+0
+### /sys/module/aml_media/parameters/dolby_vision_mode
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_vision_mode
+5
+### /sys/module/aml_media/parameters/dolby_vision_policy
+-rw-rw-r-- 1 system system 4096 1970-01-01 00:00 /sys/module/aml_media/parameters/dolby_vision_policy
+1
+### /sys/module/aml_media/parameters/dolby_vision_profile
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/dolby_vision_profile
+255
+### /sys/module/aml_media/parameters/dolby_vision_status
+-rw-rw-r-- 1 system system 4096 1970-01-01 00:00 /sys/module/aml_media/parameters/dolby_vision_status
+0
+### /sys/module/aml_media/parameters/vpp_dolby3_en
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/vpp_dolby3_en
+0
+### /sys/module/aml_media/parameters/amdv_efuse_bypass
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_efuse_bypass
+N
+### /sys/module/aml_media/parameters/amdv_graphic_max
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_graphic_max
+0
+### /sys/module/aml_media/parameters/amdv_graphic_min
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_graphic_min
+50
+### /sys/module/aml_media/parameters/amdv_mask
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_mask
+7
+### /sys/module/aml_media/parameters/amdv_reset
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_reset
+3
+### /sys/module/aml_media/parameters/amdv_reset_delay
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_reset_delay
+514
+### /sys/module/aml_media/parameters/amdv_run_mode
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_run_mode
+255
+### /sys/module/aml_media/parameters/amdv_run_mode_delay
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_run_mode_delay
+0
+### /sys/module/aml_media/parameters/amdv_target_mode
+-r--r--r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_target_mode
+5
+### /sys/module/aml_media/parameters/amdv_tuning_mode
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_tuning_mode
+0
+### /sys/module/aml_media/parameters/amdv_wait_delay
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_wait_delay
+2
+### /sys/module/aml_media/parameters/amdv_wait_on
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/aml_media/parameters/amdv_wait_on
+N
+### /sys/module/amvdec_h265/parameters/dolby_el_flush_th
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265/parameters/dolby_el_flush_th
+2
+### /sys/module/amvdec_h265/parameters/dolby_meta_with_el
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265/parameters/dolby_meta_with_el
+0
+### /sys/module/amvdec_h265/parameters/parser_dolby_vision_enable
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265/parameters/parser_dolby_vision_enable
+1
+### /sys/module/amvdec_h265_v4l/parameters/dolby_el_flush_th
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265_v4l/parameters/dolby_el_flush_th
+2
+### /sys/module/amvdec_h265_v4l/parameters/dolby_meta_with_el
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265_v4l/parameters/dolby_meta_with_el
+0
+### /sys/module/amvdec_h265_v4l/parameters/parser_dolby_vision_enable
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265_v4l/parameters/parser_dolby_vision_enable
+1
+### /sys/module/amvdec_h265/parameters/parser_dolby_vision_enable
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265/parameters/parser_dolby_vision_enable
+1
+### /sys/module/amvdec_h265_v4l/parameters/parser_dolby_vision_enable
+-rw-rw-r-- 1 root root 4096 2026-04-17 17:24 /sys/module/amvdec_h265_v4l/parameters/parser_dolby_vision_enable
+1

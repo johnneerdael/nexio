@@ -1,0 +1,2064 @@
+ 0 registered handlers:
+
+Decoder infos by media types:
+=============================
+
+Media type 'audio/3gpp':
+  Decoder "c2.android.amrnb.decoder" supports
+    aliases: [
+      "OMX.google.amrnb.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "4750-12200"
+        string max-channel-count = "1"
+        string sample-rate-ranges = "8000"
+      }
+
+Media type 'audio/ac3':
+  Decoder "c2.android.ac3.decoder" supports
+    aliases: [
+      "OMX.google.ac3.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "1-10000000"
+        string max-channel-count = "8"
+        string sample-rate-ranges = "8000-96000"
+      }
+
+Media type 'audio/amr-wb':
+  Decoder "c2.android.amrwb.decoder" supports
+    aliases: [
+      "OMX.google.amrwb.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "6600-23850"
+        string max-channel-count = "1"
+        string sample-rate-ranges = "16000"
+      }
+
+Media type 'audio/ffmpeg':
+  Decoder "c2.amlogic.audio.decoder.ffmpeg" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string max-channel-count = "30"
+      }
+
+Media type 'audio/flac':
+  Decoder "c2.android.flac.decoder" supports
+    aliases: [
+      "OMX.google.flac.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "1-21000000"
+        string max-channel-count = "8"
+        string sample-rate-ranges = "1-655350"
+      }
+
+Media type 'audio/g711-alaw':
+  Decoder "c2.android.g711.alaw.decoder" supports
+    aliases: [
+      "OMX.google.g711.alaw.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "64000"
+        string max-channel-count = "6"
+        string sample-rate-ranges = "8000-48000"
+      }
+
+Media type 'audio/g711-mlaw':
+  Decoder "c2.android.g711.mlaw.decoder" supports
+    aliases: [
+      "OMX.google.g711.mlaw.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "64000"
+        string max-channel-count = "6"
+        string sample-rate-ranges = "8000-48000"
+      }
+
+Media type 'audio/mp4a-latm':
+  Decoder "c2.android.aac.decoder" supports
+    aliases: [
+      "OMX.google.aac.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: [
+          2/    0 (LC/??),
+          5/    0 (HE/??),
+         29/    0 (HE_PS/??),
+         23/    0 (LD/??),
+         39/    0 (ELD/??),
+         20/    0 (ERScalable/??),
+         42/    0 (XHE/??) ]
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "8000-960000"
+        string max-channel-count = "8"
+        string sample-rate-ranges = "7350,8000,11025,12000,16000,22050,24000,32000,44100,48000"
+      }
+
+Media type 'audio/mpeg':
+  Decoder "c2.android.mp3.decoder" supports
+    aliases: [
+      "OMX.google.mp3.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "8000-320000"
+        string max-channel-count = "2"
+        string sample-rate-ranges = "8000,11025,12000,16000,22050,24000,32000,44100,48000"
+      }
+
+Media type 'audio/mpeg-L1':
+  Decoder "c2.amlogic.audio.decoder.mp1" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string max-channel-count = "30"
+      }
+
+Media type 'audio/mpeg-L2':
+  Decoder "c2.amlogic.audio.decoder.mp2" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string max-channel-count = "30"
+      }
+
+Media type 'audio/opus':
+  Decoder "c2.android.opus.decoder" supports
+    aliases: [
+      "OMX.google.opus.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "6000-510000"
+        string max-channel-count = "8"
+        string sample-rate-ranges = "8000,12000,16000,24000,48000"
+      }
+
+Media type 'audio/raw':
+  Decoder "c2.android.raw.decoder" supports
+    aliases: [
+      "OMX.google.raw.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "1-10000000"
+        string max-channel-count = "8"
+        string sample-rate-ranges = "8000-192000"
+      }
+
+Media type 'audio/vorbis':
+  Decoder "c2.android.vorbis.decoder" supports
+    aliases: [
+      "OMX.google.vorbis.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "32000-500000"
+        string max-channel-count = "8"
+        string sample-rate-ranges = "8000-96000"
+      }
+
+Media type 'image/jpeg':
+  Decoder "c2.amlogic.jpeg.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string size-range = "320x320-3840x2160"
+      }
+
+Media type 'video/3gpp':
+  Decoder "c2.amlogic.h263.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/   16 (Baseline/45),
+          1/    8 (Baseline/40),
+          8/   16 (ISWV2/45),
+          8/    8 (ISWV2/40) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string measured-frame-rate-176x144-range = "594-595"
+        string measured-frame-rate-352x288-range = "407-407"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+  Decoder "c2.android.h263.decoder" supports
+    aliases: [
+      "OMX.google.h263.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/   16 (Baseline/45),
+          1/    8 (Baseline/40),
+          8/   16 (ISWV2/45),
+          8/    8 (ISWV2/40) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-384000"
+        int32_t feature-adaptive-playback = 0
+        string measured-frame-rate-176x144-range = "1090-1090"
+        string measured-frame-rate-352x288-range = "722-722"
+        string size-range = "2x2-352x288"
+      }
+
+Media type 'video/av01':
+  Decoder "c2.amlogic.av1.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/ 8192 (Main8/5.1),
+       4096/ 8192 (Main10HDR10/5.1),
+       8192/ 8192 (Main10HDRPlus/5.1),
+          2/ 8192 (Main10/5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-32400"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1944000"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "9"
+        string measured-frame-rate-1280x720-range = "249-249"
+        string measured-frame-rate-1920x1080-range = "365-365"
+        string measured-frame-rate-352x288-range = "238-239"
+        string measured-frame-rate-640x360-range = "239-239"
+        string measured-frame-rate-720x480-range = "244-244"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-3840x3840"
+      }
+  Decoder "c2.amlogic.av1.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/ 8192 (Main8/5.1),
+       4096/ 8192 (Main10HDR10/5.1),
+       8192/ 8192 (Main10HDRPlus/5.1),
+          2/ 8192 (Main10/5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-32400"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1944000"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-3840x3840"
+      }
+  Decoder "c2.android.av1.decoder" supports
+    aliases: []
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/32768 (Main8/5.3),
+       4096/32768 (Main10HDR10/5.3),
+       8192/32768 (Main10HDRPlus/5.3),
+          2/32768 (Main10/5.3) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface),
+      0x36 (YUVP010) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "51-51"
+        string measured-frame-rate-352x288-range = "277-278"
+        string measured-frame-rate-640x360-range = "160-160"
+        string measured-frame-rate-720x480-range = "101-101"
+        string alignment = "1x1"
+        string bitrate-range = "1-5000000"
+        string block-count-range = "1-3600"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-108000"
+        int32_t feature-adaptive-playback = 0
+        string size-range = "2x2-1280x1280"
+      }
+
+Media type 'video/avc':
+  Decoder "c2.amlogic.avc.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/32768 (Baseline/5.1),
+      65536/32768 (ConstrainedBaseline/5.1),
+          2/32768 (Main/5.1),
+          8/32768 (High/5.1),
+      524288/32768 (ConstrainedHigh/5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "9"
+        string measured-frame-rate-1280x720-range = "244-244"
+        string measured-frame-rate-1920x1080-range = "194-194"
+        string measured-frame-rate-320x240-range = "249-249"
+        string measured-frame-rate-720x480-range = "238-239"
+        string performance-point-1920x1088-range = "60-60"
+        string performance-point-3840x2160-range = "30-30"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.amlogic.avc.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/32768 (Baseline/5.1),
+      65536/32768 (ConstrainedBaseline/5.1),
+          2/32768 (Main/5.1),
+          8/32768 (High/5.1),
+      524288/32768 (ConstrainedHigh/5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1036800"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1088-range = "60-60"
+        string performance-point-3840x2160-range = "30-30"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.android.avc.decoder" supports
+    aliases: [
+      "OMX.google.h264.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+      65536/65536 (ConstrainedBaseline/5.2),
+          1/65536 (Baseline/5.2),
+          2/65536 (Main/5.2),
+      524288/65536 (ConstrainedHigh/5.2),
+          8/65536 (High/5.2) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "90-90"
+        string measured-frame-rate-1920x1080-range = "40-40"
+        string measured-frame-rate-320x240-range = "447-447"
+        string measured-frame-rate-720x480-range = "214-214"
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-16384"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-491520"
+        int32_t feature-adaptive-playback = 0
+        string size-range = "2x2-2048x2048"
+      }
+
+Media type 'video/avs':
+  Decoder "c2.amlogic.avs.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-972000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "96x96-1920x1088"
+      }
+
+Media type 'video/avs2':
+  Decoder "c2.amlogic.avs2.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1944000"
+        int32_t feature-adaptive-playback = 0
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "96x96-3840x2160"
+      }
+
+Media type 'video/avs3':
+  Decoder "c2.amlogic.avs3.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1944000"
+        int32_t feature-adaptive-playback = 0
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-3840x2160"
+      }
+
+Media type 'video/dolby-vision':
+  Decoder "c2.amlogic.dolby-vision.dav1.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+       1024/  256 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-32400"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1944000"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-3840x3840"
+      }
+  Decoder "c2.amlogic.dolby-vision.dav1.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+       1024/  256 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-32400"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1944000"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-3840x3840"
+      }
+  Decoder "c2.amlogic.dolby-vision.dvav.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+        512/   16 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1036800"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.amlogic.dolby-vision.dvav.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+        512/   16 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1036800"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.amlogic.dolby-vision.dvhe.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+         16/  256 (??/??),
+         32/  256 (??/??),
+        256/  256 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.amlogic.dolby-vision.dvhe.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+         16/  256 (??/??),
+         32/  256 (??/??),
+        256/  256 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-4096x4096"
+      }
+
+Media type 'video/hevc':
+  Decoder "c2.amlogic.hevc.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/131072 (Main/High 5.1),
+          2/131072 (Main10/High 5.1),
+       4096/131072 (Main10HDR10/High 5.1),
+       8192/131072 (Main10HDR10Plus/High 5.1),
+          4/131072 (MainStill/High 5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "9"
+        string measured-frame-rate-1280x720-range = "225-225"
+        string measured-frame-rate-1920x1080-range = "434-435"
+        string measured-frame-rate-352x288-range = "222-223"
+        string measured-frame-rate-3840x2160-range = "155-156"
+        string measured-frame-rate-640x360-range = "223-223"
+        string measured-frame-rate-720x480-range = "224-224"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "128x128-4096x4096"
+      }
+  Decoder "c2.amlogic.hevc.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/131072 (Main/High 5.1),
+          2/131072 (Main10/High 5.1),
+       4096/131072 (Main10HDR10/High 5.1),
+       8192/131072 (Main10HDR10Plus/High 5.1),
+          4/131072 (MainStill/High 5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "128x128-4096x4096"
+      }
+  Decoder "c2.android.hevc.decoder" supports
+    aliases: [
+      "OMX.google.hevc.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/524288 (Main/High 5.2),
+          4/524288 (MainStill/High 5.2) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "109-110"
+        string measured-frame-rate-352x288-range = "400-400"
+        string measured-frame-rate-640x360-range = "251-251"
+        string measured-frame-rate-720x480-range = "228-228"
+        string alignment = "2x2"
+        string bitrate-range = "1-5000000"
+        string block-count-range = "1-65536"
+        string block-size = "8x8"
+        string blocks-per-second-range = "1-491520"
+        int32_t feature-adaptive-playback = 0
+        string size-range = "2x2-2048x2048"
+      }
+
+Media type 'video/mp4v-es':
+  Decoder "c2.amlogic.mpeg4.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/  128 (Simple/5),
+          2/  128 (SimpleScalable/5),
+          8/  128 (Main/5),
+         16/  128 (Nbit/5),
+       1024/  128 (AdvancedRealTime/5) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-489600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        string max-concurrent-instances = "9"
+        string measured-frame-rate-176x144-range = "189-190"
+        string measured-frame-rate-480x360-range = "189-190"
+        string performance-point-480x360-range = "60-60"
+        string size-range = "96x96-1920x1920"
+      }
+  Decoder "c2.android.mpeg4.decoder" supports
+    aliases: [
+      "OMX.google.mpeg4.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/  256 (Simple/6) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-14400"
+        string blocks-per-second-range = "1-432000"
+        int32_t feature-adaptive-playback = 0
+        string measured-frame-rate-1280x720-range = "231-231"
+        string measured-frame-rate-176x144-range = "1263-1263"
+        string measured-frame-rate-480x360-range = "717-717"
+        string size-range = "2x2-1920x1920"
+      }
+
+Media type 'video/mpeg2':
+  Decoder "c2.amlogic.mpeg2.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    4 (Simple/HP),
+          1/    4 (Main/HP),
+          3/    4 (SNR/HP),
+          4/    4 (Spatial/HP),
+          5/    4 (High/HP) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-489600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "9"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "96x96-1920x1920"
+      }
+  Decoder "c2.amlogic.mpeg2.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    4 (Simple/HP),
+          1/    4 (Main/HP),
+          3/    4 (SNR/HP),
+          4/    4 (Spatial/HP),
+          5/    4 (High/HP) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-489600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "96x96-1920x1920"
+      }
+
+Media type 'video/rm10':
+  Decoder "c2.amlogic.rm10.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/rm20':
+  Decoder "c2.amlogic.rm20.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/rm30':
+  Decoder "c2.amlogic.rm30.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/rm40':
+  Decoder "c2.amlogic.rm40.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/vc1':
+  Decoder "c2.amlogic.vc1.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-972000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "1"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "96x96-1920x1088"
+      }
+  Decoder "c2.amlogic.vc1.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-20000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1280x720-range = "60-60"
+        string size-range = "2x2-1280x720"
+      }
+
+Media type 'video/vvc':
+  Decoder "c2.amlogic.vvc.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "9"
+        string performance-point-1920x1088-range = "60-60"
+        string performance-point-3840x2160-range = "30-30"
+        string size-range = "128x128-4096x4096"
+      }
+  Decoder "c2.amlogic.vvc.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34560"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2073600"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1088-range = "60-60"
+        string performance-point-3840x2160-range = "30-30"
+        string size-range = "128x128-4096x4096"
+      }
+
+Media type 'video/wmv1':
+  Decoder "c2.amlogic.wmv1.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/wmv2':
+  Decoder "c2.amlogic.wmv2.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/wmv3':
+  Decoder "c2.amlogic.wmv3.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/x-motion-jpeg':
+  Decoder "c2.amlogic.mjpeg.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          0/    0 (??/??) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-489600"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "9"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "96x96-1920x1920"
+      }
+
+Media type 'video/x-vnd.on2.vp6a':
+  Decoder "c2.amlogic.vp6a.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/x-vnd.on2.vp6f':
+  Decoder "c2.amlogic.vp6f.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: []
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-1920x1080-range = "60-60"
+        string size-range = "2x2-1920x1088"
+      }
+
+Media type 'video/x-vnd.on2.vp8':
+  Decoder "c2.amlogic.vp8.decoder.sw" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/    1 (Main/V0) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8160"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-500000"
+        int32_t feature-adaptive-playback = 0
+        string max-concurrent-instances = "2"
+        string measured-frame-rate-1280x720-range = "101-102"
+        string measured-frame-rate-1920x1080-range = "44-45"
+        string measured-frame-rate-320x180-range = "501-504"
+        string measured-frame-rate-640x360-range = "150-150"
+        string performance-point-1920x1080-range = "30-30"
+        string size-range = "2x2-2048x2048"
+      }
+  Decoder "c2.android.vp8.decoder" supports
+    aliases: [
+      "OMX.google.vp8.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/    1 (Main/V0) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "61-61"
+        string measured-frame-rate-1920x1080-range = "25-25"
+        string measured-frame-rate-320x180-range = "611-611"
+        string measured-frame-rate-640x360-range = "227-227"
+        string alignment = "1x1"
+        string bitrate-range = "1-40000000"
+        string block-count-range = "1-8192"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-1000000"
+        int32_t feature-adaptive-playback = 0
+        string size-range = "2x2-2048x2048"
+      }
+
+Media type 'video/x-vnd.on2.vp9':
+  Decoder "c2.amlogic.vp9.decoder" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/  512 (0/5.1),
+          4/  512 (2/5.1),
+       4096/  512 (2HDR/5.1),
+      16384/  512 (2HDRPlus/5.1),
+          8/  512 (3/5.1),
+       8192/  512 (3HDR/5.1),
+      32768/  512 (3HDRPlus/5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34816"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2304960"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-low-latency = 0
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "9"
+        string measured-frame-rate-1280x720-range = "304-305"
+        string measured-frame-rate-1920x1080-range = "303-304"
+        string measured-frame-rate-320x180-range = "303-304"
+        string measured-frame-rate-3840x2160-range = "120-121"
+        string measured-frame-rate-640x360-range = "303-304"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.amlogic.vp9.decoder.secure" supports
+    aliases: []
+    attributes: 0xa: [
+      encoder: 0,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/  512 (0/5.1),
+          4/  512 (2/5.1),
+       4096/  512 (2HDR/5.1),
+      16384/  512 (2HDRPlus/5.1),
+          8/  512 (3/5.1),
+       8192/  512 (3HDR/5.1),
+      32768/  512 (3HDRPlus/5.1) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "2x2"
+        string bitrate-range = "1-300000000"
+        string block-count-range = "1-34816"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-2304960"
+        int32_t feature-adaptive-playback = 0
+        int32_t feature-secure-playback = 1
+        int32_t feature-tunneled-playback = 0
+        string max-concurrent-instances = "2"
+        string performance-point-3840x2160-range = "60-60"
+        string size-range = "96x96-4096x4096"
+      }
+  Decoder "c2.android.vp9.decoder" supports
+    aliases: [
+      "OMX.google.vp9.decoder" ]
+    attributes: 0x4: [
+      encoder: 0,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/  256 (0/5),
+          4/  256 (2/5),
+       4096/  256 (2HDR/5),
+      16384/  256 (2HDRPlus/5) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface),
+      0x36 (YUVP010) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "114-114"
+        string measured-frame-rate-320x180-range = "472-472"
+        string measured-frame-rate-640x360-range = "258-259"
+        string alignment = "1x1"
+        string bitrate-range = "1-5000000"
+        string block-count-range = "1-3600"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-108000"
+        int32_t feature-adaptive-playback = 0
+        string size-range = "2x2-1280x1280"
+      }
+
+
+Encoder infos by media types:
+=============================
+
+Media type 'audio/3gpp':
+  Encoder "c2.android.amrnb.encoder" supports
+    aliases: [
+      "OMX.google.amrnb.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "4750-12200"
+        string feature-bitrate-modes = "CBR"
+        string max-channel-count = "1"
+        string sample-rate-ranges = "8000"
+      }
+
+Media type 'audio/amr-wb':
+  Encoder "c2.android.amrwb.encoder" supports
+    aliases: [
+      "OMX.google.amrwb.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "6600-23850"
+        string feature-bitrate-modes = "CBR"
+        string max-channel-count = "1"
+        string sample-rate-ranges = "16000"
+      }
+
+Media type 'audio/flac':
+  Encoder "c2.android.flac.encoder" supports
+    aliases: [
+      "OMX.google.flac.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "1-21000000"
+        string complexity-default = "5"
+        string complexity-range = "0-8"
+        string feature-bitrate-modes = "CQ"
+        string max-channel-count = "2"
+        string sample-rate-ranges = "1-655350"
+      }
+
+Media type 'audio/mp4a-latm':
+  Encoder "c2.android.aac.encoder" supports
+    aliases: [
+      "OMX.google.aac.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: [
+          2/    0 (LC/??),
+          5/    0 (HE/??),
+         29/    0 (HE_PS/??),
+         23/    0 (LD/??),
+         39/    0 (ELD/??) ]
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "8000-960000"
+        string max-channel-count = "6"
+        string sample-rate-ranges = "8000,11025,12000,16000,22050,24000,32000,44100,48000"
+      }
+
+Media type 'audio/opus':
+  Encoder "c2.android.opus.encoder" supports
+    aliases: []
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 8
+    profile/levels: []
+    colors: []
+    details: AMessage(what = 0x00000000) = {
+        string bitrate-range = "500-512000"
+        string complexity-default = "5"
+        string complexity-range = "0-10"
+        string feature-bitrate-modes = "CBR,VBR"
+        string max-channel-count = "2"
+        string sample-rate-ranges = "8000,12000,16000,24000,48000"
+      }
+
+Media type 'video/3gpp':
+  Encoder "c2.android.h263.encoder" supports
+    aliases: [
+      "OMX.google.h263.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/   16 (Baseline/45),
+          1/    8 (Baseline/40) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "16x16"
+        string bitrate-range = "1-128000"
+        string measured-frame-rate-176x144-range = "450-450"
+        string size-range = "176x144-176x144"
+      }
+
+Media type 'video/av01':
+  Encoder "c2.android.av1.encoder" supports
+    aliases: []
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/  512 (Main8/4.1),
+          2/  512 (Main10/4.1) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface),
+      0x36 (YUVP010) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "17-18"
+        string measured-frame-rate-1920x1080-range = "6-6"
+        string measured-frame-rate-320x180-range = "74-74"
+        string measured-frame-rate-640x360-range = "38-38"
+        string measured-frame-rate-720x480-range = "5-10"
+        string alignment = "2x2"
+        string bitrate-range = "1-5000000"
+        string block-count-range = "1-1350"
+        string block-size = "16x16"
+        string complexity-default = "0"
+        string complexity-range = "0-5"
+        string feature-bitrate-modes = "VBR,CBR,CQ"
+        string quality-default = "80"
+        string quality-range = "0-100"
+        string quality-scale = "linear"
+        string size-range = "2x2-720x720"
+      }
+
+Media type 'video/avc':
+  Encoder "c2.amlogic.avc.encoder" supports
+    aliases: []
+    attributes: 0xb: [
+      encoder: 1,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/16384 (Baseline/5),
+          2/16384 (Main/5) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "16x16"
+        string bitrate-range = "1-20000000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-244800"
+        string max-concurrent-instances = "3"
+        string measured-frame-rate-1280x720-range = "77-78"
+        string measured-frame-rate-320x240-range = "300-525"
+        string measured-frame-rate-720x480-range = "185-186"
+        string performance-point-1280x720-range = "30-30"
+        string size-range = "176x144-3840x2160"
+      }
+  Encoder "c2.android.avc.encoder" supports
+    aliases: [
+      "OMX.google.h264.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/16384 (Baseline/5),
+      65536/16384 (ConstrainedBaseline/5),
+          2/16384 (Main/5) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "60-60"
+        string measured-frame-rate-1920x1080-range = "30-30"
+        string measured-frame-rate-320x240-range = "240-290"
+        string measured-frame-rate-720x480-range = "160-190"
+        string alignment = "2x2"
+        string bitrate-range = "1-2000000"
+        string block-count-range = "1-1620"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-40500"
+        int32_t feature-intra-refresh = 0
+        int32_t feature-qp-bounds = 0
+        string size-range = "16x16-1808x1808"
+      }
+
+Media type 'video/hevc':
+  Encoder "c2.amlogic.hevc.encoder" supports
+    aliases: []
+    attributes: 0xb: [
+      encoder: 1,
+      vendor: 1,
+      software-only: 0,
+      hw-accelerated: 1 ]
+    owner: "codec2::default"
+    rank: 16
+    profile/levels: [
+          1/16777216 (Main/Main 6.2) ]
+    colors: [
+      0x7f000789 (Surface),
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "16x16"
+        string bitrate-range = "1-10000000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "1-244800"
+        string max-concurrent-instances = "3"
+        string measured-frame-rate-1280x720-range = "79-80"
+        string measured-frame-rate-320x240-range = "184-189"
+        string measured-frame-rate-720x480-range = "187-188"
+        string performance-point-1280x720-range = "30-30"
+        string size-range = "176x144-3840x2160"
+      }
+
+Media type 'video/mp4v-es':
+  Encoder "c2.android.mpeg4.encoder" supports
+    aliases: [
+      "OMX.google.mpeg4.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/    8 (Simple/2) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string alignment = "16x16"
+        string bitrate-range = "1-64000"
+        string block-size = "16x16"
+        string blocks-per-second-range = "12-1485"
+        string measured-frame-rate-176x144-range = "452-466"
+        string size-range = "16x16-176x144"
+      }
+
+Media type 'video/x-vnd.on2.vp8':
+  Encoder "c2.android.vp8.encoder" supports
+    aliases: [
+      "OMX.google.vp8.encoder" ]
+    attributes: 0x5: [
+      encoder: 1,
+      vendor: 0,
+      software-only: 1,
+      hw-accelerated: 0 ]
+    owner: "codec2::software"
+    rank: 512
+    profile/levels: [
+          1/    1 (Main/V0) ]
+    colors: [
+      0x7f420888 (YUV420Flexible),
+      0x13 (YUV420Planar),
+      0x15 (YUV420SemiPlanar),
+      0x14 (YUV420PackedPlanar),
+      0x27 (YUV420PackedSemiPlanar),
+      0x7f000789 (Surface) ]
+    details: AMessage(what = 0x00000000) = {
+        string measured-frame-rate-1280x720-range = "17-18"
+        string measured-frame-rate-1920x1080-range = "6-6"
+        string measured-frame-rate-320x180-range = "74-74"
+        string measured-frame-rate-640x360-range = "38-38"
+        string alignment = "2x2"
+        string bitrate-range = "1-20000000"
+        string block-count-range = "1-3600"
+        string block-size = "16x16"
+        string feature-bitrate-modes = "VBR,CBR"
+        string size-range = "2x2-1280x1280"
+      }
+
+ No media recorder client
+
+ Files opened and/or mapped:

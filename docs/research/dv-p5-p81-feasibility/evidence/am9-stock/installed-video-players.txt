@@ -1,0 +1,3 @@
+package:com.droidlogic.imageplayer
+package:org.videolan.vlc
+package:com.mxtech.videoplayer.ad

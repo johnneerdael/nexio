@@ -183,7 +183,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
     }
 
     @Test
-    fun assSsaTrackSelectionAfterPlayerInitDoesNotReinitializePlayback() {
+    fun assSsaTrackSelectionAfterPlayerInitReinitializesPlayback() {
         val adjustment = resolveAssSsaPipelineTrackAdjustment(
             desiredUseAssSsaPipeline = true,
             activePlayerUsesAssSsaRenderer = false,
@@ -191,7 +191,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
         )
 
         assertEquals(true, adjustment.overrideForCurrentStream)
-        assertFalse(adjustment.shouldReinitializePlayer)
+        assertTrue(adjustment.shouldReinitializePlayer)
     }
 
     private fun tracksFor(format: Format, selected: Boolean): Tracks {

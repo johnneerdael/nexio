@@ -39,6 +39,39 @@ fun cmakePath(path: String): String {
     }
 }
 
+fun parseVersionSegments(version: String): List<Int> {
+    return version.split('.', '-', '_')
+        .mapNotNull { segment -> segment.toIntOrNull() }
+}
+
+fun compareVersionSegments(left: List<Int>, right: List<Int>): Int {
+    val maxSize = maxOf(left.size, right.size)
+    for (index in 0 until maxSize) {
+        val leftValue = left.getOrElse(index) { 0 }
+        val rightValue = right.getOrElse(index) { 0 }
+        if (leftValue != rightValue) {
+            return leftValue.compareTo(rightValue)
+        }
+    }
+    return 0
+}
+
+fun locateLatestNdkRoot(sdkDir: String): File? {
+    val ndkDir = File(sdkDir, "ndk")
+    val installed = ndkDir.listFiles()?.filter(File::isDirectory).orEmpty()
+    return installed.maxWithOrNull { left, right ->
+        val versionCompare = compareVersionSegments(
+            parseVersionSegments(left.name),
+            parseVersionSegments(right.name)
+        )
+        if (versionCompare != 0) {
+            versionCompare
+        } else {
+            left.name.compareTo(right.name)
+        }
+    }
+}
+
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
@@ -52,6 +85,9 @@ val devProperties = Properties().apply {
         load(devPropertiesFile.inputStream())
     }
 }
+
+val androidSdkDir = resolveProperty(devProperties, localProperties, "sdk.dir")
+val androidNdkRoot = androidSdkDir.takeIf { it.isNotBlank() }?.let(::locateLatestNdkRoot)
 
 val enableDoviNative = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "DOVI_NATIVE_ENABLED")
@@ -355,6 +391,50 @@ val syncFilteredMainAssets by tasks.registering(Sync::class) {
     into(filteredMainAssetsDir)
 }
 
+val generatedShadercJniLibsDir = layout.buildDirectory.dir("generated/jniLibs/shaderc")
+val syncShadercRuntimeJniLibs by tasks.registering(Sync::class) {
+    // FFmpeg's libavfilter/libswscale keep a runtime NEEDED on libshaderc_shared.so
+    // when the staged libplacebo toolchain is enabled. If the shared runtime is
+    // missing from the APK, ffmpegJNI fails to load and every native probe
+    // returns null before JNI is entered.
+    from(rootProject.file("third_party/libplacebo-prebuilt-v7.360.0")) {
+        include("*/lib/libshaderc_shared.so")
+        eachFile {
+            val abi = path.substringBefore('/')
+            path = "$abi/$name"
+        }
+        includeEmptyDirs = false
+    }
+    into(generatedShadercJniLibsDir)
+}
+
+val generatedCxxRuntimeJniLibsDir = layout.buildDirectory.dir("generated/jniLibs/cxxRuntime")
+val syncCxxRuntimeJniLibs by tasks.registering(Sync::class) {
+    val abiToTriple = mapOf(
+        "armeabi-v7a" to "arm-linux-androideabi",
+        "arm64-v8a" to "aarch64-linux-android",
+        "x86" to "i686-linux-android",
+        "x86_64" to "x86_64-linux-android"
+    )
+    androidNdkRoot?.let { ndkRoot ->
+        abiToTriple.forEach { (abi, triple) ->
+            val sharedRuntime = ndkRoot.resolve(
+                "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/$triple/libc++_shared.so"
+            )
+            if (sharedRuntime.exists()) {
+                from(sharedRuntime) {
+                    into(abi)
+                }
+            }
+        }
+    }
+    into(generatedCxxRuntimeJniLibsDir)
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(syncShadercRuntimeJniLibs, syncCxxRuntimeJniLibs)
+}
+
 android {
     namespace = "com.nexio.tv"
     compileSdk = 36
@@ -531,7 +611,9 @@ android {
         getByName("main") {
             jniLibs.srcDirs(
                 "src/main/_jni_disabled",
-                "src/main/jniLibs"
+                "src/main/jniLibs",
+                generatedShadercJniLibsDir,
+                generatedCxxRuntimeJniLibsDir
             )
             assets.setSrcDirs(listOf(syncFilteredMainAssets))
         }
@@ -545,6 +627,7 @@ android {
                 "lib/*/libavcodec.so",
                 "lib/*/libavformat.so",
                 "lib/*/libavutil.so",
+                "lib/*/libshaderc_shared.so",
                 "lib/*/libswscale.so",
                 "lib/*/libswresample.so"
             )

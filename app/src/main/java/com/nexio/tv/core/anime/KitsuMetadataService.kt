@@ -41,10 +41,7 @@ class KitsuMetadataService @Inject constructor(
             val animeId = AnimeStremioId.parse(rawId) ?: return@withContext null
             val kitsuId = when (animeId.source) {
                 AnimeIdSource.KITSU -> animeId.value
-                else -> {
-                    if (!kitsuAuthService.providerAuthenticated()) return@withContext null
-                    idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
-                }
+                else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
             }
             val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
             val response = runCatching {
@@ -80,10 +77,7 @@ class KitsuMetadataService @Inject constructor(
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext emptyMap()
         val kitsuId = when (animeId.source) {
             AnimeIdSource.KITSU -> animeId.value
-            else -> {
-                if (!kitsuAuthService.providerAuthenticated()) return@withContext emptyMap()
-                idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
-            }
+            else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
         }
         val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
         val episodes = fetchEpisodePages(authorization, kitsuId, rawId)

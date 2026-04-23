@@ -296,6 +296,10 @@ internal class AssSsaRenderController(
         renderLoopScheduled
     }
 
+    fun selectedTrackIdForTranslation(): Int? = synchronized(stateLock) {
+        selectedTrackId
+    }
+
     // Test hook; production rendering is scheduled through renderRunnable on the main thread.
     internal fun renderCurrentFrameForTesting() {
         renderCurrentFrame()

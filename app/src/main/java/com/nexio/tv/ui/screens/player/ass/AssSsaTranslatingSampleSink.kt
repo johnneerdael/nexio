@@ -13,6 +13,8 @@ internal class AssSsaTranslatingSampleSink(
     private val downstream: AssSsaSampleSink,
     private val scope: CoroutineScope,
     private val isEnabled: () -> Boolean,
+    private val isPlaybackActive: () -> Boolean = { true },
+    private val selectedTrackIdProvider: () -> Int? = { null },
     private val useSystemPromptTranslation: () -> Boolean,
     private val translate: suspend (List<AssSsaProtectedTranslationUnit>) -> Map<String, String>,
     private val translateRawAssSsa: suspend (String) -> String,
@@ -37,6 +39,22 @@ internal class AssSsaTranslatingSampleSink(
             return
         }
 
+        if (!shouldTranslateTrack(trackId)) {
+            diagnosticsLogger.log(
+                "sample_emit_original reason=inactive_track track=$trackId selectedTrack=${selectedTrackIdProvider()}"
+            )
+            downstream.onSubtitleSample(trackId, timeUs, data)
+            return
+        }
+
+        if (!isPlaybackActive()) {
+            diagnosticsLogger.log(
+                "sample_emit_original reason=playback_inactive track=$trackId timeUs=$timeUs"
+            )
+            downstream.onSubtitleSample(trackId, timeUs, data)
+            return
+        }
+
         val text = data.decodeToString()
         if (useSystemPromptTranslation()) {
             diagnosticsLogger.log(
@@ -45,14 +63,28 @@ internal class AssSsaTranslatingSampleSink(
             )
             diagnosticsLogger.logUnsafe("sample_raw_ass_source track=$trackId timeUs=$timeUs", text)
             scope.launch {
+                if (!canEmitTranslatedSample(trackId)) {
+                    diagnosticsLogger.log(
+                        "sample_emit_original reason=playback_changed mode=raw_ass track=$trackId timeUs=$timeUs"
+                    )
+                    downstream.onSubtitleSample(trackId, timeUs, data)
+                    return@launch
+                }
                 val translatedSample = runCatching {
                     translateRawAssSsa(text)
                 }.onFailure { error ->
                     diagnosticsLogger.log(
                         "sample_translate_failed mode=raw_ass track=$trackId timeUs=$timeUs " +
-                            "error=${error::class.simpleName}:${error.message}"
+                        "error=${error::class.simpleName}:${error.message}"
                     )
                 }.getOrDefault(text)
+                if (!canEmitTranslatedSample(trackId)) {
+                    diagnosticsLogger.log(
+                        "sample_emit_original reason=playback_changed mode=raw_ass track=$trackId timeUs=$timeUs"
+                    )
+                    downstream.onSubtitleSample(trackId, timeUs, data)
+                    return@launch
+                }
                 diagnosticsLogger.log(
                     "sample_emit_${if (translatedSample == text) "original" else "translated"} mode=raw_ass " +
                         "track=$trackId timeUs=$timeUs sourceBytes=${data.size} translatedBytes=${translatedSample.toByteArray().size} " +
@@ -105,14 +137,28 @@ internal class AssSsaTranslatingSampleSink(
                 downstream.onSubtitleSample(trackId, timeUs, data)
                 return@launch
             }
+            if (!canEmitTranslatedSample(trackId)) {
+                diagnosticsLogger.log(
+                    "sample_emit_original reason=playback_changed mode=protected track=$trackId timeUs=$timeUs"
+                )
+                downstream.onSubtitleSample(trackId, timeUs, data)
+                return@launch
+            }
             val translated = runCatching {
                 translate(translatableUnits)
             }.onFailure { error ->
                 diagnosticsLogger.log(
                     "sample_translate_failed mode=protected track=$trackId timeUs=$timeUs " +
-                        "error=${error::class.simpleName}:${error.message}"
+                    "error=${error::class.simpleName}:${error.message}"
                 )
             }.getOrDefault(emptyMap())
+            if (!canEmitTranslatedSample(trackId)) {
+                diagnosticsLogger.log(
+                    "sample_emit_original reason=playback_changed mode=protected track=$trackId timeUs=$timeUs"
+                )
+                downstream.onSubtitleSample(trackId, timeUs, data)
+                return@launch
+            }
             val translatedLines = records.mapIndexed { index, record ->
                 val unitId = "evt_$index"
                 val unit = unitsById[index].second
@@ -139,5 +185,14 @@ internal class AssSsaTranslatingSampleSink(
 
     override fun onFontAttachment(name: String, data: ByteArray) {
         downstream.onFontAttachment(name, data)
+    }
+
+    private fun shouldTranslateTrack(trackId: Int): Boolean {
+        val selectedTrackId = selectedTrackIdProvider()
+        return selectedTrackId == null || selectedTrackId == trackId
+    }
+
+    private fun canEmitTranslatedSample(trackId: Int): Boolean {
+        return isEnabled() && isPlaybackActive() && shouldTranslateTrack(trackId)
     }
 }

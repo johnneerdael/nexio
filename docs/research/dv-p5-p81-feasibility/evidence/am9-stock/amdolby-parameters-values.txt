@@ -1,0 +1,2 @@
+### /sys/module/amdolby_vision/parameters/*
+cat: /sys/module/amdolby_vision/parameters/*: No such file or directory

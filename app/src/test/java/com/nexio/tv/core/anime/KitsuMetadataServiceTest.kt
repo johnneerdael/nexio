@@ -46,8 +46,6 @@ class KitsuMetadataServiceTest {
         val service = KitsuMetadataService(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.MAL, "5114"), ContentMediaKind.SERIES) } returns "3936"
-        coEvery { auth.providerEnabled() } returns true
-        coEvery { auth.providerAuthenticated() } returns true
         coEvery { auth.validAccessToken() } returns null
         coEvery { api.getAnime(null, "3936", "categories,mediaRelationships.destination") } returns Response.success(
             KitsuResourceResponse(
@@ -113,8 +111,6 @@ class KitsuMetadataServiceTest {
         val service = KitsuMetadataService(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
-        coEvery { auth.providerEnabled() } returns true
-        coEvery { auth.providerAuthenticated() } returns true
         coEvery { auth.validAccessToken() } returns null
         coEvery { api.getAnimeEpisodes(null, "1", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
@@ -653,5 +649,59 @@ class KitsuMetadataServiceTest {
 
         assertEquals("Fullmetal Alchemist: Brotherhood", enrichment?.localizedTitle)
         coVerify(exactly = 1) { api.getAnime(null, "3936", any()) }
+    }
+
+    @Test
+    fun `fetchEnrichment resolves mapped imdb anime ids without authentication`() = runTest {
+        val api = mockk<KitsuApi>()
+        val mapper = mockk<AnimeIdMappingService>()
+        val auth = mockk<KitsuAuthService>()
+        val service = KitsuMetadataService(api, mapper, auth)
+
+        coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.IMDB, "tt1480925"), ContentMediaKind.SERIES) } returns "3919"
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnime(null, "3919", any()) } returns Response.success(
+            KitsuResourceResponse(
+                data = KitsuAnimeResource(
+                    id = "3919",
+                    attributes = KitsuAnimeAttributes(canonicalTitle = "Bakemonogatari")
+                )
+            )
+        )
+
+        val enrichment = service.fetchEnrichment("tt1480925", ContentMediaKind.SERIES)
+
+        assertEquals("Bakemonogatari", enrichment?.localizedTitle)
+        coVerify(exactly = 1) { api.getAnime(null, "3919", any()) }
+    }
+
+    @Test
+    fun `fetchEpisodeEnrichment resolves mapped imdb anime ids without authentication`() = runTest {
+        val api = mockk<KitsuApi>()
+        val mapper = mockk<AnimeIdMappingService>()
+        val auth = mockk<KitsuAuthService>()
+        val service = KitsuMetadataService(api, mapper, auth)
+
+        coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.IMDB, "tt1480925"), ContentMediaKind.SERIES) } returns "3919"
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnimeEpisodes(null, "3919", 20, 0) } returns Response.success(
+            KitsuCollectionResponse(
+                data = listOf(
+                    KitsuAnimeResource(
+                        id = "episode-1",
+                        attributes = KitsuAnimeAttributes(
+                            canonicalTitle = "Hitagi Crab, Part One",
+                            number = 1,
+                            seasonNumber = 1
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment("tt1480925", ContentMediaKind.SERIES, listOf(1))
+
+        assertEquals("Hitagi Crab, Part One", episodes[1 to 1]?.title)
+        coVerify(exactly = 1) { api.getAnimeEpisodes(null, "3919", 20, 0) }
     }
 }

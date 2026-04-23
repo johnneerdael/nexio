@@ -1,0 +1,157 @@
+Module                  Size  Used by
+aml_dhp                57344  2 
+video_framerate_adapter    20480  0 
+amvdec_av1_t5d_v4l    225280  0 
+amvdec_av1_v4l        245760  0 
+amvdec_av1            204800  0 
+amvdec_mavs_v4l        86016  0 
+amvdec_mavs            65536  0 
+memalloc               36864  0 
+vc8000                110592  0 
+amvenc_multi          139264  0 
+jpegenc                86016  0 
+encoder                94208  1 jpegenc
+encoder_common         20480  3 amvenc_multi,jpegenc,encoder
+amvdec_h266_v4l       942080  0 
+amvdec_h266           929792  0 
+amvdec_avs3_v4l       458752  0 
+amvdec_avs3           434176  0 
+amvdec_avs2_v4l       151552  0 
+amvdec_avs2           286720  0 
+amvdec_vp9_v4l        176128  0 
+amvdec_vp9            159744  0 
+amvdec_vc1_v4l        131072  0 
+amvdec_vc1            110592  0 
+amvdec_mmpeg4_v4l      69632  0 
+amvdec_mmpeg4          57344  0 
+amvdec_mmpeg12_v4l     94208  0 
+amvdec_mmpeg12         81920  0 
+amvdec_mmjpeg_v4l      53248  0 
+amvdec_mmjpeg          40960  0 
+amvdec_h265_v4l       237568  0 
+amvdec_h265           208896  0 
+amvdec_h264mvc         86016  0 
+amvdec_mh264_v4l      266240  0 
+amvdec_mh264          245760  0 
+amvdec_ports          442368  0 
+media_sync            258048  0 
+adla_core             249856  4 
+stream_input          274432  16 amvdec_mavs_v4l,amvdec_mavs,amvdec_h266_v4l,amvdec_h266,amvdec_avs3_v4l,amvdec_avs3,amvdec_avs2_v4l,amvdec_avs2,amvdec_mmpeg12_v4l,amvdec_mmpeg12,amvdec_h265_v4l,amvdec_h265,amvdec_mh264_v4l,amvdec_mh264,amvdec_ports,media_sync
+decoder_common        585728  32 video_framerate_adapter,amvdec_av1_t5d_v4l,amvdec_av1_v4l,amvdec_av1,amvdec_mavs_v4l,amvdec_mavs,amvenc_multi,jpegenc,encoder,amvdec_h266_v4l,amvdec_h266,amvdec_avs3_v4l,amvdec_avs3,amvdec_avs2_v4l,amvdec_avs2,amvdec_vp9_v4l,amvdec_vp9,amvdec_vc1_v4l,amvdec_vc1,amvdec_mmpeg4_v4l,amvdec_mmpeg4,amvdec_mmpeg12_v4l,amvdec_mmpeg12,amvdec_mmjpeg_v4l,amvdec_mmjpeg,amvdec_h265_v4l,amvdec_h265,amvdec_h264mvc,amvdec_mh264_v4l,amvdec_mh264,amvdec_ports,stream_input
+pts_server             77824  13 amvdec_mavs,amvdec_h266_v4l,amvdec_h266,amvdec_avs3,amvdec_avs2,amvdec_vp9,amvdec_mmpeg4,amvdec_mmpeg12,amvdec_mmjpeg,amvdec_h265,amvdec_mh264,amvdec_ports,stream_input
+firmware               45056  32 aml_dhp,amvdec_av1_t5d_v4l,amvdec_av1_v4l,amvdec_av1,amvdec_mavs_v4l,amvdec_mavs,jpegenc,encoder,amvdec_h266_v4l,amvdec_h266,amvdec_avs3_v4l,amvdec_avs3,amvdec_avs2_v4l,amvdec_avs2,amvdec_vp9_v4l,amvdec_vp9,amvdec_vc1_v4l,amvdec_vc1,amvdec_mmpeg4_v4l,amvdec_mmpeg4,amvdec_mmpeg12_v4l,amvdec_mmpeg12,amvdec_mmjpeg_v4l,amvdec_mmjpeg,amvdec_h265_v4l,amvdec_h265,amvdec_h264mvc,amvdec_mh264_v4l,amvdec_mh264,amvdec_ports,stream_input,decoder_common
+media_clock           114688  35 amvdec_av1_t5d_v4l,amvdec_av1_v4l,amvdec_av1,amvdec_mavs_v4l,amvdec_mavs,memalloc,vc8000,amvenc_multi,jpegenc,encoder,amvdec_h266_v4l,amvdec_h266,amvdec_avs3_v4l,amvdec_avs3,amvdec_avs2_v4l,amvdec_avs2,amvdec_vp9_v4l,amvdec_vp9,amvdec_vc1_v4l,amvdec_vc1,amvdec_mmpeg4_v4l,amvdec_mmpeg4,amvdec_mmpeg12_v4l,amvdec_mmpeg12,amvdec_mmjpeg_v4l,amvdec_mmjpeg,amvdec_h265_v4l,amvdec_h265,amvdec_h264mvc,amvdec_mh264_v4l,amvdec_mh264,amvdec_ports,stream_input,decoder_common,firmware
+dovi_s6_5_15_stb26    585728  0 
+mali_kbase           1355776  19 
+snd_aloop              45056  0 
+amlogic_pcie           73728  0 
+mac80211             1282048  0 
+libarc4                16384  1 mac80211
+cfg80211             1413120  1 mac80211
+amlogic_snd_codec_es8388    57344  1 
+amlogic_snd_codec_t9015    32768  0 
+amlogic_snd_soc      1093632  19 amlogic_snd_codec_t9015
+amlogic_snd_codec_dummy    20480  1 
+amlogic_usb_cam        53248  0 
+amlogic_seckey         86016  0 
+dwmac_dwc_qos_eth      24576  0 
+dwmac_meson8b          40960  0 
+dwmac_meson            20480  0 
+stmmac_platform        24576  3 dwmac_dwc_qos_eth,dwmac_meson8b,dwmac_meson
+stmmac                438272  4 dwmac_dwc_qos_eth,dwmac_meson8b,dwmac_meson,stmmac_platform
+amlogic_maxio          24576  0 
+amlogic_realtek        40960  1 
+amlogic_mdio_g12a      28672  1 dwmac_meson8b
+amlogic_host           65536  0 
+amlogic_socinfo        36864  0 
+adc_power              20480  0 
+typec_mux_gpio         20480  1 
+hwmonitor              40960  0 
+sysled_rgb             36864  0 
+amlogic_rtc            32768  0 
+dwc_otg               466944  0 [permanent]
+amlogic_dvb_ci        135168  0 
+amlogic_dummy_fe       36864  0 
+amlogic_dvb_demux     286720  1 media_sync
+leds_gpio              20480  0 
+videobuf_vmalloc       16384  0 
+v4l2_fwnode            24576  0 
+v4l2_async             32768  1 v4l2_fwnode
+i2c_dev                40960  0 
+rtc_hym8563            24576  0 
+fusb302                45056  0 
+r8153_ecm              20480  0 
+aqc111                 36864  0 
+cdc_ncm                53248  0 
+cdc_eem                20480  0 
+cdc_ether              32768  2 r8153_ecm,cdc_ncm
+ax88179_178a           45056  0 
+asix                   57344  0 
+usbnet                 69632  7 r8153_ecm,aqc111,cdc_ncm,cdc_eem,cdc_ether,ax88179_178a,asix
+r8152                 188416  1 r8153_ecm
+rtl8150                36864  0 
+mii                    24576  4 ax88179_178a,asix,usbnet,r8152
+pcs_xpcs               28672  1 stmmac
+mdio_mux               16384  2 amlogic_mdio_g12a
+system_heap            28672  29 [permanent]
+zram                   53248  2 
+ntfs3                 274432  0 
+zsmalloc               57344  1 zram
+sha1_ce                24576  0 
+amlogic_wireless       73728  0 
+rfkill                 49152  2 cfg80211,amlogic_wireless
+amlogic_crypto_dma    172032  0 
+hdr10_tmo_alg          24576  0 
+gdc_fw                 40960  0 
+dnlp_alg               77824  0 
+cuva_hdr_alg           40960  0 
+amlogic_fbc_lib        40960  0 
+protected_memory_allocator    20480  0 
+amlogic_audio_utils    28672  0 
+aml_erofs             196608  8 
+amlogic_amfc           57344  12 
+aml_drm               557056  2 hwmonitor
+amlogic_inphy          20480  2 dwmac_meson8b,amlogic_mdio_g12a
+amlogic_phy_debug      24576  5 dwmac_meson8b,stmmac,amlogic_maxio,amlogic_realtek,amlogic_inphy
+amlogic_irblaster      36864  0 
+amlogic_usb           995328  5 dwc_otg,[permanent]
+amlogic_camera         90112  0 
+aml_media           13008896  121 amvdec_av1_t5d_v4l,amvdec_av1_v4l,amvdec_av1,amvdec_mavs_v4l,amvdec_mavs,memalloc,vc8000,amvenc_multi,jpegenc,encoder,encoder_common,amvdec_h266_v4l,amvdec_h266,amvdec_avs3_v4l,amvdec_avs3,amvdec_avs2_v4l,amvdec_avs2,amvdec_vp9_v4l,amvdec_vp9,amvdec_vc1_v4l,amvdec_vc1,amvdec_mmpeg4_v4l,amvdec_mmpeg4,amvdec_mmpeg12_v4l,amvdec_mmpeg12,amvdec_mmjpeg_v4l,amvdec_mmjpeg,amvdec_h265_v4l,amvdec_h265,amvdec_h264mvc,amvdec_mh264_v4l,amvdec_mh264,amvdec_ports,media_sync,stream_input,decoder_common,media_clock,dovi_s6_5_15_stb26,mali_kbase,amlogic_snd_soc,hwmonitor,amlogic_dvb_demux,hdr10_tmo_alg,gdc_fw,dnlp_alg,cuva_hdr_alg,amlogic_fbc_lib,aml_drm,amlogic_camera
+amlogic_dvb           245760  3 amlogic_dummy_fe,amlogic_dvb_demux,aml_media
+amlogic_watchdog       36864  0 
+amlogic_input         114688  0 
+amlogic_adc            77824  0 
+amlogic_pm             40960  9 amlogic_snd_soc,dwmac_meson8b,amlogic_host,sysled_rgb,dwc_otg,amlogic_wireless,amlogic_usb,aml_media,amlogic_input
+dvb_core              212992  4 amlogic_dvb_ci,amlogic_dvb_demux,aml_media,amlogic_dvb
+videobuf_core          45056  2 videobuf_vmalloc,aml_media
+aml_smmu               36864  0 [permanent]
+optee                  73728  5 
+amlogic_tee            40960  11 jpegenc,encoder,amvdec_vp9_v4l,amvdec_vp9,adla_core,decoder_common,firmware,amlogic_dvb_demux,protected_memory_allocator,aml_media,aml_smmu
+tee                   135168  13 adla_core,aml_media,optee,amlogic_tee
+amlogic_rng            20480  0 
+amlogic_spi            98304  0 
+amlogic_i2c            32768  0 
+amlogic_efuse_unifykey   139264  2 amlogic_snd_soc,aml_media
+amlogic_mmc           147456  2 amlogic_wireless,amlogic_efuse_unifykey
+cqhci                  40960  1 amlogic_mmc
+amlogic_thermal        86016  1 mali_kbase
+amlogic_cpufreq        57344  0 
+amlogic_power          53248  6 jpegenc,encoder,decoder_common,aml_media,amlogic_input,amlogic_pm
+amlogic_reset          24576  5 
+gpio_regulator         20480  1 
+pwm_regulator          20480  1 
+amlogic_pwm            45056  5 amlogic_wireless,aml_media
+amlogic_mailbox        61440  7 
+amlogic_pinctrl_soc_s6   110592  18 [permanent]
+amlogic_gpio           73728  76 amlogic_snd_soc,amlogic_dvb,amlogic_input,amlogic_pinctrl_soc_s6
+amlogic_aoclk_soc_t5w    20480  0 [permanent]
+amlogic_clk_soc_s6    167936  75 [permanent]
+amlogic_clk           126976  3 aml_media,amlogic_aoclk_soc_t5w,amlogic_clk_soc_s6
+clk_scmi               20480  4 
+aml_cma                49152  0 
+amlogic_memory_debug    98304  0 
+amlogic_cpuinfo        16384  20 amvdec_av1_t5d_v4l,amvdec_av1,encoder,amvdec_mh264_v4l,amvdec_ports,adla_core,stream_input,decoder_common,media_clock,dovi_s6_5_15_stb26,mali_kbase,amlogic_pcie,amlogic_snd_soc,amlogic_dvb_demux,aml_erofs,amlogic_amfc,aml_drm,amlogic_usb,aml_media,amlogic_dvb,[permanent]
+amlogic_secmon         57344  7 amlogic_snd_soc,amlogic_socinfo,amlogic_dvb,amlogic_tee,amlogic_efuse_unifykey,amlogic_thermal,amlogic_cpuinfo
+amlogic_gkitool        20480  28 adla_core,amlogic_pcie,amlogic_seckey,sysled_rgb,amlogic_rtc,dwc_otg,amlogic_wireless,amlogic_amfc,aml_drm,amlogic_usb,aml_media,amlogic_dvb,amlogic_watchdog,amlogic_input,amlogic_adc,amlogic_pm,amlogic_efuse_unifykey,amlogic_mmc,amlogic_thermal,amlogic_cpufreq,amlogic_power,amlogic_reset,amlogic_pwm,amlogic_gpio,amlogic_clk,aml_cma,amlogic_memory_debug,amlogic_secmon
+amlogic_hwspinlock     20480  0 
+amlogic_uart           36864  0 

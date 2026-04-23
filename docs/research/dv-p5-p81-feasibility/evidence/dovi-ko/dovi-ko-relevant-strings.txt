@@ -1,0 +1,155 @@
+(!outputUnkFld && !extLen) || (outputUnkFld && (int)extLen == hDm->trim10UnkFldLens[trimIdx])
+dmp->signal_bit_depth
+dmp->num_ext_blocks
+The rpu stream violates the spatial filter and mode limitations
+6[dovi_gen_5_15_2026]: Error malloc h_md_parser
+6[dovi_gen_5_15_2026]: metadata_parser_reset null param
+efrc->rpu_VDR_bit_depth
+RPU ID %d not available
+../dolby_vision/dv_source_code/libs/dm/dlb_dm_process/src/CdmCmmtFxp.c
+!pDmCfg->dmCtrl.IsSink
+RPU warning INVALID LEVEL: num_y_partitions = %d, level limit            = %d
+RPU warning INVALID LEVEL: prev_vdr_rpu_id  = %d limits.prev_rpu_id      = %d
+RPU_ERR_NONE
+RPU Error: RPU type: %d not supported
+(!outputUnkFld && !extLen) || (outputUnkFld && (int)extLen == hDm->trim8UnkFldLens[trimIdx])
+../dolby_vision/dv_source_code/libs/vdr_rpu/src/rpu_decoder.c
+6[dovi_gen_5_15_2026]: Error malloc app_ctx_t
+dmp->source_min_PQ
+Wrong RPU version number
+UpdateDmCfgSt
+6[dovi_gen_5_15_2026]: dv_md_parser_reset(rc='%s') failed
+6[dovi_gen_5_15_2026]: %s
+6[dovi_gen_5_15_2026]: *** amlogic_dolby_vision_exit ***
+RPU Error: Only fixed coefficient data type supported.
+hDm->cmsCtrl.vs10ModeTm == CVs10ModeGpm
+The rpu stream violates the level limitations
+dmp->source_max_PQ
+Invalid RPU, skip frame
+6[dovi_gen_5_15_2026]: Error creating DV metadata parser
+6[dovi_gen_5_15_2026]: *** amlogic_dolby_vision_init dv: %s ***
+/mnt/fileroot/jialong.jiang/u_20250617/common/common14-5.15/common/../dolby_vision/dv_source_code/libs/vdr_rpu/src/dv_md_parser.c
+RPU warning INVALID LEVEL: nlq_num_pivots   = %d limits.nlq_num_pivots   = %d
+sigEnvIdx == pDmCfg->dmCtrl.PriInputIdx
+../dolby_vision/dv_source_code/libs/vdr_rpu/src/rpu_parser.c
+dmp->signal_eotf_param1
+The nalu input buffer is full. Increase NUM_RPU_BUFFERS?
+/mnt/fileroot/jialong.jiang/u_20250617/common/common14-5.15/common/../dolby_vision/dv_source_code/apps/edbec/src/control_path_api.c
+hDm->l11Len
+Commit2DmKs
+RPU warning INVALID LEVEL: vdr_rpu_id       = %d limits.prev_rpu_id      = %d
+DM metadata extension can be 1 or 2 only
+dmp->signal_eotf_param2
+6[dovi_gen_5_15_2026]: metadata_parser_process null param
+RPU warning INVALID LEVEL: num_pivots[%d]   = %d limits.num_pivots       = %d
+dmp->affected_dm_metadata_id
+dmp->current_dm_metadata_id
+invalid DM metadata extension size
+3[dovi_gen_5_15_2026]: Control exuecution library initialization failed
+6[dovi_gen_5_15_2026]: Creating DV mp success
+/mnt/fileroot/jialong.jiang/u_20250617/common/common14-5.15/common/../dolby_vision/dv_source_code/libs/vdr_rpu/src/rpu_decoder.c
+6[dovi_gen_5_15_2026]: comp_size too big
+6[dovi_gen_5_15_2026]: dv_md_parser_process %d:%02x,%02x (rc='%s') failed
+6[dovi_gen_5_15_2026]: dv_md_parser_init(rc='%s') failed)
+6[dovi_gen_5_15_2026]: md_size too big
+dmp->signal_eotf_param0
+RPU buffer:
+/mnt/fileroot/jialong.jiang/u_20250617/common/common14-5.15/common/../dolby_vision/dv_source_code/libs/vdr_rpu/src/rpu_parser.c
+../dolby_vision/dv_source_code/libs/dm/dlb_dm_process/src/CdmCfgFxp.c
+../dolby_vision/dv_source_code/libs/dm/dlb_dm_process/src/CdmMmg.c
+/mnt/fileroot/jialong.jiang/u_20250617/common/common14-5.15/common/../dolby_vision/dv_source_code/libs/vdr_rpu/src/rpu_common.c
+dmp->scene_refresh_flag
+dmp->signal_chroma_format
+The rpu stream violates the profile limitations
+ERROR: Found level %d extension with length %d. This is beyond the size of the rpu input buffer. The stream is corrupted.
+6[dovi_gen_5_15_2026]: Error malloc dm_byte_sequence
+../dolby_vision/dv_source_code/libs/dm/dlb_dm_process/src/CdmUtilFxp.c
+NUM_RPU_BUFFERS
+Dolby Vision metadata parser configured event notification callack is NULL
+Error: rpu_decoder_init failed: %s
+RPU warning INVALID LEVEL: num_x_partitions = %d limits.num_x_partitions = %d
+efrc->rpu_EL_bit_depth
+reserved_zero_3bits is set to 1, but no previous dm_payload found, using default values.
+6[dovi_gen_5_15_2026]: dv_md_parser_process failed %s
+dmp->ext_block[i].l.level_2.ms_weight
+efrc->rpu_BL_bit_depth
+ndM>
+'void (void *, enum _dv_md_parser_evt_e_, struct _timestamp_s_ *, struct rpu_data_header_s *, struct vdr_rpu_data_payload_s *, int, struct vdr_dm_data_payload_s *, int, int)'
+'void (rpu_print_severity_t, unsigned int, char *)'
+description=Amlogic Dolby Vision Driver
+name=dovi_gen_5_15_2026
+dovi_gen_5_15_2026
+rpu_decoder_mem_query
+dv_md_parser_get_rpu_dcd_ctx
+set_L11_hdmi_tx
+rpu_decoder_last_rpu_output
+rpu_decoder_get_output
+dst_dm_lut
+CommitCdm2KsFrmFmt
+metadata_parser_init.cfi_jt
+metadata_parser_reset.cfi_jt
+metadata_parser_process.cfi_jt
+metadata_parser_release.cfi_jt
+metadata_parser_init
+rpu_decoder_init
+metadata_parser_reset
+rpu_decoder_reset
+dm_rpu_payload_2_struct
+metadata_parser_process
+Commit2Dm3KsOMapBypass
+Commit2Dm3KsIMapBypass
+remove_dm_extensions
+update_dm_extensions
+append_dm_extensions
+Xyz2IctcpDm.m33Xyz2Lms
+InitDmKs
+GetHDmKs
+Commit2DmKs
+rpu_error_code_2_str
+vdr_rpu_get_algo_ver
+vdr_rpu_get_api_ver
+rpu_decoder_process_buffer
+get_hdmi_metadata_buffer
+__typeid__ZTSFvPv20_dv_md_parser_evt_e_P13_timestamp_s_P17rpu_data_header_sP22vdr_rpu_data_payload_siP21vdr_dm_data_payload_siiE_global_addr
+rpu_decoder_cleanup
+dump_rpu_buffer_info
+vdr_rpu_get_build_info
+GetGdActiveFltrdMean
+InitDm
+Xyz2IctcpDm
+InitDmCtrl
+GetDmCtrl
+InitCdmUtil
+rpu_decoder_flush
+set_i_dm_peak_stretch
+rpu_decoder_set_msg_log
+set_dovi2hdr10_mapping
+ConcatenatePriBwdMapping
+comp_rpu_2_main_cfg
+InitDmCfg
+GetHDmCfg
+get_dm_ctx_buf
+get_dm_ks_buf
+get_dm_kernel_buf
+md_hdmi_buf
+dm_metadata_buf
+metadata_parser_release
+dm_rpu_payload_2_byte_sequence
+dm_struct_2_rpu_payload
+validate_dm_payload
+rpu_decoder_push_2086_payload
+rpu_decoder_push_2094_payload
+rpu_header_read
+rpu_data_chroma_resampling_filter_1D_exp_read
+rpu_payload_read
+dm_data_payload_read
+src_comp_metadata
+get_dolby_control_data
+rpu_decoder_push_data
+rpu_decoder_push_VUI
+dmKs2dmreg_core3
+GetIctcpDm2LmsM33
+GetLms2IctcpDmM33
+rpu_crc32
+Xyz2IctcpDm.v3.1
+Xyz2IctcpDm.v3.0

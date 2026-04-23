@@ -15,8 +15,7 @@ data class FfmpegStreamMetadataProbeResult(
 ) {
     val hasEmbeddedAssSsaSubtitleStream: Boolean
         get() = streams.any { stream ->
-            stream.codecType.equals("subtitle", ignoreCase = true) &&
-                stream.codecName.normalizedCodecName() in ASS_SSA_SUBTITLE_CODECS
+            stream.isEmbeddedAssSsaSubtitleStream()
         }
 }
 
@@ -163,6 +162,17 @@ object FfmpegStreamMetadataProbe {
                         TAG,
                         "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
                             "url=$probeUrl streams=${parsed.streams.size}"
+                    )
+                    val subtitleSummary = parsed.streams
+                        .filter { stream -> stream.normalizedCodecType() == "subtitle" }
+                        .joinToString(prefix = "[", postfix = "]") { stream ->
+                            stream.codecName.normalizedCodecName().ifBlank { "<blank>" }
+                        }
+                    Log.i(
+                        TAG,
+                        "FFMPEG_PROBE_SUBTITLE_SUMMARY elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                            "url=$probeUrl hasEmbeddedAssSsa=${parsed.hasEmbeddedAssSsaSubtitleStream} " +
+                            "subtitleCodecs=$subtitleSummary"
                     )
                 }
                 parsed.also { cache[key] = it }
@@ -313,11 +323,30 @@ private val ASS_SSA_SUBTITLE_CODECS = setOf(
     "s_text/ssa"
 )
 
+private fun FfmpegStreamMetadata.normalizedCodecType(): String {
+    return codecType
+        .trim()
+        .lowercase(Locale.US)
+}
+
+private fun FfmpegStreamMetadata.isEmbeddedAssSsaSubtitleStream(): Boolean {
+    return normalizedCodecType() == "subtitle" && codecName.isAssSsaCodecName()
+}
+
 private fun String?.normalizedCodecName(): String {
     return this
         ?.trim()
         ?.lowercase(Locale.US)
         .orEmpty()
+}
+
+private fun String?.isAssSsaCodecName(): Boolean {
+    val normalized = normalizedCodecName()
+    return normalized in ASS_SSA_SUBTITLE_CODECS ||
+        normalized.startsWith("ass") ||
+        normalized.startsWith("ssa") ||
+        normalized.contains("s_text/ass") ||
+        normalized.contains("s_text/ssa")
 }
 
 private fun Map<String, String>.toProbeHeaderBlob(): String? {

@@ -1,0 +1,12 @@
+/sys/module/aml_media/parameters/amdv_reset
+/sys/module/aml_media/parameters/amdv_wait_on
+/sys/module/aml_media/parameters/amdv_graphic_min
+/sys/module/aml_media/parameters/amdv_run_mode
+/sys/module/aml_media/parameters/amdv_graphic_max
+/sys/module/aml_media/parameters/amdv_efuse_bypass
+/sys/module/aml_media/parameters/amdv_mask
+/sys/module/aml_media/parameters/amdv_tuning_mode
+/sys/module/aml_media/parameters/amdv_run_mode_delay
+/sys/module/aml_media/parameters/amdv_target_mode
+/sys/module/aml_media/parameters/amdv_wait_delay
+/sys/module/aml_media/parameters/amdv_reset_delay

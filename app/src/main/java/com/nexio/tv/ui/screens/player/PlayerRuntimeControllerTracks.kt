@@ -659,6 +659,17 @@ internal fun PlayerRuntimeController.maybeAdjustAssSsaPipelineForTracks(tracks: 
     _uiState.update {
         it.copy(useAssSsaRenderOverlay = desiredUseAssSsaPipeline && activePlayerUsesAssSsaRenderer)
     }
+    if (adjustment.shouldReinitializePlayer) {
+        assSsaPipelineSwitchInFlight = true
+        val fromPositionMs = backendCurrentPosition()
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "ASS_SSA_RENDER: selected after player init; reinitializing playback " +
+                "positionMs=$fromPositionMs"
+        )
+        scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+        return
+    }
     if (desiredUseAssSsaPipeline && !activePlayerUsesAssSsaRenderer && !adjustment.shouldReinitializePlayer) {
         Log.w(
             PlayerRuntimeController.TAG,

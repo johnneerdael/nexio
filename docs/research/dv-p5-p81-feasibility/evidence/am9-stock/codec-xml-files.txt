@@ -1,0 +1,14 @@
+/vendor/etc/media_codecs.xml
+/vendor/etc/media_codecs_amlogic_audio.xml
+/vendor/etc/media_codecs_amlogic_audio_ffmpeg.xml
+/vendor/etc/media_codecs_amlogic_dolby_vision.xml
+/vendor/etc/media_codecs_amlogic_encoder.xml
+/vendor/etc/media_codecs_amlogic_performance_dolby_vision.xml
+/vendor/etc/media_codecs_amlogic_performance_encoder.xml
+/vendor/etc/media_codecs_amlogic_performance_video.xml
+/vendor/etc/media_codecs_amlogic_performance_video_vvc.xml
+/vendor/etc/media_codecs_amlogic_video.xml
+/vendor/etc/media_codecs_amlogic_video_ext.xml
+/vendor/etc/media_codecs_amlogic_video_vvc.xml
+/vendor/etc/media_codecs_google_performance_video.xml
+/vendor/etc/media_codecs_performance.xml

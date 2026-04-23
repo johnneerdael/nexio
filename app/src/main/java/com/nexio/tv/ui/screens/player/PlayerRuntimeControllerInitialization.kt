@@ -150,7 +150,7 @@ internal fun resolveAssSsaPipelineTrackAdjustment(
     }
     return AssSsaPipelineTrackAdjustment(
         overrideForCurrentStream = desiredUseAssSsaPipeline,
-        shouldReinitializePlayer = false
+        shouldReinitializePlayer = desiredUseAssSsaPipeline && !activePlayerUsesAssSsaRenderer
     )
 }
 
@@ -651,6 +651,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             translationSettingsEnabled = subtitleTranslationSettings.enabled,
                             translationApiKeyPresent = subtitleTranslationSettings.apiKey.isNotBlank()
                         )
+                    },
+                    isPlaybackActive = {
+                        val player = _exoPlayer
+                        player != null && (
+                            player.playWhenReady ||
+                                player.playbackState == Player.STATE_BUFFERING
+                            )
+                    },
+                    selectedTrackIdProvider = {
+                        controller.selectedTrackIdForTranslation()
                     },
                     useSystemPromptTranslation = {
                         subtitleTranslationSettings.assSsaSystemPromptEnabled

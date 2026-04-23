@@ -1,0 +1,16 @@
+HDR10Plus Supported: 1
+HDR Static Metadata:
+    Supported EOTF:
+        Traditional SDR: 1
+        Traditional HDR: 0
+        SMPTE ST 2084: 1
+        Hybrid Log-Gamma: 1
+    Supported SMD type1: 1
+    Luminance Data
+        Max: 0
+        Avg: 0
+        Min: 0
+
+HDR Dynamic Metadata:
+
+colorimetry_data: 0

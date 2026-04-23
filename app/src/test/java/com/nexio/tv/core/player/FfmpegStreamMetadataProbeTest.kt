@@ -47,6 +47,21 @@ class FfmpegStreamMetadataProbeTest {
     }
 
     @Test
+    fun detectsEmbeddedAssSubtitleStreamsDespitePaddedCodecFields() {
+        val result = FfmpegStreamMetadataProbe.parseForTesting(
+            """
+            {
+              "streams": [
+                {"codec_type": " subtitle ", "codec_name": " ASS "}
+              ]
+            }
+            """.trimIndent()
+        )
+
+        assertTrue(result.hasEmbeddedAssSsaSubtitleStream)
+    }
+
+    @Test
     fun emptyNativeResultDoesNotPopulateCacheAndNextSuccessCanRecover() {
         var calls = 0
         FfmpegStreamMetadataProbe.setBackendForTesting(

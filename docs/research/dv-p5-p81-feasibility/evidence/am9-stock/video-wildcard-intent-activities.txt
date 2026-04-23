@@ -1,0 +1,13 @@
+4 activities found:
+  Activity #0:
+    priority=0 preferredOrder=0 match=0x608000 specificIndex=-1 isDefault=true
+    com.mxtech.videoplayer.ad/.ActivityScreen
+  Activity #1:
+    priority=0 preferredOrder=0 match=0x608000 specificIndex=-1 isDefault=true
+    com.mxtech.videoplayer.ad/.ActivityPipScreen
+  Activity #2:
+    priority=0 preferredOrder=0 match=0x608000 specificIndex=-1 isDefault=true
+    org.videolan.vlc/.StartActivity
+  Activity #3:
+    priority=0 preferredOrder=0 match=0x608000 specificIndex=-1 isDefault=true
+    videoeditor.videorecorder.screenrecorder/com.inshot.screenrecorder.activities.ShareEntryVideoEdit

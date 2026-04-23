@@ -4,11 +4,9 @@
 
 **Goal:** Add a native OpenSubtitles subtitle source to nexio that does not require the user to install the `opensubtitles-v3.strem.io` Stremio addon, and wire verified oshash-based matching end-to-end from AIOStreams-delivered playback URLs.
 
-**Architecture:** Use the credential-free legacy REST endpoint at `https://rest.opensubtitles.org/search/...` which returns clean JSON (`MovieHash`, `MovieByteSize`, `SubFromTrusted`, `SubAutoTranslation`, `SubDownloadLink` etc.) and supports IMDB **and** moviehash search natively. Wrap it in a new Kotlin `OpenSubtitlesApiClient`. Expose it through an `OpenSubtitlesSource` that `SubtitleRepositoryImpl` calls alongside installed addons. The existing `OpenSubtitlesHasher` (HTTP HEAD + two Range GETs) and the existing `currentVideoHash`/`currentVideoSize`/`currentFilename` pipeline in `PlayerRuntimeControllerObservers` are reused — no changes needed to the player or `AIOStreams` because `BehaviorHintsDto.videoSize/filename/videoHash` are already parsed from the AIOStreams output.
+**Architecture:** Port the authentication-free HTML scraping approach from `stremio-opensubtitles-pro` (browser User-Agent + `www.opensubtitles.org/libs/suggest.php` + HTML result table) into a new Kotlin `OpenSubtitlesScraperClient`. Expose it through an `OpenSubtitlesSource` that `SubtitleRepositoryImpl` calls alongside installed addons. The existing `OpenSubtitlesHasher` (HTTP HEAD + two Range GETs) and the existing `currentVideoHash`/`currentVideoSize`/`currentFilename` pipeline in `PlayerRuntimeControllerObservers` are reused — no changes needed to the player or `AIOStreams` because `BehaviorHintsDto.videoSize/filename/videoHash` are already parsed from the AIOStreams output.
 
-> **PIVOT NOTE (2026-04-21, captured during execution):** The original plan called for HTML scraping `www.opensubtitles.org` per the `stremio-opensubtitles-pro` reference. As of 2026-04-21 that domain redirects every request to a `techaro.lol-anubis` Cloudflare JS proof-of-work bot challenge — scraping is no longer viable from a server. `rest.opensubtitles.org` is wide open, returns a strict superset of the same fields, supports moviehash search server-side (`MatchedBy:"moviehash"`), and removes the need for Jsoup. All tasks have been re-grounded around this endpoint while keeping the file/test layout identical.
-
-**Tech Stack:** Kotlin, Jetpack Compose, Hilt, OkHttp 4.12, Retrofit 2.9 (moshi), Moshi 1.15 (codegen), DataStore Preferences, Media3 1.10, JUnit 4 + MockK 1.13 + MockWebServer, coroutines 1.8.
+**Tech Stack:** Kotlin, Jetpack Compose, Hilt, OkHttp 4.12, Retrofit 2.9 (moshi), Moshi 1.15 (codegen), Jsoup 1.17.2 (new), DataStore Preferences, Media3 1.10, JUnit 4 + MockK 1.13 + MockWebServer, coroutines 1.8.
 
 **Context for the implementer:**
 - Repo root: `/Users/jneerdael/Scripts/nexio`
@@ -29,9 +27,9 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `app/src/main/java/com/nexio/tv/data/remote/api/OpenSubtitlesApiClient.kt` | Low-level REST client: imdbid / hash / season+episode searches against rest.opensubtitles.org |
-| `app/src/main/java/com/nexio/tv/data/remote/dto/OpenSubtitlesRestSubtitleDto.kt` | Moshi DTO for one row of the `/search/...` JSON array |
-| `app/src/main/java/com/nexio/tv/data/remote/model/OpenSubtitlesSearchResult.kt` | Convenience domain row (subset of DTO + computed fields) |
+| `app/src/main/java/com/nexio/tv/data/remote/api/OpenSubtitlesScraperClient.kt` | Low-level scraper: suggest.php + search HTML + subtitle download/extract |
+| `app/src/main/java/com/nexio/tv/data/remote/dto/OpenSubtitlesSuggestDto.kt` | Moshi DTO for the `suggest.php?format=json3` payload |
+| `app/src/main/java/com/nexio/tv/data/remote/model/OpenSubtitlesSearchResult.kt` | Parsed scraper row: id, lang, filename, downloadUrl, fps, hash, downloads |
 | `app/src/main/java/com/nexio/tv/data/local/OpenSubtitlesPreferences.kt` | DataStore-backed: `enabled`, `onlyTrusted`, `includeAiTranslated` |
 | `app/src/main/java/com/nexio/tv/domain/repository/OpenSubtitlesSource.kt` | Interface: `fetch(type, id, videoId, hash, size, filename, languages): List<Subtitle>` |
 | `app/src/main/java/com/nexio/tv/data/repository/OpenSubtitlesSourceImpl.kt` | Repository: orchestrates scraper → filter → rank → convert to `Subtitle` |
@@ -42,6 +40,8 @@
 
 | Path | Change |
 |------|--------|
+| `gradle/libs.versions.toml` | Add `jsoup` version + library entry |
+| `app/build.gradle.kts` | Add `implementation(libs.jsoup)` |
 | `app/src/main/java/com/nexio/tv/core/di/NetworkModule.kt` | Provide `@Named("opensubtitles") OkHttpClient` with Mozilla UA |
 | `app/src/main/java/com/nexio/tv/core/di/RepositoryModule.kt` | Bind `OpenSubtitlesSource` → `OpenSubtitlesSourceImpl` |
 | `app/src/main/java/com/nexio/tv/data/repository/SubtitleRepositoryImpl.kt` | Inject `OpenSubtitlesSource`, `OpenSubtitlesPreferences`; merge results with addons |
@@ -51,8 +51,8 @@
 | Path | Scope |
 |------|-------|
 | `app/src/test/java/com/nexio/tv/core/player/OpenSubtitlesHasherTest.kt` | Hasher reference vectors via MockWebServer |
-| `app/src/test/java/com/nexio/tv/data/remote/api/OpenSubtitlesApiClientTest.kt` | REST JSON parsing with fixtures (MockWebServer) |
-| `app/src/test/java/com/nexio/tv/data/repository/OpenSubtitlesSourceImplTest.kt` | End-to-end: search → filter → Subtitle list |
+| `app/src/test/java/com/nexio/tv/data/remote/api/OpenSubtitlesScraperClientTest.kt` | Scraper HTML parsing with fixtures (MockWebServer) |
+| `app/src/test/java/com/nexio/tv/data/repository/OpenSubtitlesSourceImplTest.kt` | End-to-end: suggest → search → filter → Subtitle list |
 | `app/src/test/java/com/nexio/tv/data/repository/SubtitleRepositoryImplNativeSourceTest.kt` | Merge with addons, preference-gated |
 | `app/src/test/java/com/nexio/tv/core/player/OpenSubtitlesArchiveExtractorTest.kt` | .srt / .srt.gz / .zip extraction fixtures |
 
@@ -60,10 +60,9 @@
 
 | Path | Source |
 |------|--------|
-| `app/src/test/resources/opensubtitles/search_movie_imdbid.json` | Captured payload from `curl https://rest.opensubtitles.org/search/imdbid-0111161` |
-| `app/src/test/resources/opensubtitles/search_series_episode.json` | Captured payload from `curl https://rest.opensubtitles.org/search/episode-2/imdbid-0944947/season-1` |
-| `app/src/test/resources/opensubtitles/search_moviehash.json` | Captured payload from `curl https://rest.opensubtitles.org/search/moviebytesize-12909756/moviehash-8e245d9679d31e12` |
-| `app/src/test/resources/opensubtitles/search_empty.json` | Captured payload for an unknown imdbid → `[]` |
+| `app/src/test/resources/opensubtitles/suggest_stranger_things.json` | Capture real payload from `curl "https://www.opensubtitles.org/libs/suggest.php?format=json3&MovieName=tt4574334"` |
+| `app/src/test/resources/opensubtitles/search_results_movie.html` | Capture `curl "https://www.opensubtitles.org/en/search/sublanguageid-all/imdbid-2488496/idmovie-..."` |
+| `app/src/test/resources/opensubtitles/search_results_series.html` | Capture series variant |
 | `app/src/test/resources/opensubtitles/sample.srt` | 6-line known SRT |
 | `app/src/test/resources/opensubtitles/sample.srt.gz` | Gzipped sample.srt |
 | `app/src/test/resources/opensubtitles/sample.zip` | ZIP containing sample.srt |
@@ -71,71 +70,57 @@
 
 ---
 
-## Task 0: Pre-flight — capture fixtures from rest.opensubtitles.org
+## Task 0: Pre-flight — capture fixtures from OpenSubtitles
 
 **Files:**
 - Create: `app/src/test/resources/opensubtitles/` (directory)
 
-- [x] **Step 1: Create fixture directory**
+- [ ] **Step 1: Create fixture directory**
 
 ```bash
 mkdir -p /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles
 ```
 
-- [x] **Step 2: Capture movie IMDB search payload**
+- [ ] **Step 2: Capture the suggest.php payload for Stranger Things**
 
 ```bash
-curl -sS \
+curl -s \
   -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' \
-  'https://rest.opensubtitles.org/search/imdbid-0111161' \
-  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/search_movie_imdbid.json
+  'https://www.opensubtitles.org/libs/suggest.php?format=json3&MovieName=tt4574334' \
+  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/suggest_stranger_things.json
 ```
-Expected: JSON array; each element contains `IDSubtitleFile`, `SubLanguageID`, `SubDownloadLink`, `MatchedBy`, `MovieHash`, `MovieByteSize`, `SubFromTrusted`.
+Expected: JSON array; the first element must contain `id`, `name`, `kind`, `year`. If empty, retry with `tt0944947` (Game of Thrones).
 
-- [x] **Step 3: Capture a series episode search payload**
+- [ ] **Step 3: Capture a movie search page**
+
+Pick an idmovie from the suggest payload (field `id`) and:
 
 ```bash
-curl -sS \
+curl -s \
   -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' \
-  'https://rest.opensubtitles.org/search/episode-2/imdbid-0944947/season-1' \
-  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/search_series_episode.json
+  'https://www.opensubtitles.org/en/search/sublanguageid-all/imdbid-0111161/idmovie-<ID>' \
+  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/search_results_movie.html
 ```
+Expected: HTML containing `<table id="search_results">` with at least one `<tbody><tr>` row.
 
-- [x] **Step 4: Capture a moviehash search payload**
+- [ ] **Step 4: Capture a series episode search page**
 
 ```bash
-curl -sS \
+curl -s \
   -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' \
-  'https://rest.opensubtitles.org/search/moviebytesize-12909756/moviehash-8e245d9679d31e12' \
-  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/search_moviehash.json
+  'https://www.opensubtitles.org/en/ssearch/sublanguageid-all/imdbid-0944947/idmovie-<ID>' \
+  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/search_results_series.html
 ```
-Expected: JSON array where the first row has `"MatchedBy":"moviehash"`.
 
-- [x] **Step 5: Capture an empty result fixture**
+- [ ] **Step 5: Copy hasher reference vector**
 
 ```bash
-curl -sS 'https://rest.opensubtitles.org/search/imdbid-9999999999' \
-  > /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/search_empty.json
+cp /Users/jneerdael/Scripts/subs/oshash/test-data/testfile.bin \
+   /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/hash_testfile.bin
 ```
-Expected: file body is exactly `[]`.
+Expected: 1048576 bytes. `shasum` (any) is unimportant; the oshash is `e7e2e71e035b137f`.
 
-- [x] **Step 6: Generate the hasher reference vector**
-
-The oshash repo's `test-data/testfile.bin` is generated on demand. Reproduce locally:
-
-```bash
-python3 - <<'PY'
-import random
-random.seed(42)
-data = bytes(random.getrandbits(8) for _ in range(1_048_576))
-open('/Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/hash_testfile.bin', 'wb').write(data)
-PY
-python3 /Users/jneerdael/Scripts/subs/oshash/implementations/python/oshash.py \
-  /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/hash_testfile.bin
-```
-Expected: prints `e7e2e71e035b137f`.
-
-- [x] **Step 7: Create SRT sample fixtures**
+- [ ] **Step 6: Create SRT sample fixtures**
 
 Create `/Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/sample.srt` with:
 
@@ -156,12 +141,12 @@ gzip -k /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles/samp
 cd /Users/jneerdael/Scripts/nexio/app/src/test/resources/opensubtitles && zip sample.zip sample.srt
 ```
 
-- [ ] **Step 8: Commit fixtures**
+- [ ] **Step 7: Commit fixtures**
 
 ```bash
 cd /Users/jneerdael/Scripts/nexio
 git add app/src/test/resources/opensubtitles/
-git commit -m "test(opensubtitles): add rest.opensubtitles.org JSON fixtures + hash vector + SRT samples"
+git commit -m "test: add OpenSubtitles fixtures (suggest/search/archives/hash vector)"
 ```
 
 ---

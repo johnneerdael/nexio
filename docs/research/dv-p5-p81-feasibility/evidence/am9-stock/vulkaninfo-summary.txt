@@ -1,0 +1,1 @@
+/system/bin/sh: vulkaninfo: inaccessible or not found

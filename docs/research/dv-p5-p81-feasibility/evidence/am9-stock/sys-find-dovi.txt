@@ -1,0 +1,3 @@
+/sys/module/aml_media/holders/dovi_s6_5_15_stb26
+/sys/module/dovi_s6_5_15_stb26
+/sys/module/amlogic_cpuinfo/holders/dovi_s6_5_15_stb26

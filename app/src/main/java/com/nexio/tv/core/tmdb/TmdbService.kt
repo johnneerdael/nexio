@@ -1,11 +1,9 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
-import com.nexio.tv.core.metadata.MetadataApiKeyResolver
-import com.nexio.tv.core.metadata.MetadataProviderConfig
-import com.nexio.tv.core.metadata.MetadataProviderCredential
+import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -24,28 +22,18 @@ private const val TAG = "TmdbService"
  */
 @Singleton
 class TmdbService(
-    private val tmdbApi: TmdbApi,
-    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential
+    private val tmdbExternalIdLookupProvider: TmdbExternalIdLookupProvider,
+    private val tmdbCredentialProvider: suspend () -> String
 ) {
     @Inject
     constructor(
-        tmdbApi: TmdbApi,
-        metadataApiKeyResolver: MetadataApiKeyResolver
-    ) : this(
-        tmdbApi = tmdbApi,
-        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() }
-    )
-
-    constructor(
-        tmdbApi: TmdbApi,
+        tmdbExternalIdLookupProvider: TmdbExternalIdLookupProvider,
         tmdbSettingsDataStore: TmdbSettingsDataStore
     ) : this(
-        tmdbApi = tmdbApi,
+        tmdbExternalIdLookupProvider = tmdbExternalIdLookupProvider,
         tmdbCredentialProvider = {
-            MetadataProviderConfig.resolveCredential(
-                customApiKey = tmdbSettingsDataStore.settings.first().apiKey,
-                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
-            )
+            val customApiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+            customApiKey.ifBlank { BuildConfig.TMDB_API_KEY.trim() }
         }
     )
 
@@ -101,10 +89,9 @@ class TmdbService(
         try {
             Log.d(TAG, "Looking up TMDB ID for IMDB: $imdbId (type: $mediaType)")
             
-            val response = tmdbApi.findByExternalId(
+            val response = tmdbExternalIdLookupProvider.findByExternalId(
                 externalId = imdbId,
-                apiKey = apiKey,
-                externalSource = "imdb_id"
+                apiKey = apiKey
             )
             
             if (!response.isSuccessful) {
@@ -188,9 +175,9 @@ class TmdbService(
             Log.d(TAG, "Looking up IMDB ID for TMDB: $tmdbId (type: $mediaType)")
             
             val response = when (normalizedType) {
-                "movie" -> tmdbApi.getMovieExternalIds(tmdbId, apiKey)
-                "tv", "series" -> tmdbApi.getTvExternalIds(tmdbId, apiKey)
-                else -> tmdbApi.getMovieExternalIds(tmdbId, apiKey)
+                "movie" -> tmdbExternalIdLookupProvider.getMovieExternalIds(tmdbId, apiKey)
+                "tv", "series" -> tmdbExternalIdLookupProvider.getTvExternalIds(tmdbId, apiKey)
+                else -> tmdbExternalIdLookupProvider.getMovieExternalIds(tmdbId, apiKey)
             }
             
             if (!response.isSuccessful) {
@@ -303,10 +290,10 @@ class TmdbService(
 
     private suspend fun requireApiKey(): String? {
         val credential = tmdbCredentialProvider()
-        if (credential.missing) {
+        if (credential.isBlank()) {
             Log.w(TAG, "TMDB API key is missing; lookup skipped")
             return null
         }
-        return credential.apiKey
+        return credential
     }
 }

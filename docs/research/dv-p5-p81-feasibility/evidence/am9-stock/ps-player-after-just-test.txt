@@ -1,0 +1,3 @@
+u0_a73       22390   574   16116312 148476 do_freezer_trap     0 S org.videolan.vlc
+u0_a83       22831   574   16770564 171272 do_freezer_trap     0 S com.mxtech.videoplayer.ad
+u0_a92       25013   574   16723964 376368 do_epoll_wait       0 S com.brouken.player

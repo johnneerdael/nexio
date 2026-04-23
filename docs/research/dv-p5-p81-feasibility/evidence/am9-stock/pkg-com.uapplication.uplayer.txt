@@ -1,0 +1,1091 @@
+Activity Resolver Table:
+  Full MIME Types:
+      application/mpegurl:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/x-ogg:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/x-shockwave-flash:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/mp4:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/ogg:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/sdp:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/x-mpegURL:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/x-mpegurl:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/vnd.apple.mpegurl.audio:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/vnd.apple.mpegurl:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/vnd.rn-realmedia:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      audio/mpegurl:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/vnd.rn-realmedia-vbr:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      audio/x-mpegurl:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      video/*:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Base MIME Types:
+      audio:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Wild MIME Types:
+      video:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Schemes:
+      file:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      http:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      https:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      content:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Non-Data Actions:
+      android.intent.action.MAIN:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 7df6dd9
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+          Category: "android.intent.category.LEANBACK_LAUNCHER"
+
+  MIME Typed Actions:
+      android.intent.action.VIEW:
+        7110323 com.uapplication.uplayer/.player.ui.NewPlayerActivity filter 1453020
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "file"
+          Scheme: "content"
+          Scheme: "http"
+          Scheme: "https"
+          StaticType: "video"
+          StaticType: "application/sdp"
+          StaticType: "application/mp4"
+          StaticType: "application/vnd.apple.mpegurl"
+          StaticType: "application/vnd.apple.mpegurl.audio"
+          StaticType: "application/vnd.rn-realmedia"
+          StaticType: "application/vnd.rn-realmedia-vbr"
+          StaticType: "application/mpegurl"
+          StaticType: "application/x-mpegurl"
+          StaticType: "application/x-mpegURL"
+          StaticType: "application/ogg"
+          StaticType: "application/x-ogg"
+          StaticType: "audio/mpegurl"
+          StaticType: "audio/x-mpegurl"
+          StaticType: "application/x-shockwave-flash"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+Receiver Resolver Table:
+  Non-Data Actions:
+      android.intent.action.BATTERY_OKAY:
+        f9d2e4c com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy filter 4d00e95
+          Action: "android.intent.action.BATTERY_OKAY"
+          Action: "android.intent.action.BATTERY_LOW"
+      android.intent.action.ACTION_POWER_DISCONNECTED:
+        c70139e com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryChargingProxy filter be6ae7f
+          Action: "android.intent.action.ACTION_POWER_DISCONNECTED"
+          Action: "android.intent.action.ACTION_POWER_CONNECTED"
+      androidx.profileinstaller.action.SAVE_PROFILE:
+        894e150 com.uapplication.uplayer/androidx.profileinstaller.ProfileInstallReceiver filter 1ce356f
+          Action: "androidx.profileinstaller.action.SAVE_PROFILE"
+      android.intent.action.DEVICE_STORAGE_LOW:
+        d45cbaa com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy filter a41b39b
+          Action: "android.intent.action.DEVICE_STORAGE_LOW"
+          Action: "android.intent.action.DEVICE_STORAGE_OK"
+      android.net.conn.CONNECTIVITY_CHANGE:
+        794e338 com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$NetworkStateProxy filter cefff11
+          Action: "android.net.conn.CONNECTIVITY_CHANGE"
+      android.intent.action.DEVICE_STORAGE_OK:
+        d45cbaa com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy filter a41b39b
+          Action: "android.intent.action.DEVICE_STORAGE_LOW"
+          Action: "android.intent.action.DEVICE_STORAGE_OK"
+      androidx.profileinstaller.action.INSTALL_PROFILE:
+        894e150 com.uapplication.uplayer/androidx.profileinstaller.ProfileInstallReceiver filter 7ea7f49
+          Action: "androidx.profileinstaller.action.INSTALL_PROFILE"
+      android.intent.action.BATTERY_LOW:
+        f9d2e4c com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy filter 4d00e95
+          Action: "android.intent.action.BATTERY_OKAY"
+          Action: "android.intent.action.BATTERY_LOW"
+      android.intent.action.TIMEZONE_CHANGED:
+        a0cf876 com.uapplication.uplayer/androidx.work.impl.background.systemalarm.RescheduleReceiver filter c7dee77
+          Action: "android.intent.action.TIMEZONE_CHANGED"
+          Action: "android.intent.action.TIME_SET"
+          Action: "android.intent.action.BOOT_COMPLETED"
+      android.intent.action.TIME_SET:
+        a0cf876 com.uapplication.uplayer/androidx.work.impl.background.systemalarm.RescheduleReceiver filter c7dee77
+          Action: "android.intent.action.TIMEZONE_CHANGED"
+          Action: "android.intent.action.TIME_SET"
+          Action: "android.intent.action.BOOT_COMPLETED"
+      androidx.profileinstaller.action.SKIP_FILE:
+        894e150 com.uapplication.uplayer/androidx.profileinstaller.ProfileInstallReceiver filter d16a04e
+          Action: "androidx.profileinstaller.action.SKIP_FILE"
+      androidx.profileinstaller.action.BENCHMARK_OPERATION:
+        894e150 com.uapplication.uplayer/androidx.profileinstaller.ProfileInstallReceiver filter beec27c
+          Action: "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+      android.intent.action.BOOT_COMPLETED:
+        a0cf876 com.uapplication.uplayer/androidx.work.impl.background.systemalarm.RescheduleReceiver filter c7dee77
+          Action: "android.intent.action.TIMEZONE_CHANGED"
+          Action: "android.intent.action.TIME_SET"
+          Action: "android.intent.action.BOOT_COMPLETED"
+      android.intent.action.ACTION_POWER_CONNECTED:
+        c70139e com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryChargingProxy filter be6ae7f
+          Action: "android.intent.action.ACTION_POWER_DISCONNECTED"
+          Action: "android.intent.action.ACTION_POWER_CONNECTED"
+      androidx.work.diagnostics.REQUEST_DIAGNOSTICS:
+        7482602 com.uapplication.uplayer/androidx.work.impl.diagnostics.DiagnosticsReceiver filter cd8fb13
+          Action: "androidx.work.diagnostics.REQUEST_DIAGNOSTICS"
+      androidx.work.impl.background.systemalarm.UpdateProxies:
+        750fae4 com.uapplication.uplayer/androidx.work.impl.background.systemalarm.ConstraintProxyUpdateReceiver filter a447b4d
+          Action: "androidx.work.impl.background.systemalarm.UpdateProxies"
+
+Domain verification status:
+
+Permissions:
+  Permission [com.uapplication.uplayer.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION] (1a7f067):
+    sourcePackage=com.uapplication.uplayer
+    uid=10093 gids=[] type=0 prot=signature
+    perm=PermissionInfo{66aee14 com.uapplication.uplayer.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION}
+    flags=0x0
+
+Registered ContentProviders:
+  com.uapplication.uplayer/androidx.core.content.FileProvider:
+    Provider{789a6bd com.uapplication.uplayer/androidx.core.content.FileProvider}
+  com.uapplication.uplayer/com.google.firebase.provider.FirebaseInitProvider:
+    Provider{997c4b2 com.uapplication.uplayer/com.google.firebase.provider.FirebaseInitProvider}
+  com.uapplication.uplayer/androidx.startup.InitializationProvider:
+    Provider{7392c03 com.uapplication.uplayer/androidx.startup.InitializationProvider}
+
+ContentProvider Authorities:
+  [com.uapplication.uplayer.androidx-startup]:
+    Provider{7392c03 com.uapplication.uplayer/androidx.startup.InitializationProvider}
+      applicationInfo=ApplicationInfo{c12d780 com.uapplication.uplayer}
+  [com.uapplication.uplayer.fileprovider]:
+    Provider{789a6bd com.uapplication.uplayer/androidx.core.content.FileProvider}
+      applicationInfo=ApplicationInfo{eaef1b9 com.uapplication.uplayer}
+  [com.uapplication.uplayer.firebaseinitprovider]:
+    Provider{997c4b2 com.uapplication.uplayer/com.google.firebase.provider.FirebaseInitProvider}
+      applicationInfo=ApplicationInfo{c3979fe com.uapplication.uplayer}
+
+Key Set Manager:
+  [com.uapplication.uplayer]
+      Signing KeySets: 63
+
+Packages:
+  Package [com.uapplication.uplayer] (18855f):
+    appId=10093
+    pkg=Package{98debac com.uapplication.uplayer}
+    codePath=/data/app/~~pUp-DXX5JF5XUB7blk2FhQ==/com.uapplication.uplayer-FOk9Nq0SQo0OS_tcwEYq9g==
+    resourcePath=/data/app/~~pUp-DXX5JF5XUB7blk2FhQ==/com.uapplication.uplayer-FOk9Nq0SQo0OS_tcwEYq9g==
+    legacyNativeLibraryDir=/data/app/~~pUp-DXX5JF5XUB7blk2FhQ==/com.uapplication.uplayer-FOk9Nq0SQo0OS_tcwEYq9g==/lib
+    extractNativeLibs=false
+    primaryCpuAbi=armeabi-v7a
+    secondaryCpuAbi=null
+    cpuAbiOverride=null
+    versionCode=70 minSdk=30 targetSdk=35
+    minExtensionVersions=[]
+    versionName=0.4.40
+    usesNonSdkApi=false
+    splits=[base]
+    apkSigningVersion=2
+    flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE HAS_DOMAIN_URLS PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    forceQueryable=false
+    queriesPackages=[com.google.android.apps.tv.launcherx, com.google.android.tvlauncher, com.google.android.tvrecommendations, com.google.android.gms.policy_cast_dynamite]
+    dataDir=/data/user/0/com.uapplication.uplayer
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    timeStamp=2026-04-17 20:21:26
+    lastUpdateTime=2026-04-17 20:21:28
+    installerPackageName=null
+    installerPackageUid=-1
+    initiatingPackageName=com.android.shell
+    originatingPackageName=null
+    packageSource=1
+    appMetadataFilePath=null
+    signatures=PackageSignatures{243f075 version:2, signatures:[6a6e5c20], past signatures:[]}
+    installPermissionsFixed=true
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    privatePkgFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE HAS_DOMAIN_URLS PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    apexModuleName=null
+    declared permissions:
+      com.uapplication.uplayer.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: prot=signature
+    requested permissions:
+      android.permission.INTERNET
+      android.permission.ACCESS_NETWORK_STATE
+      android.permission.WAKE_LOCK
+      android.permission.READ_USER_DICTIONARY
+      android.permission.READ_MEDIA_VIDEO
+      android.permission.MANAGE_EXTERNAL_STORAGE
+      android.permission.REQUEST_INSTALL_PACKAGES
+      com.google.android.gms.permission.AD_ID
+      android.permission.FOREGROUND_SERVICE
+      android.permission.ACCESS_ADSERVICES_ATTRIBUTION
+      android.permission.ACCESS_ADSERVICES_AD_ID
+      com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE
+      android.permission.RECEIVE_BOOT_COMPLETED
+      com.uapplication.uplayer.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+      android.permission.READ_MEDIA_VISUAL_USER_SELECTED
+    install permissions:
+      com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE: granted=true
+      com.uapplication.uplayer.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=false
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      android.permission.ACCESS_ADSERVICES_AD_ID: granted=true
+      android.permission.INTERNET: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.ACCESS_ADSERVICES_ATTRIBUTION: granted=true
+      android.permission.READ_USER_DICTIONARY: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=false
+      com.google.android.gms.permission.AD_ID: granted=true
+      android.permission.WAKE_LOCK: granted=true
+    User 0: ceDataInode=40971 installed=true hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=true enabled=0 instant=false virtual=false
+      installReason=0
+      firstInstallTime=2026-04-17 20:21:28
+      uninstallReason=0
+      overlay paths:
+        /data/resource-cache/com.android.systemui-neutral-R8ci.frro
+        /data/resource-cache/com.android.systemui-accent-U3gl.frro
+        /data/resource-cache/com.android.systemui-dynamic-Rtm6.frro
+      gids=[3003]
+      runtime permissions:
+        android.permission.READ_MEDIA_VISUAL_USER_SELECTED: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_VIDEO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+
+Queries:
+  system apps queryable: false
+  queries via forceQueryable:
+  queries via package name:
+  queries via component:
+    com.android.settings.intelligence:
+      com.uapplication.uplayer
+    com.ionitech.airscreen:
+      com.uapplication.uplayer
+    com.spocky.projengmenu:
+      com.uapplication.uplayer
+    com.mxtech.videoplayer.ad:
+      com.uapplication.uplayer
+    org.xbmc.kodi:
+      com.uapplication.uplayer
+    org.smarttube.stable:
+      com.uapplication.uplayer
+    videoeditor.videorecorder.screenrecorder:
+      com.uapplication.uplayer
+    com.nexio.tv:
+      com.uapplication.uplayer
+  queryable via interaction:
+    User 0:
+  queryable via uses-library:
+
+Dexopt state:
+  [com.uapplication.uplayer]
+    path: /data/app/~~pUp-DXX5JF5XUB7blk2FhQ==/com.uapplication.uplayer-FOk9Nq0SQo0OS_tcwEYq9g==/base.apk
+      arm: [status=verify] [reason=install] [primary-abi]
+        [location is /data/app/~~pUp-DXX5JF5XUB7blk2FhQ==/com.uapplication.uplayer-FOk9Nq0SQo0OS_tcwEYq9g==/oat/arm/base.odex]
+
+Compiler stats:
+  [com.uapplication.uplayer]
+     base.apk - 1424

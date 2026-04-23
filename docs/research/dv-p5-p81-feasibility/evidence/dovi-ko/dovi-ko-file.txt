@@ -1,0 +1,1 @@
+/Users/jneerdael/Downloads/dovi.ko: ELF 64-bit LSB relocatable, ARM aarch64, version 1 (SYSV), BuildID[sha1]=11509eb66696b72bbde0fcdbffa500e6f1764eec, not stripped

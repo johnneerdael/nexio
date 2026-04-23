@@ -51,6 +51,13 @@ bugs/
 .worktrees/
 d
 docs/
+!docs/
+!docs/architecture/metadata-provider-routing-audit.md
+!docs/architecture/metadata-provider-routing-audit.errata.md
+!docs/research/
+!docs/research/metadata-audit/
+!docs/research/metadata-audit/provider-endpoint-index.md
+!docs/research/metadata-audit/field-source-matrix.md
 nexio-web/ecosystem.config.cjs
 nexio-web/.env
 openspec/

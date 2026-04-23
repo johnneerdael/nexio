@@ -1,0 +1,180 @@
+Activity Resolver Table:
+  Full MIME Types:
+      */*:
+        669b6b4 com.droidlogic.FileBrower/.FileBrower filter 3084e52
+          Action: "android.intent.action.GET_CONTENT"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.OPENABLE"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Wild MIME Types:
+      *:
+        669b6b4 com.droidlogic.FileBrower/.FileBrower filter 3084e52
+          Action: "android.intent.action.GET_CONTENT"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.OPENABLE"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Non-Data Actions:
+      android.intent.action.MAIN:
+        669b6b4 com.droidlogic.FileBrower/.FileBrower filter 3e5d2dd
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+          Category: "android.intent.category.LEANBACK_LAUNCHER"
+
+  MIME Typed Actions:
+      android.intent.action.GET_CONTENT:
+        669b6b4 com.droidlogic.FileBrower/.FileBrower filter 3084e52
+          Action: "android.intent.action.GET_CONTENT"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.OPENABLE"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+Receiver Resolver Table:
+  Non-Data Actions:
+      androidx.profileinstaller.action.SAVE_PROFILE:
+        7d28523 com.droidlogic.FileBrower/androidx.profileinstaller.ProfileInstallReceiver filter ab8fd9e
+          Action: "androidx.profileinstaller.action.SAVE_PROFILE"
+      androidx.profileinstaller.action.INSTALL_PROFILE:
+        7d28523 com.droidlogic.FileBrower/androidx.profileinstaller.ProfileInstallReceiver filter 5458a20
+          Action: "androidx.profileinstaller.action.INSTALL_PROFILE"
+      androidx.profileinstaller.action.SKIP_FILE:
+        7d28523 com.droidlogic.FileBrower/androidx.profileinstaller.ProfileInstallReceiver filter 371bfd9
+          Action: "androidx.profileinstaller.action.SKIP_FILE"
+      androidx.profileinstaller.action.BENCHMARK_OPERATION:
+        7d28523 com.droidlogic.FileBrower/androidx.profileinstaller.ProfileInstallReceiver filter 43e507f
+          Action: "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+
+Domain verification status:
+
+Permissions:
+  Permission [com.droidlogic.FileBrower.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION] (1c5fb0a):
+    sourcePackage=com.droidlogic.FileBrower
+    uid=10035 gids=[] type=0 prot=signature
+    perm=PermissionInfo{7851f7b com.droidlogic.FileBrower.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION}
+    flags=0x0
+
+Registered ContentProviders:
+  com.droidlogic.FileBrower/androidx.core.content.FileProvider:
+    Provider{7681198 com.droidlogic.FileBrower/androidx.core.content.FileProvider}
+  com.droidlogic.FileBrower/androidx.startup.InitializationProvider:
+    Provider{3bfdf1 com.droidlogic.FileBrower/androidx.startup.InitializationProvider}
+
+ContentProvider Authorities:
+  [com.droidlogic.FileBrower.androidx-startup]:
+    Provider{3bfdf1 com.droidlogic.FileBrower/androidx.startup.InitializationProvider}
+      applicationInfo=ApplicationInfo{a50bdd6 com.droidlogic.FileBrower}
+  [com.droidlogic.filebrowser.fileprovider]:
+    Provider{7681198 com.droidlogic.FileBrower/androidx.core.content.FileProvider}
+      applicationInfo=ApplicationInfo{7bc3857 com.droidlogic.FileBrower}
+
+Key Set Manager:
+  [com.droidlogic.FileBrower]
+      Signing KeySets: 2
+
+Packages:
+  Package [com.droidlogic.FileBrower] (e98af44):
+    appId=10035
+    pkg=Package{f01882d com.droidlogic.FileBrower}
+    codePath=/vendor/app/FileBrowser
+    resourcePath=/vendor/app/FileBrowser
+    legacyNativeLibraryDir=/vendor/app/FileBrowser/lib
+    extractNativeLibs=true
+    primaryCpuAbi=null
+    secondaryCpuAbi=null
+    cpuAbiOverride=null
+    versionCode=1 minSdk=34 targetSdk=23
+    minExtensionVersions=[]
+    versionName=4.0
+    usesNonSdkApi=false
+    splits=[base]
+    apkSigningVersion=3
+    flags=[ SYSTEM HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]
+    privateFlags=[ PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE VENDOR PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    forceQueryable=false
+    dataDir=/data/user/0/com.droidlogic.FileBrower
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    usesLibraries:
+      android.test.base
+      android.hidl.manager-V1.0-java
+      android.hidl.base-V1.0-java
+      org.apache.http.legacy
+      droidlogic.software.core
+    usesLibraryFiles:
+      /system/framework/android.test.base.jar
+      /system/framework/android.hidl.manager-V1.0-java.jar
+      /system/framework/android.hidl.base-V1.0-java.jar
+      /system/framework/org.apache.http.legacy.jar
+      /vendor/framework/droidlogic.software.core.jar
+    timeStamp=2009-01-01 00:00:00
+    lastUpdateTime=2009-01-01 00:00:00
+    installerPackageName=null
+    installerPackageUid=-1
+    initiatingPackageName=null
+    originatingPackageName=null
+    packageSource=0
+    appMetadataFilePath=null
+    signatures=PackageSignatures{af2e162 version:3, signatures:[5737aea9], past signatures:[]}
+    installPermissionsFixed=true
+    pkgFlags=[ SYSTEM HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]
+    privatePkgFlags=[ PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE VENDOR PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    apexModuleName=null
+    declared permissions:
+      com.droidlogic.FileBrower.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: prot=signature
+    requested permissions:
+      android.permission.READ_EXTERNAL_STORAGE
+      android.permission.WRITE_MEDIA_STORAGE
+      android.permission.WRITE_EXTERNAL_STORAGE
+      android.permission.MANAGE_EXTERNAL_STORAGE
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS
+      android.permission.WAKE_LOCK
+      com.droidlogic.FileBrower.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+      android.permission.POST_NOTIFICATIONS
+      android.permission.ACCESS_MEDIA_LOCATION
+      android.permission.READ_MEDIA_AUDIO
+      android.permission.READ_MEDIA_VIDEO
+      android.permission.READ_MEDIA_IMAGES
+      android.permission.READ_MEDIA_VISUAL_USER_SELECTED
+    install permissions:
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=true
+      android.permission.WRITE_MEDIA_STORAGE: granted=true
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS: granted=true
+      com.droidlogic.FileBrower.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.WAKE_LOCK: granted=true
+    User 0: ceDataInode=1853 installed=true hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=false enabled=0 instant=false virtual=false
+      installReason=0
+      firstInstallTime=2009-01-01 00:00:00
+      uninstallReason=0
+      runtime permissions:
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_VISUAL_USER_SELECTED: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_EXTERNAL_STORAGE: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_MEDIA_IMAGES: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_VIDEO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.WRITE_EXTERNAL_STORAGE: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.ACCESS_MEDIA_LOCATION: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+
+Queries:
+  system apps queryable: false
+  queries via forceQueryable:
+  forceQueryable:
+    com.droidlogic.FileBrower
+  queries via package name:
+  queries via component:
+  queryable via interaction:
+    User 0:
+  queryable via uses-library:
+
+Dexopt state:
+  [com.droidlogic.FileBrower]
+    path: /vendor/app/FileBrowser/FileBrowser.apk
+      arm64: [status=verify] [reason=prebuilt] [primary-abi]
+        [location is /vendor/app/FileBrowser/oat/arm64/FileBrowser.odex]
+
+Compiler stats:
+  [com.droidlogic.FileBrower]
+    (No recorded stats)

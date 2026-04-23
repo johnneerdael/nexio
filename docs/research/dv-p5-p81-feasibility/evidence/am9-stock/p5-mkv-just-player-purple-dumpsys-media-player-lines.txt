@@ -1,0 +1,188 @@
+Decoder infos by media types:
+  Decoder "c2.android.amrnb.decoder" supports
+      "OMX.google.amrnb.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.ac3.decoder" supports
+      "OMX.google.ac3.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.amrwb.decoder" supports
+      "OMX.google.amrwb.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.amlogic.audio.decoder.ffmpeg" supports
+    owner: "codec2::default"
+  Decoder "c2.android.flac.decoder" supports
+      "OMX.google.flac.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.g711.alaw.decoder" supports
+      "OMX.google.g711.alaw.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.g711.mlaw.decoder" supports
+      "OMX.google.g711.mlaw.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.aac.decoder" supports
+      "OMX.google.aac.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.mp3.decoder" supports
+      "OMX.google.mp3.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.amlogic.audio.decoder.mp1" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.audio.decoder.mp2" supports
+    owner: "codec2::default"
+  Decoder "c2.android.opus.decoder" supports
+      "OMX.google.opus.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.raw.decoder" supports
+      "OMX.google.raw.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.android.vorbis.decoder" supports
+      "OMX.google.vorbis.decoder" ]
+    owner: "codec2::software"
+  Decoder "c2.amlogic.jpeg.decoder" supports
+    owner: "codec2::default"
+Media type 'video/3gpp':
+  Decoder "c2.amlogic.h263.decoder.sw" supports
+    owner: "codec2::default"
+  Decoder "c2.android.h263.decoder" supports
+      "OMX.google.h263.decoder" ]
+    owner: "codec2::software"
+Media type 'video/av01':
+  Decoder "c2.amlogic.av1.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.av1.decoder.secure" supports
+    owner: "codec2::default"
+  Decoder "c2.android.av1.decoder" supports
+    owner: "codec2::software"
+Media type 'video/avc':
+  Decoder "c2.amlogic.avc.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.avc.decoder.secure" supports
+    owner: "codec2::default"
+  Decoder "c2.android.avc.decoder" supports
+      "OMX.google.h264.decoder" ]
+    owner: "codec2::software"
+Media type 'video/avs':
+  Decoder "c2.amlogic.avs.decoder" supports
+    owner: "codec2::default"
+Media type 'video/avs2':
+  Decoder "c2.amlogic.avs2.decoder" supports
+    owner: "codec2::default"
+Media type 'video/avs3':
+  Decoder "c2.amlogic.avs3.decoder" supports
+    owner: "codec2::default"
+Media type 'video/dolby-vision':
+  Decoder "c2.amlogic.dolby-vision.dav1.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.dolby-vision.dav1.decoder.secure" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.dolby-vision.dvav.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.dolby-vision.dvav.decoder.secure" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.dolby-vision.dvhe.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.dolby-vision.dvhe.decoder.secure" supports
+    owner: "codec2::default"
+Media type 'video/hevc':
+  Decoder "c2.amlogic.hevc.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.hevc.decoder.secure" supports
+    owner: "codec2::default"
+  Decoder "c2.android.hevc.decoder" supports
+      "OMX.google.hevc.decoder" ]
+    owner: "codec2::software"
+Media type 'video/mp4v-es':
+  Decoder "c2.amlogic.mpeg4.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.android.mpeg4.decoder" supports
+      "OMX.google.mpeg4.decoder" ]
+    owner: "codec2::software"
+Media type 'video/mpeg2':
+  Decoder "c2.amlogic.mpeg2.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.mpeg2.decoder.secure" supports
+    owner: "codec2::default"
+Media type 'video/rm10':
+  Decoder "c2.amlogic.rm10.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/rm20':
+  Decoder "c2.amlogic.rm20.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/rm30':
+  Decoder "c2.amlogic.rm30.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/rm40':
+  Decoder "c2.amlogic.rm40.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/vc1':
+  Decoder "c2.amlogic.vc1.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.vc1.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/vvc':
+  Decoder "c2.amlogic.vvc.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.vvc.decoder.secure" supports
+    owner: "codec2::default"
+Media type 'video/wmv1':
+  Decoder "c2.amlogic.wmv1.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/wmv2':
+  Decoder "c2.amlogic.wmv2.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/wmv3':
+  Decoder "c2.amlogic.wmv3.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/x-motion-jpeg':
+  Decoder "c2.amlogic.mjpeg.decoder" supports
+    owner: "codec2::default"
+Media type 'video/x-vnd.on2.vp6a':
+  Decoder "c2.amlogic.vp6a.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/x-vnd.on2.vp6f':
+  Decoder "c2.amlogic.vp6f.decoder.sw" supports
+    owner: "codec2::default"
+Media type 'video/x-vnd.on2.vp8':
+  Decoder "c2.amlogic.vp8.decoder.sw" supports
+    owner: "codec2::default"
+  Decoder "c2.android.vp8.decoder" supports
+      "OMX.google.vp8.decoder" ]
+    owner: "codec2::software"
+Media type 'video/x-vnd.on2.vp9':
+  Decoder "c2.amlogic.vp9.decoder" supports
+    owner: "codec2::default"
+  Decoder "c2.amlogic.vp9.decoder.secure" supports
+    owner: "codec2::default"
+  Decoder "c2.android.vp9.decoder" supports
+      "OMX.google.vp9.decoder" ]
+    owner: "codec2::software"
+  Encoder "c2.android.amrnb.encoder" supports
+    owner: "codec2::software"
+  Encoder "c2.android.amrwb.encoder" supports
+    owner: "codec2::software"
+  Encoder "c2.android.flac.encoder" supports
+    owner: "codec2::software"
+  Encoder "c2.android.aac.encoder" supports
+    owner: "codec2::software"
+  Encoder "c2.android.opus.encoder" supports
+    owner: "codec2::software"
+Media type 'video/3gpp':
+  Encoder "c2.android.h263.encoder" supports
+    owner: "codec2::software"
+Media type 'video/av01':
+  Encoder "c2.android.av1.encoder" supports
+    owner: "codec2::software"
+Media type 'video/avc':
+  Encoder "c2.amlogic.avc.encoder" supports
+    owner: "codec2::default"
+  Encoder "c2.android.avc.encoder" supports
+    owner: "codec2::software"
+Media type 'video/hevc':
+  Encoder "c2.amlogic.hevc.encoder" supports
+    owner: "codec2::default"
+Media type 'video/mp4v-es':
+  Encoder "c2.android.mpeg4.encoder" supports
+    owner: "codec2::software"
+Media type 'video/x-vnd.on2.vp8':
+  Encoder "c2.android.vp8.encoder" supports
+    owner: "codec2::software"

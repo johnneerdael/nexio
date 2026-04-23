@@ -1,0 +1,775 @@
+Receiver Resolver Table:
+  Non-Data Actions:
+      android.hardware.usb.action.USB_DEVICE_ATTACHED:
+        f9aedca com.droidlogic/.UsbCameraReceiver filter da6fb3b
+          Action: "android.hardware.usb.action.USB_DEVICE_ATTACHED"
+          Action: "android.hardware.usb.action.USB_DEVICE_DETACHED"
+      android.hardware.usb.action.USB_DEVICE_DETACHED:
+        f9aedca com.droidlogic/.UsbCameraReceiver filter da6fb3b
+          Action: "android.hardware.usb.action.USB_DEVICE_ATTACHED"
+          Action: "android.hardware.usb.action.USB_DEVICE_DETACHED"
+      android.intent.action.SCREEN_ON:
+        228286e com.droidlogic/.btpair.BluetoothAutoPairReceiver filter a7eeb0f
+          Action: "android.intent.action.SCREEN_ON"
+          Action: "android.intent.action.BOOT_COMPLETED"
+      androidx.profileinstaller.action.SAVE_PROFILE:
+        42d79c com.droidlogic/androidx.profileinstaller.ProfileInstallReceiver filter 3c9292b
+          Action: "androidx.profileinstaller.action.SAVE_PROFILE"
+      android.net.conn.CONNECTIVITY_CHANGE:
+        e380c04 com.droidlogic/.EthernetWifiSwitch filter 9e85ed
+          Action: "android.net.conn.CONNECTIVITY_CHANGE"
+      android.intent.action.GLOBAL_BUTTON:
+        29b6c22 com.droidlogic/.GlobalKeyReceiver filter b6b96b3
+          Action: "android.intent.action.GLOBAL_BUTTON"
+      androidx.profileinstaller.action.INSTALL_PROFILE:
+        42d79c com.droidlogic/androidx.profileinstaller.ProfileInstallReceiver filter 8cf85a5
+          Action: "androidx.profileinstaller.action.INSTALL_PROFILE"
+      androidx.profileinstaller.action.SKIP_FILE:
+        42d79c com.droidlogic/androidx.profileinstaller.ProfileInstallReceiver filter db25d7a
+          Action: "androidx.profileinstaller.action.SKIP_FILE"
+      androidx.profileinstaller.action.BENCHMARK_OPERATION:
+        42d79c com.droidlogic/androidx.profileinstaller.ProfileInstallReceiver filter 973d188
+          Action: "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+      android.intent.action.PRE_BOOT_COMPLETED:
+        a621c96 com.droidlogic/.BootComplete filter 2801017
+          Action: "android.intent.action.PRE_BOOT_COMPLETED"
+          Action: "android.intent.action.BOOT_COMPLETED"
+          mPriority=1000, mOrder=0, mHasStaticPartialTypes=false, mHasDynamicPartialTypes=false
+      android.intent.action.BOOT_COMPLETED:
+        b472258 com.droidlogic/.AiPqReceiver filter 1d09fb1
+          Action: "android.intent.action.BOOT_COMPLETED"
+        a621c96 com.droidlogic/.BootComplete filter 2801017
+          Action: "android.intent.action.PRE_BOOT_COMPLETED"
+          Action: "android.intent.action.BOOT_COMPLETED"
+          mPriority=1000, mOrder=0, mHasStaticPartialTypes=false, mHasDynamicPartialTypes=false
+        62be470 com.droidlogic/.btpair.FastBootComplete filter eea93e9
+          Action: "android.intent.action.BOOT_COMPLETED"
+          mPriority=2147483647, mOrder=0, mHasStaticPartialTypes=false, mHasDynamicPartialTypes=false
+        228286e com.droidlogic/.btpair.BluetoothAutoPairReceiver filter a7eeb0f
+          Action: "android.intent.action.SCREEN_ON"
+          Action: "android.intent.action.BOOT_COMPLETED"
+
+Service Resolver Table:
+  Non-Data Actions:
+      com.droidlogic.PrebuiltChannelsService:
+        757d721 com.droidlogic/.PrebuiltChannelsService filter 878d746
+          Action: "com.droidlogic.PrebuiltChannelsService"
+
+Domain verification status:
+
+Permissions:
+  Permission [com.droidlogic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION] (f522b9d):
+    sourcePackage=com.droidlogic
+    uid=1000 gids=[] type=0 prot=signature
+    perm=PermissionInfo{7b49812 com.droidlogic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION}
+    flags=0x0
+
+Permissions:
+  Permission [droidlogic.permission.SYSTEM_CONTROL] (e266be3):
+    sourcePackage=com.droidlogic
+    uid=1000 gids=[] type=0 prot=signature
+    perm=PermissionInfo{fcd49e0 droidlogic.permission.SYSTEM_CONTROL}
+    flags=0x0
+
+Registered ContentProviders:
+  com.droidlogic/.database.DataProvider:
+    Provider{a2ae499 com.droidlogic/.database.DataProvider}
+  com.droidlogic/androidx.startup.InitializationProvider:
+    Provider{d40235e com.droidlogic/androidx.startup.InitializationProvider}
+
+ContentProvider Authorities:
+  [com.droidlogic.database]:
+    Provider{a2ae499 com.droidlogic/.database.DataProvider}
+      applicationInfo=ApplicationInfo{7c9e33f com.droidlogic}
+  [com.droidlogic.androidx-startup]:
+    Provider{d40235e com.droidlogic/androidx.startup.InitializationProvider}
+      applicationInfo=ApplicationInfo{5ed240c com.droidlogic}
+
+Key Set Manager:
+  [com.droidlogic]
+      Signing KeySets: 2
+
+Packages:
+  Package [com.droidlogic] (f1c428):
+    appId=1000
+    sharedUser=SharedUserSetting{ef27281 android.uid.system/1000}
+    pkg=Package{43c3155 com.droidlogic}
+    codePath=/system_ext/priv-app/droidlogic-res
+    resourcePath=/system_ext/priv-app/droidlogic-res
+    legacyNativeLibraryDir=/system_ext/priv-app/droidlogic-res/lib
+    extractNativeLibs=true
+    primaryCpuAbi=arm64-v8a
+    secondaryCpuAbi=null
+    cpuAbiOverride=null
+    versionCode=34 minSdk=34 targetSdk=34
+    minExtensionVersions=[]
+    versionName=14
+    usesNonSdkApi=true
+    splits=[base]
+    apkSigningVersion=3
+    flags=[ SYSTEM HAS_CODE PERSISTENT ALLOW_BACKUP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE DEFAULT_TO_DEVICE_PROTECTED_STORAGE DIRECT_BOOT_AWARE PARTIALLY_DIRECT_BOOT_AWARE PRIVILEGED SYSTEM_EXT PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    forceQueryable=false
+    queriesIntents=[Intent { act=com.android.setupwizard.action.PARTNER_CUSTOMIZATION }]
+    dataDir=/data/user_de/0/com.droidlogic
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    usesLibraries:
+      droidlogic.software.core
+    usesOptionalLibraries:
+      androidx.window.extensions
+      androidx.window.sidecar
+    usesLibraryFiles:
+      /vendor/framework/droidlogic.software.core.jar
+    timeStamp=2009-01-01 00:00:00
+    lastUpdateTime=2009-01-01 00:00:00
+    installerPackageName=null
+    installerPackageUid=-1
+    initiatingPackageName=null
+    originatingPackageName=null
+    packageSource=0
+    appMetadataFilePath=null
+    signatures=PackageSignatures{167176a version:3, signatures:[5737aea9], past signatures:[]}
+    installPermissionsFixed=false
+    pkgFlags=[ SYSTEM HAS_CODE PERSISTENT ALLOW_BACKUP ]
+    privatePkgFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE DEFAULT_TO_DEVICE_PROTECTED_STORAGE DIRECT_BOOT_AWARE PARTIALLY_DIRECT_BOOT_AWARE PRIVILEGED SYSTEM_EXT PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    apexModuleName=null
+    declared permissions:
+      droidlogic.permission.SYSTEM_CONTROL: prot=signature
+      com.droidlogic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: prot=signature
+    requested permissions:
+      android.permission.INTERNET
+      droidlogic.permission.SYSTEM_CONTROL
+      android.permission.RECEIVE_BOOT_COMPLETED
+      android.permission.WRITE_SECURE_SETTINGS
+      android.permission.KILL_BACKGROUND_PROCESSES
+      android.permission.GET_TASKS
+      android.permission.HDMI_CEC
+      android.permission.WAKE_LOCK
+      android.permission.MANAGE_USERS
+      android.permission.INTERACT_ACROSS_USERS_FULL
+      android.permission.INTERACT_ACROSS_USERS
+      android.permission.DISABLE_KEYGUARD
+      android.permission.BLUETOOTH
+      android.permission.CONTROL_KEYGUARD
+      android.permission.SET_TIME
+      android.permission.BLUETOOTH_PRIVILEGED
+      android.permission.BROADCAST_STICKY
+      android.permission.CHANGE_CONFIGURATION
+      android.permission.WRITE_SETTINGS
+      android.permission.MODIFY_AUDIO_SETTINGS
+      android.permission.MODIFY_AUDIO_ROUTING
+      android.permission.DEVICE_POWER
+      android.permission.ACCESS_NETWORK_STATE
+      android.permission.BLUETOOTH_ADMIN
+      android.permission.FORCE_STOP_PACKAGES
+      com.google.android.permission.GLOBAL_BUTTON
+      android.permission.MODIFY_HDR_CONVERSION_MODE
+      android.permission.MANAGE_LOW_POWER_STANDBY
+      android.permission.NET_BIND_SERVICE
+      com.droidlogic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+    install permissions:
+      android.permission.REAL_GET_TASKS: granted=true
+      android.permission.ACCESS_GPU_SERVICE: granted=true
+      android.permission.BIND_INCALL_SERVICE: granted=true
+      android.permission.WRITE_SETTINGS: granted=true
+      android.permission.CONTROL_KEYGUARD: granted=true
+      android.permission.CONFIGURE_WIFI_DISPLAY: granted=true
+      android.permission.CONFIGURE_DISPLAY_COLOR_MODE: granted=true
+      android.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS: granted=true
+      com.android.keychain.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.LIST_ENABLED_CREDENTIAL_PROVIDERS: granted=true
+      android.permission.BIND_ATTENTION_SERVICE: granted=true
+      android.permission.RESTART_PACKAGES: granted=true
+      android.permission.USE_CREDENTIALS: granted=true
+      com.uapplication.remoteupdater.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS: granted=true
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=true
+      android.permission.ACCESS_CHECKIN_PROPERTIES: granted=true
+      android.permission.REMAP_MODIFIER_KEYS: granted=true
+      android.permission.MODIFY_AUDIO_ROUTING: granted=true
+      android.permission.READ_SAFETY_CENTER_STATUS: granted=true
+      com.android.tv.settings.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.QUERY_AUDIO_STATE: granted=true
+      android.permission.INSTALL_LOCATION_PROVIDER: granted=true
+      android.permission.USE_RESERVED_DISK: granted=true
+      android.permission.MANAGE_LOW_POWER_STANDBY: granted=true
+      android.permission.MANAGE_ACCOUNTS: granted=true
+      android.permission.SYSTEM_ALERT_WINDOW: granted=true
+      android.permission.BROADCAST_PHONE_ACCOUNT_REGISTRATION: granted=true
+      android.permission.CLEAR_APP_USER_DATA: granted=true
+      android.permission.BROADCAST_CALLLOG_INFO: granted=true
+      android.permission.INSTALL_PACKAGES: granted=true
+      com.ugoos.ugoosfirstrun.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.CONTROL_UI_TRACING: granted=true
+      android.permission.NFC: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED: granted=true
+      android.permission.BIND_ROTATION_RESOLVER_SERVICE: granted=true
+      android.permission.NETWORK_SETTINGS: granted=true
+      android.permission.CALL_PRIVILEGED: granted=true
+      android.permission.CHANGE_NETWORK_STATE: granted=true
+      android.permission.MASTER_CLEAR: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.WRITE_SYNC_SETTINGS: granted=true
+      android.permission.READ_INSTALLED_SESSION_PATHS: granted=true
+      android.permission.ALLOW_PLACE_IN_MULTI_PANE_SETTINGS: granted=true
+      android.permission.MANAGE_DYNAMIC_SYSTEM: granted=true
+      android.permission.LAUNCH_MULTI_PANE_SETTINGS_DEEP_LINK: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      com.google.android.googleapps.permission.GOOGLE_AUTH: granted=true
+      android.permission.MANAGE_ROLE_HOLDERS: granted=true
+      android.permission.PEERS_MAC_ADDRESS: granted=true
+      android.permission.DEVICE_POWER: granted=true
+      android.permission.ENFORCE_UPDATE_OWNERSHIP: granted=true
+      android.permission.SET_TIME_ZONE: granted=true
+      android.permission.READ_PRINT_SERVICES: granted=true
+      android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS: granted=true
+      android.permission.USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER: granted=true
+      android.permission.RESTART_WIFI_SUBSYSTEM: granted=true
+      com.android.providers.tv.permission.READ_EPG_DATA: granted=true
+      android.permission.READ_PROFILE: granted=true
+      android.permission.BLUETOOTH: granted=true
+      android.permission.CHANGE_WIFI_MULTICAST_STATE: granted=true
+      com.google.android.assistant.WRITE_HOTWORD_STATE: granted=true
+      android.permission.WRITE_MEDIA_STORAGE: granted=true
+      android.permission.WRITE_BLOCKED_NUMBERS: granted=true
+      android.permission.SET_ANIMATION_SCALE: granted=true
+      android.permission.GET_TASKS: granted=true
+      android.permission.BIND_REMOTE_LOCKSCREEN_VALIDATION_SERVICE: granted=true
+      android.permission.INTERNET: granted=true
+      com.uapplication.launcher.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.TRANSMIT_IR: granted=true
+      android.permission.REORDER_TASKS: granted=true
+      android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION: granted=true
+      android.permission.BLUETOOTH_ADMIN: granted=true
+      android.permission.CONTROL_VPN: granted=true
+      android.permission.UPDATE_DEVICE_STATS: granted=true
+      android.permission.MANAGE_FINGERPRINT: granted=true
+      android.permission.READ_PROJECTION_STATE: granted=true
+      android.permission.SEND_SAFETY_CENTER_UPDATE: granted=true
+      android.permission.BIND_CONNECTION_SERVICE: granted=true
+      com.android.providers.tv.permission.WRITE_EPG_DATA: granted=true
+      android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS: granted=true
+      android.permission.ACCESS_INSTANT_APPS: granted=true
+      android.permission.MODIFY_HDR_CONVERSION_MODE: granted=true
+      android.permission.GET_PACKAGE_SIZE: granted=true
+      android.permission.ACCESS_CONTEXT_HUB: granted=true
+      android.permission.MANAGE_USB: granted=true
+      android.permission.INTERACT_ACROSS_USERS_FULL: granted=true
+      com.droidlogic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.STOP_APP_SWITCHES: granted=true
+      android.permission.BATTERY_STATS: granted=true
+      android.permission.PACKAGE_USAGE_STATS: granted=true
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS: granted=true
+      android.permission.GET_ACCOUNTS_PRIVILEGED: granted=true
+      android.permission.TETHER_PRIVILEGED: granted=true
+      android.permission.WRITE_SECURE_SETTINGS: granted=true
+      android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED: granted=true
+      android.permission.MANAGE_DEBUGGING: granted=true
+      android.permission.MOVE_PACKAGE: granted=true
+      android.permission.READ_BLOCKED_NUMBERS: granted=true
+      android.permission.STATUS_BAR_SERVICE: granted=true
+      android.permission.READ_SEARCH_INDEXABLES: granted=true
+      android.permission.USE_FULL_SCREEN_INTENT: granted=true
+      android.permission.READ_PRIVILEGED_PHONE_STATE: granted=true
+      android.permission.ACCESS_DOWNLOAD_MANAGER: granted=true
+      android.permission.BROADCAST_STICKY: granted=true
+      android.permission.BLUETOOTH_PRIVILEGED: granted=true
+      android.permission.SET_ALWAYS_FINISH: granted=true
+      android.permission.HARDWARE_TEST: granted=true
+      android.permission.USE_BIOMETRIC_INTERNAL: granted=true
+      android.permission.OBSERVE_SENSOR_PRIVACY: granted=false
+      android.permission.INSTALL_DYNAMIC_SYSTEM: granted=true
+      android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME: granted=true
+      android.intent.category.MASTER_CLEAR.permission.C2D_MESSAGE: granted=true
+      android.permission.BIND_JOB_SERVICE: granted=true
+      android.permission.CONFIRM_FULL_BACKUP: granted=true
+      android.permission.SET_TIME: granted=true
+      android.permission.WRITE_APN_SETTINGS: granted=true
+      android.permission.CHANGE_WIFI_STATE: granted=true
+      android.permission.FOREGROUND_SERVICE_DATA_SYNC: granted=true
+      com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA: granted=true
+      android.permission.MANAGE_USERS: granted=true
+      android.permission.SET_PREFERRED_APPLICATIONS: granted=true
+      android.permission.DELETE_CACHE_FILES: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.DISABLE_KEYGUARD: granted=true
+      android.permission.BACKUP: granted=true
+      android.permission.CHANGE_CONFIGURATION: granted=true
+      android.permission.USER_ACTIVITY: granted=true
+      android.permission.LOCAL_MAC_ADDRESS: granted=true
+      android.permission.READ_LOGS: granted=true
+      android.permission.COPY_PROTECTED_DATA: granted=true
+      android.permission.INTERACT_ACROSS_USERS: granted=true
+      android.permission.SET_WALLPAPER: granted=true
+      com.google.android.gms.permission.ACTIVITY_RECOGNITION: granted=true
+      android.permission.SET_KEYBOARD_LAYOUT: granted=true
+      android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS: granted=true
+      android.permission.READ_DREAM_STATE: granted=true
+      android.permission.START_VIEW_APP_FEATURES: granted=true
+      android.permission.MANAGE_ENHANCED_CONFIRMATION_STATES: granted=true
+      android.permission.HANDLE_QUERY_PACKAGE_RESTART: granted=true
+      com.droidlogic.mediacenter.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MANAGE_APP_OPS_RESTRICTIONS: granted=true
+      android.permission.KILL_BACKGROUND_PROCESSES: granted=true
+      android.permission.MANAGE_USER_OEM_UNLOCK_STATE: granted=true
+      android.permission.REQUEST_NETWORK_SCORES: granted=true
+      android.permission.MANAGE_SENSOR_PRIVACY: granted=false
+      android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS: granted=true
+      android.permission.WRITE_USER_DICTIONARY: granted=true
+      android.permission.READ_DREAM_SUPPRESSION: granted=true
+      android.permission.READ_SYNC_STATS: granted=true
+      android.permission.WRITE_DREAM_STATE: granted=true
+      android.permission.REBOOT: granted=true
+      android.permission.MOUNT_FORMAT_FILESYSTEMS: granted=true
+      android.permission.SCHEDULE_EXACT_ALARM: granted=true
+      android.permission.REQUEST_DELETE_PACKAGES: granted=true
+      android.permission.OEM_UNLOCK_STATE: granted=true
+      android.permission.MANAGE_DEVICE_ADMINS: granted=true
+      android.permission.CHANGE_APP_IDLE_STATE: granted=true
+      android.permission.BIND_SETTINGS_SUGGESTIONS_SERVICE: granted=true
+      android.permission.TEST_BLACKLISTED_PASSWORD: granted=true
+      android.permission.MANAGE_NOTIFICATION_LISTENERS: granted=true
+      android.permission.SET_POINTER_SPEED: granted=true
+      droidlogic.permission.SYSTEM_CONTROL: granted=true
+      android.permission.READ_CONTENT_RATING_SYSTEMS: granted=true
+      android.permission.MANAGE_NOTIFICATIONS: granted=true
+      android.permission.USE_COLORIZED_NOTIFICATIONS: granted=true
+      android.permission.GLOBAL_SEARCH: granted=true
+      com.google.android.assistant.READ_HOTWORD_STATE: granted=true
+      android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS: granted=true
+      android.permission.CONNECTIVITY_INTERNAL: granted=true
+      android.permission.SET_WALLPAPER_HINTS: granted=true
+      android.permission.READ_SYNC_SETTINGS: granted=true
+      android.permission.START_ACTIVITIES_FROM_BACKGROUND: granted=true
+      android.permission.BIND_CELL_BROADCAST_SERVICE: granted=true
+      android.permission.LOADER_USAGE_STATS: granted=true
+      android.permission.OVERRIDE_WIFI_CONFIG: granted=true
+      android.permission.FORCE_STOP_PACKAGES: granted=true
+      android.permission.SUGGEST_MANUAL_TIME_AND_ZONE: granted=true
+      android.permission.HIDE_NON_SYSTEM_OVERLAY_WINDOWS: granted=true
+      com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS: granted=true
+      android.permission.ACCESS_NOTIFICATIONS: granted=true
+      android.permission.HANDLE_CALL_INTENT: granted=true
+      android.permission.MEDIA_RESOURCE_OVERRIDE_PID: granted=true
+      android.permission.CUSTOMIZE_SYSTEM_UI: granted=true
+      android.permission.VIBRATE: granted=true
+      com.android.certinstaller.INSTALL_AS_USER: granted=true
+      android.permission.MANAGE_APP_HIBERNATION: granted=true
+      android.permission.HANDLE_CAR_MODE_CHANGES: granted=true
+      android.permission.HDMI_CEC: granted=true
+      android.permission.BIND_INPUT_METHOD: granted=true
+      android.permission.READ_USER_DICTIONARY: granted=true
+      com.android.server.telecom.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MANAGE_SLICE_PERMISSIONS: granted=true
+      android.permission.MANAGE_SCOPED_ACCESS_DIRECTORY_PERMISSIONS: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.READ_APP_SPECIFIC_LOCALES: granted=true
+      android.permission.USE_BIOMETRIC: granted=true
+      android.permission.MANAGE_APP_OPS_MODES: granted=true
+      com.android.settings.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=true
+      android.permission.MODIFY_PHONE_STATE: granted=true
+      android.permission.STATUS_BAR: granted=true
+      android.permission.READ_FRAME_BUFFER: granted=true
+      android.permission.QUERY_ALL_PACKAGES: granted=true
+      android.permission.DUMP: granted=true
+      android.permission.READ_DEVICE_CONFIG: granted=true
+      android.permission.LOCATION_HARDWARE: granted=true
+      android.permission.UNLIMITED_TOASTS: granted=true
+      android.permission.QUERY_ADMIN_POLICY: granted=true
+      android.permission.WAKE_LOCK: granted=true
+      android.permission.SET_UNRESTRICTED_KEEP_CLEAR_AREAS: granted=true
+      android.permission.INJECT_EVENTS: granted=true
+      android.permission.BIND_NETWORK_RECOMMENDATION_SERVICE: granted=true
+      android.permission.UPDATE_APP_OPS_STATS: granted=true
+      android.permission.READ_OEM_UNLOCK_STATE: granted=true
+      android.permission.MEDIA_CONTENT_CONTROL: granted=true
+      android.permission.DELETE_PACKAGES: granted=true
+    User 0: ceDataInode=1800 installed=true hidden=false suspended=false distractionFlags=0 stopped=false notLaunched=false enabled=0 instant=false virtual=false
+      installReason=0
+      firstInstallTime=2009-01-01 00:00:00
+      uninstallReason=0
+      disabledComponents:
+        com.droidlogic.btpair.BluetoothAutoPairReceiver
+
+Queries:
+  system apps queryable: false
+  queries via forceQueryable:
+  forceQueryable:
+    [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+  queries via package name:
+  queries via component:
+  queryable via interaction:
+    User 0:
+      [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]:
+        com.android.bluetooth
+        [com.android.networkstack.tethering,com.android.networkstack]
+        com.android.providers.calendar
+        [com.android.providers.userdictionary,com.android.providers.contacts]
+        [com.android.soundpicker,com.android.providers.media,com.android.providers.downloads.ui,com.android.mtp,com.android.providers.downloads]
+        com.google.android.tv.remote.service
+        com.android.externalstorage
+        [com.google.android.gsf,com.google.android.gms,com.google.android.backuptransport]
+        com.android.documentsui
+        com.google.android.katniss
+        com.android.packageinstaller
+        com.android.statementservice
+        com.android.providers.tv
+        com.android.vending
+        com.droidlogic.FileBrower
+        com.android.inputmethod.latin
+        com.android.systemui.recents.horizontal
+        com.android.systemui
+        android.ugoos.update.service
+        android.ext.services
+        com.android.providers.media.module
+        com.android.rkpdapp
+        com.android.permissioncontroller
+        com.android.adservices.api
+        com.android.devicelockcontroller
+        org.videolan.vlc
+        com.ionitech.airscreen
+        com.microsoft.emmx
+        com.spocky.projengmenu
+        com.mxtech.videoplayer.ad
+        org.smarttube.stable
+        videoeditor.videorecorder.screenrecorder
+        com.nexio.tv
+        app.revanced.android.gms
+        com.brouken.player
+      com.android.bluetooth:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      [com.android.networkstack.tethering,com.android.networkstack]:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.providers.calendar:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      [com.android.providers.userdictionary,com.android.providers.contacts]:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      [com.android.soundpicker,com.android.providers.media,com.android.providers.downloads.ui,com.android.mtp,com.android.providers.downloads]:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.google.android.tv.remote.service:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      [com.google.android.gsf,com.google.android.gms,com.google.android.backuptransport]:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.google.android.webview:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.google.android.katniss:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.packageinstaller:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.statementservice:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.providers.tv:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.vending:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.printspooler:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.inputmethod.latin:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.systemui:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      android.ext.services:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.providers.media.module:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.rkpdapp:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.permissioncontroller:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.android.devicelockcontroller:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.spocky.projengmenu:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      com.mxtech.videoplayer.ad:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      org.smarttube.stable:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+      app.revanced.android.gms:
+        [com.android.tv.settings,com.droidlogic,com.android.keychain,com.droidlogic.miracast,com.android.dreams.phototable,com.yeker.factorytest.tool,com.uapplication.remoteupdater,com.ugoos.framework.networkvolume,com.droidlogic.mediacenter,com.ugoos.ugoos_tv_remote,com.android.settings,com.ugoos.ugoosfirstrun,com.ugoos.framework.sysled,com.android.server.telecom,com.android.localtransport,com.android.location.fused,com.android.providers.settings,com.android.wallpaperbackup,com.android.dynsystem,android,com.android.inputdevices,com.uapplication.search,com.uapplication.launcher]
+  queryable via uses-library:
+
+Shared users:
+  SharedUser [android.uid.system] (ef27281):
+    appId=1000
+    Packages
+      PackageSetting{cef560 com.android.tv.settings/1000}
+      PackageSetting{f1c428 com.droidlogic/1000}
+      PackageSetting{12c271a com.android.keychain/1000}
+      PackageSetting{1f90f6a com.droidlogic.miracast/1000}
+      PackageSetting{2031337 com.android.dreams.phototable/1000}
+      PackageSetting{458e03c com.yeker.factorytest.tool/1000}
+      PackageSetting{46babd3 com.uapplication.remoteupdater/1000}
+      PackageSetting{5893827 com.ugoos.framework.networkvolume/1000}
+      PackageSetting{72821c2 com.droidlogic.mediacenter/1000}
+      PackageSetting{77c0e0d com.ugoos.ugoos_tv_remote/1000}
+      PackageSetting{8559ae6 com.android.settings/1000}
+      PackageSetting{864a310 com.ugoos.ugoosfirstrun/1000}
+      PackageSetting{891f1c5 com.ugoos.framework.sysled/1000}
+      PackageSetting{a2fe5d1 com.android.server.telecom/1000}
+      PackageSetting{ae87e09 com.android.localtransport/1000}
+      PackageSetting{b5d2cf8 com.android.location.fused/1000}
+      PackageSetting{bbd9563 com.android.providers.settings/1000}
+      PackageSetting{bd2c24b com.android.wallpaperbackup/1000}
+      PackageSetting{cbb322f com.android.dynsystem/1000}
+      PackageSetting{eb420a4 android/1000}
+      PackageSetting{f5a980e com.android.inputdevices/1000}
+      PackageSetting{fa4e541 com.uapplication.search/1000}
+      PackageSetting{fb2fad4 com.uapplication.launcher/1000}
+    install permissions:
+      android.permission.REAL_GET_TASKS: granted=true
+      android.permission.ACCESS_GPU_SERVICE: granted=true
+      android.permission.BIND_INCALL_SERVICE: granted=true
+      android.permission.WRITE_SETTINGS: granted=true
+      android.permission.CONTROL_KEYGUARD: granted=true
+      android.permission.CONFIGURE_WIFI_DISPLAY: granted=true
+      android.permission.CONFIGURE_DISPLAY_COLOR_MODE: granted=true
+      android.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS: granted=true
+      com.android.keychain.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.LIST_ENABLED_CREDENTIAL_PROVIDERS: granted=true
+      android.permission.BIND_ATTENTION_SERVICE: granted=true
+      android.permission.RESTART_PACKAGES: granted=true
+      android.permission.USE_CREDENTIALS: granted=true
+      com.uapplication.remoteupdater.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS: granted=true
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=true
+      android.permission.ACCESS_CHECKIN_PROPERTIES: granted=true
+      android.permission.REMAP_MODIFIER_KEYS: granted=true
+      android.permission.MODIFY_AUDIO_ROUTING: granted=true
+      android.permission.READ_SAFETY_CENTER_STATUS: granted=true
+      com.android.tv.settings.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.QUERY_AUDIO_STATE: granted=true
+      android.permission.INSTALL_LOCATION_PROVIDER: granted=true
+      android.permission.USE_RESERVED_DISK: granted=true
+      android.permission.MANAGE_LOW_POWER_STANDBY: granted=true
+      android.permission.MANAGE_ACCOUNTS: granted=true
+      android.permission.SYSTEM_ALERT_WINDOW: granted=true
+      android.permission.BROADCAST_PHONE_ACCOUNT_REGISTRATION: granted=true
+      android.permission.CLEAR_APP_USER_DATA: granted=true
+      android.permission.BROADCAST_CALLLOG_INFO: granted=true
+      android.permission.INSTALL_PACKAGES: granted=true
+      com.ugoos.ugoosfirstrun.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.CONTROL_UI_TRACING: granted=true
+      android.permission.NFC: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED: granted=true
+      android.permission.BIND_ROTATION_RESOLVER_SERVICE: granted=true
+      android.permission.NETWORK_SETTINGS: granted=true
+      android.permission.CALL_PRIVILEGED: granted=true
+      android.permission.CHANGE_NETWORK_STATE: granted=true
+      android.permission.MASTER_CLEAR: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.WRITE_SYNC_SETTINGS: granted=true
+      android.permission.READ_INSTALLED_SESSION_PATHS: granted=true
+      android.permission.ALLOW_PLACE_IN_MULTI_PANE_SETTINGS: granted=true
+      android.permission.MANAGE_DYNAMIC_SYSTEM: granted=true
+      android.permission.LAUNCH_MULTI_PANE_SETTINGS_DEEP_LINK: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      com.google.android.googleapps.permission.GOOGLE_AUTH: granted=true
+      android.permission.MANAGE_ROLE_HOLDERS: granted=true
+      android.permission.PEERS_MAC_ADDRESS: granted=true
+      android.permission.DEVICE_POWER: granted=true
+      android.permission.ENFORCE_UPDATE_OWNERSHIP: granted=true
+      android.permission.SET_TIME_ZONE: granted=true
+      android.permission.READ_PRINT_SERVICES: granted=true
+      android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS: granted=true
+      android.permission.USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER: granted=true
+      android.permission.RESTART_WIFI_SUBSYSTEM: granted=true
+      com.android.providers.tv.permission.READ_EPG_DATA: granted=true
+      android.permission.READ_PROFILE: granted=true
+      android.permission.BLUETOOTH: granted=true
+      android.permission.CHANGE_WIFI_MULTICAST_STATE: granted=true
+      com.google.android.assistant.WRITE_HOTWORD_STATE: granted=true
+      android.permission.WRITE_MEDIA_STORAGE: granted=true
+      android.permission.WRITE_BLOCKED_NUMBERS: granted=true
+      android.permission.SET_ANIMATION_SCALE: granted=true
+      android.permission.GET_TASKS: granted=true
+      android.permission.BIND_REMOTE_LOCKSCREEN_VALIDATION_SERVICE: granted=true
+      android.permission.INTERNET: granted=true
+      com.uapplication.launcher.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.TRANSMIT_IR: granted=true
+      android.permission.REORDER_TASKS: granted=true
+      android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION: granted=true
+      android.permission.BLUETOOTH_ADMIN: granted=true
+      android.permission.CONTROL_VPN: granted=true
+      android.permission.UPDATE_DEVICE_STATS: granted=true
+      android.permission.MANAGE_FINGERPRINT: granted=true
+      android.permission.READ_PROJECTION_STATE: granted=true
+      android.permission.SEND_SAFETY_CENTER_UPDATE: granted=true
+      android.permission.BIND_CONNECTION_SERVICE: granted=true
+      com.android.providers.tv.permission.WRITE_EPG_DATA: granted=true
+      android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS: granted=true
+      android.permission.ACCESS_INSTANT_APPS: granted=true
+      android.permission.MODIFY_HDR_CONVERSION_MODE: granted=true
+      android.permission.GET_PACKAGE_SIZE: granted=true
+      android.permission.ACCESS_CONTEXT_HUB: granted=true
+      android.permission.MANAGE_USB: granted=true
+      android.permission.INTERACT_ACROSS_USERS_FULL: granted=true
+      com.droidlogic.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.STOP_APP_SWITCHES: granted=true
+      android.permission.BATTERY_STATS: granted=true
+      android.permission.PACKAGE_USAGE_STATS: granted=true
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS: granted=true
+      android.permission.GET_ACCOUNTS_PRIVILEGED: granted=true
+      android.permission.TETHER_PRIVILEGED: granted=true
+      android.permission.WRITE_SECURE_SETTINGS: granted=true
+      android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED: granted=true
+      android.permission.MANAGE_DEBUGGING: granted=true
+      android.permission.MOVE_PACKAGE: granted=true
+      android.permission.READ_BLOCKED_NUMBERS: granted=true
+      android.permission.STATUS_BAR_SERVICE: granted=true
+      android.permission.READ_SEARCH_INDEXABLES: granted=true
+      android.permission.USE_FULL_SCREEN_INTENT: granted=true
+      android.permission.READ_PRIVILEGED_PHONE_STATE: granted=true
+      android.permission.ACCESS_DOWNLOAD_MANAGER: granted=true
+      android.permission.BROADCAST_STICKY: granted=true
+      android.permission.BLUETOOTH_PRIVILEGED: granted=true
+      android.permission.SET_ALWAYS_FINISH: granted=true
+      android.permission.HARDWARE_TEST: granted=true
+      android.permission.USE_BIOMETRIC_INTERNAL: granted=true
+      android.permission.OBSERVE_SENSOR_PRIVACY: granted=false
+      android.permission.INSTALL_DYNAMIC_SYSTEM: granted=true
+      android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME: granted=true
+      android.intent.category.MASTER_CLEAR.permission.C2D_MESSAGE: granted=true
+      android.permission.BIND_JOB_SERVICE: granted=true
+      android.permission.CONFIRM_FULL_BACKUP: granted=true
+      android.permission.SET_TIME: granted=true
+      android.permission.WRITE_APN_SETTINGS: granted=true
+      android.permission.CHANGE_WIFI_STATE: granted=true
+      android.permission.FOREGROUND_SERVICE_DATA_SYNC: granted=true
+      com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA: granted=true
+      android.permission.MANAGE_USERS: granted=true
+      android.permission.SET_PREFERRED_APPLICATIONS: granted=true
+      android.permission.DELETE_CACHE_FILES: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.DISABLE_KEYGUARD: granted=true
+      android.permission.BACKUP: granted=true
+      android.permission.CHANGE_CONFIGURATION: granted=true
+      android.permission.USER_ACTIVITY: granted=true
+      android.permission.LOCAL_MAC_ADDRESS: granted=true
+      android.permission.READ_LOGS: granted=true
+      android.permission.COPY_PROTECTED_DATA: granted=true
+      android.permission.INTERACT_ACROSS_USERS: granted=true
+      android.permission.SET_WALLPAPER: granted=true
+      com.google.android.gms.permission.ACTIVITY_RECOGNITION: granted=true
+      android.permission.SET_KEYBOARD_LAYOUT: granted=true
+      android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS: granted=true
+      android.permission.READ_DREAM_STATE: granted=true
+      android.permission.START_VIEW_APP_FEATURES: granted=true
+      android.permission.MANAGE_ENHANCED_CONFIRMATION_STATES: granted=true
+      android.permission.HANDLE_QUERY_PACKAGE_RESTART: granted=true
+      com.droidlogic.mediacenter.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MANAGE_APP_OPS_RESTRICTIONS: granted=true
+      android.permission.KILL_BACKGROUND_PROCESSES: granted=true
+      android.permission.MANAGE_USER_OEM_UNLOCK_STATE: granted=true
+      android.permission.REQUEST_NETWORK_SCORES: granted=true
+      android.permission.MANAGE_SENSOR_PRIVACY: granted=false
+      android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS: granted=true
+      android.permission.WRITE_USER_DICTIONARY: granted=true
+      android.permission.READ_DREAM_SUPPRESSION: granted=true
+      android.permission.READ_SYNC_STATS: granted=true
+      android.permission.WRITE_DREAM_STATE: granted=true
+      android.permission.REBOOT: granted=true
+      android.permission.MOUNT_FORMAT_FILESYSTEMS: granted=true
+      android.permission.SCHEDULE_EXACT_ALARM: granted=true
+      android.permission.REQUEST_DELETE_PACKAGES: granted=true
+      android.permission.OEM_UNLOCK_STATE: granted=true
+      android.permission.MANAGE_DEVICE_ADMINS: granted=true
+      android.permission.CHANGE_APP_IDLE_STATE: granted=true
+      android.permission.BIND_SETTINGS_SUGGESTIONS_SERVICE: granted=true
+      android.permission.TEST_BLACKLISTED_PASSWORD: granted=true
+      android.permission.MANAGE_NOTIFICATION_LISTENERS: granted=true
+      android.permission.SET_POINTER_SPEED: granted=true
+      droidlogic.permission.SYSTEM_CONTROL: granted=true
+      android.permission.READ_CONTENT_RATING_SYSTEMS: granted=true
+      android.permission.MANAGE_NOTIFICATIONS: granted=true
+      android.permission.USE_COLORIZED_NOTIFICATIONS: granted=true
+      android.permission.GLOBAL_SEARCH: granted=true
+      com.google.android.assistant.READ_HOTWORD_STATE: granted=true
+      android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS: granted=true
+      android.permission.CONNECTIVITY_INTERNAL: granted=true
+      android.permission.SET_WALLPAPER_HINTS: granted=true
+      android.permission.READ_SYNC_SETTINGS: granted=true
+      android.permission.START_ACTIVITIES_FROM_BACKGROUND: granted=true
+      android.permission.BIND_CELL_BROADCAST_SERVICE: granted=true
+      android.permission.LOADER_USAGE_STATS: granted=true
+      android.permission.OVERRIDE_WIFI_CONFIG: granted=true
+      android.permission.FORCE_STOP_PACKAGES: granted=true
+      android.permission.SUGGEST_MANUAL_TIME_AND_ZONE: granted=true
+      android.permission.HIDE_NON_SYSTEM_OVERLAY_WINDOWS: granted=true
+      com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS: granted=true
+      android.permission.ACCESS_NOTIFICATIONS: granted=true
+      android.permission.HANDLE_CALL_INTENT: granted=true
+      android.permission.MEDIA_RESOURCE_OVERRIDE_PID: granted=true
+      android.permission.CUSTOMIZE_SYSTEM_UI: granted=true
+      android.permission.VIBRATE: granted=true
+      com.android.certinstaller.INSTALL_AS_USER: granted=true
+      android.permission.MANAGE_APP_HIBERNATION: granted=true
+      android.permission.HANDLE_CAR_MODE_CHANGES: granted=true
+      android.permission.HDMI_CEC: granted=true
+      android.permission.BIND_INPUT_METHOD: granted=true
+      android.permission.READ_USER_DICTIONARY: granted=true
+      com.android.server.telecom.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.MANAGE_SLICE_PERMISSIONS: granted=true
+      android.permission.MANAGE_SCOPED_ACCESS_DIRECTORY_PERMISSIONS: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.READ_APP_SPECIFIC_LOCALES: granted=true
+      android.permission.USE_BIOMETRIC: granted=true
+      android.permission.MANAGE_APP_OPS_MODES: granted=true
+      com.android.settings.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=true
+      android.permission.MODIFY_PHONE_STATE: granted=true
+      android.permission.STATUS_BAR: granted=true
+      android.permission.READ_FRAME_BUFFER: granted=true
+      android.permission.QUERY_ALL_PACKAGES: granted=true
+      android.permission.DUMP: granted=true
+      android.permission.READ_DEVICE_CONFIG: granted=true
+      android.permission.LOCATION_HARDWARE: granted=true
+      android.permission.UNLIMITED_TOASTS: granted=true
+      android.permission.QUERY_ADMIN_POLICY: granted=true
+      android.permission.WAKE_LOCK: granted=true
+      android.permission.SET_UNRESTRICTED_KEEP_CLEAR_AREAS: granted=true
+      android.permission.INJECT_EVENTS: granted=true
+      android.permission.BIND_NETWORK_RECOMMENDATION_SERVICE: granted=true
+      android.permission.UPDATE_APP_OPS_STATS: granted=true
+      android.permission.READ_OEM_UNLOCK_STATE: granted=true
+      android.permission.MEDIA_CONTENT_CONTROL: granted=true
+      android.permission.DELETE_PACKAGES: granted=true
+    User 0: 
+      gids=[1065, 3002, 3003, 3001, 3007, 1007]
+      runtime permissions:
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_CALL_LOG: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.ACCESS_FINE_LOCATION: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_PHONE_NUMBERS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_MEDIA_VISUAL_USER_SELECTED: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.BLUETOOTH_CONNECT: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_TV_LISTINGS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_EXTERNAL_STORAGE: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.ACCESS_COARSE_LOCATION: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_PHONE_STATE: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.SEND_SMS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.CALL_PHONE: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_MEDIA_IMAGES: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.WRITE_CONTACTS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.CAMERA: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.WRITE_CALL_LOG: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_MEDIA_AUDIO: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_MEDIA_VIDEO: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.BLUETOOTH_ADVERTISE: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.GET_ACCOUNTS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT]
+        android.permission.WRITE_EXTERNAL_STORAGE: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.ACTIVITY_RECOGNITION: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.RECORD_AUDIO: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_CONTACTS: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.ACCESS_BACKGROUND_LOCATION: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.BLUETOOTH_SCAN: granted=true, flags=[ SYSTEM_FIXED|GRANTED_BY_DEFAULT|RESTRICTION_SYSTEM_EXEMPT|RESTRICTION_UPGRADE_EXEMPT]
+
+Dexopt state:
+  [com.droidlogic]
+    path: /system_ext/priv-app/droidlogic-res/droidlogic-res.apk
+      arm64: [status=verify] [reason=vdex] [primary-abi]
+        [location is /system_ext/priv-app/droidlogic-res/oat/arm64/droidlogic-res.vdex]
+
+Compiler stats:
+  [com.droidlogic]
+    (No recorded stats)

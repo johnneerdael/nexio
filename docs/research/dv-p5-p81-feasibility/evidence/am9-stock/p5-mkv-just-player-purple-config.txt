@@ -1,0 +1,1 @@
+cat: /sys/class/amhdmitx/amhdmitx0/config: I/O error

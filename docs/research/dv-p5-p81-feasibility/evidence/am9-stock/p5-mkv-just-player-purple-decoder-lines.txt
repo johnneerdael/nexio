@@ -1,0 +1,723 @@
+04-17 19:13:59.120  4425  4425 W Looper  : Slow delivery took 829015ms main h=android.os.Handler c=com.google.android.exoplayer2.ext.leanback.LeanbackPlayerAdapter@cf9aa71 m=0
+04-17 19:33:08.723  4425  4425 W Looper  : Slow delivery took 1133434ms main h=android.os.Handler c=com.google.android.exoplayer2.ext.leanback.LeanbackPlayerAdapter@cf9aa71 m=0
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: FATAL EXCEPTION: ExoPlayer:Playback
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: 	at androidx.media3.exoplayer.trackselection.BaseTrackSelection.isTrackExcluded(Unknown Source:2)
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsChunkSource.createFallbackOptions(SourceFile:11)
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsChunkSource.createFallbackOptions(SourceFile:15)
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsSampleStreamWrapper.onLoadError(SourceFile:16)
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsSampleStreamWrapper.onLoadError(SourceFile:1)
+04-17 19:35:29.698 20532 21779 E AndroidRuntime: 	at androidx.media3.exoplayer.upstream.Loader$LoadTask.handleMessage(Unknown Source:69)
+04-17 19:51:09.061  4425  4425 W Looper  : Slow delivery took 1065914ms main h=android.os.Handler c=com.google.android.exoplayer2.ext.leanback.LeanbackPlayerAdapter@cf9aa71 m=0
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: FATAL EXCEPTION: ExoPlayer:Playback
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: 	at androidx.media3.exoplayer.trackselection.BaseTrackSelection.isTrackExcluded(Unknown Source:2)
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsChunkSource.createFallbackOptions(SourceFile:11)
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsChunkSource.createFallbackOptions(SourceFile:15)
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsSampleStreamWrapper.onLoadError(SourceFile:16)
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: 	at androidx.media3.exoplayer.hls.HlsSampleStreamWrapper.onLoadError(SourceFile:1)
+04-17 19:52:11.174 21846 24178 E AndroidRuntime: 	at androidx.media3.exoplayer.upstream.Loader$LoadTask.handleMessage(Unknown Source:69)
+04-17 20:01:12.800   848   902 V BackupManagerService: [UserID:0] restoreAtInstall pkg=com.brouken.player token=22 restoreSet=0
+04-17 20:02:56.345 24617 24617 I ExoPlayerImpl: Init 5f6b039 [AndroidXMedia3/1.10.0] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:02:56.694 24617 24763 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:02:56.694 24617 24763 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:02:56.694 24617 24763 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:02:56.695 24617 24763 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:02:56.695 24617 24763 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:02:56.695 24617 24763 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:02:56.921 24617 24763 I DMCodecAdapterFactory: Creating an asynchronous MediaCodec adapter for track type video
+04-17 20:02:56.967 24617 24776 D CCodec  : allocate(c2.amlogic.avc.decoder)
+04-17 20:02:56.989 24617 24776 I CCodec  : setting up 'default' as default (vendor) store
+04-17 20:02:56.992   601   750 I C2VendorComponentStore: C2VendorComponentStore::createComponent name c2.amlogic.avc.decoder
+04-17 20:02:56.992   601   750 I C2VendorComponentStore: localModule libpath libcodec2_aml_video_decoder.so 1
+04-17 20:02:56.993   601   750 V C2VendorComponentStore: init  libPath:libcodec2_aml_video_decoder.so --> isAudio:0, createFactoryName:CreateC2VdecH264Factory
+04-17 20:02:56.993   601   750 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:02:56.994   601   750 I C2VdecCodecConfig: isCodecSupportHdr10Plus hdr10:(1)
+04-17 20:02:56.995   601   750 I C2VdecComponent: [247##-1]"Create C2VdecComponent(c2.amlogic.avc.decoder)"
+04-17 20:02:56.996 24617 24776 I CCodec  : Created component [c2.amlogic.avc.decoder]
+04-17 20:02:56.996 24617 24776 D CCodecConfig: Query domain & kind failed => BAD_INDEX
+04-17 20:02:56.997 24617 24776 D CCodecConfig: read media type: video/avc
+04-17 20:02:56.997 24617 24776 D CCodecConfig: read media type: video/avc
+04-17 20:02:57.003 24617 24776 D CCodecConfig: ignoring local param raw.size (0xd2001800) as it is already supported
+04-17 20:02:57.003 24617 24776 D CCodecConfig: ignoring local param default.color (0x5200180b) as it is already supported
+04-17 20:02:57.003 24617 24776 D CCodecConfig: ignoring local param raw.hdr-static-info (0xd200180a) as it is already supported
+04-17 20:02:57.004 24617 24776 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:02:57.005 24617 24776 D CCodecConfig: c2 config diff is Dict {
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 algo.delay.value = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 algo.low-latency.value = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::float coded.frame-rate.value = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 coded.pl.level = 20495
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 coded.pl.profile = 20482
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 coded.vui.color.matrix = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 coded.vui.color.primaries = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 coded.vui.color.range = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 coded.vui.color.transfer = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 default.color.matrix = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 default.color.primaries = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 default.color.range = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 default.color.transfer = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 1310720
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 input.delay.value = 4
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   Buffer input.hdr-dynamic-info.data = {
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   }
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 input.hdr-dynamic-info.type = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   string input.media-type.value = "video/avc"
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 output.delay.value = 3
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   Buffer output.hdr-dynamic-info.data = {
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   }
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 output.hdr-dynamic-info.type = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   string output.media-type.value = "video/raw"
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 output.tunnel-start-render.value = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 raw.color.matrix = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 raw.color.primaries = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   c2::u32 raw.color.range = 0
+04-17 20:02:57.005 24617 24776 D CCodecConfig:   
+04-17 20:02:57.013 24617 24775 I MediaCodec: MediaCodec will operate in async mode
+04-17 20:02:57.015 24617 24775 D MediaCodec: flushMediametrics
+04-17 20:02:57.015 24617 24775 I MediaCodec: [c2.amlogic.avc.decoder] setting surface generation to 25207809
+04-17 20:02:57.015 24617 24776 D CCodec  : [c2.amlogic.avc.decoder] buffers are bound to CCodec for this session
+04-17 20:02:57.015 24617 24776 D CCodecConfig: no c2 equivalents for csd-1
+04-17 20:02:57.016 24617 24776 D CCodecConfig: no c2 equivalents for log-session-id
+04-17 20:02:57.016 24617 24776 D CCodecConfig: no c2 equivalents for native-window
+04-17 20:02:57.016 24617 24776 D CCodecConfig: no c2 equivalents for flags
+04-17 20:02:57.016   601   601 E C2VdecCodecConfig: can not support 8K
+04-17 20:02:57.016   601   601 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:02:57.017 24617 24776 D CCodecConfig: c2 config diff is   c2::float coded.frame-rate.value = 24
+04-17 20:02:57.017 24617 24776 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 8388608
+04-17 20:02:57.017 24617 24776 D CCodecConfig:   c2::u32 raw.size.height = 2160
+04-17 20:02:57.017 24617 24776 D CCodecConfig:   c2::u32 raw.size.width = 3840
+04-17 20:02:57.018 24617 24776 D CCodec  : client requested max input size 44887, which is smaller than what component recommended (8388608); overriding with component recommendation.
+04-17 20:02:57.018 24617 24776 W CCodec  : This behavior is subject to change. It is recommended that app developers double check whether the requested max input size is in reasonable range.
+04-17 20:02:57.018 24617 24776 D CCodec  : encoding statistics level = 0
+04-17 20:02:57.018 24617 24776 D CCodec  : setup formats input: AMessage(what = 0x00000000) = {
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t frame-rate = 24
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t height = 2160
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t level = 32768
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t max-input-size = 8388608
+04-17 20:02:57.018 24617 24776 D CCodec  :   string mime = "video/avc"
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t profile = 2
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t width = 3840
+04-17 20:02:57.018 24617 24776 D CCodec  :   Rect crop(0, 0, 3839, 2159)
+04-17 20:02:57.018 24617 24776 D CCodec  : }
+04-17 20:02:57.018 24617 24776 D CCodec  : setup formats output: AMessage(what = 0x00000000) = {
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t android._video-scaling = 1
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t android._dataspace = 281411584
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t color-standard = 6
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t color-range = 2
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t color-transfer = 3
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t sar-height = 1
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t rotation-degrees = 0
+04-17 20:02:57.018 24617 24776 D CCodec  :   Buffer hdr-static-info = {
+04-17 20:02:57.018 24617 24776 D CCodec  :     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+04-17 20:02:57.018 24617 24776 D CCodec  :     00000010:  00 00 00 00 00 00 00 00  00                       .........
+04-17 20:02:57.018 24617 24776 D CCodec  :   }
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t sar-width = 1
+04-17 20:02:57.018 24617 24776 D CCodec  :   Rect crop(0, 0, 3839, 2159)
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t width = 3840
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t frame-rate = 24
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t height = 2160
+04-17 20:02:57.018 24617 24776 D CCodec  :   string mime = "video/raw"
+04-17 20:02:57.018 24617 24776 D CCodec  :   Buffer output.hdr-dynamic-info.data = {
+04-17 20:02:57.018 24617 24776 D CCodec  :   }
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t output.hdr-dynamic-info.type = 0
+04-17 20:02:57.018 24617 24776 D CCodec  :   int32_t color-format = 2130708361
+04-17 20:02:57.018 24617 24776 D CCodec  : }
+04-17 20:02:57.018 24617 24776 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:02:57.073 24617 24763 D MediaCodec: keep callback message for reclaim
+04-17 20:02:57.074   601 24781 I C2VdecCodecConfig: isCodecSupportHdr10Plus hdr10:(1)
+04-17 20:02:57.075   601 24781 I C2VdecDeviceUtil: [0#-1]"Disable low latency mode to v4l2 decoder."
+04-17 20:02:57.075   601 24781 E C2VdecCodecConfig: can not support 8K
+04-17 20:02:57.095   601 24781 I AmVideoDec: [No--1]-[0]"res_status.v.query.avail 444 -mmsize: 160 -adjust 0\n"
+04-17 20:02:57.111   601 24788 I VDA     : [-1##1061]"Initialize decoder_instance_num_ = 1061"
+04-17 20:02:57.112   601 24781 I VDA     : [0##1061]"setDurationToDecoder set [3999][24.000002]"
+04-17 20:02:57.112   601 24781 I VDA     : [0##1061]"setDurationToDecoder set [3999]"
+04-17 20:02:57.112   601 24781 I VDA     : [0##1061]"sendMessagetoDecoder set AML_V4L2_SET_VF_DURATION"
+04-17 20:02:57.125   601 24781 I VDA     : [0##1061]"sendMessagetoDecoder set AML_V4L2_SET_UEVENT_DURATION"
+04-17 20:02:57.126   601 24781 I VDA     : [0##1061]"decoderID:1061"
+04-17 20:02:57.126   601 24781 I VideoDecWrapper: [0##-1]"Query decoderID(1061) success."
+04-17 20:02:57.155 24617 24776 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] Created input block pool with allocatorID 16 => poolID 17 - OK (0)
+04-17 20:02:57.156 24617 24776 I CCodecBufferChannel: [c2.amlogic.avc.decoder#670] Created output block pool with allocatorID 18 => poolID 262 - OK
+04-17 20:02:57.157 24617 24776 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] Configured output block pool ids 262 => OK
+04-17 20:02:57.194 24617 24763 I DMCodecAdapterFactory: Creating an asynchronous MediaCodec adapter for track type audio
+04-17 20:02:57.208   601 24781 I C2VdecDeviceUtil: [0#1061]"Disable low latency mode to v4l2 decoder."
+04-17 20:02:57.210   601 24781 E C2VdecCodecConfig: can not support 8K
+04-17 20:02:57.210   601 24781 I AmVideoDec: [No--1]-[0]"res_status.v.query.avail 444 -mmsize: 160 -adjust 0\n"
+04-17 20:02:57.211 24617 24798 D CCodec  : allocate(c2.android.ac3.decoder)
+04-17 20:02:57.212 24617 24798 I CCodec  : setting up 'default' as default (vendor) store
+04-17 20:02:57.213   601   601 I C2VendorComponentStore: C2VendorComponentStore::createComponent name c2.android.ac3.decoder
+04-17 20:02:57.218 24617 24798 I CCodec  : Created component [c2.android.ac3.decoder]
+04-17 20:02:57.218 24617 24798 D CCodecConfig: read media type: audio/ac3
+04-17 20:02:57.222 24617 24798 I CCodecConfig: query failed after returning 8 values (BAD_INDEX)
+04-17 20:02:57.222 24617 24798 D CCodecConfig: c2 config diff is Dict {
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   c2::u32 coded.bitrate.value = 64000
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 65536
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   c2::u32 input.delay.value = 0
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   string input.media-type.value = "audio/ac3"
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   string output.media-type.value = "audio/raw"
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   c2::u32 raw.channel-count.value = 2
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   c2::u32 raw.pcm-encoding.value = 0
+04-17 20:02:57.222 24617 24798 D CCodecConfig:   c2::u32 raw.sample-rate.value = 44100
+04-17 20:02:57.222 24617 24798 D CCodecConfig: }
+04-17 20:02:57.230   601 24799 I VDA     : [-1##1063]"Initialize decoder_instance_num_ = 1063"
+04-17 20:02:57.231   601 24781 I VDA     : [0##1063]"setDurationToDecoder set [3999][24.000002]"
+04-17 20:02:57.231   601 24781 I VDA     : [0##1063]"setDurationToDecoder set [3999]"
+04-17 20:02:57.231   601 24781 I VDA     : [0##1063]"sendMessagetoDecoder set AML_V4L2_SET_VF_DURATION"
+04-17 20:02:57.235   601 24781 I VDA     : [0##1063]"sendMessagetoDecoder set AML_V4L2_SET_UEVENT_DURATION"
+04-17 20:02:57.235   601 24781 I VDA     : [0##1063]"decoderID:1063"
+04-17 20:02:57.235   601 24781 I VideoDecWrapper: [0##1061]"Query decoderID(1063) success."
+04-17 20:02:57.239 24617 24780 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] Ignoring stale input buffer done callback: last flush index = 0, frameIndex = 0
+04-17 20:02:57.412 24617 24798 I MediaCodec: MediaCodec will operate in async mode
+04-17 20:02:57.412 24617 24798 D MediaCodec: flushMediametrics
+04-17 20:02:57.412 24617 24798 D CCodec  : [c2.android.ac3.decoder] buffers are bound to CCodec for this session
+04-17 20:02:57.412 24617 24798 D CCodecConfig: no c2 equivalents for log-session-id
+04-17 20:02:57.412 24617 24798 D CCodecConfig: no c2 equivalents for flags
+04-17 20:02:57.414 24617 24798 D CCodecConfig: config failed => CORRUPTED
+04-17 20:02:57.415 24617 24798 D CCodecConfig: c2 config diff is   c2::u32 raw.channel-count.value = 6
+04-17 20:02:57.415 24617 24798 D CCodecConfig:   c2::u32 raw.sample-rate.value = 48000
+04-17 20:02:57.416 24617 24798 D CCodec  : client requested max input size 798, which is smaller than what component recommended (65536); overriding with component recommendation.
+04-17 20:02:57.416 24617 24798 W CCodec  : This behavior is subject to change. It is recommended that app developers double check whether the requested max input size is in reasonable range.
+04-17 20:02:57.416 24617 24798 D CCodec  : encoding statistics level = 0
+04-17 20:02:57.416 24617 24798 D CCodec  : setup formats input: AMessage(what = 0x00000000) = {
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t android._codec-pcm-encoding = 2
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t bitrate = 64000
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t channel-count = 6
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t max-input-size = 65536
+04-17 20:02:57.416 24617 24798 D CCodec  :   string mime = "audio/ac3"
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t pcm-encoding = 2
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t sample-rate = 48000
+04-17 20:02:57.416 24617 24798 D CCodec  : }
+04-17 20:02:57.416 24617 24798 D CCodec  : setup formats output: AMessage(what = 0x00000000) = {
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t android._codec-pcm-encoding = 2
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t channel-count = 6
+04-17 20:02:57.416 24617 24798 D CCodec  :   string mime = "audio/raw"
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t pcm-encoding = 2
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t sample-rate = 48000
+04-17 20:02:57.416 24617 24798 D CCodec  :   int32_t android._config-pcm-encoding = 2
+04-17 20:02:57.416 24617 24798 D CCodec  : }
+04-17 20:02:57.416 24617 24798 I CCodecConfig: query failed after returning 8 values (BAD_INDEX)
+04-17 20:02:57.438 24617 24763 D MediaCodec: keep callback message for reclaim
+04-17 20:02:57.435   721   721 I oid.ac3.decoder: type=1400 audit(0.0:5716): avc:  denied  { read write } for  name="v4lvideo" dev="tmpfs" ino=673 scontext=u:r:mediaswcodec:s0 tcontext=u:object_r:video_device:s0 tclass=chr_file permissive=1
+04-17 20:02:57.435   721   721 I oid.ac3.decoder: type=1400 audit(0.0:5717): avc:  denied  { open } for  path="/dev/v4lvideo" dev="tmpfs" ino=673 scontext=u:r:mediaswcodec:s0 tcontext=u:object_r:video_device:s0 tclass=chr_file permissive=1
+04-17 20:02:57.435   721   721 I oid.ac3.decoder: type=1400 audit(0.0:5718): avc:  denied  { ioctl } for  path="/dev/v4lvideo" dev="tmpfs" ino=673 ioctlcmd=0x4904 scontext=u:r:mediaswcodec:s0 tcontext=u:object_r:video_device:s0 tclass=chr_file permissive=1
+04-17 20:02:57.444 24617 24798 D CCodecBufferChannel: [c2.android.ac3.decoder#563] Created input block pool with allocatorID 16 => poolID 18 - OK (0)
+04-17 20:02:57.446 24617 24798 I CCodecBufferChannel: [c2.android.ac3.decoder#563] Created output block pool with allocatorID 16 => poolID 271 - OK
+04-17 20:02:57.446 24617 24798 D CCodecBufferChannel: [c2.android.ac3.decoder#563] Configured output block pool ids 271 => OK
+04-17 20:02:57.487 24617 24775 I MediaCodec: [c2.amlogic.avc.decoder] setting surface generation to 25207810
+04-17 20:02:57.487   601 24799 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:02:57.489   601 24781 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:02:57.489   601 24805 I VDA     : [0##1063]"CreateOutputBuffers decoder_state_ change to kAwaitingPictureBuffers\n"
+04-17 20:02:57.489   601 24781 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(0*0),w_align=0,h_align=0,size=0,compress=0]
+04-17 20:02:57.489   601 24781 I C2VdecDeviceUtil: [0#1063]"Query the decoder width align(64) success."
+04-17 20:02:57.490   601 24781 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.490   601 24805 I VDA     : [0##1063]"AssignPictureBuffersTask decoder_state_=kAwaitingPictureBuffers"
+04-17 20:02:57.490   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.491   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.511   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.511   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.536   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.536   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.559   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.559   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.572   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.572   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.586   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.586   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.600   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.600   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.613   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.613   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.632   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.632   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.645   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.645   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.663   601 24781 E C2VdecCodecConfig: can not support 8K
+04-17 20:02:57.663   601 24781 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:02:57.663   601 24805 I VDA     : [0##1063]"DecodeBufferTask decoder_state_ = kPictureBuffersReady -> kDecoding"
+04-17 20:02:57.666 24617 24776 D CCodecConfig: c2 config diff is   c2::u32 raw.crop.height = 2160
+04-17 20:02:57.666 24617 24776 D CCodecConfig:   c2::u32 raw.crop.left = 0
+04-17 20:02:57.666 24617 24776 D CCodecConfig:   c2::u32 raw.crop.top = 0
+04-17 20:02:57.666 24617 24776 D CCodecConfig:   c2::u32 raw.crop.width = 3840
+04-17 20:02:57.863   408  3850 D MesonHwc: adjustVsyncMode to MixMode
+04-17 20:02:57.865   408  3850 D hwc_di  : use org:is_repeat=0, omx_index=0,bypass=1, tvp=0, mFirstI=0
+04-17 20:02:57.889   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.889   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:57.979   408  3850 D hwc_di  : use org:is_repeat=0, omx_index=0,bypass=1, tvp=0, mFirstI=0
+04-17 20:02:58.017   408  3850 D hwc_di  : use org:is_repeat=0, omx_index=0,bypass=1, tvp=0, mFirstI=0
+04-17 20:02:58.099   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:02:58.099   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(3840*2176),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:05.734   601 24805 I VDA     : [0##1063]"SendDecoderCmdStop"
+04-17 20:03:08.699 24617 24775 I MediaCodec: [c2.amlogic.avc.decoder] setting surface generation to 25207811
+04-17 20:03:08.710 24617 24617 I ExoPlayerImpl: Release 5f6b039 [AndroidXMedia3/1.10.0] [umx5jyks, AM9 PRO, UGOOS, 34] [media3.common, media3.exoplayer, media3.decoder, media3.datasource, media3.extractor, media3.ui]
+04-17 20:03:08.714 24617 24763 D MediaCodec: keep callback message for reclaim
+04-17 20:03:08.714 24617 24775 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:03:08.718 24617 24763 D MediaCodec: keep callback message for reclaim
+04-17 20:03:08.718 24617 24798 I CCodecConfig: query failed after returning 8 values (BAD_INDEX)
+04-17 20:03:08.720 24617 24775 I MediaCodec: [c2.amlogic.avc.decoder] setting surface generation to 25207812
+04-17 20:03:08.722 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.722 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723 24617 24775 D CCodecBufferChannel: [c2.amlogic.avc.decoder#670] MediaCodec discarded an unknown buffer
+04-17 20:03:08.723   601 24781 I C2VdecComponent: [0##1063]"[onStopDone] clear decoder duration"
+04-17 20:03:08.723   601 24781 I C2VdecDeviceUtil: [0#1063]"into clearDecoderDuration"
+04-17 20:03:08.725 24617 24798 D CCodecBufferChannel: [c2.android.ac3.decoder#563] MediaCodec discarded an unknown buffer
+04-17 20:03:08.725 24617 24798 D CCodecBufferChannel: [c2.android.ac3.decoder#563] MediaCodec discarded an unknown buffer
+04-17 20:03:08.725 24617 24798 D CCodecBufferChannel: [c2.android.ac3.decoder#563] MediaCodec discarded an unknown buffer
+04-17 20:03:08.725 24617 24798 D CCodecBufferChannel: [c2.android.ac3.decoder#563] MediaCodec discarded an unknown buffer
+04-17 20:03:08.726 24617 24798 D MediaCodec: flushMediametrics
+04-17 20:03:08.727 24617 24798 D MediaCodec: flushMediametrics
+04-17 20:03:08.727 24617 24798 W MediaCodec: no metrics handle found
+04-17 20:03:08.740   601 24781 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(0*0),w_align=0,h_align=0,size=0,compress=0]
+04-17 20:03:08.760 24617 24775 D MediaCodec: flushMediametrics
+04-17 20:03:08.761 24617 24775 D MediaCodec: flushMediametrics
+04-17 20:03:08.761 24617 24775 W MediaCodec: no metrics handle found
+04-17 20:03:08.842   408  3850 D MesonHwc: adjustVsyncMode to HwMode
+04-17 20:03:53.578   848  2474 I ActivityTaskManager: START u0 {act=android.intent.action.VIEW dat=https://stremthru.fortheweak.cloud/... typ=video/* pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity (has extras)} with LAUNCH_SINGLE_TASK from uid 10088 (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+04-17 20:03:53.578  1055  1083 V WindowManagerShell: Transition requested: android.os.BinderProxy@3c5d35f TransitionRequestInfo { type = 1, triggerTask = TaskInfo{userId=0 taskId=567 displayId=0 isRunning=true baseIntent=Intent { act=android.intent.action.VIEW dat=https://stremthru.fortheweak.cloud/... typ=video/* flg=0x10000000 pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity } baseActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} topActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} origActivity=null realActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} numActivities=1 lastActiveTime=125605708 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@c1c21ac} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=true launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=ActivityInfo{144ee75 com.brouken.player.PlayerActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isTopActivityTransparent=false locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null, flags = 0 }
+04-17 20:03:53.584   848  2474 W WindowManager: [addWindow] title:Splash Screen com.brouken.player
+04-17 20:03:53.648   848   877 I ActivityManager: Start proc 25013:com.brouken.player/u0a92 for next-top-activity {com.brouken.player/com.brouken.player.PlayerActivity}
+04-17 20:03:53.667 25013 25013 I .brouken.player: Using CollectorTypeCC GC.
+04-17 20:03:53.677 25013 25013 E .brouken.player: Not starting debugger since process cannot load the jdwp agent.
+04-17 20:03:53.679   848   867 V WindowManager: Sent Transition #143 createdAt=04-17 20:03:53.569 via request=TransitionRequestInfo { type = 1, triggerTask = TaskInfo{userId=0 taskId=567 displayId=0 isRunning=true baseIntent=Intent { act=android.intent.action.VIEW dat=https://stremthru.fortheweak.cloud/... typ=video/* flg=0x10000000 pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity } baseActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} topActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} origActivity=null realActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} numActivities=1 lastActiveTime=125605708 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{62f0778 Task{af07730 #567 type=standard A=10092:com.brouken.player}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=true launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=ActivityInfo{51cee51 com.brouken.player.PlayerActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isTopActivityTransparent=false locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null, flags = 0 }
+04-17 20:03:53.681   848   867 V WindowManager:     info={id=143 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{RemoteToken{62f0778 Task{af07730 #567 type=standard A=10092:com.brouken.player}}} m=OPEN f=NONE leash=Surface(name=Task=567)/@0x7c5ea sb=Rect(0, 0 - 3840, 2160) eb=Rect(0, 0 - 3840, 2160) d=0},{WCT{RemoteToken{e97f500 Task{baa8391 #566 type=standard A=10088:com.nexio.tv}}} m=TO_BACK f=NONE leash=Surface(name=Task=566)/@0x8994632 sb=Rect(0, 0 - 3840, 2160) eb=Rect(0, 0 - 3840, 2160) d=0}]}
+04-17 20:03:53.864 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.arm64_v8a.dm': No such file or directory
+04-17 20:03:53.865 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.arm64_v8a.dm': No such file or directory
+04-17 20:03:53.868 25013 25013 W .brouken.player: Entry not found
+04-17 20:03:53.870 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.en.dm': No such file or directory
+04-17 20:03:53.870 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.en.dm': No such file or directory
+04-17 20:03:53.872 25013 25013 W .brouken.player: Entry not found
+04-17 20:03:53.873 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.nl.dm': No such file or directory
+04-17 20:03:53.873 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.nl.dm': No such file or directory
+04-17 20:03:53.874 25013 25013 W .brouken.player: Entry not found
+04-17 20:03:53.875 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.xxhdpi.dm': No such file or directory
+04-17 20:03:53.875 25013 25013 W ziparchive: Unable to open '/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.xxhdpi.dm': No such file or directory
+04-17 20:03:53.877 25013 25013 W .brouken.player: Entry not found
+04-17 20:03:53.881 25013 25013 D nativeloader: Configuring clns-4 for other apk /data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/base.apk:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.arm64_v8a.apk:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.en.apk:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.nl.apk:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.xxhdpi.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/lib/arm64:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/base.apk!/lib/arm64-v8a:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.arm64_v8a.apk!/lib/arm64-v8a:/data/app/~~RVxf49Ufr0PBkOpAbZwHkA==/com.brouken.player-szTvCNvMJjitP_LwBJEiuA==/split_config.en.apk!/lib/arm64-
+04-17 20:03:53.899 25013 25013 V GraphicsEnvironment: ANGLE GameManagerService for com.brouken.player: false
+04-17 20:03:53.900 25013 25013 V GraphicsEnvironment: com.brouken.player is not listed in per-application setting
+04-17 20:03:53.957 25013 25013 W System.err: java.io.FileNotFoundException: /data/user/0/com.brouken.player/files/positions: open failed: ENOENT (No such file or directory)
+04-17 20:03:53.958 25013 25013 W System.err: 	at com.brouken.player.Prefs.loadPositions(Prefs.java:231)
+04-17 20:03:53.958 25013 25013 W System.err: 	at com.brouken.player.Prefs.<init>(Prefs.java:94)
+04-17 20:03:53.958 25013 25013 W System.err: 	at com.brouken.player.PlayerActivity.onCreate(PlayerActivity.java:221)
+04-17 20:03:54.088 25013 25013 I ExoPlayerImpl: Init ded6995 [AndroidXMedia3/1.10.0] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:03:54.114   848 15398 I MediaSessionStack: addSession to bottom of stack | record: com.brouken.player/androidx.media3.session.id. (userId=0)
+04-17 20:03:54.127  1139  1139 D MediaPlayerList: onActiveSessionsChanged: controller: com.brouken.player
+04-17 20:03:54.129  1139  1139 I MediaPlayerList: Adding wrapped media player: com.brouken.player at key: 3
+04-17 20:03:54.161 25013 25013 W System.err: 	at com.brouken.player.PlayerActivity.initializePlayer(PlayerActivity.java:1323)
+04-17 20:03:54.161 25013 25013 W System.err: 	at com.brouken.player.PlayerActivity.onStart(PlayerActivity.java:731)
+04-17 20:03:54.245 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:03:54.253 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:03:54.263   848  1601 W WindowManager: [addWindow] title:com.brouken.player/com.brouken.player.PlayerActivity
+04-17 20:03:54.277   848 15398 D CoreBackPreview: Window{b11920 u0 com.brouken.player/com.brouken.player.PlayerActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@74e6b7f, mPriority=-1, mIsAnimationCallback=false}
+04-17 20:03:54.452   848   867 I ActivityTaskManager: Displayed com.brouken.player/.PlayerActivity for user 0: +884ms
+04-17 20:03:54.498 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:03:54.508 22615 22615 V MusicFXControlPanelEffect: openSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 3497)
+04-17 20:03:54.508 22615 22615 V MusicFXControlPanelEffect: closeSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 0)
+04-17 20:03:54.532 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:03:54.533 22615 22615 V MusicFXControlPanelEffect: openSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 3497)
+04-17 20:03:54.534   848  2472 W InputManager-JNI: Input channel object '69dd65c Splash Screen com.brouken.player (client)' was disposed without first being removed with the input manager!
+04-17 20:03:54.691 25013 25081 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:03:54.691 25013 25081 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:03:54.692 25013 25081 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:03:54.692 25013 25081 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:03:54.692 25013 25081 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:03:54.692 25013 25081 W VideoCapabilities: Unsupported mime video/dolby-vision
+04-17 20:03:54.711   848  2474 I ImeTracker: com.brouken.player:8acba464: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_UNSPECIFIED_WINDOW
+04-17 20:03:54.711   848  2474 I ImeTracker: com.brouken.player:8acba464: onCancelled at PHASE_SERVER_SHOULD_HIDE
+04-17 20:03:54.714 25013 25081 I DMCodecAdapterFactory: Creating an asynchronous MediaCodec adapter for track type video
+04-17 20:03:54.722 25013 25122 D CCodec  : allocate(c2.amlogic.avc.decoder)
+04-17 20:03:54.725 25013 25122 I CCodec  : setting up 'default' as default (vendor) store
+04-17 20:03:54.729   601  1230 I C2VendorComponentStore: C2VendorComponentStore::createComponent name c2.amlogic.avc.decoder
+04-17 20:03:54.730   601  1230 I C2VendorComponentStore: localModule libpath libcodec2_aml_video_decoder.so 1
+04-17 20:03:54.730   601  1230 V C2VendorComponentStore: init  libPath:libcodec2_aml_video_decoder.so --> isAudio:0, createFactoryName:CreateC2VdecH264Factory
+04-17 20:03:54.730   601  1230 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:03:54.731   601  1230 I C2VdecCodecConfig: isCodecSupportHdr10Plus hdr10:(1)
+04-17 20:03:54.732   601  1230 I C2VdecComponent: [248##-1]"Create C2VdecComponent(c2.amlogic.avc.decoder)"
+04-17 20:03:54.738 25013 25122 I CCodec  : Created component [c2.amlogic.avc.decoder]
+04-17 20:03:54.738 25013 25122 D CCodecConfig: Query domain & kind failed => BAD_INDEX
+04-17 20:03:54.739 25013 25122 D CCodecConfig: read media type: video/avc
+04-17 20:03:54.739 25013 25122 D CCodecConfig: read media type: video/avc
+04-17 20:03:54.745 25013 25122 D CCodecConfig: ignoring local param raw.size (0xd2001800) as it is already supported
+04-17 20:03:54.745 25013 25122 D CCodecConfig: ignoring local param default.color (0x5200180b) as it is already supported
+04-17 20:03:54.745 25013 25122 D CCodecConfig: ignoring local param raw.hdr-static-info (0xd200180a) as it is already supported
+04-17 20:03:54.746 25013 25122 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:03:54.747 25013 25122 D CCodecConfig: c2 config diff is Dict {
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 algo.delay.value = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 algo.low-latency.value = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::float coded.frame-rate.value = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 coded.pl.level = 20495
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 coded.pl.profile = 20482
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 coded.vui.color.matrix = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 coded.vui.color.primaries = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 coded.vui.color.range = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 coded.vui.color.transfer = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 default.color.matrix = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 default.color.primaries = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 default.color.range = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 default.color.transfer = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 1310720
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 input.delay.value = 4
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   Buffer input.hdr-dynamic-info.data = {
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   }
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 input.hdr-dynamic-info.type = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   string input.media-type.value = "video/avc"
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 output.delay.value = 3
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   Buffer output.hdr-dynamic-info.data = {
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   }
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 output.hdr-dynamic-info.type = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   string output.media-type.value = "video/raw"
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 output.tunnel-start-render.value = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 raw.color.matrix = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 raw.color.primaries = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   c2::u32 raw.color.range = 0
+04-17 20:03:54.747 25013 25122 D CCodecConfig:   
+04-17 20:03:54.750 25013 25121 I MediaCodec: MediaCodec will operate in async mode
+04-17 20:03:54.750 25013 25121 D MediaCodec: flushMediametrics
+04-17 20:03:54.750 25013 25121 I MediaCodec: [c2.amlogic.avc.decoder] setting surface generation to 25613313
+04-17 20:03:54.753 25013 25122 D CCodec  : [c2.amlogic.avc.decoder] buffers are bound to CCodec for this session
+04-17 20:03:54.754 25013 25122 D CCodecConfig: no c2 equivalents for csd-1
+04-17 20:03:54.754 25013 25122 D CCodecConfig: no c2 equivalents for log-session-id
+04-17 20:03:54.754 25013 25122 D CCodecConfig: no c2 equivalents for native-window
+04-17 20:03:54.754 25013 25122 D CCodecConfig: no c2 equivalents for flags
+04-17 20:03:54.754   601  1229 E C2VdecCodecConfig: can not support 8K
+04-17 20:03:54.754   601  1229 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:03:54.755 25013 25122 D CCodecConfig: c2 config diff is   c2::float coded.frame-rate.value = 0.967742
+04-17 20:03:54.755 25013 25122 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 547973
+04-17 20:03:54.755 25013 25122 D CCodecConfig:   c2::u32 raw.size.height = 720
+04-17 20:03:54.755 25013 25122 D CCodecConfig:   c2::u32 raw.size.width = 1280
+04-17 20:03:54.755 25013 25122 D CCodec  : client requested max input size 23685, which is smaller than what component recommended (547973); overriding with component recommendation.
+04-17 20:03:54.755 25013 25122 W CCodec  : This behavior is subject to change. It is recommended that app developers double check whether the requested max input size is in reasonable range.
+04-17 20:03:54.755 25013 25122 D CCodec  : encoding statistics level = 0
+04-17 20:03:54.755 25013 25122 D CCodec  : setup formats input: AMessage(what = 0x00000000) = {
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t frame-rate = 1
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t height = 720
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t level = 32768
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t max-input-size = 547973
+04-17 20:03:54.755 25013 25122 D CCodec  :   string mime = "video/avc"
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t profile = 2
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t width = 1280
+04-17 20:03:54.755 25013 25122 D CCodec  :   Rect crop(0, 0, 1279, 719)
+04-17 20:03:54.755 25013 25122 D CCodec  : }
+04-17 20:03:54.755 25013 25122 D CCodec  : setup formats output: AMessage(what = 0x00000000) = {
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t android._video-scaling = 1
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t android._dataspace = 260
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t color-standard = 1
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t color-range = 2
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t color-transfer = 3
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t sar-height = 1
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t rotation-degrees = 0
+04-17 20:03:54.755 25013 25122 D CCodec  :   Buffer hdr-static-info = {
+04-17 20:03:54.755 25013 25122 D CCodec  :     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+04-17 20:03:54.755 25013 25122 D CCodec  :     00000010:  00 00 00 00 00 00 00 00  00                       .........
+04-17 20:03:54.755 25013 25122 D CCodec  :   }
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t sar-width = 1
+04-17 20:03:54.755 25013 25122 D CCodec  :   Rect crop(0, 0, 1279, 719)
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t width = 1280
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t frame-rate = 1
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t height = 720
+04-17 20:03:54.755 25013 25122 D CCodec  :   string mime = "video/raw"
+04-17 20:03:54.755 25013 25122 D CCodec  :   Buffer output.hdr-dynamic-info.data = {
+04-17 20:03:54.755 25013 25122 D CCodec  :   }
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t output.hdr-dynamic-info.type = 0
+04-17 20:03:54.755 25013 25122 D CCodec  :   int32_t color-format = 2130708361
+04-17 20:03:54.755 25013 25122 D CCodec  : }
+04-17 20:03:54.756 25013 25122 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:03:54.756 25013 25081 D MediaCodec: keep callback message for reclaim
+04-17 20:03:54.757   601 25127 I C2VdecCodecConfig: isCodecSupportHdr10Plus hdr10:(1)
+04-17 20:03:54.758   601 25127 I C2VdecDeviceUtil: [0#-1]"Disable low latency mode to v4l2 decoder."
+04-17 20:03:54.759   601 25127 E C2VdecCodecConfig: can not support 8K
+04-17 20:03:54.799   601 25127 I AmVideoDec: [No--1]-[0]"res_status.v.query.avail 444 -mmsize: 30 -adjust 0\n"
+04-17 20:03:54.805   601 25136 I VDA     : [-1##1067]"Initialize decoder_instance_num_ = 1067"
+04-17 20:03:54.808   601 25127 I VDA     : [0##1067]"setDurationToDecoder set [99200][0.967742]"
+04-17 20:03:54.808   601 25127 I VDA     : [0##1067]"setDurationToDecoder set [99200]"
+04-17 20:03:54.808   601 25127 I VDA     : [0##1067]"sendMessagetoDecoder set AML_V4L2_SET_VF_DURATION"
+04-17 20:03:54.808   601 25127 I VDA     : [0##1067]"sendMessagetoDecoder set AML_V4L2_SET_UEVENT_DURATION"
+04-17 20:03:54.822   601 25127 I VDA     : [0##1067]"decoderID:1067"
+04-17 20:03:54.822   601 25127 I VideoDecWrapper: [0##-1]"Query decoderID(1067) success."
+04-17 20:03:54.824 25013 25122 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] Created input block pool with allocatorID 16 => poolID 17 - OK (0)
+04-17 20:03:54.830 25013 25122 I CCodecBufferChannel: [c2.amlogic.avc.decoder#384] Created output block pool with allocatorID 18 => poolID 263 - OK
+04-17 20:03:54.834 25013 25122 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] Configured output block pool ids 263 => OK
+04-17 20:03:54.866 25013 25126 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] Ignoring stale input buffer done callback: last flush index = 0, frameIndex = 0
+04-17 20:03:54.870   601 25136 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:03:54.871   601 25146 I VDA     : [0##1067]"CreateOutputBuffers decoder_state_ change to kAwaitingPictureBuffers\n"
+04-17 20:03:54.871   601 25127 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:03:54.876   601 25127 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(0*0),w_align=0,h_align=0,size=0,compress=0]
+04-17 20:03:54.876   601 25127 I C2VdecDeviceUtil: [0#1067]"Query the decoder width align(64) success."
+04-17 20:03:54.876   601 25127 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.877   601 25146 I VDA     : [0##1067]"AssignPictureBuffersTask decoder_state_=kAwaitingPictureBuffers"
+04-17 20:03:54.878   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.878   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.898   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.898   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.905   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.905   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.910   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.910   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.915   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.915   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.920   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.920   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.922   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.922   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.924   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.924   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.936   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.936   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.938   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.938   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1280*768),w_align=64,h_align=64,size=0,compress=0]
+04-17 20:03:54.942   601 25127 E C2VdecCodecConfig: can not support 8K
+04-17 20:03:54.942   601 25127 E C2VdecCodecConfig: c2.amlogic.avc.decoder can support 4K
+04-17 20:03:54.944   601 25146 I VDA     : [0##1067]"DecodeBufferTask decoder_state_ = kPictureBuffersReady -> kDecoding"
+04-17 20:03:54.944 25013 25122 D CCodecConfig: c2 config diff is   c2::u32 raw.crop.height = 720
+04-17 20:03:54.944 25013 25122 D CCodecConfig:   c2::u32 raw.crop.left = 0
+04-17 20:03:54.944 25013 25122 D CCodecConfig:   c2::u32 raw.crop.top = 0
+04-17 20:03:54.944 25013 25122 D CCodecConfig:   c2::u32 raw.crop.width = 1280
+04-17 20:03:55.008   848 15398 I MediaFocusControl: requestAudioFocus() from uid/pid 10092/25013 AA=USAGE_MEDIA/CONTENT_TYPE_MOVIE clientId=android.media.AudioManager@d12c9faandroidx.media3.common.audio.AudioFocusManager$$ExternalSyntheticLambda0@be65bab callingPack=com.brouken.player req=1 flags=0x1 sdk=36
+04-17 20:03:55.019   848  1601 I MediaSessionStack: onPlaybackStateChanged - Pushing session to top | record: com.brouken.player/androidx.media3.session.id. (userId=0)
+04-17 20:03:55.032   408  3850 D MesonHwc: adjustVsyncMode to MixMode
+04-17 20:03:55.034   408  3850 D hwc_di  : use org:is_repeat=0, omx_index=0,bypass=1, tvp=0, mFirstI=0
+04-17 20:03:56.494  1055  1083 V WindowManagerShell: Transition requested: android.os.BinderProxy@96a8b04 TransitionRequestInfo { type = 2, triggerTask = TaskInfo{userId=0 taskId=567 displayId=0 isRunning=false baseIntent=Intent { act=android.intent.action.VIEW dat=https://stremthru.fortheweak.cloud/... typ=video/* flg=0x10000000 pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} numActivities=0 lastActiveTime=125606069 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@1d098ed} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isTopActivityTransparent=false locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null, flags = 0 }
+04-17 20:03:56.585   848   867 V WindowManager: Sent Transition #144 createdAt=04-17 20:03:56.492 via request=TransitionRequestInfo { type = 2, triggerTask = TaskInfo{userId=0 taskId=567 displayId=0 isRunning=false baseIntent=Intent { act=android.intent.action.VIEW dat=https://stremthru.fortheweak.cloud/... typ=video/* flg=0x10000000 pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} numActivities=0 lastActiveTime=125606069 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{62f0778 Task{af07730 #567 type=standard A=10092:com.brouken.player}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isTopActivityTransparent=false locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null, flags = 0 }
+04-17 20:03:56.585   848   867 V WindowManager:     info={id=144 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{RemoteToken{e97f500 Task{baa8391 #566 type=standard A=10088:com.nexio.tv}}} m=TO_FRONT f=NONE leash=Surface(name=Task=566)/@0x8994632 sb=Rect(0, 0 - 3840, 2160) eb=Rect(0, 0 - 3840, 2160) d=0},{WCT{RemoteToken{62f0778 Task{af07730 #567 type=standard A=10092:com.brouken.player}}} m=CLOSE f=NONE leash=Surface(name=Task=567)/@0x7c5ea sb=Rect(0, 0 - 3840, 2160) eb=Rect(0, 0 - 3840, 2160) d=0}]}
+04-17 20:03:57.084   408  3850 D MesonHwc: adjustVsyncMode to HwMode
+04-17 20:03:57.166 25013 25013 I MediaSessionImpl: Release 2a3a776 [AndroidXMedia3/1.10.0] [umx5jyks, AM9 PRO, UGOOS, 34] [media3.common, media3.ui, media3.exoplayer, media3.decoder, media3.session, media3.datasource, media3.extractor]
+04-17 20:03:57.168   848  2470 I MediaSessionStack: removeSession | record: com.brouken.player/androidx.media3.session.id. (userId=0)
+04-17 20:03:57.171 25013 25013 I ExoPlayerImpl: Release ded6995 [AndroidXMedia3/1.10.0] [umx5jyks, AM9 PRO, UGOOS, 34] [media3.common, media3.ui, media3.exoplayer, media3.decoder, media3.session, media3.datasource, media3.extractor]
+04-17 20:03:57.176 25013 25081 D MediaCodec: keep callback message for reclaim
+04-17 20:03:57.176 25013 25121 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:03:57.178 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:03:57.178 22615 22615 V MusicFXControlPanelEffect: closeSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 3497)
+04-17 20:03:57.180 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:03:57.181 22615 22615 V MusicFXControlPanelEffect: closeSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 0)
+04-17 20:03:57.192 25013 25121 I MediaCodec: [c2.amlogic.avc.decoder] setting surface generation to 25613314
+04-17 20:03:57.197 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.198 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.198 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.198 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.198 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.199   601 25127 I C2VdecComponent: [0##1067]"[onStopDone] clear decoder duration"
+04-17 20:03:57.199   601 25127 I C2VdecDeviceUtil: [0#1067]"into clearDecoderDuration"
+04-17 20:03:57.200 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.200 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.200 25013 25121 D CCodecBufferChannel: [c2.amlogic.avc.decoder#384] MediaCodec discarded an unknown buffer
+04-17 20:03:57.207   848  2470 D CoreBackPreview: Window{b11920 u0 com.brouken.player/com.brouken.player.PlayerActivity}: Setting back callback null
+04-17 20:03:57.211   601 25127 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(0*0),w_align=0,h_align=0,size=0,compress=0]
+04-17 20:03:57.216 25013 25121 D MediaCodec: flushMediametrics
+04-17 20:03:57.217 25013 25121 D MediaCodec: flushMediametrics
+04-17 20:03:57.217 25013 25121 W MediaCodec: no metrics handle found
+04-17 20:03:57.220   848  2470 W InputManager-JNI: Input channel object 'b11920 com.brouken.player/com.brouken.player.PlayerActivity (client)' was disposed without first being removed with the input manager!
+04-17 20:03:59.831 25013 25209 D ProfileInstaller: Installing profile for com.brouken.player
+04-17 20:04:04.188   848  1601 I ActivityTaskManager: START u0 {act=android.intent.action.VIEW dat=https://stremthru.13377001.xyz/... typ=video/* pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity (has extras)} with LAUNCH_SINGLE_TASK from uid 10088 (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+04-17 20:04:04.189  1055  1083 V WindowManagerShell: Transition requested: android.os.BinderProxy@eb07a19 TransitionRequestInfo { type = 1, triggerTask = TaskInfo{userId=0 taskId=568 displayId=0 isRunning=true baseIntent=Intent { act=android.intent.action.VIEW dat=https://stremthru.13377001.xyz/... typ=video/* flg=0x10000000 pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity } baseActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} topActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} origActivity=null realActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} numActivities=1 lastActiveTime=125616318 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@eadcade} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=true launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=ActivityInfo{98334bf com.brouken.player.PlayerActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isTopActivityTransparent=false locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null, flags = 0 }
+04-17 20:04:04.193   848  1601 W WindowManager: [addWindow] title:Splash Screen com.brouken.player
+04-17 20:04:04.320 25013 25021 I .brouken.player: Background concurrent copying GC freed 120653(4704KB) AllocSpace objects, 28(1036KB) LOS objects, 49% free, 6338KB/12MB, paused 144us,59us total 108.555ms
+04-17 20:04:04.626   848   867 V WindowManager: Sent Transition #145 createdAt=04-17 20:04:04.179 via request=TransitionRequestInfo { type = 1, triggerTask = TaskInfo{userId=0 taskId=568 displayId=0 isRunning=true baseIntent=Intent { act=android.intent.action.VIEW dat=https://stremthru.13377001.xyz/... typ=video/* flg=0x10000000 pkg=com.brouken.player cmp=com.brouken.player/.PlayerActivity } baseActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} topActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} origActivity=null realActivity=ComponentInfo{com.brouken.player/com.brouken.player.PlayerActivity} numActivities=1 lastActiveTime=125616318 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{bc027fb Task{354efc9 #568 type=standard A=10092:com.brouken.player}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=true launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=ActivityInfo{421b018 com.brouken.player.PlayerActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isTopActivityTransparent=false locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null, flags = 0 }
+04-17 20:04:04.626   848   867 V WindowManager:     info={id=145 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{RemoteToken{bc027fb Task{354efc9 #568 type=standard A=10092:com.brouken.player}}} m=OPEN f=NONE leash=Surface(name=Task=568)/@0xb3c93f5 sb=Rect(0, 0 - 3840, 2160) eb=Rect(0, 0 - 3840, 2160) d=0},{WCT{RemoteToken{e97f500 Task{baa8391 #566 type=standard A=10088:com.nexio.tv}}} m=TO_BACK f=NONE leash=Surface(name=Task=566)/@0x8994632 sb=Rect(0, 0 - 3840, 2160) eb=Rect(0, 0 - 3840, 2160) d=0}]}
+04-17 20:04:04.637 25013 25013 I ExoPlayerImpl: Init d5d57f6 [AndroidXMedia3/1.10.0] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:04.652   848  2474 I MediaSessionStack: addSession to bottom of stack | record: com.brouken.player/androidx.media3.session.id. (userId=0)
+04-17 20:04:04.683  1139  1139 D MediaPlayerList: onActiveSessionsChanged: controller: com.brouken.player
+04-17 20:04:04.691 25013 25013 W System.err: 	at com.brouken.player.PlayerActivity.initializePlayer(PlayerActivity.java:1323)
+04-17 20:04:04.691 25013 25013 W System.err: 	at com.brouken.player.PlayerActivity.onStart(PlayerActivity.java:731)
+04-17 20:04:04.701 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:04:04.706 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:04:04.712   848  2474 W WindowManager: [addWindow] title:com.brouken.player/com.brouken.player.PlayerActivity
+04-17 20:04:04.732 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:04:04.732 22615 22615 V MusicFXControlPanelEffect: openSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 3505)
+04-17 20:04:04.732 22615 22615 V MusicFXControlPanelEffect: closeSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 0)
+04-17 20:04:04.732   848  2474 D CoreBackPreview: Window{ff47bcf u0 com.brouken.player/com.brouken.player.PlayerActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@7e705eb, mPriority=-1, mIsAnimationCallback=false}
+04-17 20:04:04.735 22615 22615 V MusicFXControlPanelReceiver: Package name: com.brouken.player
+04-17 20:04:04.735 22615 22615 V MusicFXControlPanelEffect: openSession(android.app.ReceiverRestrictedContext@a912328, com.brouken.player, 3505)
+04-17 20:04:04.814   848   867 I ActivityTaskManager: Displayed com.brouken.player/.PlayerActivity for user 0: +632ms
+04-17 20:04:04.857   848 15398 W InputManager-JNI: Input channel object '74e4cfc Splash Screen com.brouken.player (client)' was disposed without first being removed with the input manager!
+04-17 20:04:04.866   848  2470 I ImeTracker: com.brouken.player:c784ba02: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_UNSPECIFIED_WINDOW
+04-17 20:04:04.867   848  2470 I ImeTracker: com.brouken.player:c784ba02: onCancelled at PHASE_SERVER_SHOULD_HIDE
+04-17 20:04:09.100 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.100 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.100 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.100 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.101 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.165 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.165 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.165 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.165 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dvav.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.165 25013 25255 D MediaCodecInfo: NoSupport [codec.profileLevel, dvhe.05.06, video/dolby-vision] [c2.amlogic.dolby-vision.dav1.decoder, video/dolby-vision] [umx5jyks, AM9 PRO, UGOOS, 34]
+04-17 20:04:09.166 25013 25255 I DMCodecAdapterFactory: Creating an asynchronous MediaCodec adapter for track type video
+04-17 20:04:09.168 25013 25276 D CCodec  : allocate(c2.amlogic.dolby-vision.dvhe.decoder)
+04-17 20:04:09.169 25013 25276 I CCodec  : setting up 'default' as default (vendor) store
+04-17 20:04:09.169   601  1230 I C2VendorComponentStore: C2VendorComponentStore::createComponent name c2.amlogic.dolby-vision.dvhe.decoder
+04-17 20:04:09.169   601  1230 I C2VendorComponentStore: localModule libpath libcodec2_aml_video_decoder.so 5
+04-17 20:04:09.170   601  1230 V C2VendorComponentStore: init  libPath:libcodec2_aml_video_decoder.so --> isAudio:0, createFactoryName:CreateC2VdecDVHEFactory
+04-17 20:04:09.170   601  1230 E C2VdecCodecConfig: c2.amlogic.dolby-vision.dvhe.decoder can support 4K
+04-17 20:04:09.170   601  1230 I C2VdecCodecConfig: isCodecSupportHdr10Plus hdr10:(1)
+04-17 20:04:09.175   601  1230 I C2VdecComponent: [249##-1]"Create C2VdecComponent(c2.amlogic.dolby-vision.dvhe.decoder)"
+04-17 20:04:09.176 25013 25276 I CCodec  : Created component [c2.amlogic.dolby-vision.dvhe.decoder]
+04-17 20:04:09.176 25013 25276 D CCodecConfig: Query domain & kind failed => BAD_INDEX
+04-17 20:04:09.177 25013 25276 D CCodecConfig: read media type: video/dolby-vision
+04-17 20:04:09.177 25013 25276 D CCodecConfig: read media type: video/dolby-vision
+04-17 20:04:09.182 25013 25276 D CCodecConfig: ignoring local param raw.size (0xd2001800) as it is already supported
+04-17 20:04:09.182 25013 25276 D CCodecConfig: ignoring local param default.color (0x5200180b) as it is already supported
+04-17 20:04:09.182 25013 25276 D CCodecConfig: ignoring local param raw.hdr-static-info (0xd200180a) as it is already supported
+04-17 20:04:09.183 25013 25276 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:04:09.183 25013 25276 D CCodecConfig: c2 config diff is Dict {
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 algo.delay.value = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 algo.low-latency.value = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::float coded.frame-rate.value = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 coded.pl.level = 32776
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 coded.pl.profile = 32773
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 coded.vui.color.matrix = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 coded.vui.color.primaries = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 coded.vui.color.range = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 coded.vui.color.transfer = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 default.color.matrix = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 default.color.primaries = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 default.color.range = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 default.color.transfer = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 1310720
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 input.delay.value = 4
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   Buffer input.hdr-dynamic-info.data = {
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   }
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 input.hdr-dynamic-info.type = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   string input.media-type.value = "video/dolby-vision"
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 output.delay.value = 3
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   Buffer output.hdr-dynamic-info.data = {
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   }
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 output.hdr-dynamic-info.type = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   string output.media-type.value = "video/raw"
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 output.tunnel-start-render.value = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 raw.color.matrix = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 raw.color.primaries = 0
+04-17 20:04:09.183 25013 25276 D CCodecConfig:   c2::u32 raw.color.ran
+04-17 20:04:09.185 25013 25275 I MediaCodec: MediaCodec will operate in async mode
+04-17 20:04:09.185 25013 25275 D MediaCodec: flushMediametrics
+04-17 20:04:09.186 25013 25275 I MediaCodec: [c2.amlogic.dolby-vision.dvhe.decoder] setting surface generation to 25613315
+04-17 20:04:09.186 25013 25276 D CCodec  : [c2.amlogic.dolby-vision.dvhe.decoder] buffers are bound to CCodec for this session
+04-17 20:04:09.187 25013 25276 D CCodecConfig: no c2 equivalents for log-session-id
+04-17 20:04:09.187 25013 25276 D CCodecConfig: no c2 equivalents for native-window
+04-17 20:04:09.187 25013 25276 D CCodecConfig: no c2 equivalents for flags
+04-17 20:04:09.187   601  1229 E C2VdecCodecConfig: can not support 8K
+04-17 20:04:09.187   601  1229 E C2VdecCodecConfig: c2.amlogic.dolby-vision.dvhe.decoder can support 4K
+04-17 20:04:09.187 25013 25276 D CCodecConfig: c2 config diff is   c2::u32 input.buffers.max-size.value = 8388608
+04-17 20:04:09.187 25013 25276 D CCodecConfig:   c2::u32 raw.size.height = 1606
+04-17 20:04:09.187 25013 25276 D CCodecConfig:   c2::u32 raw.size.width = 3840
+04-17 20:04:09.188 25013 25276 D CCodec  : client requested max input size 4625280, which is smaller than what component recommended (8388608); overriding with component recommendation.
+04-17 20:04:09.188 25013 25276 W CCodec  : This behavior is subject to change. It is recommended that app developers double check whether the requested max input size is in reasonable range.
+04-17 20:04:09.188 25013 25276 D CCodec  : encoding statistics level = 0
+04-17 20:04:09.188 25013 25276 D CCodec  : setup formats input: AMessage(what = 0x00000000) = {
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t frame-rate = 0
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t height = 1606
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t level = 256
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t max-input-size = 8388608
+04-17 20:04:09.188 25013 25276 D CCodec  :   string mime = "video/dolby-vision"
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t profile = 32
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t width = 3840
+04-17 20:04:09.188 25013 25276 D CCodec  :   Rect crop(0, 0, 3839, 1605)
+04-17 20:04:09.188 25013 25276 D CCodec  : }
+04-17 20:04:09.188 25013 25276 D CCodec  : setup formats output: AMessage(what = 0x00000000) = {
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t android._video-scaling = 1
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t android._dataspace = 281411584
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t color-standard = 6
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t color-range = 2
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t color-transfer = 3
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t sar-height = 1
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t rotation-degrees = 0
+04-17 20:04:09.188 25013 25276 D CCodec  :   Buffer hdr-static-info = {
+04-17 20:04:09.188 25013 25276 D CCodec  :     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+04-17 20:04:09.188 25013 25276 D CCodec  :     00000010:  00 00 00 00 00 00 00 00  00                       .........
+04-17 20:04:09.188 25013 25276 D CCodec  :   }
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t sar-width = 1
+04-17 20:04:09.188 25013 25276 D CCodec  :   Rect crop(0, 0, 3839, 1605)
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t width = 3840
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t frame-rate = 0
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t height = 1606
+04-17 20:04:09.188 25013 25276 D CCodec  :   string mime = "video/raw"
+04-17 20:04:09.188 25013 25276 D CCodec  :   Buffer output.hdr-dynamic-info.data = {
+04-17 20:04:09.188 25013 25276 D CCodec  :   }
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t output.hdr-dynamic-info.type = 0
+04-17 20:04:09.188 25013 25276 D CCodec  :   int32_t color-format = 2130708361
+04-17 20:04:09.188 25013 25276 D CCodec  : }
+04-17 20:04:09.188 25013 25276 I CCodecConfig: query failed after returning 17 values (BAD_INDEX)
+04-17 20:04:09.189 25013 25255 D MediaCodec: keep callback message for reclaim
+04-17 20:04:09.190   601 25277 I C2VdecCodecConfig: isCodecSupportHdr10Plus hdr10:(1)
+04-17 20:04:09.190   601 25277 I C2VdecDeviceUtil: [0#-1]"Disable low latency mode to v4l2 decoder."
+04-17 20:04:09.191   601 25277 E C2VdecCodecConfig: can not support 8K
+04-17 20:04:09.193   601 25277 I VideoDecWrapper: [0##-1]"initialize:mime:video/hevc secureMode is 0 flags is 0x8001"
+04-17 20:04:09.193   601 25277 I AmVideoDec: [No--1]-[0]"res_status.v.query.avail 444 -mmsize: 160 -adjust 0\n"
+04-17 20:04:09.195   601 25284 I VDA     : [-1##1071]"Initialize decoder_instance_num_ = 1071"
+04-17 20:04:09.196   601 25277 I VDA     : [0##1071]"decoderID:1071"
+04-17 20:04:09.196   601 25277 I VideoDecWrapper: [0##-1]"Query decoderID(1071) success."
+04-17 20:04:09.197 25013 25276 D CCodecBufferChannel: [c2.amlogic.dolby-vision.dvhe.decoder#62] Created input block pool with allocatorID 16 => poolID 18 - OK (0)
+04-17 20:04:09.198 25013 25276 I CCodecBufferChannel: [c2.amlogic.dolby-vision.dvhe.decoder#62] Created output block pool with allocatorID 18 => poolID 264 - OK
+04-17 20:04:09.199 25013 25276 D CCodecBufferChannel: [c2.amlogic.dolby-vision.dvhe.decoder#62] Configured output block pool ids 264 => OK
+04-17 20:04:09.218 25013 25126 D CCodecBufferChannel: [c2.amlogic.dolby-vision.dvhe.decoder#62] Ignoring stale input buffer done callback: last flush index = 0, frameIndex = 0
+04-17 20:04:09.442   601 25284 E C2VdecCodecConfig: c2.amlogic.dolby-vision.dvhe.decoder can support 4K
+04-17 20:04:09.443   601 25289 I VDA     : [0##1071]"CreateOutputBuffers decoder_state_ change to kAwaitingPictureBuffers\n"
+04-17 20:04:09.450   601 25277 E C2VdecCodecConfig: c2.amlogic.dolby-vision.dvhe.decoder can support 4K
+04-17 20:04:09.450   601 25277 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(0*0),w_align=0,h_align=0,size=0,compress=0]
+04-17 20:04:09.450 25013 25276 D CCodecConfig: c2 config diff is   c2::u32 output.delay.value = 5
+04-17 20:04:09.451   601 25277 I C2VdecDeviceUtil: [0#1071]"Query the decoder width align(64) success."
+04-17 20:04:09.451   601 25277 I gralloc : am_gralloc_set_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.452   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.452   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.453   601 25289 I VDA     : [0##1071]"AssignPictureBuffersTask decoder_state_=kAwaitingPictureBuffers"
+04-17 20:04:09.461   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.461   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.466   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.466   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.468   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.468   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.469   601 25289 I VDA     : [0##1071]"Ioctl set duration to decoder [0]dur[41708]"
+04-17 20:04:09.470   601 25289 I VDA     : [0##1071]"setDurationToDecoder set [4004]"
+04-17 20:04:09.470   601 25289 I VDA     : [0##1071]"sendMessagetoDecoder set AML_V4L2_SET_VF_DURATION"
+04-17 20:04:09.470   601 25289 I VDA     : [0##1071]"sendMessagetoDecoder set AML_V4L2_SET_UEVENT_DURATION"
+04-17 20:04:09.470   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.471   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.477   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.477   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.486   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.486   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.502   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.502   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.505   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.506   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.508   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.508   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.510   601 25277 E C2VdecCodecConfig: can not support 8K
+04-17 20:04:09.510   601 25277 E C2VdecCodecConfig: c2.amlogic.dolby-vision.dvhe.decoder can support 4K
+04-17 20:04:09.511   601 25289 I VDA     : [0##1071]"DecodeBufferTask decoder_state_ = kPictureBuffersReady -> kDecoding"
+04-17 20:04:09.512 25013 25276 D CCodecConfig: c2 config diff is   c2::u32 raw.crop.height = 1606
+04-17 20:04:09.512 25013 25276 D CCodecConfig:   c2::u32 raw.crop.left = 0
+04-17 20:04:09.512 25013 25276 D CCodecConfig:   c2::u32 raw.crop.top = 0
+04-17 20:04:09.512 25013 25276 D CCodecConfig:   c2::u32 raw.crop.width = 3840
+04-17 20:04:09.514   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.514   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.519   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.519   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.551   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.551   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.577   408  3850 D MesonHwc: adjustVsyncMode to MixMode
+04-17 20:04:09.579   408  3850 D hwc_di  : use org:is_repeat=0, omx_index=0,bypass=1, tvp=0, mFirstI=0
+04-17 20:04:09.583   848  2474 I MediaFocusControl: requestAudioFocus() from uid/pid 10092/25013 AA=USAGE_MEDIA/CONTENT_TYPE_MOVIE clientId=android.media.AudioManager@d12c9faandroidx.media3.common.audio.AudioFocusManager$$ExternalSyntheticLambda0@49380fc callingPack=com.brouken.player req=1 flags=0x1 sdk=36
+04-17 20:04:09.585   848 15398 I MediaSessionStack: onPlaybackStateChanged - Pushing session to top | record: com.brouken.player/androidx.media3.session.id. (userId=0)
+04-17 20:04:09.594   848   848 D MediaSessionService: Media button session is changed to com.brouken.player/androidx.media3.session.id. (userId=0)
+04-17 20:04:09.598  1139  1139 I MediaPlayerList: onMediaKeyEventSessionChanged: token=com.brouken.player
+04-17 20:04:09.604  1139  1139 D MediaPlayerList: setActivePlayer(): setting player to com.brouken.player
+04-17 20:04:09.605   848 15398 I MediaSessionService: tempAllowlistTargetPkgIfPossible callingPackage:com.android.bluetooth targetPackage:com.brouken.player reason:MediaSessionRecord:android.support.v4.media.session.command.GET_EXTRA_BINDER [WIU] [FGS]
+04-17 20:04:09.632  1139  1139 D AudioMediaPlayerWrapper: com.brouken.player Only Title and Artist info sync for metadata
+04-17 20:04:09.651  1139  1139 D MediaPlayerList: onActiveSessionsChanged: controller: com.brouken.player
+04-17 20:04:09.654 25013 25021 I .brouken.player: Background concurrent copying GC freed 17475(1085KB) AllocSpace objects, 99(2076KB) LOS objects, 49% free, 14MB/28MB, paused 132us,60us total 137.340ms
+04-17 20:04:09.658   408  3850 D hwc_di  : use org:is_repeat=0, omx_index=0,bypass=1, tvp=0, mFirstI=0
+04-17 20:04:09.661   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:09.661   377   377 I mali_gralloc: am_gralloc_get_uvm_decoder_para: parameters:[slot_id=0,w*h(1024*576),w_align=64,h_align=64,size=0,compress=1]
+04-17 20:04:19.585  1139  1139 V AudioMediaPlayerWrapper: onPlaybackStateChanged(): com.brouken.player : PlaybackState {state=PLAYING(3), position=9877, buffered position=56289, speed=1.0, updated=125631715, actions=7339995, custom actions=[], active item id=0, error=null}
+04-17 20:04:19.586  1139  1139 D AudioMediaPlayerWrapper: com.brouken.player Only Title and Artist info sync for metadata
+04-17 20:04:19.586  1139  1139 V AudioMediaPlayerWrapper: trySendMediaUpdate(): Metadata has been updated for com.brouken.player

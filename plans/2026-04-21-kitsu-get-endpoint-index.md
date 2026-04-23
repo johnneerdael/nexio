@@ -89,6 +89,29 @@ Internal engineering reference derived from `kitsu.apib` in this repo.
 | `/list-imports` | Auth required | Import-job status surface for authenticated users. |
 | `/list-imports/{id}` | Auth required | Single import-job status lookup. |
 
+## Candidate public catalog queries to verify next
+
+These are the most plausible public query shapes for catalog-style anime rows based on the generic JSON:API sorting rules plus the anime fields exposed in the blueprint. They are not all explicitly guaranteed by `kitsu.apib`, so they should be treated as live-verification candidates rather than shipped assumptions.
+
+| Catalog idea | Candidate public query | Confidence | Why |
+|---|---|---|---|
+| Trending anime | `/trending/anime` | High | Explicit dedicated public endpoint in the blueprint. |
+| Highest rated anime | `/anime?sort=ratingRank` | Medium | `ratingRank` is exposed on anime objects and generic sorting is documented. |
+| Highest rated anime | `/anime?sort=-averageRating` | Medium | `averageRating` is exposed on anime objects and generic sorting is documented. |
+| Most popular anime | `/anime?sort=popularityRank` | Medium | `popularityRank` is exposed on anime objects and generic sorting is documented. |
+| Most popular anime | `/anime?sort=-userCount,-favoritesCount` | Medium | `userCount` and `favoritesCount` are exposed on anime objects and generic sorting is documented. |
+| Top upcoming anime | `/anime?filter[status]=upcoming&sort=ratingRank` | Low | `status` exists on anime objects, but anime-specific status filtering is not explicitly documented. |
+| Top upcoming anime | `/anime?filter[status]=upcoming&sort=popularityRank` | Low | Same caveat: likely shape, but filter support needs live confirmation. |
+| Top airing anime | `/anime?filter[status]=current&sort=ratingRank` | Low | `current` is a documented anime status value, but not a documented anime filter. |
+| Top airing anime | `/anime?filter[status]=current&sort=popularityRank` | Low | Same caveat: candidate only until verified live. |
+
+### Recommended live verification order
+
+1. Verify `/trending/anime` as the baseline discovery rail.
+2. Verify whether `/anime?sort=ratingRank` and `/anime?sort=popularityRank` return stable ordered collections.
+3. Verify whether `/anime?sort=-averageRating` and `/anime?sort=-userCount,-favoritesCount` behave better than rank-based sorts.
+4. Verify whether `filter[status]=upcoming` and `filter[status]=current` are accepted on `/anime` before planning upcoming / airing rails.
+
 ## Full documented GET appendix
 
 - Total documented GET actions in `kitsu.apib`: 126
@@ -233,4 +256,3 @@ Internal engineering reference derived from `kitsu.apib` in this repo.
 - `GET /media-follows` and `GET /media-follows/{id}` do not include a local `Authorisation` table in the blueprint, so their public-read status should be verified before using them in product code.
 - The blueprint makes it clear that auth can change visibility even on public GET routes, especially for NSFW/R18 content and user-private library data.
 - If Nexio adds authenticated Kitsu functionality later, start with `library-entries` before more account-specific or moderation-specific routes.
-

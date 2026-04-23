@@ -1,0 +1,9 @@
+AM8 Pro was not present in `adb devices -l` during this evidence pass.
+
+Connected devices were:
+
+192.168.50.58:5555     device product:kirkwood model:Google_TV_Streamer device:kirkwood transport_id:15
+192.168.50.71:5555     device product:umx5jyks_arm64 model:AM9_PRO device:umx5jyks transport_id:31
+
+The Google TV Streamer was not used as AM8 Pro evidence.
+

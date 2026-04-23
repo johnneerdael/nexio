@@ -12,11 +12,13 @@
         <exclude domain="sharedpref" path="io.github.jan.supabase.auth.xml" />
         <exclude domain="file" path="datastore/auth_presence.preferences_pb" />
         <exclude domain="file" path="datastore/app_onboarding.preferences_pb" />
+        <exclude domain="file" path="datastore/supabase_session_backup.preferences_pb" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="io.github.jan.supabase.xml" />
         <exclude domain="sharedpref" path="io.github.jan.supabase.auth.xml" />
         <exclude domain="file" path="datastore/auth_presence.preferences_pb" />
         <exclude domain="file" path="datastore/app_onboarding.preferences_pb" />
+        <exclude domain="file" path="datastore/supabase_session_backup.preferences_pb" />
     </device-transfer>
 </data-extraction-rules>
