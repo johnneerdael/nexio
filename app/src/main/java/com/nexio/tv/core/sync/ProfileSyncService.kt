@@ -2,6 +2,7 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.ProfileDataStore
 import com.nexio.tv.data.remote.supabase.SupabaseProfile
@@ -30,7 +31,7 @@ class ProfileSyncService @Inject constructor(
 ) {
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (!authManager.hasSyncSession) {
+            if (!hasLiveFullAccountSession()) {
                 return@withContext Result.success(Unit)
             }
 
@@ -66,7 +67,7 @@ class ProfileSyncService @Inject constructor(
 
     suspend fun pullFromRemote(): Result<List<UserProfile>> = withContext(Dispatchers.IO) {
         try {
-            if (!authManager.hasSyncSession) {
+            if (!hasLiveFullAccountSession()) {
                 return@withContext Result.success(emptyList())
             }
 
@@ -104,7 +105,7 @@ class ProfileSyncService @Inject constructor(
         pin: String
     ): Result<SupabaseProfilePinVerifyResult> = withContext(Dispatchers.IO) {
         try {
-            if (!authManager.hasSyncSession) {
+            if (!hasLiveFullAccountSession()) {
                 return@withContext Result.failure(Exception("No sync session"))
             }
             if (profileId !in 1..4) {
@@ -146,5 +147,12 @@ class ProfileSyncService @Inject constructor(
             if (!authManager.refreshSessionIfJwtExpired(e)) throw e
             block()
         }
+    }
+
+    private fun hasLiveFullAccountSession(): Boolean {
+        return hasLiveFullAccountSyncSession(
+            authState = authManager.authState.value,
+            sessionUserId = authManager.currentSessionUserId
+        )
     }
 }

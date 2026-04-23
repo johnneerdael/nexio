@@ -4,12 +4,14 @@ import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.ProfileDataStore
 import com.nexio.tv.data.remote.supabase.SupabaseProfilePinVerifyResult
+import com.nexio.tv.domain.model.AuthState
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.result.PostgrestResult
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
@@ -22,12 +24,11 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ProfileSyncServiceTest {
     private fun service(
-        authManager: AuthManager = mockk(relaxed = true),
+        authManager: AuthManager = fullAccountAuthManager(),
         postgrest: Postgrest = mockk(),
         profileDataStore: ProfileDataStore = mockk(relaxed = true),
         profileManager: ProfileManager = mockk(relaxed = true)
     ): ProfileSyncService {
-        every { authManager.hasSyncSession } returns true
         return ProfileSyncService(
             authManager = authManager,
             postgrest = postgrest,
@@ -36,10 +37,15 @@ class ProfileSyncServiceTest {
         )
     }
 
+    private fun fullAccountAuthManager(): AuthManager = mockk(relaxed = true) {
+        every { authState } returns MutableStateFlow(AuthState.FullAccount("user-1", "user@example.com"))
+        every { currentSessionUserId } returns "user-1"
+        every { hasSyncSession } returns true
+    }
+
     @Test
     fun `invalid local PIN returns rejected success without RPC`() = runTest {
-        val authManager = mockk<AuthManager>(relaxed = true)
-        every { authManager.hasSyncSession } returns true
+        val authManager = fullAccountAuthManager()
         val postgrest = mockk<Postgrest>(relaxed = true)
         val result = service(authManager = authManager, postgrest = postgrest)
 
@@ -55,8 +61,7 @@ class ProfileSyncServiceTest {
 
     @Test
     fun `empty RPC response returns failure`() = runTest {
-        val authManager = mockk<AuthManager>(relaxed = true)
-        every { authManager.hasSyncSession } returns true
+        val authManager = fullAccountAuthManager()
         val postgrest = mockk<Postgrest>()
         val rpcResult = mockk<PostgrestResult>()
         coEvery { postgrest.rpc("profile_verify_pin", any<JsonObject>()) } returns rpcResult
@@ -71,8 +76,7 @@ class ProfileSyncServiceTest {
 
     @Test
     fun `RPC exception returns failure`() = runTest {
-        val authManager = mockk<AuthManager>(relaxed = true)
-        every { authManager.hasSyncSession } returns true
+        val authManager = fullAccountAuthManager()
         val postgrest = mockk<Postgrest>()
         coEvery { postgrest.rpc("profile_verify_pin", any<JsonObject>()) } throws RuntimeException("boom")
 
@@ -83,4 +87,19 @@ class ProfileSyncServiceTest {
         coVerify(exactly = 1) { postgrest.rpc("profile_verify_pin", any<JsonObject>()) }
     }
 
+    @Test
+    fun `verifyProfilePin requires live full account session`() = runTest {
+        val authManager = mockk<AuthManager>(relaxed = true) {
+            every { authState } returns MutableStateFlow(AuthState.SessionLost)
+            every { currentSessionUserId } returns "durable-user"
+            every { hasSyncSession } returns true
+        }
+        val postgrest = mockk<Postgrest>(relaxed = true)
+
+        val result = service(authManager = authManager, postgrest = postgrest)
+            .verifyProfilePin(2, "1234")
+
+        assertTrue(result.isFailure)
+        coVerify(exactly = 0) { postgrest.rpc(any(), any<JsonObject>()) }
+    }
 }
