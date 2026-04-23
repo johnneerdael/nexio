@@ -203,40 +203,6 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `manual account auth clears legacy or mismatched durable credential`() {
-        assertTrue(
-            shouldClearDurableCredentialForManualAccountAuth(
-                credential = DurableDeviceCredentialSnapshot(
-                    devicePublicId = "device-public-id",
-                    deviceSecret = "device-secret",
-                    ownerUserId = null
-                ),
-                authenticatedUserId = "owner-b"
-            )
-        )
-        assertTrue(
-            shouldClearDurableCredentialForManualAccountAuth(
-                credential = DurableDeviceCredentialSnapshot(
-                    devicePublicId = "device-public-id",
-                    deviceSecret = "device-secret",
-                    ownerUserId = "owner-a"
-                ),
-                authenticatedUserId = "owner-b"
-            )
-        )
-        assertFalse(
-            shouldClearDurableCredentialForManualAccountAuth(
-                credential = DurableDeviceCredentialSnapshot(
-                    devicePublicId = "device-public-id",
-                    deviceSecret = "device-secret",
-                    ownerUserId = "owner-b"
-                ),
-                authenticatedUserId = "owner-b"
-            )
-        )
-    }
-
-    @Test
     fun `authenticated session observer clears ownerless durable credential during manual account auth`() {
         assertTrue(
             shouldClearDurableCredentialForAuthenticatedSession(

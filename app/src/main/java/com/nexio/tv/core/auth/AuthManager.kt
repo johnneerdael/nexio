@@ -317,21 +317,17 @@ class AuthManager @Inject constructor(
         }
 
     private suspend fun publishAuthenticatedUser(userId: String, email: String?) {
-        _sessionUserId.value = userId
-        if (cachedEffectiveUserSourceUserId != userId) {
+        val publication = resolveAuthenticatedSessionPublication(
+            userId = userId,
+            email = email,
+            isReturningUser = isReturningUser()
+        )
+        _sessionUserId.value = publication.sessionUserId
+        if (cachedEffectiveUserSourceUserId != publication.sessionUserId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
         }
-        val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
-        val newState = if (computed !is AuthState.FullAccount && isReturningUser()) {
-            // Supabase reports "authenticated" but with no email — typically a
-            // stale anonymous session left over from a QR-pairing attempt.
-            // For a returning user, this should surface the reconnect nudge,
-            // not the fresh-install sign-in pitch.
-            AuthState.SessionLost
-        } else {
-            computed
-        }
+        val newState = publication.authState
         _authState.value = newState
         if (newState is AuthState.FullAccount) {
             scope.launch {
@@ -764,17 +760,6 @@ internal fun shouldClearDurableCredentialForAuthenticatedSession(
     return normalizedOwnerUserId != normalizedAuthenticatedUserId
 }
 
-internal fun shouldClearDurableCredentialForManualAccountAuth(
-    credential: DurableDeviceCredentialSnapshot,
-    authenticatedUserId: String
-): Boolean {
-    if (!credential.isComplete) return false
-    val normalizedAuthenticatedUserId = authenticatedUserId.trim()
-    if (normalizedAuthenticatedUserId.isBlank()) return false
-    val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() }
-    return normalizedOwnerUserId != normalizedAuthenticatedUserId
-}
-
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null
 
 internal fun shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress: Boolean): Boolean =
@@ -852,6 +837,33 @@ internal suspend fun finalizeTvLoginExchange(
 ) {
     saveCredential(result.devicePublicId, result.deviceSecret)
     importAuthTokens(result.accessToken, result.refreshToken)
+}
+
+internal data class AuthenticatedSessionPublication(
+    val authState: AuthState,
+    val sessionUserId: String?
+)
+
+internal fun resolveAuthenticatedSessionPublication(
+    userId: String,
+    email: String?,
+    isReturningUser: Boolean
+): AuthenticatedSessionPublication {
+    val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
+    val authState = if (computed !is AuthState.FullAccount && isReturningUser) {
+        // Supabase reports "authenticated" but with no email — typically a
+        // stale anonymous session left over from a QR-pairing attempt.
+        // For a returning user, this should surface the reconnect nudge,
+        // not the fresh-install sign-in pitch.
+        AuthState.SessionLost
+    } else {
+        computed
+    }
+    val sessionUserId = (authState as? AuthState.FullAccount)?.userId
+    return AuthenticatedSessionPublication(
+        authState = authState,
+        sessionUserId = sessionUserId
+    )
 }
 
 internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {
