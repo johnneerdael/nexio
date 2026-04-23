@@ -54,6 +54,41 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `revoked during running session clears stale refresh token before forcing reconnect`() = runTest {
+        var durableCredentialCleared = false
+        var persistedRefreshToken: String? = "stale-refresh-token"
+        var terminalState: String? = null
+
+        handleAuthoritativeDurableCredentialRejection(
+            clearDurableCredential = { durableCredentialCleared = true },
+            clearSupabaseSession = { persistedRefreshToken = null },
+            transitionToReconnectState = { terminalState = "SessionLost" }
+        )
+
+        assertTrue(durableCredentialCleared)
+        assertNull(persistedRefreshToken)
+        assertEquals("SessionLost", terminalState)
+    }
+
+    @Test
+    fun `revoked at cold start clears rejected durable credential from local storage`() = runTest {
+        var localCredential: DurableDeviceCredentialSnapshot = DurableDeviceCredentialSnapshot(
+            devicePublicId = "device-public-id",
+            deviceSecret = "device-secret"
+        )
+
+        handleAuthoritativeDurableCredentialRejection(
+            clearDurableCredential = {
+                localCredential = DurableDeviceCredentialSnapshot()
+            },
+            clearSupabaseSession = {},
+            transitionToReconnectState = {}
+        )
+
+        assertFalse(localCredential.isComplete)
+    }
+
+    @Test
     fun `local sign out suppresses recovery branching`() {
         assertTrue(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = true))
         assertFalse(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = false))

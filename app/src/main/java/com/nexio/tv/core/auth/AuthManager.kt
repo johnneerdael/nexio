@@ -256,7 +256,24 @@ class AuthManager @Inject constructor(
             try {
                 if (restoreSupabaseSessionFromDurableCredential()) return
             } catch (e: Exception) {
-                Log.w(TAG, "Durable credential session recovery failed", e)
+                when (
+                    resolveDurableRecoveryFailureAction(
+                        isAuthoritativeRejection = e is AuthoritativeDurableCredentialRejectionException
+                    )
+                ) {
+                    DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                        Log.w(
+                            TAG,
+                            "Durable credential was authoritatively rejected during silent recovery; clearing local auth state and marking session lost",
+                            e
+                        )
+                        clearLocalAuthStateAfterAuthoritativeDurableRejection()
+                        return
+                    }
+                    DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                        Log.w(TAG, "Durable credential session recovery failed", e)
+                    }
+                }
             }
         }
         Log.w(
@@ -513,10 +530,10 @@ class AuthManager @Inject constructor(
                     DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
                         Log.w(
                             TAG,
-                            "Durable credential was authoritatively rejected after JWT expiry; clearing credential and marking session lost",
+                            "Durable credential was authoritatively rejected after JWT expiry; clearing local auth state and marking session lost",
                             recoveryError
                         )
-                        clearDurableCredentialAndMarkSessionLost()
+                        clearLocalAuthStateAfterAuthoritativeDurableRejection()
                     }
                     DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
                         Log.e(TAG, "Failed durable session recovery after JWT expiry", recoveryError)
@@ -540,13 +557,18 @@ class AuthManager @Inject constructor(
         }
     }
 
-    private suspend fun clearDurableCredentialAndMarkSessionLost() {
-        try {
-            durableDeviceCredentialStore.clear()
-        } catch (clearError: Exception) {
-            Log.w(TAG, "Failed clearing durable credential after authoritative revoke", clearError)
-        }
-        transitionToSessionLost()
+    private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection() {
+        handleAuthoritativeDurableCredentialRejection(
+            clearDurableCredential = {
+                durableDeviceCredentialStore.clear()
+            },
+            clearSupabaseSession = {
+                auth.clearSession()
+            },
+            transitionToReconnectState = {
+                transitionToSessionLost()
+            }
+        )
     }
 
     suspend fun startTvLoginSession(deviceNonce: String, deviceName: String?, redirectBaseUrl: String): Result<TvLoginStartResult> {
@@ -902,6 +924,24 @@ internal fun resolveDurableRecoveryFailureAction(
     } else {
         DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE
     }
+}
+
+internal suspend fun handleAuthoritativeDurableCredentialRejection(
+    clearDurableCredential: suspend () -> Unit,
+    clearSupabaseSession: suspend () -> Unit,
+    transitionToReconnectState: () -> Unit
+) {
+    try {
+        clearDurableCredential()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing durable credential after authoritative revoke", clearError)
+    }
+    try {
+        clearSupabaseSession()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing local Supabase session after authoritative revoke", clearError)
+    }
+    transitionToReconnectState()
 }
 
 internal suspend fun finalizeTvLoginExchange(
