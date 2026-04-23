@@ -3,10 +3,10 @@ package com.nexio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.ProfileSettingsSyncService
 import com.nexio.tv.core.sync.ProfileSyncService
-import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -29,9 +29,16 @@ internal class SettingsViewModel @Inject constructor(
     private val profileSettingsSyncService: ProfileSettingsSyncService,
     private val profileManager: ProfileManager
 ) : ViewModel() {
-    val hasFullAccountSession: StateFlow<Boolean> = authManager.authState
-        .map { it is AuthState.FullAccount }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, authManager.isAuthenticated)
+    val hasLiveFullAccountSession: StateFlow<Boolean> = combine(
+        authManager.authState,
+        authManager.sessionUserId
+    ) { authState, sessionUserId ->
+        hasLiveFullAccountSyncSession(authState, sessionUserId)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)
+    )
 
     val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
@@ -54,7 +61,7 @@ internal class SettingsViewModel @Inject constructor(
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress.asStateFlow()
 
     fun triggerSyncNow() {
-        if (!authManager.isAuthenticated) return
+        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) return
         if (_syncStatus.value == SyncStatus.SYNCING) return
         viewModelScope.launch {
             _syncStatus.value = SyncStatus.SYNCING

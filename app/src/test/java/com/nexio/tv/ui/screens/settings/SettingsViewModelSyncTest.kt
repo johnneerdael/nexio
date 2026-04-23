@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.settings
 
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.ProfileSettingsSyncService
 import com.nexio.tv.core.sync.ProfileSyncService
@@ -117,10 +118,44 @@ class SettingsViewModelSyncTest {
         coVerify(exactly = 0) { profileSettingsSyncService.pushBlobForProfile(any()) }
     }
 
-    private fun authManager(authState: AuthState): AuthManager {
+    @Test
+    fun `sync now is a no-op without a live session user id`() = runTest(dispatcher) {
+        val activeProfileId = MutableStateFlow(3)
+        val authManager = authManager(
+            authState = AuthState.FullAccount("user-1", "user@example.com"),
+            currentSessionUserId = null
+        )
+        val profileSyncService = mockk<ProfileSyncService>(relaxed = true)
+        val profileSettingsSyncService = mockk<ProfileSettingsSyncService>(relaxed = true)
+        val profileManager = profileManager(activeProfileId)
+
+        val viewModel = SettingsViewModel(
+            authManager = authManager,
+            profileSyncService = profileSyncService,
+            profileSettingsSyncService = profileSettingsSyncService,
+            profileManager = profileManager
+        )
+
+        viewModel.triggerSyncNow()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { profileSyncService.pullFromRemote() }
+        coVerify(exactly = 0) { profileSyncService.pushToRemote() }
+        coVerify(exactly = 0) { profileSettingsSyncService.pushBlobForProfile(any()) }
+    }
+
+    private fun authManager(
+        authState: AuthState,
+        currentSessionUserId: String? = (authState as? AuthState.FullAccount)?.userId
+    ): AuthManager {
         return mockk {
             every { this@mockk.authState } returns MutableStateFlow(authState)
             every { this@mockk.isAuthenticated } returns (authState is AuthState.FullAccount)
+            every { this@mockk.sessionUserId } returns MutableStateFlow(currentSessionUserId)
+            every { this@mockk.currentSessionUserId } returns currentSessionUserId
+            every {
+                this@mockk.hasSyncSession
+            } returns hasLiveFullAccountSyncSession(authState, currentSessionUserId)
         }
     }
 

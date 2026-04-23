@@ -491,7 +491,7 @@ private fun AccountSettingsInline(
     val accountUiState by accountViewModel.uiState.collectAsStateWithLifecycle()
     val activeProfile by settingsViewModel.activeProfile.collectAsStateWithLifecycle()
     val isPrimaryProfile by settingsViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
-    val hasFullAccountSession by settingsViewModel.hasFullAccountSession.collectAsStateWithLifecycle()
+    val hasLiveFullAccountSession by settingsViewModel.hasLiveFullAccountSession.collectAsStateWithLifecycle()
     val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
 
     Column(
@@ -506,7 +506,7 @@ private fun AccountSettingsInline(
             modifier = Modifier.fillMaxWidth(),
             title = "Profiles"
         ) {
-            if (hasFullAccountSession) {
+            if (hasLiveFullAccountSession) {
                 SyncNowRow(
                     syncStatus = syncStatus,
                     onSyncNow = { settingsViewModel.triggerSyncNow() }

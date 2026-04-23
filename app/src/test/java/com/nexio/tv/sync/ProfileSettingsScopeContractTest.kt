@@ -394,15 +394,15 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
-    fun `manual sync is gated on full account session in settings ui and view model`() {
+    fun `manual sync is gated on live full account session in settings ui and view model`() {
         val screenSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt").readText()
         val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsViewModel.kt").readText()
 
-        assertTrue(viewModelSource.contains("val hasFullAccountSession: StateFlow<Boolean> = authManager.authState"))
-        assertTrue(viewModelSource.contains("map { it is AuthState.FullAccount }"))
-        assertTrue(viewModelSource.contains("if (!authManager.isAuthenticated) return"))
-        assertTrue(screenSource.contains("val hasFullAccountSession by settingsViewModel.hasFullAccountSession.collectAsStateWithLifecycle()"))
-        assertTrue(screenSource.contains("if (hasFullAccountSession) {"))
+        assertTrue(viewModelSource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(viewModelSource.contains("authManager.sessionUserId"))
+        assertTrue(viewModelSource.contains("if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) return"))
+        assertTrue(screenSource.contains("val hasLiveFullAccountSession by settingsViewModel.hasLiveFullAccountSession.collectAsStateWithLifecycle()"))
+        assertTrue(screenSource.contains("if (hasLiveFullAccountSession) {"))
         assertTrue(screenSource.contains("SyncNowRow("))
     }
 
