@@ -18,11 +18,20 @@ import org.junit.Test
 
 class ProfileWebSyncServiceTest {
     @Test
-    fun `sync active profile requires full account session`() = runTest {
+    fun `sync active profile requires live sync session`() = runTest {
         val postgrest = mockk<Postgrest>(relaxed = true)
         val service = ProfileWebSyncService(
             authManager = mockk<AuthManager> {
-                every { authState } returns MutableStateFlow(AuthState.SessionLost)
+                every {
+                    authState
+                } returns MutableStateFlow(
+                    AuthState.FullAccount(
+                        userId = "user-123",
+                        email = "user@example.com"
+                    )
+                )
+                every { sessionUserId } returns MutableStateFlow(null)
+                every { currentSessionUserId } returns null
             },
             postgrest = postgrest,
             traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true),

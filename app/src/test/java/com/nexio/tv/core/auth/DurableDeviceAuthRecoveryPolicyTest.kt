@@ -153,6 +153,21 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `jwt expiry recovery ignores cached refresh token after authoritative rejection`() {
+        assertEquals(
+            JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY,
+            resolveJwtExpiryRecoveryAction(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret"
+                ),
+                ignoreCachedRefreshToken = true
+            )
+        )
+    }
+
+    @Test
     fun `jwt expiry recovery falls back to refresh token only for legacy refresh-only sessions`() {
         assertEquals(
             JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION,

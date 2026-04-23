@@ -2,6 +2,7 @@ package com.nexio.tv.core.auth
 
 import com.nexio.tv.domain.model.AuthState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -86,5 +87,50 @@ class AuthManagerStateTest {
 
         assertEquals(AuthState.SignedOut, publication.authState)
         assertNull(publication.sessionUserId)
+    }
+
+    @Test
+    fun `full account without live session does not satisfy sync gate`() {
+        assertFalse(
+            hasLiveFullAccountSyncSession(
+                authState = AuthState.FullAccount(
+                    userId = "user-123",
+                    email = "user@example.com"
+                ),
+                sessionUserId = null
+            )
+        )
+        assertNull(
+            liveFullAccountSessionUserId(
+                authState = AuthState.FullAccount(
+                    userId = "user-123",
+                    email = "user@example.com"
+                ),
+                sessionUserId = null
+            )
+        )
+    }
+
+    @Test
+    fun `full account with live session satisfies sync gate`() {
+        assertTrue(
+            hasLiveFullAccountSyncSession(
+                authState = AuthState.FullAccount(
+                    userId = "user-123",
+                    email = "user@example.com"
+                ),
+                sessionUserId = "user-123"
+            )
+        )
+        assertEquals(
+            "user-123",
+            liveFullAccountSessionUserId(
+                authState = AuthState.FullAccount(
+                    userId = "user-123",
+                    email = "user@example.com"
+                ),
+                sessionUserId = "user-123"
+            )
+        )
     }
 }

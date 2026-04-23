@@ -2,7 +2,7 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.domain.model.AuthState
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
@@ -50,7 +50,12 @@ class ProfileWebSyncService @Inject constructor(
 ) {
     suspend fun syncActiveProfile(profileIndex: Int): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (authManager.authState.value !is AuthState.FullAccount) {
+            if (
+                !hasLiveFullAccountSyncSession(
+                    authState = authManager.authState.value,
+                    sessionUserId = authManager.currentSessionUserId
+                )
+            ) {
                 return@withContext Result.failure(
                     IllegalStateException("Profile web auth sync requires a full account session")
                 )

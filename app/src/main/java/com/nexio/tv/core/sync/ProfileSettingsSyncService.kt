@@ -13,7 +13,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.domain.model.AuthState
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
@@ -223,7 +223,12 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     private fun requireFullAccountSession(): Result<Unit>? {
-        return if (authManager.authState.value is AuthState.FullAccount) {
+        return if (
+            hasLiveFullAccountSyncSession(
+                authState = authManager.authState.value,
+                sessionUserId = authManager.currentSessionUserId
+            )
+        ) {
             null
         } else {
             Result.failure(IllegalStateException("Profile settings sync requires a full account session"))

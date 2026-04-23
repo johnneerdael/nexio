@@ -359,7 +359,7 @@ class ProfileSettingsScopeContractTest {
     fun `profile web auth sync does not own primary profile integrations`() {
         val source = profileWebSyncService.readText()
 
-        assertTrue(source.contains("authManager.authState.value !is AuthState.FullAccount"))
+        assertTrue(source.contains("hasLiveFullAccountSyncSession("))
         assertTrue(source.contains("profileModeRouter.routeFor(profileIndex)"))
         assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue(source.contains("profileBoundary.authRoute"))
@@ -383,9 +383,9 @@ class ProfileSettingsScopeContractTest {
     fun `startup sync routes default legacy away from secondary profile sync`() {
         val source = startupSyncService.readText()
 
-        assertTrue(source.contains("authManager.authState.collect"))
-        assertTrue(source.contains("val userId = (authState as? AuthState.FullAccount)?.userId"))
-        assertTrue(source.contains("authManager.authState.value !is AuthState.FullAccount"))
+        assertTrue(source.contains("combine(authManager.authState, authManager.sessionUserId)"))
+        assertTrue(source.contains("liveFullAccountSessionUserId("))
+        assertTrue(source.contains("hasLiveFullAccountSyncSession("))
         assertTrue(source.contains("profileModeRouter.routeFor(activeId)"))
         assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue(source.contains("Skipping secondary profile startup sync for default legacy profile"))

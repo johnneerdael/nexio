@@ -122,7 +122,7 @@ class AuthManager @Inject constructor(
                                                         "Refresh token rejected; falling through to durable recovery",
                                                         e
                                                     )
-                                                    attemptSilentSessionRecovery()
+                                                    attemptSilentSessionRecovery(ignoreCachedRefreshToken = true)
                                                 }
                                                 AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT -> {
                                                     Log.w(TAG, "Refresh token rejected; signing out", e)
@@ -192,12 +192,12 @@ class AuthManager @Inject constructor(
         return readHasCompletedOnboardingQr()
     }
 
-    private suspend fun attemptSilentSessionRecovery() {
+    private suspend fun attemptSilentSessionRecovery(ignoreCachedRefreshToken: Boolean = false) {
         // Give the SDK's own storage layer a few chances to hydrate the session
         // before we commit to any SignedOut transition. Each iteration re-checks
         // init, user, and session. If the user re-appears, Supabase will emit
         // Authenticated on its own and we'll pick it up in the collector.
-        var shouldAttemptDurableAfterRefreshRejection = false
+        var shouldAttemptDurableAfterRefreshRejection = ignoreCachedRefreshToken
         for (attempt in 0 until 3) {
             if (shouldAttemptDurableAfterRefreshRejection) break
             delay(500L * (attempt + 1))
@@ -209,7 +209,8 @@ class AuthManager @Inject constructor(
                 when (
                     resolveJwtExpiryRecoveryAction(
                         hasRefreshToken = session?.refreshToken?.isNotBlank() == true,
-                        credential = credential
+                        credential = credential,
+                        ignoreCachedRefreshToken = shouldAttemptDurableAfterRefreshRejection
                     )
                 ) {
                     JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY -> break
@@ -834,6 +835,20 @@ internal fun sessionUserIdWhileSessionUnavailable(): String? = null
 internal fun shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress: Boolean): Boolean =
     isLocalSignOutInProgress
 
+internal fun hasLiveFullAccountSyncSession(
+    authState: AuthState,
+    sessionUserId: String?
+): Boolean {
+    return authState is AuthState.FullAccount && !sessionUserId.isNullOrBlank()
+}
+
+internal fun liveFullAccountSessionUserId(
+    authState: AuthState,
+    sessionUserId: String?
+): String? {
+    return sessionUserId?.takeIf { hasLiveFullAccountSyncSession(authState, it) }
+}
+
 internal enum class NotAuthenticatedStartupAction {
     REFRESH_LIVE_SESSION,
     ATTEMPT_RETURNING_USER_RECOVERY,
@@ -875,9 +890,10 @@ internal fun resolveNotAuthenticatedStartupAction(
 
 internal fun resolveJwtExpiryRecoveryAction(
     hasRefreshToken: Boolean,
-    credential: DurableDeviceCredentialSnapshot
+    credential: DurableDeviceCredentialSnapshot,
+    ignoreCachedRefreshToken: Boolean = false
 ): JwtExpiryRecoveryAction {
-    if (hasRefreshToken) return JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION
+    if (hasRefreshToken && !ignoreCachedRefreshToken) return JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION
     if (credential.isComplete) return JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY
     return JwtExpiryRecoveryAction.NO_RECOVERY_PATH
 }
