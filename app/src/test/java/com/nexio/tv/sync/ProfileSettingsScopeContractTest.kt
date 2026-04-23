@@ -407,6 +407,22 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `profile delete remote sync is gated on live full account session`() {
+        val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsViewModel.kt").readText()
+        val profileManagerSource = File("app/src/main/java/com/nexio/tv/core/profile/ProfileManager.kt").readText()
+
+        assertTrue(viewModelSource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(viewModelSource.contains("profileManager.deleteProfile("))
+        assertTrue(viewModelSource.contains("syncRemoteDelete = hasLiveFullAccountSyncSession("))
+        assertTrue(viewModelSource.contains("authManager.authState.value"))
+        assertTrue(viewModelSource.contains("authManager.currentSessionUserId"))
+        assertTrue(profileManagerSource.contains("suspend fun deleteProfile(id: Int, syncRemoteDelete: Boolean = false): Boolean"))
+        assertTrue(profileManagerSource.contains("deleteProfileDataAsync(id, syncRemoteDelete)"))
+        assertTrue(profileManagerSource.contains("if (syncRemoteDelete) {"))
+        assertTrue(profileManagerSource.contains("deleteProfileRemote(profileId)"))
+    }
+
+    @Test
     fun `account and addon sync entrypoints require a live full account session`() {
         val accountViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/account/AccountViewModel.kt").readText()
         val accountSettingsSyncSource = accountSettingsSyncService.readText()

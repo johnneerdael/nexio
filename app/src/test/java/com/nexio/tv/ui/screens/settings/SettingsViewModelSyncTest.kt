@@ -144,6 +144,52 @@ class SettingsViewModelSyncTest {
         coVerify(exactly = 0) { profileSettingsSyncService.pushBlobForProfile(any()) }
     }
 
+    @Test
+    fun `confirm delete profile enables remote sync for a live full account session`() = runTest(dispatcher) {
+        val authManager = authManager(authState = AuthState.FullAccount("user-1", "user@example.com"))
+        val profileSyncService = mockk<ProfileSyncService>(relaxed = true)
+        val profileSettingsSyncService = mockk<ProfileSettingsSyncService>(relaxed = true)
+        val profileManager = profileManager(MutableStateFlow(3))
+        val profile = UserProfile(id = 3, name = "Profile 3", avatarColorHex = "#8E24AA")
+        coEvery { profileManager.deleteProfile(profile.id, syncRemoteDelete = true) } returns true
+
+        val viewModel = SettingsViewModel(
+            authManager = authManager,
+            profileSyncService = profileSyncService,
+            profileSettingsSyncService = profileSettingsSyncService,
+            profileManager = profileManager
+        )
+
+        viewModel.requestDeleteProfile(profile)
+        viewModel.confirmDeleteProfile()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { profileManager.deleteProfile(profile.id, syncRemoteDelete = true) }
+    }
+
+    @Test
+    fun `confirm delete profile skips remote sync without a live full account session`() = runTest(dispatcher) {
+        val authManager = authManager(authState = AuthState.SessionLost)
+        val profileSyncService = mockk<ProfileSyncService>(relaxed = true)
+        val profileSettingsSyncService = mockk<ProfileSettingsSyncService>(relaxed = true)
+        val profileManager = profileManager(MutableStateFlow(3))
+        val profile = UserProfile(id = 3, name = "Profile 3", avatarColorHex = "#8E24AA")
+        coEvery { profileManager.deleteProfile(profile.id, syncRemoteDelete = false) } returns true
+
+        val viewModel = SettingsViewModel(
+            authManager = authManager,
+            profileSyncService = profileSyncService,
+            profileSettingsSyncService = profileSettingsSyncService,
+            profileManager = profileManager
+        )
+
+        viewModel.requestDeleteProfile(profile)
+        viewModel.confirmDeleteProfile()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { profileManager.deleteProfile(profile.id, syncRemoteDelete = false) }
+    }
+
     private fun authManager(
         authState: AuthState,
         currentSessionUserId: String? = (authState as? AuthState.FullAccount)?.userId

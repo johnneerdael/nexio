@@ -99,7 +99,13 @@ internal class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _deleteInProgress.value = true
             try {
-                profileManager.deleteProfile(profile.id)
+                profileManager.deleteProfile(
+                    profile.id,
+                    syncRemoteDelete = hasLiveFullAccountSyncSession(
+                        authManager.authState.value,
+                        authManager.currentSessionUserId
+                    )
+                )
                 _showDeleteDialog.value = null
             } finally {
                 _deleteInProgress.value = false

@@ -12,6 +12,7 @@ import com.nexio.tv.data.local.ProfileDataStoreImpl
 import com.nexio.tv.domain.model.UserProfile
 import io.github.jan.supabase.postgrest.Postgrest
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -216,7 +217,7 @@ class ProfileManagerTest {
         val profilesAfterCreate = manager.profiles.first { it.size == 2 }
         val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
 
-        val result = manager.deleteProfile(aliceId)
+        val result = manager.deleteProfile(aliceId, syncRemoteDelete = true)
         assertTrue(result)
         val profilesAfterDelete = manager.profiles.first { p -> p.none { it.id == aliceId } }
         assertFalse(profilesAfterDelete.any { it.id == aliceId })
@@ -230,7 +231,7 @@ class ProfileManagerTest {
         val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
         writeProfileSharedPreferences(aliceId)
 
-        val result = manager.deleteProfile(aliceId)
+        val result = manager.deleteProfile(aliceId, syncRemoteDelete = true)
 
         assertTrue(result)
         spStoreBaseNames.forEach { baseName ->
@@ -251,7 +252,7 @@ class ProfileManagerTest {
         val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
         writeProfileSharedPreferences(aliceId)
 
-        val result = manager.deleteProfile(aliceId)
+        val result = manager.deleteProfile(aliceId, syncRemoteDelete = true)
 
         assertTrue(result)
         val profilesAfterDelete = manager.profiles.first { p -> p.none { it.id == aliceId } }
@@ -263,6 +264,30 @@ class ProfileManagerTest {
         val pending = context.getSharedPreferences("profile_cleanup_state", Application.MODE_PRIVATE)
             .getStringSet("pending_remote_cleanup", emptySet())
         assertTrue(pending?.contains(aliceId.toString()) == true)
+    }
+
+    @Test
+    fun `deleteProfile skips remote cleanup when remote sync is gated off but still deletes locally`() = runTest {
+        val postgrest = mockk<Postgrest>(relaxed = true)
+        val manager = makeManager(postgrest)
+        manager.createProfile("Alice", "#E53935")
+        val profilesAfterCreate = manager.profiles.first { it.size == 2 }
+        val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
+        writeProfileSharedPreferences(aliceId)
+
+        val result = manager.deleteProfile(aliceId, syncRemoteDelete = false)
+
+        assertTrue(result)
+        val profilesAfterDelete = manager.profiles.first { p -> p.none { it.id == aliceId } }
+        assertFalse(profilesAfterDelete.any { it.id == aliceId })
+        spStoreBaseNames.forEach { baseName ->
+            val prefsName = profilePrefsName(baseName, aliceId)
+            assertFalse(sharedPreferencesFile(prefsName).exists())
+        }
+        coVerify(exactly = 0) { postgrest.rpc(any<String>(), any<JsonObject>()) }
+        val pending = context.getSharedPreferences("profile_cleanup_state", Application.MODE_PRIVATE)
+            .getStringSet("pending_remote_cleanup", emptySet())
+        assertTrue(pending.isNullOrEmpty())
     }
 
     @Test
