@@ -125,6 +125,10 @@ class AccountViewModel @Inject constructor(
     fun getSyncCode(pin: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+                _uiState.update { it.copy(isLoading = false, error = "Sign in with an account first.") }
+                return@launch
+            }
             syncRepository.getSyncCode(pin).fold(
                 onSuccess = { code ->
                     _uiState.update { it.copy(isLoading = false, generatedSyncCode = code) }

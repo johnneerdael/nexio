@@ -27,6 +27,18 @@ class SyncRepositoryImplSessionTest {
     }
 
     @Test
+    fun `get sync code fails fast without a live full-account session`() = runTest {
+        val postgrest = mockk<Postgrest>(relaxed = true)
+        val repository = createRepository(postgrest)
+
+        val result = repository.getSyncCode("1234")
+
+        assertTrue(result.isFailure)
+        assertEquals("No live full account session", result.exceptionOrNull()?.message)
+        coVerify(exactly = 0) { postgrest.rpc(any<String>(), any<JsonObject>()) }
+    }
+
+    @Test
     fun `claim sync code fails fast without a live full-account session`() = runTest {
         val postgrest = mockk<Postgrest>(relaxed = true)
         val repository = createRepository(postgrest)

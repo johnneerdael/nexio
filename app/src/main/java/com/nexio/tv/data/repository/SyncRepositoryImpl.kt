@@ -40,6 +40,9 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun getSyncCode(pin: String): Result<String> {
         return try {
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+                return Result.failure(IllegalStateException("No live full account session"))
+            }
             val params = buildJsonObject { put("p_pin", pin) }
             val response = postgrest.rpc("get_sync_code", params)
             val results = response.decodeList<SyncCodeResult>()

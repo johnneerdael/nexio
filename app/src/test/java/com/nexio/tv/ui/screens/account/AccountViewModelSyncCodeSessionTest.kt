@@ -55,6 +55,22 @@ class AccountViewModelSyncCodeSessionTest {
     }
 
     @Test
+    fun `get sync code refuses stale full-account session`() = runTest(dispatcher) {
+        val syncRepository = mockk<SyncRepository>(relaxed = true)
+        val viewModel = createViewModel(
+            authState = AuthState.FullAccount("user-1", "user@example.com"),
+            currentSessionUserId = null,
+            syncRepository = syncRepository
+        )
+
+        viewModel.getSyncCode("1234")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { syncRepository.getSyncCode(any()) }
+        assertEquals("Sign in with an account first.", viewModel.uiState.value.error)
+    }
+
+    @Test
     fun `claim sync code refuses stale full-account session`() = runTest(dispatcher) {
         val syncRepository = mockk<SyncRepository>(relaxed = true)
         val viewModel = createViewModel(
