@@ -209,6 +209,20 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `authoritative refresh rejection still allows durable recovery when rejected refresh token remains cached`() {
+        assertTrue(
+            shouldAttemptDurableSessionRecovery(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret"
+                ),
+                ignoreCachedRefreshToken = true
+            )
+        )
+    }
+
+    @Test
     fun `durable recovery stays disabled when credential is incomplete`() {
         assertFalse(
             shouldAttemptDurableSessionRecovery(

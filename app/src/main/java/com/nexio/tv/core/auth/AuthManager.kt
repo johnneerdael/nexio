@@ -220,35 +220,37 @@ class AuthManager @Inject constructor(
                     JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> Unit
                 }
             } catch (e: Exception) {
-                if (e.isAuthoritativeRefreshRejection()) {
-                    when (
-                        resolveAuthoritativeRefreshRejectionAction(
-                            hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                when (
+                    resolveRefreshFailureAction(
+                        refreshError = e,
+                        hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                    )
+                ) {
+                    RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY -> {
+                        Log.w(
+                            TAG,
+                            "Authoritative rejection during silent recovery; attempting durable recovery",
+                            e
                         )
-                    ) {
-                        AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY -> {
-                            Log.w(
-                                TAG,
-                                "Authoritative rejection during silent recovery; attempting durable recovery",
-                                e
-                            )
-                            shouldAttemptDurableAfterRefreshRejection = true
-                            continue
-                        }
-                        AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT -> {
-                            Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
-                            transitionToSignedOut()
-                            return
-                        }
+                        shouldAttemptDurableAfterRefreshRejection = true
+                        continue
+                    }
+                    RefreshFailureAction.TRANSITION_SIGNED_OUT -> {
+                        Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
+                        transitionToSignedOut()
+                        return
+                    }
+                    RefreshFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                        Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
                     }
                 }
-                Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
             }
         }
         if (
             shouldAttemptDurableSessionRecovery(
                 hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
-                credential = durableDeviceCredentialStore.snapshot()
+                credential = durableDeviceCredentialStore.snapshot(),
+                ignoreCachedRefreshToken = shouldAttemptDurableAfterRefreshRejection
             )
         ) {
             try {
@@ -549,8 +551,59 @@ class AuthManager @Inject constructor(
                     auth.refreshCurrentSession()
                     true
                 } catch (refreshError: Exception) {
-                    Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
-                    false
+                    when (
+                        resolveRefreshFailureAction(
+                            refreshError = refreshError,
+                            hasDurableCredential = credential.isComplete
+                        )
+                    ) {
+                        RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY -> {
+                            try {
+                                Log.w(
+                                    TAG,
+                                    "Refresh token was authoritatively rejected after JWT expiry; restoring Supabase session from durable credential",
+                                    refreshError
+                                )
+                                restoreSupabaseSessionFromDurableCredential()
+                            } catch (recoveryError: Exception) {
+                                when (
+                                    resolveDurableRecoveryFailureAction(
+                                        isAuthoritativeRejection = recoveryError is AuthoritativeDurableCredentialRejectionException
+                                    )
+                                ) {
+                                    DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                                        Log.w(
+                                            TAG,
+                                            "Durable credential was authoritatively rejected after refresh rejection; clearing local auth state and marking session lost",
+                                            recoveryError
+                                        )
+                                        clearLocalAuthStateAfterAuthoritativeDurableRejection()
+                                    }
+                                    DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                                        Log.e(
+                                            TAG,
+                                            "Failed durable session recovery after refresh rejection",
+                                            recoveryError
+                                        )
+                                    }
+                                }
+                                false
+                            }
+                        }
+                        RefreshFailureAction.TRANSITION_SIGNED_OUT -> {
+                            Log.w(
+                                TAG,
+                                "Refresh token was authoritatively rejected after JWT expiry; signing out",
+                                refreshError
+                            )
+                            transitionToSignedOut()
+                            false
+                        }
+                        RefreshFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                            Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
+                            false
+                        }
+                    }
                 }
             }
             JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> {
@@ -738,9 +791,10 @@ class AuthManager @Inject constructor(
 
 internal fun shouldAttemptDurableSessionRecovery(
     hasRefreshToken: Boolean,
-    credential: DurableDeviceCredentialSnapshot
+    credential: DurableDeviceCredentialSnapshot,
+    ignoreCachedRefreshToken: Boolean = false
 ): Boolean {
-    return !hasRefreshToken && credential.isComplete
+    return (!hasRefreshToken || ignoreCachedRefreshToken) && credential.isComplete
 }
 
 internal fun shouldRequestDurableCredentialBackfill(
@@ -802,6 +856,12 @@ internal enum class DurableRecoveryFailureAction {
     CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
 }
 
+internal enum class RefreshFailureAction {
+    ATTEMPT_DURABLE_RECOVERY,
+    TRANSITION_SIGNED_OUT,
+    KEEP_CURRENT_AUTH_STATE
+}
+
 internal fun resolveNotAuthenticatedStartupAction(
     hasRefreshToken: Boolean,
     isReturningUser: Boolean,
@@ -839,6 +899,26 @@ internal fun resolveDurableRecoveryFailureAction(
         DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
     } else {
         DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE
+    }
+}
+
+internal fun resolveRefreshFailureAction(
+    refreshError: Throwable,
+    hasDurableCredential: Boolean
+): RefreshFailureAction {
+    if (!refreshError.isAuthoritativeRefreshRejection()) {
+        return RefreshFailureAction.KEEP_CURRENT_AUTH_STATE
+    }
+
+    return when (
+        resolveAuthoritativeRefreshRejectionAction(
+            hasDurableCredential = hasDurableCredential
+        )
+    ) {
+        AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY ->
+            RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY
+        AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT ->
+            RefreshFailureAction.TRANSITION_SIGNED_OUT
     }
 }
 
