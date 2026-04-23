@@ -42,6 +42,18 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `authoritative durable recovery rejection after jwt expiry clears local credential and forces reconnect`() {
+        assertEquals(
+            DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST,
+            resolveDurableRecoveryFailureAction(isAuthoritativeRejection = true)
+        )
+        assertEquals(
+            DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE,
+            resolveDurableRecoveryFailureAction(isAuthoritativeRejection = false)
+        )
+    }
+
+    @Test
     fun `local sign out suppresses recovery branching`() {
         assertTrue(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = true))
         assertFalse(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = false))

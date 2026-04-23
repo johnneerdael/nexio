@@ -43,6 +43,8 @@ import javax.inject.Singleton
 
 private const val TAG = "AuthManager"
 
+private class AuthoritativeDurableCredentialRejectionException(message: String) : IllegalStateException(message)
+
 @Singleton
 class AuthManager @Inject constructor(
     private val auth: Auth,
@@ -503,7 +505,23 @@ class AuthManager @Inject constructor(
                 Log.w(TAG, "JWT expired; restoring Supabase session from durable credential")
                 restoreSupabaseSessionFromDurableCredential()
             } catch (recoveryError: Exception) {
-                Log.e(TAG, "Failed durable session recovery after JWT expiry", recoveryError)
+                when (
+                    resolveDurableRecoveryFailureAction(
+                        isAuthoritativeRejection = recoveryError is AuthoritativeDurableCredentialRejectionException
+                    )
+                ) {
+                    DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                        Log.w(
+                            TAG,
+                            "Durable credential was authoritatively rejected after JWT expiry; clearing credential and marking session lost",
+                            recoveryError
+                        )
+                        clearDurableCredentialAndMarkSessionLost()
+                    }
+                    DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                        Log.e(TAG, "Failed durable session recovery after JWT expiry", recoveryError)
+                    }
+                }
                 false
             }
         }
@@ -520,6 +538,15 @@ class AuthManager @Inject constructor(
             Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
             false
         }
+    }
+
+    private suspend fun clearDurableCredentialAndMarkSessionLost() {
+        try {
+            durableDeviceCredentialStore.clear()
+        } catch (clearError: Exception) {
+            Log.w(TAG, "Failed clearing durable credential after authoritative revoke", clearError)
+        }
+        transitionToSessionLost()
     }
 
     suspend fun startTvLoginSession(deviceNonce: String, deviceName: String?, redirectBaseUrl: String): Result<TvLoginStartResult> {
@@ -651,7 +678,9 @@ class AuthManager @Inject constructor(
                 val responseBody = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     if (response.code == 401 || response.code == 403) {
-                        durableDeviceCredentialStore.clear()
+                        throw AuthoritativeDurableCredentialRejectionException(
+                            "Durable device session exchange failed (${response.code}): $responseBody"
+                        )
                     }
                     throw IllegalStateException(
                         "Durable device session exchange failed (${response.code}): $responseBody"
@@ -839,6 +868,11 @@ internal enum class AuthoritativeRefreshRejectionAction {
     TRANSITION_SIGNED_OUT
 }
 
+internal enum class DurableRecoveryFailureAction {
+    KEEP_CURRENT_AUTH_STATE,
+    CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
+}
+
 internal fun resolveNotAuthenticatedStartupAction(
     hasRefreshToken: Boolean,
     isReturningUser: Boolean,
@@ -857,6 +891,16 @@ internal fun resolveAuthoritativeRefreshRejectionAction(
         AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY
     } else {
         AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT
+    }
+}
+
+internal fun resolveDurableRecoveryFailureAction(
+    isAuthoritativeRejection: Boolean
+): DurableRecoveryFailureAction {
+    return if (isAuthoritativeRejection) {
+        DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
+    } else {
+        DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE
     }
 }
 
