@@ -54,6 +54,7 @@ import kotlinx.coroutines.delay
 fun AuthQrSignInScreen(
     onBackPress: () -> Unit = {},
     onContinue: (() -> Unit)? = null,
+    allowReconnectLaunch: Boolean = false,
     viewModel: AccountViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -82,11 +83,12 @@ fun AuthQrSignInScreen(
                 authState = uiState.authState,
                 isSignedIn = isSignedIn,
                 hasQrLoginCode = !uiState.qrLoginCode.isNullOrBlank(),
-                isLoading = uiState.isLoading
+                isLoading = uiState.isLoading,
+                allowReconnectLaunch = allowReconnectLaunch
             )
         ) {
-            // Debounce: only mint a QR code if we stay in SignedOut/SessionLost for a moment.
-            // On cold-start / post-upgrade, AuthState can briefly flash one of these
+            // Debounce: only mint a QR code if we stay in a QR-eligible state for a moment.
+            // On cold-start / post-upgrade, AuthState can briefly flash SignedOut
             // while Supabase's session storage hydrates — starting a QR login on
             // that flash is exactly the spurious re-auth prompt we want to avoid.
             delay(1500)
@@ -95,7 +97,8 @@ fun AuthQrSignInScreen(
                     authState = uiState.authState,
                     isSignedIn = isSignedIn,
                     hasQrLoginCode = !uiState.qrLoginCode.isNullOrBlank(),
-                    isLoading = uiState.isLoading
+                    isLoading = uiState.isLoading,
+                    allowReconnectLaunch = allowReconnectLaunch
                 )
             ) {
                 viewModel.startQrLogin()
@@ -350,9 +353,11 @@ internal fun shouldLaunchQrLogin(
     authState: AuthState,
     isSignedIn: Boolean,
     hasQrLoginCode: Boolean,
-    isLoading: Boolean
+    isLoading: Boolean,
+    allowReconnectLaunch: Boolean
 ): Boolean {
-    val needsQr = authState is AuthState.SignedOut
+    val needsQr = authState is AuthState.SignedOut ||
+        (allowReconnectLaunch && authState is AuthState.SessionLost)
     return needsQr && !isSignedIn && !hasQrLoginCode && !isLoading
 }
 

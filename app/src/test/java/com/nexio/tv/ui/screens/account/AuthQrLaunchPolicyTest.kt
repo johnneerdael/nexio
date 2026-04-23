@@ -13,19 +13,34 @@ class AuthQrLaunchPolicyTest {
                 authState = AuthState.SignedOut,
                 isSignedIn = false,
                 hasQrLoginCode = false,
-                isLoading = false
+                isLoading = false,
+                allowReconnectLaunch = false
             )
         )
     }
 
     @Test
-    fun `launch stays blocked for returning users in session lost state`() {
+    fun `launch stays blocked for returning users in session lost state without explicit reconnect`() {
         assertFalse(
             shouldLaunchQrLogin(
                 authState = AuthState.SessionLost,
                 isSignedIn = false,
                 hasQrLoginCode = false,
-                isLoading = false
+                isLoading = false,
+                allowReconnectLaunch = false
+            )
+        )
+    }
+
+    @Test
+    fun `launch starts for session lost when reconnect flow explicitly requests it`() {
+        assertTrue(
+            shouldLaunchQrLogin(
+                authState = AuthState.SessionLost,
+                isSignedIn = false,
+                hasQrLoginCode = false,
+                isLoading = false,
+                allowReconnectLaunch = true
             )
         )
     }
@@ -37,7 +52,8 @@ class AuthQrLaunchPolicyTest {
                 authState = AuthState.Loading,
                 isSignedIn = false,
                 hasQrLoginCode = false,
-                isLoading = false
+                isLoading = false,
+                allowReconnectLaunch = false
             )
         )
         assertFalse(
@@ -45,7 +61,8 @@ class AuthQrLaunchPolicyTest {
                 authState = AuthState.FullAccount(userId = "user-123", email = "user@example.com"),
                 isSignedIn = true,
                 hasQrLoginCode = false,
-                isLoading = false
+                isLoading = false,
+                allowReconnectLaunch = true
             )
         )
     }
@@ -57,7 +74,8 @@ class AuthQrLaunchPolicyTest {
                 authState = AuthState.SignedOut,
                 isSignedIn = false,
                 hasQrLoginCode = true,
-                isLoading = false
+                isLoading = false,
+                allowReconnectLaunch = false
             )
         )
         assertFalse(
@@ -65,7 +83,8 @@ class AuthQrLaunchPolicyTest {
                 authState = AuthState.SignedOut,
                 isSignedIn = false,
                 hasQrLoginCode = false,
-                isLoading = true
+                isLoading = true,
+                allowReconnectLaunch = true
             )
         )
     }

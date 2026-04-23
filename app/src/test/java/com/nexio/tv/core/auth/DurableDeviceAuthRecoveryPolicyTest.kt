@@ -1,6 +1,8 @@
 package com.nexio.tv.core.auth
 
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -18,9 +20,21 @@ class DurableDeviceAuthRecoveryPolicyTest {
         assertEquals(
             NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,
             resolveNotAuthenticatedStartupAction(
-                hasCachedIdentity = true,
                 hasRefreshToken = false,
-                isReturningUser = true
+                isReturningUser = true,
+                hasDurableCredential = false
+            )
+        )
+    }
+
+    @Test
+    fun `not authenticated startup attempts recovery from durable credential even without returning markers`() {
+        assertEquals(
+            NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,
+            resolveNotAuthenticatedStartupAction(
+                hasRefreshToken = false,
+                isReturningUser = false,
+                hasDurableCredential = true
             )
         )
     }
@@ -30,14 +44,13 @@ class DurableDeviceAuthRecoveryPolicyTest {
         assertEquals(
             NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION,
             resolveNotAuthenticatedStartupAction(
-                hasCachedIdentity = false,
                 hasRefreshToken = true,
-                isReturningUser = true
+                isReturningUser = true,
+                hasDurableCredential = true
             )
         )
         assertFalse(
             shouldAttemptDurableSessionRecovery(
-                isReturningUser = true,
                 hasRefreshToken = true,
                 credential = DurableDeviceCredentialSnapshot(
                     devicePublicId = "device-public-id",
@@ -52,32 +65,17 @@ class DurableDeviceAuthRecoveryPolicyTest {
         assertEquals(
             NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT,
             resolveNotAuthenticatedStartupAction(
-                hasCachedIdentity = false,
                 hasRefreshToken = false,
-                isReturningUser = false
+                isReturningUser = false,
+                hasDurableCredential = false
             )
         )
     }
 
     @Test
-    fun `durable recovery only runs for returning users with no live refresh token and complete credential`() {
+    fun `durable recovery runs when no live refresh token and credential is complete`() {
         assertTrue(
             shouldAttemptDurableSessionRecovery(
-                isReturningUser = true,
-                hasRefreshToken = false,
-                credential = DurableDeviceCredentialSnapshot(
-                    devicePublicId = "device-public-id",
-                    deviceSecret = "device-secret"
-                )
-            )
-        )
-    }
-
-    @Test
-    fun `durable recovery stays disabled for fresh installs`() {
-        assertFalse(
-            shouldAttemptDurableSessionRecovery(
-                isReturningUser = false,
                 hasRefreshToken = false,
                 credential = DurableDeviceCredentialSnapshot(
                     devicePublicId = "device-public-id",
@@ -91,7 +89,6 @@ class DurableDeviceAuthRecoveryPolicyTest {
     fun `durable recovery stays disabled when refresh token already exists`() {
         assertFalse(
             shouldAttemptDurableSessionRecovery(
-                isReturningUser = true,
                 hasRefreshToken = true,
                 credential = DurableDeviceCredentialSnapshot(
                     devicePublicId = "device-public-id",
@@ -105,7 +102,6 @@ class DurableDeviceAuthRecoveryPolicyTest {
     fun `durable recovery stays disabled when credential is incomplete`() {
         assertFalse(
             shouldAttemptDurableSessionRecovery(
-                isReturningUser = true,
                 hasRefreshToken = false,
                 credential = DurableDeviceCredentialSnapshot(
                     devicePublicId = "device-public-id",
@@ -113,5 +109,53 @@ class DurableDeviceAuthRecoveryPolicyTest {
                 )
             )
         )
+    }
+
+    @Test
+    fun `qr exchange imports auth only after durable credential save succeeds`() = runTest {
+        val calls = mutableListOf<String>()
+
+        finalizeTvLoginExchange(
+            result = DurableDeviceCredentialIssueResult(
+                devicePublicId = "device-public-id",
+                deviceSecret = "device-secret",
+                accessToken = "access-token",
+                refreshToken = "refresh-token"
+            ),
+            saveCredential = { publicId, secret ->
+                calls += "save:$publicId:$secret"
+            },
+            importAuthTokens = { accessToken, refreshToken ->
+                calls += "import:$accessToken:$refreshToken"
+            }
+        )
+
+        assertEquals(
+            listOf(
+                "save:device-public-id:device-secret",
+                "import:access-token:refresh-token"
+            ),
+            calls
+        )
+    }
+
+    @Test
+    fun `qr exchange does not import auth when durable credential save fails`() = runTest {
+        var imported = false
+
+        runCatching {
+            finalizeTvLoginExchange(
+                result = DurableDeviceCredentialIssueResult(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    accessToken = "access-token",
+                    refreshToken = "refresh-token"
+                ),
+                saveCredential = { _, _ -> error("disk full") },
+                importAuthTokens = { _, _ -> imported = true }
+            )
+        }
+
+        assertFalse(imported)
     }
 }

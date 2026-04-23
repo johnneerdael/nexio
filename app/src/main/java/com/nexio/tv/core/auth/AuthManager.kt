@@ -79,15 +79,15 @@ class AuthManager @Inject constructor(
                     is SessionStatus.NotAuthenticated -> {
                         _sessionUserId.value = sessionUserIdWhileSessionUnavailable()
                         auth.awaitInitialization()
-                        val hasCachedIdentity = auth.currentUserOrNull() != null
                         val session = auth.currentSessionOrNull()
                         val hasRefreshToken = session?.refreshToken?.isNotBlank() == true
                         val returning = isReturningUser()
+                        val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
                         when (
                             resolveNotAuthenticatedStartupAction(
-                                hasCachedIdentity = hasCachedIdentity,
                                 hasRefreshToken = hasRefreshToken,
-                                isReturningUser = returning
+                                isReturningUser = returning,
+                                hasDurableCredential = hasDurableCredential
                             )
                         ) {
                             NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION -> {
@@ -192,7 +192,6 @@ class AuthManager @Inject constructor(
         }
         if (
             shouldAttemptDurableSessionRecovery(
-                isReturningUser = true,
                 hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
                 credential = durableDeviceCredentialStore.snapshot()
             )
@@ -513,10 +512,17 @@ class AuthManager @Inject constructor(
                 }
             }
             val result = json.decodeFromString<DurableDeviceCredentialIssueResult>(body)
-            auth.importAuthToken(result.accessToken, result.refreshToken)
-            durableDeviceCredentialStore.save(
-                devicePublicId = result.devicePublicId,
-                deviceSecret = result.deviceSecret
+            finalizeTvLoginExchange(
+                result = result,
+                saveCredential = { devicePublicId, deviceSecret ->
+                    durableDeviceCredentialStore.save(
+                        devicePublicId = devicePublicId,
+                        deviceSecret = deviceSecret
+                    )
+                },
+                importAuthTokens = { accessToken, refreshToken ->
+                    auth.importAuthToken(accessToken, refreshToken)
+                }
             )
             Result.success(Unit)
         } catch (e: Exception) {
@@ -559,11 +565,10 @@ class AuthManager @Inject constructor(
 }
 
 internal fun shouldAttemptDurableSessionRecovery(
-    isReturningUser: Boolean,
     hasRefreshToken: Boolean,
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
-    return isReturningUser && !hasRefreshToken && credential.isComplete
+    return !hasRefreshToken && credential.isComplete
 }
 
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null
@@ -575,13 +580,23 @@ internal enum class NotAuthenticatedStartupAction {
 }
 
 internal fun resolveNotAuthenticatedStartupAction(
-    hasCachedIdentity: Boolean,
     hasRefreshToken: Boolean,
-    isReturningUser: Boolean
+    isReturningUser: Boolean,
+    hasDurableCredential: Boolean
 ): NotAuthenticatedStartupAction {
     if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
+    if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
+}
+
+internal suspend fun finalizeTvLoginExchange(
+    result: DurableDeviceCredentialIssueResult,
+    saveCredential: suspend (String, String) -> Unit,
+    importAuthTokens: suspend (String, String) -> Unit
+) {
+    saveCredential(result.devicePublicId, result.deviceSecret)
+    importAuthTokens(result.accessToken, result.refreshToken)
 }
 
 internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {
