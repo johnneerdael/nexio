@@ -134,6 +134,37 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `legacy live session requests durable credential backfill when credential is missing`() {
+        assertTrue(
+            shouldRequestDurableCredentialBackfill(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = null,
+                    deviceSecret = null
+                )
+            )
+        )
+        assertFalse(
+            shouldRequestDurableCredentialBackfill(
+                hasRefreshToken = false,
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = null,
+                    deviceSecret = null
+                )
+            )
+        )
+        assertFalse(
+            shouldRequestDurableCredentialBackfill(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret"
+                )
+            )
+        )
+    }
+
+    @Test
     fun `qr exchange imports auth only after durable credential save succeeds`() = runTest {
         val calls = mutableListOf<String>()
 

@@ -1,11 +1,14 @@
 package com.nexio.tv.core.auth
 
+import android.os.Build
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import com.nexio.tv.data.local.DurableDeviceCredentialStore
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialBackfillRequest
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialBackfillResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
 import com.nexio.tv.data.remote.supabase.DurableDeviceSessionExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
@@ -50,6 +53,8 @@ class AuthManager @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     @Volatile
     private var localSignOutInProgress = false
+    @Volatile
+    private var durableCredentialBackfillAttemptedUserId: String? = null
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -254,6 +259,7 @@ class AuthManager @Inject constructor(
         _sessionUserId.value = null
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
+        durableCredentialBackfillAttemptedUserId = null
         _authState.value = AuthState.SessionLost
         // Intentionally do NOT clear the presence marker — the user has not
         // explicitly signed out, and the next cold start should still treat
@@ -264,6 +270,7 @@ class AuthManager @Inject constructor(
         _sessionUserId.value = null
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
+        durableCredentialBackfillAttemptedUserId = null
         _authState.value = AuthState.SignedOut
         if (clearPresenceMarker) {
             scope.launch {
@@ -296,6 +303,7 @@ class AuthManager @Inject constructor(
         if (cachedEffectiveUserSourceUserId != userId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
+            durableCredentialBackfillAttemptedUserId = null
         }
         val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
         val newState = if (computed !is AuthState.FullAccount && isReturningUser()) {
@@ -315,6 +323,17 @@ class AuthManager @Inject constructor(
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to persist auth presence marker", e)
                 }
+            }
+            val credential = durableDeviceCredentialStore.snapshot()
+            if (
+                shouldRequestDurableCredentialBackfill(
+                    hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
+                    credential = credential
+                ) &&
+                durableCredentialBackfillAttemptedUserId != userId
+            ) {
+                durableCredentialBackfillAttemptedUserId = userId
+                scope.launch { requestDurableCredentialBackfill() }
             }
         }
     }
@@ -604,6 +623,74 @@ class AuthManager @Inject constructor(
         auth.importAuthToken(result.accessToken, result.refreshToken)
         return true
     }
+
+    private suspend fun requestDurableCredentialBackfill() {
+        val accessToken = auth.currentAccessTokenOrNull()
+        if (accessToken.isNullOrBlank()) {
+            Log.w(TAG, "Skipping durable credential backfill without an access token")
+            return
+        }
+
+        val payload = json.encodeToString(
+            DurableDeviceCredentialBackfillRequest.serializer(),
+            durableCredentialBackfillRequest()
+        )
+        val request = Request.Builder()
+            .url("${BuildConfig.SUPABASE_URL}/functions/v1/device-credential-backfill")
+            .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .header("Authorization", "Bearer $accessToken")
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        val body = withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException(
+                        "Durable credential backfill failed (${response.code}): $responseBody"
+                    )
+                }
+                responseBody
+            }
+        }
+        val result = json.decodeFromString<DurableDeviceCredentialBackfillResult>(body)
+        if (
+            result.status == "backfilled" &&
+            !result.devicePublicId.isNullOrBlank() &&
+            !result.deviceSecret.isNullOrBlank()
+        ) {
+            durableDeviceCredentialStore.save(
+                devicePublicId = result.devicePublicId,
+                deviceSecret = result.deviceSecret
+            )
+            Log.i(TAG, "Backfilled durable credential for legacy linked device")
+            return
+        }
+
+        Log.i(
+            TAG,
+            "Legacy durable credential backfill requires reconnect: ${result.reason ?: "unknown"}"
+        )
+    }
+
+    private fun durableCredentialBackfillRequest(): DurableDeviceCredentialBackfillRequest {
+        val model = Build.MODEL?.trim()?.takeIf { it.isNotBlank() }
+        val manufacturer = Build.MANUFACTURER?.trim()?.takeIf { it.isNotBlank() }
+        val formattedModel = listOfNotNull(manufacturer, model)
+            .distinct()
+            .joinToString(" ")
+            .trim()
+            .takeIf { it.isNotBlank() }
+        val platform = if (manufacturer.equals("Amazon", ignoreCase = true)) {
+            "Fire TV"
+        } else {
+            "Android TV"
+        }
+        return DurableDeviceCredentialBackfillRequest(
+            deviceName = model,
+            deviceModel = formattedModel,
+            devicePlatform = platform
+        )
+    }
 }
 
 internal fun shouldAttemptDurableSessionRecovery(
@@ -611,6 +698,13 @@ internal fun shouldAttemptDurableSessionRecovery(
     credential: DurableDeviceCredentialSnapshot
 ): Boolean {
     return !hasRefreshToken && credential.isComplete
+}
+
+internal fun shouldRequestDurableCredentialBackfill(
+    hasRefreshToken: Boolean,
+    credential: DurableDeviceCredentialSnapshot
+): Boolean {
+    return hasRefreshToken && !credential.isComplete
 }
 
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null

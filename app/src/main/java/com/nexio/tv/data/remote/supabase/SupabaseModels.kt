@@ -91,6 +91,22 @@ data class DurableDeviceCredentialIssueResult(
 )
 
 @Serializable
+data class DurableDeviceCredentialBackfillRequest(
+    @SerialName("device_name") val deviceName: String? = null,
+    @SerialName("device_model") val deviceModel: String? = null,
+    @SerialName("device_platform") val devicePlatform: String? = null
+)
+
+@Serializable
+data class DurableDeviceCredentialBackfillResult(
+    val status: String,
+    val reason: String? = null,
+    @SerialName("device_public_id") val devicePublicId: String? = null,
+    @SerialName("device_secret") val deviceSecret: String? = null,
+    @SerialName("display_name") val displayName: String? = null
+)
+
+@Serializable
 data class DurableDeviceSessionExchangeResult(
     @SerialName("access_token") val accessToken: String,
     @SerialName("refresh_token") val refreshToken: String,
