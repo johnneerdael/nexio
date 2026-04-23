@@ -26,7 +26,7 @@
 
 ### Migration Note
 - Legacy approved TVs are not silently backfilled into durable authority from owner session plus metadata alone.
-- Legacy TVs without a pre-existing durable credential must reconnect once to receive a durable credential unless a stronger proof path is added later.
+- Legacy TVs without a pre-existing durable credential must reconnect once to receive a durable credential in this rollout.
 - Existing legacy `device_name` values become the initial stable display name when no approval-time custom name exists yet.
 
 ### Validation Status For This Fix

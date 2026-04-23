@@ -118,9 +118,9 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `not authenticated startup prefers refreshable live session over durable recovery`() {
+    fun `not authenticated startup prefers durable validation over stale refresh token when credential exists`() {
         assertEquals(
-            NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION,
+            NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,
             resolveNotAuthenticatedStartupAction(
                 hasRefreshToken = true,
                 isReturningUser = true,
@@ -134,6 +134,38 @@ class DurableDeviceAuthRecoveryPolicyTest {
                     devicePublicId = "device-public-id",
                     deviceSecret = "device-secret"
                 )
+            )
+        )
+    }
+
+    @Test
+    fun `jwt expiry recovery prefers durable validation over stale refresh token when credential exists`() {
+        assertEquals(
+            JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY,
+            resolveJwtExpiryRecoveryAction(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `jwt expiry recovery falls back to refresh token only for legacy refresh-only sessions`() {
+        assertEquals(
+            JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION,
+            resolveJwtExpiryRecoveryAction(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot()
+            )
+        )
+        assertEquals(
+            JwtExpiryRecoveryAction.NO_RECOVERY_PATH,
+            resolveJwtExpiryRecoveryAction(
+                hasRefreshToken = false,
+                credential = DurableDeviceCredentialSnapshot()
             )
         )
     }

@@ -205,13 +205,19 @@ class AuthManager @Inject constructor(
                 auth.awaitInitialization()
                 if (auth.currentUserOrNull() != null) return
                 val session = auth.currentSessionOrNull()
-                if (session?.refreshToken?.isNotBlank() == true) {
-                    auth.refreshCurrentSession()
-                    return
-                }
                 val credential = durableDeviceCredentialStore.snapshot()
-                if (credential.isComplete) {
-                    break
+                when (
+                    resolveJwtExpiryRecoveryAction(
+                        hasRefreshToken = session?.refreshToken?.isNotBlank() == true,
+                        credential = credential
+                    )
+                ) {
+                    JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY -> break
+                    JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION -> {
+                        auth.refreshCurrentSession()
+                        return
+                    }
+                    JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> Unit
                 }
             } catch (e: Exception) {
                 if (e.isAuthoritativeRefreshRejection()) {
@@ -505,43 +511,52 @@ class AuthManager @Inject constructor(
     suspend fun refreshSessionIfJwtExpired(error: Throwable): Boolean {
         if (!error.isJwtExpiredError()) return false
         val credential = durableDeviceCredentialStore.snapshot()
-        if (credential.isComplete) {
-            return try {
-                Log.w(TAG, "JWT expired; restoring Supabase session from durable credential")
-                restoreSupabaseSessionFromDurableCredential()
-            } catch (recoveryError: Exception) {
-                when (
-                    resolveDurableRecoveryFailureAction(
-                        isAuthoritativeRejection = recoveryError is AuthoritativeDurableCredentialRejectionException
-                    )
-                ) {
-                    DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
-                        Log.w(
-                            TAG,
-                            "Durable credential was authoritatively rejected after JWT expiry; clearing local auth state and marking session lost",
-                            recoveryError
+        val hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true
+        return when (
+            resolveJwtExpiryRecoveryAction(
+                hasRefreshToken = hasRefreshToken,
+                credential = credential
+            )
+        ) {
+            JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY -> {
+                try {
+                    Log.w(TAG, "JWT expired; restoring Supabase session from durable credential")
+                    restoreSupabaseSessionFromDurableCredential()
+                } catch (recoveryError: Exception) {
+                    when (
+                        resolveDurableRecoveryFailureAction(
+                            isAuthoritativeRejection = recoveryError is AuthoritativeDurableCredentialRejectionException
                         )
-                        clearLocalAuthStateAfterAuthoritativeDurableRejection()
+                    ) {
+                        DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                            Log.w(
+                                TAG,
+                                "Durable credential was authoritatively rejected after JWT expiry; clearing local auth state and marking session lost",
+                                recoveryError
+                            )
+                            clearLocalAuthStateAfterAuthoritativeDurableRejection()
+                        }
+                        DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                            Log.e(TAG, "Failed durable session recovery after JWT expiry", recoveryError)
+                        }
                     }
-                    DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
-                        Log.e(TAG, "Failed durable session recovery after JWT expiry", recoveryError)
-                    }
+                    false
                 }
+            }
+            JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION -> {
+                try {
+                    Log.w(TAG, "JWT expired; refreshing Supabase session and retrying request")
+                    auth.refreshCurrentSession()
+                    true
+                } catch (refreshError: Exception) {
+                    Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
+                    false
+                }
+            }
+            JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> {
+                Log.w(TAG, "JWT expired but no refresh token or durable credential available; cannot refresh session")
                 false
             }
-        }
-        val hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true
-        if (!hasRefreshToken) {
-            Log.w(TAG, "JWT expired but no refresh token available; cannot refresh session")
-            return false
-        }
-        return try {
-            Log.w(TAG, "JWT expired; refreshing Supabase session and retrying request")
-            auth.refreshCurrentSession()
-            true
-        } catch (refreshError: Exception) {
-            Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
-            false
         }
     }
 
@@ -771,6 +786,12 @@ internal enum class NotAuthenticatedStartupAction {
     TRANSITION_SIGNED_OUT
 }
 
+internal enum class JwtExpiryRecoveryAction {
+    ATTEMPT_DURABLE_RECOVERY,
+    REFRESH_LIVE_SESSION,
+    NO_RECOVERY_PATH
+}
+
 internal enum class AuthoritativeRefreshRejectionAction {
     ATTEMPT_DURABLE_RECOVERY,
     TRANSITION_SIGNED_OUT
@@ -786,10 +807,19 @@ internal fun resolveNotAuthenticatedStartupAction(
     isReturningUser: Boolean,
     hasDurableCredential: Boolean
 ): NotAuthenticatedStartupAction {
-    if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
     if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
+    if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
     if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
     return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
+}
+
+internal fun resolveJwtExpiryRecoveryAction(
+    hasRefreshToken: Boolean,
+    credential: DurableDeviceCredentialSnapshot
+): JwtExpiryRecoveryAction {
+    if (credential.isComplete) return JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY
+    if (hasRefreshToken) return JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION
+    return JwtExpiryRecoveryAction.NO_RECOVERY_PATH
 }
 
 internal fun resolveAuthoritativeRefreshRejectionAction(

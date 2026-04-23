@@ -38,7 +38,7 @@ Today the TV QR approval flow records a `linked_devices` row but returns a norma
 - Decision: Persist a stable display name chosen at approval time and treat it as the primary human-readable device label.
   - Rationale: model/platform strings alone are weak identifiers in households with multiple similar TVs or sticks, and revocation UX depends on the user recognizing the correct device.
 
-- Decision: Disable metadata-only legacy durable-credential backfill from the app/runtime path until a stronger proof path exists.
+- Decision: Do not support automatic metadata-only legacy durable-credential backfill in this rollout.
   - Rationale: owner session plus legacy device metadata does not prove that the current TV is the previously approved device, so silently minting durable authority across that boundary is unsafe.
 
 ## Architecture
@@ -91,7 +91,7 @@ Today the TV QR approval flow records a `linked_devices` row but returns a norma
 
 ## Migration Note
 - Legacy approved TVs are not silently backfilled into durable authority from owner session plus metadata alone.
-- Legacy TVs without a pre-existing durable credential must reconnect once to receive a durable credential unless a stronger proof path is added later.
+- Legacy TVs without a pre-existing durable credential must reconnect once to receive a durable credential in this rollout.
 - Existing legacy `device_name` values become the initial stable display name when no approval-time custom name exists yet.
 
 ## Risks / Trade-offs

@@ -323,7 +323,7 @@ private fun LinkedDevicesSection(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = device.deviceName ?: "Unknown Device",
+                        text = device.displayName ?: device.deviceName ?: "Unknown Device",
                         style = MaterialTheme.typography.bodyMedium,
                         color = NexioColors.TextPrimary,
                         modifier = Modifier.weight(1f)

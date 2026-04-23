@@ -43,7 +43,7 @@ sign-in or sign-up to a different account.
 - **AND** any later cold start must rely on the current account's own durable credential or a fresh
   reconnect flow
 
-### Requirement: Legacy Migration Must Not Mint Durable Authority From Metadata Alone
+### Requirement: Conservative Rollout Does Not Mint Durable Authority From Metadata Alone
 
 The Android TV app and supporting server functions SHALL NOT silently create a durable device
 credential for a legacy device from only an owner session plus metadata matching.
@@ -59,3 +59,8 @@ credential for a legacy device from only an owner session plus metadata matching
   metadata only
 - **THEN** it returns reconnect guidance instead of minting a durable credential
 - **AND** no new durable authority is created from that request
+
+#### Scenario: Legacy device without durable credential requires reconnect
+- **WHEN** a previously linked TV does not already have a durable credential on disk
+- **THEN** the rollout does not silently promote legacy metadata into durable authority
+- **AND** the device must reconnect through the explicit approval flow to receive a durable credential

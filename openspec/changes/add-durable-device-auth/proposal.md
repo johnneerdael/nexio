@@ -20,8 +20,8 @@ state must stay aligned with the currently authenticated account.
   switch cannot preserve the prior account's durable credential.
 - Clear owner-mismatched durable credentials when an authenticated session appears with a different
   user than the credential claims.
-- Preserve the TV login exchange flow, but disable metadata-only legacy durable credential
-  backfill from the normal app/runtime path until a stronger proof path exists.
+- Preserve the TV login exchange flow, but do not support automatic metadata-only legacy durable
+  credential backfill in this rollout.
 
 ## Impact
 - Affected specs: `durable-device-auth` (new capability)
