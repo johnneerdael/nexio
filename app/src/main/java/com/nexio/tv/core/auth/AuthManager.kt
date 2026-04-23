@@ -52,6 +52,8 @@ class AuthManager @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     @Volatile
     private var localSignOutInProgress = false
+    @Volatile
+    private var manualAccountAuthInProgress = false
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -340,14 +342,26 @@ class AuthManager @Inject constructor(
                 }
             }
             var credential = durableDeviceCredentialStore.snapshot()
-            if (shouldClearDurableCredentialForAuthenticatedSession(credential, userId)) {
+            if (
+                shouldClearDurableCredentialForAuthenticatedSession(
+                    credential = credential,
+                    authenticatedUserId = userId,
+                    isManualAccountAuthInProgress = manualAccountAuthInProgress
+                )
+            ) {
                 try {
                     durableDeviceCredentialStore.clear()
                     credential = durableDeviceCredentialStore.snapshot()
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed clearing stale durable credential for authenticated user $userId", e)
                 }
-            } else if (shouldBindDurableCredentialOwner(credential, userId)) {
+            } else if (
+                shouldBindDurableCredentialOwner(
+                    credential = credential,
+                    authenticatedUserId = userId,
+                    isManualAccountAuthInProgress = manualAccountAuthInProgress
+                )
+            ) {
                 try {
                     durableDeviceCredentialStore.bindOwnerIfMissing(userId)
                     credential = durableDeviceCredentialStore.snapshot()
@@ -407,6 +421,7 @@ class AuthManager @Inject constructor(
     }
 
     suspend fun signUpWithEmail(email: String, password: String): Result<Unit> {
+        manualAccountAuthInProgress = true
         return try {
             auth.signUpWith(Email) {
                 this.email = email
@@ -417,10 +432,13 @@ class AuthManager @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Sign up failed", e)
             Result.failure(e)
+        } finally {
+            manualAccountAuthInProgress = false
         }
     }
 
     suspend fun signInWithEmail(email: String, password: String): Result<Unit> {
+        manualAccountAuthInProgress = true
         return try {
             auth.signInWith(Email) {
                 this.email = email
@@ -431,6 +449,8 @@ class AuthManager @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Sign in failed", e)
             Result.failure(e)
+        } finally {
+            manualAccountAuthInProgress = false
         }
     }
 
@@ -721,22 +741,26 @@ internal fun shouldRequestDurableCredentialBackfill(
 
 internal fun shouldBindDurableCredentialOwner(
     credential: DurableDeviceCredentialSnapshot,
-    authenticatedUserId: String
+    authenticatedUserId: String,
+    isManualAccountAuthInProgress: Boolean = false
 ): Boolean {
     if (!credential.isComplete) return false
     val normalizedAuthenticatedUserId = authenticatedUserId.trim()
     if (normalizedAuthenticatedUserId.isBlank()) return false
+    if (isManualAccountAuthInProgress) return false
     return credential.ownerUserId.isNullOrBlank()
 }
 
 internal fun shouldClearDurableCredentialForAuthenticatedSession(
     credential: DurableDeviceCredentialSnapshot,
-    authenticatedUserId: String
+    authenticatedUserId: String,
+    isManualAccountAuthInProgress: Boolean = false
 ): Boolean {
     if (!credential.isComplete) return false
     val normalizedAuthenticatedUserId = authenticatedUserId.trim()
     if (normalizedAuthenticatedUserId.isBlank()) return false
-    val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() }
+        ?: return isManualAccountAuthInProgress
     return normalizedOwnerUserId != normalizedAuthenticatedUserId
 }
 

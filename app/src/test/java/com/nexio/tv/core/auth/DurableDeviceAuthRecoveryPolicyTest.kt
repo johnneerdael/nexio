@@ -237,6 +237,58 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `authenticated session observer clears ownerless durable credential during manual account auth`() {
+        assertTrue(
+            shouldClearDurableCredentialForAuthenticatedSession(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = true
+            )
+        )
+        assertFalse(
+            shouldClearDurableCredentialForAuthenticatedSession(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = false
+            )
+        )
+    }
+
+    @Test
+    fun `authenticated session observer never binds ownerless durable credential during manual account auth`() {
+        assertFalse(
+            shouldBindDurableCredentialOwner(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = true
+            )
+        )
+        assertTrue(
+            shouldBindDurableCredentialOwner(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = false
+            )
+        )
+    }
+
+    @Test
     fun `runtime never requests metadata-only durable credential backfill`() {
         assertFalse(
             shouldRequestDurableCredentialBackfill(
