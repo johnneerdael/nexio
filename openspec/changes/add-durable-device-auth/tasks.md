@@ -53,3 +53,11 @@
   - emulator logs reported `hvf is not enabled on this aarch64 host`
   - emulator logs repeatedly reported `qemu-system-aarch64-headless: qemu_mprotect__osdep: mprotect failed: Permission denied`
 - Because no physical Android/TV device is attached to this machine and the local emulator cannot reach a usable online state, the remaining Android validation item is still pending external runtime access.
+
+### Local Reset Note 2026-04-24
+- Manual device sign-out and server-authoritative durable-device revoke now reset local account-scoped state to stock defaults.
+- Reset scope:
+  - secondary profiles are removed and the active profile returns to `Default`
+  - addons reset to the stock addon set
+  - account integration credentials and auth config are cleared back to stock defaults
+  - synced formatter and tracking provider settings are reset to stock defaults

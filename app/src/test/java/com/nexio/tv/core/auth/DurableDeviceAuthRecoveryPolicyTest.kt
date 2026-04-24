@@ -34,6 +34,15 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `auth exits route through local stock reset coordinator`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+
+        assertTrue(source.contains("localAccountResetCoordinator.resetToSignedOutStockState()"))
+        assertTrue(source.contains("handleManualSignOut("))
+        assertTrue(source.contains("handleAuthoritativeDurableCredentialRejection("))
+    }
+
+    @Test
     fun `authoritative refresh rejection with durable credential falls through to durable recovery`() {
         assertEquals(
             AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY,
