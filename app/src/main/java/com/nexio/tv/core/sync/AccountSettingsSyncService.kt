@@ -581,6 +581,7 @@ class AccountSettingsSyncService @Inject constructor(
             }
             val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)
 
+            var appliedRemoteSettings = false
             applyingRemoteMutex.withLock {
                 if (!hasLiveFullAccountSession()) {
                     return@withLock
@@ -598,9 +599,13 @@ class AccountSettingsSyncService @Inject constructor(
                             }
                         }
                     }
+                    appliedRemoteSettings = true
                 } finally {
                     isApplyingRemote = false
                 }
+            }
+            if (!appliedRemoteSettings) {
+                return@withContext Result.failure(IllegalStateException("No live full account session"))
             }
 
             premiumizeService.refreshAccountState()
