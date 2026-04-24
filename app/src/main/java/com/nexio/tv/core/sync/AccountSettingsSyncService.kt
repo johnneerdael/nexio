@@ -612,7 +612,11 @@ class AccountSettingsSyncService @Inject constructor(
             torBoxService.refreshAccountState()
             easyDebridService.refreshAccountState()
 
-            Result.success(buildRemoteAddonInstallConfigs(snapshot.addons, ::resolveRemoteAddonUrl))
+            val remoteAddonConfigs = buildRemoteAddonInstallConfigs(snapshot.addons, ::resolveRemoteAddonUrl)
+            if (!hasLiveFullAccountSession()) {
+                return@withContext Result.failure(IllegalStateException("No live full account session"))
+            }
+            Result.success(remoteAddonConfigs)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
             Result.failure(e)

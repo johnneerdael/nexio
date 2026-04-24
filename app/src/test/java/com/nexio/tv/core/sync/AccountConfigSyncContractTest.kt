@@ -165,7 +165,9 @@ class AccountConfigSyncContractTest {
         val guardedLiveSessionCheck = lockBody.indexOf("if (!hasLiveFullAccountSession())")
         val applyingRemoteFlag = lockBody.indexOf("isApplyingRemote = true")
         val stalePullFailure = pullBody.indexOf("if (!appliedRemoteSettings)")
-        val addonResult = pullBody.indexOf("Result.success(buildRemoteAddonInstallConfigs")
+        val addonBuild = pullBody.indexOf("val remoteAddonConfigs = buildRemoteAddonInstallConfigs")
+        val finalLiveSessionCheck = pullBody.indexOf("if (!hasLiveFullAccountSession())", startIndex = addonBuild)
+        val addonResult = pullBody.indexOf("Result.success(remoteAddonConfigs)")
 
         assertTrue("pullFromRemoteAndApply must fetch the account snapshot before resolving secrets", snapshotPullRpc >= 0)
         assertTrue("pullFromRemoteAndApply must resolve remote secrets before acquiring the apply mutex", secretResolution >= 0)
@@ -184,7 +186,11 @@ class AccountConfigSyncContractTest {
         )
         assertTrue(
             "pullFromRemoteAndApply must fail stale pulls before returning remote addon configs",
-            stalePullFailure in (mutexLock + 1) until addonResult
+            stalePullFailure in (mutexLock + 1) until addonBuild
+        )
+        assertTrue(
+            "pullFromRemoteAndApply must re-check live session after building remote addon configs",
+            finalLiveSessionCheck in (addonBuild + 1) until addonResult
         )
         assertFalse(
             "pullFromRemoteAndApply must not call remote secret resolution while applyingRemoteMutex is held",
