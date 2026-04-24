@@ -1,6 +1,7 @@
 package com.nexio.tv.core.auth
 
 import com.nexio.tv.domain.model.AuthState
+import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +10,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthManagerStateTest {
+    @Test
+    fun `stock device state exposes canonical default profile addons and account config`() {
+        assertEquals(1, stockDefaultProfile().id)
+        assertEquals("Default", stockDefaultProfile().name)
+        assertEquals(
+            listOf("https://v3-cinemeta.strem.io", "https://opensubtitles-v3.strem.io"),
+            stockAddonInstallConfigs().map { it.url }
+        )
+        assertEquals(AccountConfigSyncPayload(), stockAccountConfigSyncPayload())
+    }
+
     @Test
     fun `anonymous user with null email returns SignedOut`() {
         assertEquals(
