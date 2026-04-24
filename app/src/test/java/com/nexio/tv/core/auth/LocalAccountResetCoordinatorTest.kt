@@ -17,7 +17,7 @@ class LocalAccountResetCoordinatorTest {
         val coordinator = LocalAccountResetCoordinator(
             profileManager = profileManager,
             addonPreferences = addonPreferences,
-            accountSettingsSyncService = accountSettingsSyncService
+            accountSettingsSyncService = javax.inject.Provider { accountSettingsSyncService }
         )
 
         coordinator.resetToSignedOutStockState()

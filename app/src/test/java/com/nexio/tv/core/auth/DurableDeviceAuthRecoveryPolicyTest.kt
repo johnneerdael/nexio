@@ -65,14 +65,17 @@ class DurableDeviceAuthRecoveryPolicyTest {
     fun `revoked during running session clears stale refresh token before forcing reconnect`() = runTest {
         var durableCredentialCleared = false
         var persistedRefreshToken: String? = "stale-refresh-token"
+        var resetCalled = false
         var terminalState: String? = null
 
         handleAuthoritativeDurableCredentialRejection(
+            resetLocalAccountState = { resetCalled = true },
             clearDurableCredential = { durableCredentialCleared = true },
             clearSupabaseSession = { persistedRefreshToken = null },
             transitionToReconnectState = { terminalState = "SessionLost" }
         )
 
+        assertTrue(resetCalled)
         assertTrue(durableCredentialCleared)
         assertNull(persistedRefreshToken)
         assertEquals("SessionLost", terminalState)
@@ -86,6 +89,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         )
 
         handleAuthoritativeDurableCredentialRejection(
+            resetLocalAccountState = {},
             clearDurableCredential = {
                 localCredential = DurableDeviceCredentialSnapshot()
             },
@@ -100,6 +104,26 @@ class DurableDeviceAuthRecoveryPolicyTest {
     fun `local sign out suppresses recovery branching`() {
         assertTrue(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = true))
         assertFalse(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = false))
+    }
+
+    @Test
+    fun `manual sign out triggers local stock reset`() = runTest {
+        var resetCalled = false
+        var durableCredentialCleared = false
+        var presenceMarkerCleared = false
+        var supabaseSessionCleared = false
+
+        handleManualSignOut(
+            resetLocalAccountState = { resetCalled = true },
+            clearPresenceMarker = { presenceMarkerCleared = true },
+            clearDurableCredential = { durableCredentialCleared = true },
+            clearSupabaseSession = { supabaseSessionCleared = true }
+        )
+
+        assertTrue(resetCalled)
+        assertTrue(presenceMarkerCleared)
+        assertTrue(durableCredentialCleared)
+        assertTrue(supabaseSessionCleared)
     }
 
     @Test

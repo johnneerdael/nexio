@@ -51,7 +51,8 @@ class AuthManager @Inject constructor(
     private val httpClient: OkHttpClient,
     private val authPresenceDataStore: AuthPresenceDataStore,
     private val appOnboardingDataStore: AppOnboardingDataStore,
-    private val durableDeviceCredentialStore: DurableDeviceCredentialStore
+    private val durableDeviceCredentialStore: DurableDeviceCredentialStore,
+    private val localAccountResetCoordinator: LocalAccountResetCoordinator
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -524,17 +525,20 @@ class AuthManager @Inject constructor(
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         try {
-            try {
-                authPresenceDataStore.clear()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
-            }
-            try {
-                durableDeviceCredentialStore.clear()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clear durable device credential on sign-out", e)
-            }
-            auth.signOut()
+            handleManualSignOut(
+                resetLocalAccountState = {
+                    localAccountResetCoordinator.resetToSignedOutStockState()
+                },
+                clearPresenceMarker = {
+                    authPresenceDataStore.clear()
+                },
+                clearDurableCredential = {
+                    durableDeviceCredentialStore.clear()
+                },
+                clearSupabaseSession = {
+                    auth.signOut()
+                }
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Sign out failed", e)
         } finally {
@@ -652,6 +656,9 @@ class AuthManager @Inject constructor(
 
     private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection() {
         handleAuthoritativeDurableCredentialRejection(
+            resetLocalAccountState = {
+                localAccountResetCoordinator.resetToSignedOutStockState()
+            },
             clearDurableCredential = {
                 durableDeviceCredentialStore.clear()
             },
@@ -1031,10 +1038,16 @@ internal fun resolveRefreshFailureAction(
 }
 
 internal suspend fun handleAuthoritativeDurableCredentialRejection(
+    resetLocalAccountState: suspend () -> Unit,
     clearDurableCredential: suspend () -> Unit,
     clearSupabaseSession: suspend () -> Unit,
     transitionToReconnectState: () -> Unit
 ) {
+    try {
+        resetLocalAccountState()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed resetting local account state after authoritative revoke", clearError)
+    }
     try {
         clearDurableCredential()
     } catch (clearError: Exception) {
@@ -1046,6 +1059,30 @@ internal suspend fun handleAuthoritativeDurableCredentialRejection(
         Log.w(TAG, "Failed clearing local Supabase session after authoritative revoke", clearError)
     }
     transitionToReconnectState()
+}
+
+internal suspend fun handleManualSignOut(
+    resetLocalAccountState: suspend () -> Unit,
+    clearPresenceMarker: suspend () -> Unit,
+    clearDurableCredential: suspend () -> Unit,
+    clearSupabaseSession: suspend () -> Unit
+) {
+    try {
+        resetLocalAccountState()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed resetting local account state on sign-out", clearError)
+    }
+    try {
+        clearPresenceMarker()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing auth presence marker on sign-out", clearError)
+    }
+    try {
+        clearDurableCredential()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing durable device credential on sign-out", clearError)
+    }
+    clearSupabaseSession()
 }
 
 internal suspend fun finalizeTvLoginExchange(
