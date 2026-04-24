@@ -582,6 +582,9 @@ class AccountSettingsSyncService @Inject constructor(
             val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)
 
             applyingRemoteMutex.withLock {
+                if (!hasLiveFullAccountSession()) {
+                    return@withLock
+                }
                 isApplyingRemote = true
                 try {
                     applySharedAccountConfigSyncSettings(snapshot.settings)

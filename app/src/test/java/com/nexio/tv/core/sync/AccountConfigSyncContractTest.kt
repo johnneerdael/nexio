@@ -162,6 +162,8 @@ class AccountConfigSyncContractTest {
         val secretResolution = pullBody.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)")
         val mutexLock = pullBody.indexOf("applyingRemoteMutex.withLock")
         val lockBody = pullBody.substring(mutexLock)
+        val guardedLiveSessionCheck = lockBody.indexOf("if (!hasLiveFullAccountSession())")
+        val applyingRemoteFlag = lockBody.indexOf("isApplyingRemote = true")
 
         assertTrue("pullFromRemoteAndApply must fetch the account snapshot before resolving secrets", snapshotPullRpc >= 0)
         assertTrue("pullFromRemoteAndApply must resolve remote secrets before acquiring the apply mutex", secretResolution >= 0)
@@ -173,6 +175,10 @@ class AccountConfigSyncContractTest {
         assertTrue(
             "pullFromRemoteAndApply must apply already resolved secrets under suppression",
             lockBody.contains("applyResolvedRemoteSecrets(resolvedSecrets)")
+        )
+        assertTrue(
+            "pullFromRemoteAndApply must re-check live session before applying remote state",
+            guardedLiveSessionCheck >= 0 && guardedLiveSessionCheck < applyingRemoteFlag
         )
         assertFalse(
             "pullFromRemoteAndApply must not call remote secret resolution while applyingRemoteMutex is held",
