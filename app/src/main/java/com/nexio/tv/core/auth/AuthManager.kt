@@ -79,6 +79,32 @@ class AuthManager @Inject constructor(
                     is SessionStatus.Authenticated -> {
                         val user = auth.currentUserOrNull()
                         if (user != null) {
+                            val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                            if (
+                                shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                                    userId = user.id,
+                                    email = user.email,
+                                    hasDurableCredential = hasDurableCredential
+                                )
+                            ) {
+                                Log.w(
+                                    TAG,
+                                    "Discarding stale authenticated Supabase session in favor of durable recovery"
+                                )
+                                _sessionUserId.value = null
+                                _authState.value = AuthState.Loading
+                                try {
+                                    auth.clearSession()
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed clearing stale Supabase session before durable recovery", e)
+                                    if (isReturningUser()) {
+                                        transitionToSessionLost()
+                                    } else {
+                                        transitionToSignedOut()
+                                    }
+                                }
+                                return@collect
+                            }
                             publishAuthenticatedUser(user.id, user.email)
                         } else {
                             val recoveredUser = authenticatedUserFromAccessToken(auth.currentAccessTokenOrNull())
@@ -1042,6 +1068,15 @@ internal data class AuthenticatedAccessTokenUser(
     val userId: String,
     val email: String?
 )
+
+internal fun shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+    userId: String,
+    email: String?,
+    hasDurableCredential: Boolean
+): Boolean {
+    if (!hasDurableCredential) return false
+    return fullAccountStateForSupabaseUser(userId, email) !is AuthState.FullAccount
+}
 
 internal fun authenticatedUserFromAccessToken(accessToken: String?): AuthenticatedAccessTokenUser? {
     val token = accessToken?.trim().orEmpty()

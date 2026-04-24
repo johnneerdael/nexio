@@ -158,4 +158,36 @@ class AuthManagerStateTest {
         )
         assertNull(authenticatedUserFromAccessToken("header.$missingSubPayload.signature"))
     }
+
+    @Test
+    fun `stale authenticated anonymous session is discarded when durable credential exists`() {
+        assertTrue(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "anon-user",
+                email = null,
+                hasDurableCredential = true
+            )
+        )
+        assertTrue(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "anon-user",
+                email = "   ",
+                hasDurableCredential = true
+            )
+        )
+        assertFalse(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "anon-user",
+                email = null,
+                hasDurableCredential = false
+            )
+        )
+        assertFalse(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "user-123",
+                email = "user@example.com",
+                hasDurableCredential = true
+            )
+        )
+    }
 }
