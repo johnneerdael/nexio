@@ -358,92 +358,116 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            if (!hasLiveFullAccountSession()) {
+        var pullAfterConflict = false
+        val result = try {
+            if (isApplyingRemote) {
                 return@withContext Result.success(Unit)
             }
 
-            val payload = buildLocalPayload()
-            val (changedPaths, changedPathsGeneration) = synchronized(pendingChangedPaths) {
-                pendingChangedPaths.toList() to pendingChangedPathsGeneration
-            }
-            var scheduleFollowUpPush = false
-
-            if (changedPaths.isNotEmpty()) {
-                val pushResult = withJwtRefreshRetry {
-                    postgrest.rpc(
-                        "sync_push_account_settings_v7",
-                        buildAccountConfigSyncPushParamsV7(
-                            payload = payload,
-                            baseRevision = lastAppliedRemoteRevision,
-                            changedPaths = changedPaths
-                        )
-                    ).decodeAs<AccountConfigV7PushResult>()
+            applyingRemoteMutex.withLock {
+                if (isApplyingRemote) {
+                    return@withLock Result.success(Unit)
+                }
+                if (!hasLiveFullAccountSession()) {
+                    return@withLock Result.success(Unit)
                 }
 
-                if (!pushResult.applied) {
-                    Log.w(TAG, "Account settings push conflicted paths=${pushResult.conflictPaths.joinToString(",")}")
-                    val hasNewerLocalChanges = synchronized(pendingChangedPaths) {
-                        pendingChangedPathsGeneration != changedPathsGeneration
+                val payload = buildLocalPayload()
+                val (changedPaths, changedPathsGeneration) = synchronized(pendingChangedPaths) {
+                    pendingChangedPaths.toList() to pendingChangedPathsGeneration
+                }
+                var scheduleFollowUpPush = false
+
+                if (changedPaths.isNotEmpty()) {
+                    if (!hasLiveFullAccountSession()) {
+                        return@withLock Result.success(Unit)
                     }
-                    if (hasNewerLocalChanges) {
-                        pushJob = scope.launch {
-                            delay(500)
-                            pushToRemote()
+
+                    val pushResult = withJwtRefreshRetry {
+                        postgrest.rpc(
+                            "sync_push_account_settings_v7",
+                            buildAccountConfigSyncPushParamsV7(
+                                payload = payload,
+                                baseRevision = lastAppliedRemoteRevision,
+                                changedPaths = changedPaths
+                            )
+                        ).decodeAs<AccountConfigV7PushResult>()
+                    }
+
+                    if (!pushResult.applied) {
+                        Log.w(TAG, "Account settings push conflicted paths=${pushResult.conflictPaths.joinToString(",")}")
+                        val hasNewerLocalChanges = synchronized(pendingChangedPaths) {
+                            pendingChangedPathsGeneration != changedPathsGeneration
                         }
-                    } else {
-                        pullFromRemoteAndApply()
+                        if (hasNewerLocalChanges) {
+                            pushJob = scope.launch {
+                                delay(500)
+                                pushToRemote()
+                            }
+                        } else {
+                            pullAfterConflict = true
+                        }
+                        return@withLock Result.success(Unit)
                     }
-                    return@withContext Result.success(Unit)
-                }
 
-                lastAppliedRemoteRevision = pushResult.syncRevision
-                synchronized(pendingChangedPaths) {
-                    if (pendingChangedPathsGeneration == changedPathsGeneration) {
-                        pendingChangedPaths.removeAll(changedPaths.toSet())
-                    } else {
-                        scheduleFollowUpPush = true
+                    lastAppliedRemoteRevision = pushResult.syncRevision
+                    synchronized(pendingChangedPaths) {
+                        if (pendingChangedPathsGeneration == changedPathsGeneration) {
+                            pendingChangedPaths.removeAll(changedPaths.toSet())
+                        } else {
+                            scheduleFollowUpPush = true
+                        }
                     }
                 }
-            }
 
-            val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
-            syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
-            syncTvdbCredentialSecretToRemote()
-            syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(
-                TRANSLATION_SECRET_TYPE,
-                TRANSLATION_SECRET_REF,
-                subtitleTranslationSettings.apiKey
-            )
-            legacyGeminiApiKeySecretForPush(
-                providerName = subtitleTranslationSettings.provider.name,
-                translationApiKey = subtitleTranslationSettings.apiKey
-            )?.let { legacyGeminiKey ->
-                syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey)
-            }
-            syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
-            syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
-            syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, premiumizeSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, torBoxSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, easyDebridSettingsDataStore.settings.first().apiKey)
-            syncRealDebridSecretsToRemote()
-            syncTraktSecretsToRemote()
-            syncSimklSecretsToRemote()
-
-            if (scheduleFollowUpPush) {
-                pushJob = scope.launch {
-                    delay(500)
-                    pushToRemote()
+                if (!hasLiveFullAccountSession()) {
+                    return@withLock Result.success(Unit)
                 }
-            }
 
-            Result.success(Unit)
+                val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
+                syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
+                syncTvdbCredentialSecretToRemote()
+                syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
+                syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
+                syncApiKeySecretToRemote(
+                    TRANSLATION_SECRET_TYPE,
+                    TRANSLATION_SECRET_REF,
+                    subtitleTranslationSettings.apiKey
+                )
+                legacyGeminiApiKeySecretForPush(
+                    providerName = subtitleTranslationSettings.provider.name,
+                    translationApiKey = subtitleTranslationSettings.apiKey
+                )?.let { legacyGeminiKey ->
+                    syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey)
+                }
+                syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
+                syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
+                syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, premiumizeSettingsDataStore.settings.first().apiKey)
+                syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, torBoxSettingsDataStore.settings.first().apiKey)
+                syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, easyDebridSettingsDataStore.settings.first().apiKey)
+                syncRealDebridSecretsToRemote()
+                syncTraktSecretsToRemote()
+                syncSimklSecretsToRemote()
+
+                if (scheduleFollowUpPush) {
+                    pushJob = scope.launch {
+                        delay(500)
+                        pushToRemote()
+                    }
+                }
+
+                Result.success(Unit)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push account settings to remote", e)
             Result.failure(e)
         }
+
+        if (pullAfterConflict && result.isSuccess) {
+            pullFromRemoteAndApply()
+        }
+
+        result
     }
 
     suspend fun pullFromRemoteAndApply(

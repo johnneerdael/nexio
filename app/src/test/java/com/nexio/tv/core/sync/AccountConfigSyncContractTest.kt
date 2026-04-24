@@ -106,6 +106,28 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `local reset suppression serializes account pushes before payload build and remote rpc`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pushStart = source.indexOf("suspend fun pushToRemote()")
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
+        val pushBody = source.substring(pushStart, pullStart)
+
+        val mutexLock = pushBody.indexOf("applyingRemoteMutex.withLock")
+        val firstLiveSessionCheck = pushBody.indexOf("if (!hasLiveFullAccountSession())")
+        val payloadBuild = pushBody.indexOf("val payload = buildLocalPayload()")
+        val secondLiveSessionCheck = pushBody.indexOf("if (!hasLiveFullAccountSession())", startIndex = payloadBuild)
+        val remotePushRpc = pushBody.indexOf("\"sync_push_account_settings_v7\"")
+
+        assertTrue("pushToRemote must acquire the same mutex as local reset suppression", mutexLock >= 0)
+        assertTrue("live session check must happen inside the guarded section", mutexLock < firstLiveSessionCheck)
+        assertTrue("payload must be built only after the guarded live session check", firstLiveSessionCheck < payloadBuild)
+        assertTrue(
+            "pushToRemote must re-check live session after payload build and before remote push RPC",
+            secondLiveSessionCheck in (payloadBuild + 1) until remotePushRpc
+        )
+    }
+
+    @Test
     fun `buildAccountConfigSyncPayload serializes integrations catalogs and formatter`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
