@@ -306,6 +306,24 @@ class ProfileManagerTest {
     }
 
     @Test
+    fun `resetToSingleDefaultProfile removes secondary profiles and activates default`() = runTest {
+        val manager = makeManager()
+        manager.createProfile(name = "Kids", avatarColorHex = "#FF0000")
+        manager.createProfile(name = "Guest", avatarColorHex = "#00FF00")
+        val profilesAfterCreate = manager.profiles.first { it.size == 3 }
+        val guestId = profilesAfterCreate.first { it.name == "Guest" }.id
+        manager.setActiveProfile(guestId)
+        manager.activeProfileId.first { it == guestId }
+
+        manager.resetToSingleDefaultProfile()
+
+        val profilesAfterReset = manager.profiles.first { it.size == 1 }
+        assertEquals(listOf(1), profilesAfterReset.map { it.id })
+        assertEquals("Default", profilesAfterReset.single().name)
+        assertEquals(1, manager.activeProfileId.value)
+    }
+
+    @Test
     fun `updateProfile changes name and avatarColorHex for existing profile`() = runTest {
         val manager = makeManager()
         manager.createProfile("Alice", "#E53935")

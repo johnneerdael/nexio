@@ -2,6 +2,7 @@ package com.nexio.tv.core.profile
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.auth.stockDefaultProfile
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.local.ProfileDataStore
@@ -133,6 +134,19 @@ class ProfileManager(
         deleteProfileDataAsync(id, syncRemoteDelete)
         dataStore.deleteProfile(id)
         return true
+    }
+
+    suspend fun resetToSingleDefaultProfile() {
+        val current = dataStore.profilesList.first()
+        current
+            .map { it.id }
+            .filter { it != 1 }
+            .forEach { profileId ->
+                deleteProfileDataAsync(profileId, syncRemoteDelete = false)
+            }
+
+        dataStore.replaceAllProfiles(listOf(stockDefaultProfile()))
+        setActiveProfile(1)
     }
 
     suspend fun updateProfile(profile: UserProfile): Boolean {

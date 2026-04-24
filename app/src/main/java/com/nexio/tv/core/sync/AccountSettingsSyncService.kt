@@ -5,6 +5,7 @@ import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.auth.liveFullAccountSessionUserId
+import com.nexio.tv.core.auth.stockAccountConfigSyncPayload
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
@@ -87,6 +88,7 @@ import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.repository.EasyDebridService
+import com.nexio.tv.data.repository.KitsuAuthSnapshot
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.domain.model.AddonParserPreset
@@ -486,11 +488,46 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
+    suspend fun resetLocalAccountConfigToDefaults() = withContext(Dispatchers.IO) {
+        applyingRemoteMutex.withLock {
+            isApplyingRemote = true
+            pushJob?.cancel()
+            pushJob = null
+            try {
+                applySharedAccountConfigSyncSettings(stockAccountConfigSyncPayload())
+                clearLocalAccountSecrets()
+                synchronized(pendingChangedPaths) {
+                    pendingChangedPaths.clear()
+                    pendingChangedPathsGeneration += 1L
+                }
+            } finally {
+                isApplyingRemote = false
+            }
+        }
+    }
+
     private fun hasLiveFullAccountSession(): Boolean {
         return hasLiveFullAccountSyncSession(
             authState = authManager.authState.value,
             sessionUserId = authManager.currentSessionUserId
         )
+    }
+
+    private suspend fun clearLocalAccountSecrets() {
+        tmdbSettingsDataStore.setApiKey("")
+        tvdbSettingsDataStore.clearCredentials()
+        mdbListSettingsDataStore.setApiKey("")
+        omdbSettingsDataStore.setApiKey("")
+        subtitleTranslationSettingsDataStore.setApiKey("")
+        posterRatingsSettingsDataStore.setRpdbApiKey("")
+        posterRatingsSettingsDataStore.setTopPostersApiKey("")
+        premiumizeSettingsDataStore.setApiKey("")
+        torBoxSettingsDataStore.setApiKey("")
+        easyDebridSettingsDataStore.setApiKey("")
+        realDebridAuthDataStore.clearAuth()
+        traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
+        simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
+        kitsuAuthDataStore.save(KitsuAuthSnapshot())
     }
 
     private fun liveSessionUserId(): String? {
