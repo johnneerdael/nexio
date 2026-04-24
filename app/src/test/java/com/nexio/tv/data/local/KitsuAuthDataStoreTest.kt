@@ -72,8 +72,11 @@ class KitsuAuthDataStoreTest {
                 includeNsfw = false
             )
         )
+
+        profileManager.createProfile("Alice", "#E53935")
+        val secondaryId = profileManager.profiles.first { it.size >= 2 }.first { it.id != 1 }.id
         authStore.saveForProfile(
-            profileId = 2,
+            profileId = secondaryId,
             snapshot = KitsuAuthSnapshot(
                 enabled = true,
                 username = "secondary-user",
@@ -83,12 +86,13 @@ class KitsuAuthDataStoreTest {
                 includeNsfw = true
             )
         )
-        profileManager.setActiveProfile(2)
+        profileManager.setActiveProfile(secondaryId)
+        profileManager.activeProfileId.first { it == secondaryId }
 
         authStore.clearAuth(profileId = 1)
 
         val profile1 = authStore.stateForProfile(1).first()
-        val profile2 = authStore.stateForProfile(2).first()
+        val profile2 = authStore.stateForProfile(secondaryId).first()
         assertFalse(profile1.isAuthenticated)
         assertNull(profile1.username)
         assertFalse(profile1.includeNsfw)
