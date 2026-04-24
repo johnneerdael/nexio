@@ -164,6 +164,30 @@ export function buildApprovalResponsePayload(input: {
   };
 }
 
+export async function replacePendingCredentialHandoff(input: {
+  adminClient: ReturnType<typeof createSupabaseClients>["adminClient"];
+  credentialRow: DurableCredentialHandoffRecord;
+}) {
+  const handoffRetiredAt = new Date().toISOString();
+  const { error: retireError } = await input.adminClient
+    .from("device_credential_handoffs")
+    .update({ used_at: handoffRetiredAt })
+    .eq("device_user_id", input.credentialRow.device_user_id)
+    .is("used_at", null);
+
+  if (retireError) {
+    throw new Error(`Failed to retire prior durable credential handoff: ${retireError.message}`);
+  }
+
+  const { error: insertError } = await input.adminClient
+    .from("device_credential_handoffs")
+    .insert(input.credentialRow);
+
+  if (insertError) {
+    throw new Error(`Failed to stage durable credential handoff: ${insertError.message}`);
+  }
+}
+
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
@@ -304,15 +328,7 @@ async function handleRequest(req: Request): Promise<Response> {
     credentialRow.device_public_id = durableCredential.server.device_public_id;
     credentialRow.credential_hash = durableCredential.server.credential_hash;
 
-    const { error: credentialError } = await adminClient
-      .from("device_credential_handoffs")
-      .upsert(credentialRow, { onConflict: "device_user_id" });
-
-    if (credentialError) {
-      return json({
-        error: `Failed to stage durable credential handoff: ${credentialError.message}`,
-      }, 500);
-    }
+    await replacePendingCredentialHandoff({ adminClient, credentialRow });
 
     const { data: magicData, error: magicError } = await adminClient.auth.admin
       .generateLink({

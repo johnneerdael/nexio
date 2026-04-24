@@ -8,6 +8,7 @@ import {
   buildApprovalExchangePayload,
   buildApprovalResponsePayload,
   buildDurableCredential,
+  replacePendingCredentialHandoff,
 } from "../tv-logins-exchange/index.ts";
 import { isCredentialHandoffExpired } from "../device-credential-activate/index.ts";
 import {
@@ -188,6 +189,75 @@ test("buildDurableCredential returns a client payload plus hashed server payload
       credential.client.device_public_id,
       credential.client.device_secret,
     ),
+  );
+});
+
+test("replacePendingCredentialHandoff retires prior unused handoffs before inserting a new row", async () => {
+  const operations: Array<Record<string, unknown>> = [];
+  const adminClient: {
+    from: (table: string) => {
+      update: (payload: Record<string, unknown>) => {
+        eq: (column: string, value: string) => {
+          is: (nullColumn: string, nullValue: null) => Promise<{ error: null }>;
+        };
+      };
+      insert: (payload: Record<string, unknown>) => Promise<{ error: null }>;
+    };
+  } = {
+    from(table: string) {
+      assert.equal(table, "device_credential_handoffs");
+      return {
+        update(payload: Record<string, unknown>) {
+          operations.push({ op: "update", payload });
+          return {
+            eq(column: string, value: string) {
+              operations.push({ op: "eq", column, value });
+              return {
+                async is(nullColumn: string, nullValue: null) {
+                  operations.push({ op: "is", column: nullColumn, value: nullValue });
+                  return { error: null };
+                },
+              };
+            },
+          };
+        },
+        async insert(payload: Record<string, unknown>) {
+          operations.push({ op: "insert", payload });
+          return { error: null };
+        },
+      };
+    },
+  };
+
+  const credentialRow = await buildApprovalExchangePayload({
+    ownerUserId: "owner-user-id",
+    requesterUserId: "requester-user-id",
+    linkedDeviceId: "linked-device-id",
+    requestedDisplayName: "Bedroom TV",
+    sessionRow: {
+      device_name: "Session Device",
+      device_model: "Chromecast",
+      device_platform: "Android TV",
+    },
+  });
+
+  await replacePendingCredentialHandoff({ adminClient: adminClient as never, credentialRow });
+
+  assert.equal(operations[0]?.op, "update");
+  assert.deepEqual(operations[1], {
+    op: "eq",
+    column: "device_user_id",
+    value: "requester-user-id",
+  });
+  assert.deepEqual(operations[2], {
+    op: "is",
+    column: "used_at",
+    value: null,
+  });
+  assert.equal(operations[3]?.op, "insert");
+  assert.equal(
+    (operations[3] as { payload: { device_user_id: string } }).payload?.device_user_id,
+    "requester-user-id",
   );
 });
 
