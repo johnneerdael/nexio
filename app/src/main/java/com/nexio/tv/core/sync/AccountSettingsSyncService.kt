@@ -527,7 +527,7 @@ class AccountSettingsSyncService @Inject constructor(
         realDebridAuthDataStore.clearAuth()
         traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
         simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
-        kitsuAuthDataStore.save(KitsuAuthSnapshot())
+        kitsuAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
     }
 
     private fun liveSessionUserId(): String? {
