@@ -140,11 +140,45 @@ class AccountConfigSyncContractTest {
         )
         assertFalse(
             "pushToRemote must not read local stores after releasing the reset mutex",
-            afterSnapshotCapture.contains("DataStore.") ||
+                afterSnapshotCapture.contains("DataStore.") ||
                 afterSnapshotCapture.contains(".settings.first()") ||
                 afterSnapshotCapture.contains(".state.first()") ||
                 afterSnapshotCapture.contains(".stateForProfile(") ||
                 afterSnapshotCapture.contains(".observeAccountState().first()")
+        )
+    }
+
+    @Test
+    fun `pull resolves remote secrets before acquiring local apply mutex`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply")
+        val secretResolverStart = source.indexOf("private suspend fun resolveRemoteSecretsForApply", startIndex = pullStart)
+        val buildSecretSnapshotStart = source.indexOf("private suspend fun buildAccountSecretPushSnapshot", startIndex = pullStart)
+        val pullEnd = listOf(secretResolverStart, buildSecretSnapshotStart).filter { it > pullStart }.minOrNull()
+            ?: error("Could not locate pullFromRemoteAndApply body boundary")
+        val pullBody = source.substring(pullStart, pullEnd)
+
+        val snapshotPullRpc = pullBody.indexOf("\"sync_pull_account_snapshot\"")
+        val secretResolution = pullBody.indexOf("val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)")
+        val mutexLock = pullBody.indexOf("applyingRemoteMutex.withLock")
+        val lockBody = pullBody.substring(mutexLock)
+
+        assertTrue("pullFromRemoteAndApply must fetch the account snapshot before resolving secrets", snapshotPullRpc >= 0)
+        assertTrue("pullFromRemoteAndApply must resolve remote secrets before acquiring the apply mutex", secretResolution >= 0)
+        assertTrue("pullFromRemoteAndApply must acquire the local apply mutex", mutexLock >= 0)
+        assertTrue(
+            "pullFromRemoteAndApply must not hold applyingRemoteMutex while resolving remote secrets",
+            secretResolution in (snapshotPullRpc + 1) until mutexLock
+        )
+        assertTrue(
+            "pullFromRemoteAndApply must apply already resolved secrets under suppression",
+            lockBody.contains("applyResolvedRemoteSecrets(resolvedSecrets)")
+        )
+        assertFalse(
+            "pullFromRemoteAndApply must not call remote secret resolution while applyingRemoteMutex is held",
+            lockBody.contains("resolveRemoteSecretsForApply") ||
+                lockBody.contains("applyRemoteSecrets(snapshot.settings)") ||
+                lockBody.contains("withJwtRefreshRetry")
         )
     }
 

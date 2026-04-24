@@ -404,6 +404,40 @@ class AccountSettingsSyncService @Inject constructor(
         val accessToken: String
     )
 
+    private data class ResolvedRemoteSecretsForApply(
+        val tmdbApiKey: String?,
+        val tvdbCredential: AccountTvdbCredentialSecretPayload?,
+        val mdbListApiKey: String?,
+        val omdbApiKey: String?,
+        val subtitleTranslationApiKey: String?,
+        val rpdbApiKey: String?,
+        val topPostersApiKey: String?,
+        val premiumizeApiKey: String?,
+        val torBoxApiKey: String?,
+        val easyDebridApiKey: String?,
+        val realDebrid: ResolvedRemoteRealDebridSecrets?,
+        val trakt: ResolvedRemoteTraktSecrets?,
+        val simkl: ResolvedRemoteSimklSecrets?
+    )
+
+    private data class ResolvedRemoteRealDebridSecrets(
+        val accessPayload: AccountRealDebridAccessSecretPayload?,
+        val refreshPayload: AccountRealDebridRefreshSecretPayload?,
+        val remote: RealDebridSyncSettings
+    )
+
+    private data class ResolvedRemoteTraktSecrets(
+        val accessPayload: AccountTraktAccessSecretPayload?,
+        val refreshPayload: AccountTraktRefreshSecretPayload?,
+        val preserveLocalTokens: Boolean,
+        val remote: TraktAuthSyncSettings
+    )
+
+    private data class ResolvedRemoteSimklSecrets(
+        val accessPayload: AccountSimklAccessSecretPayload?,
+        val remote: SimklAuthSyncSettings
+    )
+
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (isApplyingRemote) {
@@ -545,12 +579,13 @@ class AccountSettingsSyncService @Inject constructor(
                     buildAccountConfigSyncPullParams()
                 ).decodeAs<AccountConfigSnapshotRpcResponse>()
             }
+            val resolvedSecrets = resolveRemoteSecretsForApply(snapshot.settings)
 
             applyingRemoteMutex.withLock {
                 isApplyingRemote = true
                 try {
                     applySharedAccountConfigSyncSettings(snapshot.settings)
-                    applyRemoteSecrets(snapshot.settings)
+                    applyResolvedRemoteSecrets(resolvedSecrets)
                     lastAppliedRemoteRevision = snapshot.settingsRevision
                     clearSuppression(switchGenAtPullStart)
                     if (clearPendingChanges) {
@@ -564,6 +599,10 @@ class AccountSettingsSyncService @Inject constructor(
                     isApplyingRemote = false
                 }
             }
+
+            premiumizeService.refreshAccountState()
+            torBoxService.refreshAccountState()
+            easyDebridService.refreshAccountState()
 
             Result.success(buildRemoteAddonInstallConfigs(snapshot.addons, ::resolveRemoteAddonUrl))
         } catch (e: Exception) {
@@ -1359,17 +1398,15 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteSecrets(settings: AccountConfigSyncPayload) {
+    private suspend fun resolveRemoteSecretsForApply(settings: AccountConfigSyncPayload): ResolvedRemoteSecretsForApply {
         // Each helper returns null when the resolve RPC fails transiently (network,
         // JWT, decode). Only overwrite the local API key when we have an authoritative
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
-        resolveApiKeySecretOrNull(TMDB_SECRET_TYPE, TMDB_SECRET_REF)?.let { tmdbSettingsDataStore.setApiKey(it) }
-        resolveTvdbCredentialSecretOrNull()?.let { tvdb ->
-            tvdbSettingsDataStore.setCredentials(tvdb.apiKey, tvdb.pin.orEmpty())
-        }
-        resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)?.let { mdbListSettingsDataStore.setApiKey(it) }
-        resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
+        val tmdbApiKey = resolveApiKeySecretOrNull(TMDB_SECRET_TYPE, TMDB_SECRET_REF)
+        val tvdbCredential = resolveTvdbCredentialSecretOrNull()
+        val mdbListApiKey = resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)
+        val omdbApiKey = resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)
         val genericTranslationKey = resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
         val allowLegacyFallback = settings.integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
         val legacyGeminiKey = if (genericTranslationKey != null && genericTranslationKey.isBlank() && allowLegacyFallback) {
@@ -1377,27 +1414,43 @@ class AccountSettingsSyncService @Inject constructor(
         } else {
             null
         }
-        val translationKey = selectSubtitleTranslationApiKeySecret(
-            genericTranslationKey = genericTranslationKey,
-            legacyGeminiKey = legacyGeminiKey,
-            allowLegacyFallback = allowLegacyFallback
+        return ResolvedRemoteSecretsForApply(
+            tmdbApiKey = tmdbApiKey,
+            tvdbCredential = tvdbCredential,
+            mdbListApiKey = mdbListApiKey,
+            omdbApiKey = omdbApiKey,
+            subtitleTranslationApiKey = selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = genericTranslationKey,
+                legacyGeminiKey = legacyGeminiKey,
+                allowLegacyFallback = allowLegacyFallback
+            ),
+            rpdbApiKey = resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF),
+            topPostersApiKey = resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF),
+            premiumizeApiKey = resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF),
+            torBoxApiKey = resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF),
+            easyDebridApiKey = resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF),
+            realDebrid = resolveRemoteRealDebridSecrets(settings.integrations.debrid.realDebrid),
+            trakt = resolveRemoteTraktSecrets(settings.integrations.traktAuth),
+            simkl = resolveRemoteSimklSecrets(settings.integrations.simklAuth)
         )
-        translationKey?.let { subtitleTranslationSettingsDataStore.setApiKey(it) }
-        resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
-        resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }
-        resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)?.let { premiumizeSettingsDataStore.setApiKey(it) }
-        resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)?.let { torBoxSettingsDataStore.setApiKey(it) }
-        resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)?.let { easyDebridSettingsDataStore.setApiKey(it) }
-        premiumizeService.refreshAccountState()
-        torBoxService.refreshAccountState()
-        easyDebridService.refreshAccountState()
-        applyRemoteRealDebridSecrets(settings)
-        applyRemoteTraktSecrets(settings)
-        applyRemoteSimklSecrets(settings)
     }
 
-    private suspend fun resolveApiKeySecret(secretType: String, secretRef: String): String {
-        return resolveApiKeySecretOrNull(secretType, secretRef).orEmpty()
+    private suspend fun applyResolvedRemoteSecrets(secrets: ResolvedRemoteSecretsForApply) {
+        secrets.tmdbApiKey?.let { tmdbSettingsDataStore.setApiKey(it) }
+        secrets.tvdbCredential?.let { tvdb ->
+            tvdbSettingsDataStore.setCredentials(tvdb.apiKey, tvdb.pin.orEmpty())
+        }
+        secrets.mdbListApiKey?.let { mdbListSettingsDataStore.setApiKey(it) }
+        secrets.omdbApiKey?.let { omdbSettingsDataStore.setApiKey(it) }
+        secrets.subtitleTranslationApiKey?.let { subtitleTranslationSettingsDataStore.setApiKey(it) }
+        secrets.rpdbApiKey?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
+        secrets.topPostersApiKey?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }
+        secrets.premiumizeApiKey?.let { premiumizeSettingsDataStore.setApiKey(it) }
+        secrets.torBoxApiKey?.let { torBoxSettingsDataStore.setApiKey(it) }
+        secrets.easyDebridApiKey?.let { easyDebridSettingsDataStore.setApiKey(it) }
+        secrets.realDebrid?.let { applyResolvedRemoteRealDebridSecrets(it) }
+        secrets.trakt?.let { applyResolvedRemoteTraktSecrets(it) }
+        secrets.simkl?.let { applyResolvedRemoteSimklSecrets(it) }
     }
 
     private suspend fun resolveTvdbCredentialSecretOrNull(): AccountTvdbCredentialSecretPayload? {
@@ -1443,7 +1496,7 @@ class AccountSettingsSyncService @Inject constructor(
         return result.getOrNull()?.apiKey?.trim().orEmpty()
     }
 
-    private suspend fun applyRemoteTraktSecrets(settings: AccountConfigSyncPayload) {
+    private suspend fun resolveRemoteTraktSecrets(remote: TraktAuthSyncSettings): ResolvedRemoteTraktSecrets? {
         val accessResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -1473,22 +1526,20 @@ class AccountSettingsSyncService @Inject constructor(
         // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
         // Clearing on transient failure is what was logging the user out on every upgrade.
         if (accessResult.isFailure || refreshResult.isFailure) {
-            return
+            return null
         }
 
         val accessPayload = accessResult.getOrNull()
         val refreshPayload = refreshResult.getOrNull()
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
-
         if (accessToken.isBlank() || refreshToken.isBlank()) {
-            // Only clear local auth when the remote authoritatively says Trakt is
-            // not connected (and not in a pending device-flow). Mirrors RD's logic.
-            val remote = settings.integrations.traktAuth
-            if (!remote.connected && !remote.pending) {
-                traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
-            }
-            return
+            return ResolvedRemoteTraktSecrets(
+                accessPayload = accessPayload,
+                refreshPayload = refreshPayload,
+                preserveLocalTokens = false,
+                remote = remote
+            )
         }
 
         // Trakt rotates the refresh token on every refresh — once we've used a
@@ -1506,20 +1557,49 @@ class AccountSettingsSyncService @Inject constructor(
         val remoteCreatedAt = accessPayload?.createdAt ?: 0L
         val localHasTokens = !localState.accessToken.isNullOrBlank() &&
             !localState.refreshToken.isNullOrBlank()
-        if (localHasTokens && localCreatedAt >= remoteCreatedAt) {
+        val preserveLocalTokens = localHasTokens &&
+            localCreatedAt >= remoteCreatedAt
+        if (preserveLocalTokens) {
             Log.w(
                 TAG,
-                "applyRemoteTraktSecrets: local token (createdAt=$localCreatedAt) is newer " +
+                "resolveRemoteTraktSecrets: local token (createdAt=$localCreatedAt) is newer " +
                     "than remote (createdAt=$remoteCreatedAt); preserving local and pushing upstream"
             )
             runCatching { syncTraktSecretsToRemote() }
                 .onFailure { e -> Log.w(TAG, "Failed to push local Trakt tokens after stale-remote detection", e) }
+        }
+
+        return ResolvedRemoteTraktSecrets(
+            accessPayload = accessPayload,
+            refreshPayload = refreshPayload,
+            preserveLocalTokens = preserveLocalTokens,
+            remote = remote
+        )
+    }
+
+    private suspend fun applyResolvedRemoteTraktSecrets(secrets: ResolvedRemoteTraktSecrets) {
+        val accessPayload = secrets.accessPayload
+        val refreshPayload = secrets.refreshPayload
+        val accessToken = accessPayload?.accessToken?.trim().orEmpty()
+        val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
+
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            // Only clear local auth when the remote authoritatively says Trakt is
+            // not connected (and not in a pending device-flow). Mirrors RD's logic.
+            val remote = secrets.remote
+            if (!remote.connected && !remote.pending) {
+                traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
+            }
+            return
+        }
+
+        if (secrets.preserveLocalTokens) {
             traktAuthDataStore.saveUser(
-                username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
-                userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() },
+                username = secrets.remote.username.takeIf { it.isNotBlank() },
+                userSlug = secrets.remote.userSlug.takeIf { it.isNotBlank() },
                 profileId = profileModeRouter.defaultLegacyProfileId()
             )
-            if (!settings.integrations.traktAuth.pending) {
+            if (!secrets.remote.pending) {
                 traktAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
             }
             return
@@ -1536,16 +1616,16 @@ class AccountSettingsSyncService @Inject constructor(
             profileId = profileModeRouter.defaultLegacyProfileId()
         )
         traktAuthDataStore.saveUser(
-            username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
-            userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() },
+            username = secrets.remote.username.takeIf { it.isNotBlank() },
+            userSlug = secrets.remote.userSlug.takeIf { it.isNotBlank() },
             profileId = profileModeRouter.defaultLegacyProfileId()
         )
-        if (!settings.integrations.traktAuth.pending) {
+        if (!secrets.remote.pending) {
             traktAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
         }
     }
 
-    private suspend fun applyRemoteSimklSecrets(settings: AccountConfigSyncPayload) {
+    private suspend fun resolveRemoteSimklSecrets(remote: SimklAuthSyncSettings): ResolvedRemoteSimklSecrets? {
         val accessResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -1560,12 +1640,19 @@ class AccountSettingsSyncService @Inject constructor(
         }
 
         if (accessResult.isFailure) {
-            return
+            return null
         }
 
-        val accessToken = accessResult.getOrNull()?.accessToken?.trim().orEmpty()
+        return ResolvedRemoteSimklSecrets(
+            accessPayload = accessResult.getOrNull(),
+            remote = remote
+        )
+    }
+
+    private suspend fun applyResolvedRemoteSimklSecrets(secrets: ResolvedRemoteSimklSecrets) {
+        val accessToken = secrets.accessPayload?.accessToken?.trim().orEmpty()
         if (accessToken.isBlank()) {
-            val remote = settings.integrations.simklAuth
+            val remote = secrets.remote
             if (!remote.connected && !remote.pending) {
                 simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
             }
@@ -1574,17 +1661,17 @@ class AccountSettingsSyncService @Inject constructor(
 
         simklAuthDataStore.saveAccessToken(accessToken, profileId = profileModeRouter.defaultLegacyProfileId())
         simklAuthDataStore.saveUser(
-            username = settings.integrations.simklAuth.username.takeIf { it.isNotBlank() },
-            accountId = settings.integrations.simklAuth.accountId,
-            accountType = settings.integrations.simklAuth.accountType.takeIf { it.isNotBlank() },
+            username = secrets.remote.username.takeIf { it.isNotBlank() },
+            accountId = secrets.remote.accountId,
+            accountType = secrets.remote.accountType.takeIf { it.isNotBlank() },
             profileId = profileModeRouter.defaultLegacyProfileId()
         )
-        if (!settings.integrations.simklAuth.pending) {
+        if (!secrets.remote.pending) {
             simklAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
         }
     }
 
-    private suspend fun applyRemoteRealDebridSecrets(settings: AccountConfigSyncPayload) {
+    private suspend fun resolveRemoteRealDebridSecrets(remote: RealDebridSyncSettings): ResolvedRemoteRealDebridSecrets? {
         val accessResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -1614,11 +1701,19 @@ class AccountSettingsSyncService @Inject constructor(
         // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
         // Same upgrade-time logout class of bug as the Trakt path used to have.
         if (accessResult.isFailure || refreshResult.isFailure) {
-            return
+            return null
         }
 
-        val accessPayload = accessResult.getOrNull()
-        val refreshPayload = refreshResult.getOrNull()
+        return ResolvedRemoteRealDebridSecrets(
+            accessPayload = accessResult.getOrNull(),
+            refreshPayload = refreshResult.getOrNull(),
+            remote = remote
+        )
+    }
+
+    private suspend fun applyResolvedRemoteRealDebridSecrets(secrets: ResolvedRemoteRealDebridSecrets) {
+        val accessPayload = secrets.accessPayload
+        val refreshPayload = secrets.refreshPayload
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         val userClientId = accessPayload?.userClientId?.trim().orEmpty()
@@ -1645,13 +1740,13 @@ class AccountSettingsSyncService @Inject constructor(
                 )
             )
             realDebridAuthDataStore.saveUsername(
-                settings.integrations.debrid.realDebrid.username.takeIf { it.isNotBlank() }
+                secrets.remote.username.takeIf { it.isNotBlank() }
             )
             realDebridAuthDataStore.clearDeviceFlow()
             return
         }
 
-        val remoteFlow = settings.integrations.debrid.realDebrid
+        val remoteFlow = secrets.remote
         if (remoteFlow.pending && remoteFlow.deviceCode.isNotBlank()) {
             realDebridAuthDataStore.clearAuth()
             val expiresInSeconds = remoteFlow.expiresAt
