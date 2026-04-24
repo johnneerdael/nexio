@@ -123,6 +123,7 @@ class AccountConfigSyncContractTest {
         val secondLiveSessionCheck = pushBody.indexOf("if (!hasLiveFullAccountSession())", startIndex = payloadBuild)
         val remoteCall = pushBody.indexOf("withJwtRefreshRetry")
         val remotePushRpc = pushBody.indexOf("\"sync_push_account_settings_v7\"", startIndex = remoteCall)
+        val afterSnapshotCapture = pushBody.substring(snapshotLockRelease)
 
         assertTrue("pushToRemote must acquire the same mutex as local reset suppression", mutexLock >= 0)
         assertTrue("live session check must happen inside the guarded section", mutexLock < firstLiveSessionCheck)
@@ -136,6 +137,14 @@ class AccountConfigSyncContractTest {
         assertTrue(
             "pushToRemote must not hold the local reset mutex while executing withJwtRefreshRetry",
             snapshotLockRelease < remoteCall
+        )
+        assertFalse(
+            "pushToRemote must not read local stores after releasing the reset mutex",
+            afterSnapshotCapture.contains("DataStore.") ||
+                afterSnapshotCapture.contains(".settings.first()") ||
+                afterSnapshotCapture.contains(".state.first()") ||
+                afterSnapshotCapture.contains(".stateForProfile(") ||
+                afterSnapshotCapture.contains(".observeAccountState().first()")
         )
     }
 

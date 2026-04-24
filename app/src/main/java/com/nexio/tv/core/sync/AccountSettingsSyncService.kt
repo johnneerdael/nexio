@@ -361,7 +361,47 @@ class AccountSettingsSyncService @Inject constructor(
         val payload: AccountConfigSyncPayload,
         val baseRevision: Long,
         val changedPaths: List<String>,
-        val changedPathsGeneration: Long
+        val changedPathsGeneration: Long,
+        val secrets: AccountSecretPushSnapshot
+    )
+
+    private data class AccountSecretPushSnapshot(
+        val tmdbApiKey: String,
+        val tvdbApiKey: String,
+        val tvdbPin: String,
+        val mdbListApiKey: String,
+        val omdbApiKey: String,
+        val subtitleTranslationApiKey: String,
+        val legacyGeminiApiKey: String?,
+        val rpdbApiKey: String,
+        val topPostersApiKey: String,
+        val premiumizeApiKey: String,
+        val torBoxApiKey: String,
+        val easyDebridApiKey: String,
+        val realDebrid: RealDebridSecretPushSnapshot,
+        val trakt: TraktSecretPushSnapshot,
+        val simkl: SimklSecretPushSnapshot
+    )
+
+    private data class RealDebridSecretPushSnapshot(
+        val accessToken: String,
+        val refreshToken: String,
+        val tokenType: String,
+        val expiresIn: Int,
+        val userClientId: String,
+        val userClientSecret: String
+    )
+
+    private data class TraktSecretPushSnapshot(
+        val accessToken: String,
+        val refreshToken: String,
+        val tokenType: String,
+        val createdAt: Long,
+        val expiresIn: Int
+    )
+
+    private data class SimklSecretPushSnapshot(
+        val accessToken: String
     )
 
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
@@ -386,7 +426,8 @@ class AccountSettingsSyncService @Inject constructor(
                     payload = payload,
                     baseRevision = lastAppliedRemoteRevision,
                     changedPaths = changedPaths,
-                    changedPathsGeneration = changedPathsGeneration
+                    changedPathsGeneration = changedPathsGeneration,
+                    secrets = buildAccountSecretPushSnapshot()
                 )
             } ?: return@withContext Result.success(Unit)
 
@@ -457,30 +498,30 @@ class AccountSettingsSyncService @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
-            val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
-            syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
-            syncTvdbCredentialSecretToRemote()
-            syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
+            val secrets = snapshot.secrets
+            syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, secrets.tmdbApiKey)
+            syncTvdbCredentialSecretToRemote(
+                tvdbApiKey = secrets.tvdbApiKey,
+                tvdbPin = secrets.tvdbPin
+            )
+            syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, secrets.mdbListApiKey)
+            syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, secrets.omdbApiKey)
             syncApiKeySecretToRemote(
                 TRANSLATION_SECRET_TYPE,
                 TRANSLATION_SECRET_REF,
-                subtitleTranslationSettings.apiKey
+                secrets.subtitleTranslationApiKey
             )
-            legacyGeminiApiKeySecretForPush(
-                providerName = subtitleTranslationSettings.provider.name,
-                translationApiKey = subtitleTranslationSettings.apiKey
-            )?.let { legacyGeminiKey ->
+            secrets.legacyGeminiApiKey?.let { legacyGeminiKey ->
                 syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey)
             }
-            syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
-            syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
-            syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, premiumizeSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, torBoxSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, easyDebridSettingsDataStore.settings.first().apiKey)
-            syncRealDebridSecretsToRemote()
-            syncTraktSecretsToRemote()
-            syncSimklSecretsToRemote()
+            syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, secrets.rpdbApiKey)
+            syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, secrets.topPostersApiKey)
+            syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, secrets.premiumizeApiKey)
+            syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, secrets.torBoxApiKey)
+            syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, secrets.easyDebridApiKey)
+            syncRealDebridSecretsToRemote(secrets.realDebrid)
+            syncTraktSecretsToRemote(secrets.trakt)
+            syncSimklSecretsToRemote(secrets.simkl)
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -529,6 +570,52 @@ class AccountSettingsSyncService @Inject constructor(
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
             Result.failure(e)
         }
+    }
+
+    private suspend fun buildAccountSecretPushSnapshot(): AccountSecretPushSnapshot {
+        val tvdb = tvdbSettingsDataStore.settings.first()
+        val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
+        val posterRatings = posterRatingsSettingsDataStore.settings.first()
+        val realDebrid = realDebridAuthDataStore.state.first()
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        val trakt = traktAuthDataStore.stateForProfile(defaultProfileId).first()
+        val simkl = simklAuthDataStore.stateForProfile(defaultProfileId).first()
+
+        return AccountSecretPushSnapshot(
+            tmdbApiKey = tmdbSettingsDataStore.settings.first().apiKey,
+            tvdbApiKey = tvdb.apiKey,
+            tvdbPin = tvdb.subscriberPin,
+            mdbListApiKey = mdbListSettingsDataStore.settings.first().apiKey,
+            omdbApiKey = omdbSettingsDataStore.settings.first().apiKey,
+            subtitleTranslationApiKey = subtitleTranslationSettings.apiKey,
+            legacyGeminiApiKey = legacyGeminiApiKeySecretForPush(
+                providerName = subtitleTranslationSettings.provider.name,
+                translationApiKey = subtitleTranslationSettings.apiKey
+            ),
+            rpdbApiKey = posterRatings.rpdbApiKey,
+            topPostersApiKey = posterRatings.topPostersApiKey,
+            premiumizeApiKey = premiumizeSettingsDataStore.settings.first().apiKey,
+            torBoxApiKey = torBoxSettingsDataStore.settings.first().apiKey,
+            easyDebridApiKey = easyDebridSettingsDataStore.settings.first().apiKey,
+            realDebrid = RealDebridSecretPushSnapshot(
+                accessToken = realDebrid.accessToken?.trim().orEmpty(),
+                refreshToken = realDebrid.refreshToken?.trim().orEmpty(),
+                tokenType = realDebrid.tokenType ?: "Bearer",
+                expiresIn = realDebrid.expiresIn ?: 0,
+                userClientId = realDebrid.userClientId?.trim().orEmpty(),
+                userClientSecret = realDebrid.userClientSecret?.trim().orEmpty()
+            ),
+            trakt = TraktSecretPushSnapshot(
+                accessToken = trakt.accessToken?.trim().orEmpty(),
+                refreshToken = trakt.refreshToken?.trim().orEmpty(),
+                tokenType = trakt.tokenType ?: "bearer",
+                createdAt = trakt.createdAt ?: 0L,
+                expiresIn = trakt.expiresIn ?: 0
+            ),
+            simkl = SimklSecretPushSnapshot(
+                accessToken = simkl.accessToken?.trim().orEmpty()
+            )
+        )
     }
 
     suspend fun runWithLocalResetPushSuppressed(block: suspend () -> Unit) {
@@ -1043,12 +1130,11 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun syncTvdbCredentialSecretToRemote() {
-        val tvdb = tvdbSettingsDataStore.settings.first()
-        val tvdbApiKey = tvdb.apiKey.trim()
-        val tvdbPin = tvdb.subscriberPin.trim()
+    private suspend fun syncTvdbCredentialSecretToRemote(tvdbApiKey: String, tvdbPin: String) {
+        val trimmedApiKey = tvdbApiKey.trim()
+        val trimmedPin = tvdbPin.trim()
 
-        if (tvdbApiKey.isBlank()) {
+        if (trimmedApiKey.isBlank()) {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_delete_account_secret",
@@ -1073,12 +1159,12 @@ class AccountSettingsSyncService @Inject constructor(
                         Json.encodeToJsonElement(
                             AccountTvdbCredentialSecretPayload.serializer(),
                             AccountTvdbCredentialSecretPayload(
-                                apiKey = tvdbApiKey,
-                                pin = tvdbPin.takeIf { it.isNotBlank() }
+                                apiKey = trimmedApiKey,
+                                pin = trimmedPin.takeIf { it.isNotBlank() }
                             )
                         )
                     )
-                    put("p_masked_preview", "Stored ••••${tvdbApiKey.takeLast(4)}")
+                    put("p_masked_preview", "Stored ••••${trimmedApiKey.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
                 }
@@ -1086,18 +1172,12 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun syncRealDebridSecretsToRemote() {
-        val state = realDebridAuthDataStore.state.first()
-        val accessToken = state.accessToken?.trim().orEmpty()
-        val refreshToken = state.refreshToken?.trim().orEmpty()
-        val userClientId = state.userClientId?.trim().orEmpty()
-        val userClientSecret = state.userClientSecret?.trim().orEmpty()
-
+    private suspend fun syncRealDebridSecretsToRemote(snapshot: RealDebridSecretPushSnapshot) {
         if (
-            accessToken.isBlank() ||
-            refreshToken.isBlank() ||
-            userClientId.isBlank() ||
-            userClientSecret.isBlank()
+            snapshot.accessToken.isBlank() ||
+            snapshot.refreshToken.isBlank() ||
+            snapshot.userClientId.isBlank() ||
+            snapshot.userClientSecret.isBlank()
         ) {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -1131,15 +1211,15 @@ class AccountSettingsSyncService @Inject constructor(
                         Json.encodeToJsonElement(
                             AccountRealDebridAccessSecretPayload.serializer(),
                             AccountRealDebridAccessSecretPayload(
-                                accessToken = accessToken,
-                                tokenType = state.tokenType ?: "Bearer",
-                                expiresIn = state.expiresIn ?: 0,
-                                userClientId = userClientId,
-                                userClientSecret = userClientSecret
+                                accessToken = snapshot.accessToken,
+                                tokenType = snapshot.tokenType,
+                                expiresIn = snapshot.expiresIn,
+                                userClientId = snapshot.userClientId,
+                                userClientSecret = snapshot.userClientSecret
                             )
                         )
                     )
-                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+                    put("p_masked_preview", "Connected ••••${snapshot.accessToken.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
                 }
@@ -1153,10 +1233,10 @@ class AccountSettingsSyncService @Inject constructor(
                         "p_secret_payload",
                         Json.encodeToJsonElement(
                             AccountRealDebridRefreshSecretPayload.serializer(),
-                            AccountRealDebridRefreshSecretPayload(refreshToken = refreshToken)
+                            AccountRealDebridRefreshSecretPayload(refreshToken = snapshot.refreshToken)
                         )
                     )
-                    put("p_masked_preview", "Connected ••••${refreshToken.takeLast(4)}")
+                    put("p_masked_preview", "Connected ••••${snapshot.refreshToken.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
                 }
@@ -1165,11 +1245,20 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun syncTraktSecretsToRemote() {
-        val traktState = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
-        val accessToken = traktState.accessToken?.trim().orEmpty()
-        val refreshToken = traktState.refreshToken?.trim().orEmpty()
+        val trakt = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
+        syncTraktSecretsToRemote(
+            TraktSecretPushSnapshot(
+                accessToken = trakt.accessToken?.trim().orEmpty(),
+                refreshToken = trakt.refreshToken?.trim().orEmpty(),
+                tokenType = trakt.tokenType ?: "bearer",
+                createdAt = trakt.createdAt ?: 0L,
+                expiresIn = trakt.expiresIn ?: 0
+            )
+        )
+    }
 
-        if (accessToken.isBlank() || refreshToken.isBlank()) {
+    private suspend fun syncTraktSecretsToRemote(snapshot: TraktSecretPushSnapshot) {
+        if (snapshot.accessToken.isBlank() || snapshot.refreshToken.isBlank()) {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_delete_account_secret",
@@ -1202,14 +1291,14 @@ class AccountSettingsSyncService @Inject constructor(
                         Json.encodeToJsonElement(
                             AccountTraktAccessSecretPayload.serializer(),
                             AccountTraktAccessSecretPayload(
-                                accessToken = accessToken,
-                                tokenType = traktState.tokenType ?: "bearer",
-                                createdAt = traktState.createdAt ?: 0L,
-                                expiresIn = traktState.expiresIn ?: 0
+                                accessToken = snapshot.accessToken,
+                                tokenType = snapshot.tokenType,
+                                createdAt = snapshot.createdAt,
+                                expiresIn = snapshot.expiresIn
                             )
                         )
                     )
-                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+                    put("p_masked_preview", "Connected ••••${snapshot.accessToken.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
                 }
@@ -1223,10 +1312,10 @@ class AccountSettingsSyncService @Inject constructor(
                         "p_secret_payload",
                         Json.encodeToJsonElement(
                             AccountTraktRefreshSecretPayload.serializer(),
-                            AccountTraktRefreshSecretPayload(refreshToken = refreshToken)
+                            AccountTraktRefreshSecretPayload(refreshToken = snapshot.refreshToken)
                         )
                     )
-                    put("p_masked_preview", "Stored ••••${refreshToken.takeLast(4)}")
+                    put("p_masked_preview", "Stored ••••${snapshot.refreshToken.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
                 }
@@ -1234,11 +1323,8 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun syncSimklSecretsToRemote() {
-        val simklState = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
-        val accessToken = simklState.accessToken?.trim().orEmpty()
-
-        if (accessToken.isBlank()) {
+    private suspend fun syncSimklSecretsToRemote(snapshot: SimklSecretPushSnapshot) {
+        if (snapshot.accessToken.isBlank()) {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_delete_account_secret",
@@ -1262,10 +1348,10 @@ class AccountSettingsSyncService @Inject constructor(
                         "p_secret_payload",
                         Json.encodeToJsonElement(
                             AccountSimklAccessSecretPayload.serializer(),
-                            AccountSimklAccessSecretPayload(accessToken = accessToken)
+                            AccountSimklAccessSecretPayload(accessToken = snapshot.accessToken)
                         )
                     )
-                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+                    put("p_masked_preview", "Connected ••••${snapshot.accessToken.takeLast(4)}")
                     put("p_status", "configured")
                     put("p_source", "app")
                 }
