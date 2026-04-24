@@ -41,3 +41,15 @@
   - the matching `device_credentials` row transitioned to `status = 'revoked'` with `revoked_at` populated
   - post-revoke `device-session-exchange` returned `401 Invalid durable device credential`
   - the pre-revoke owner JWT still authenticated successfully via `auth/v1/user` immediately after revoke
+
+### Android Validation Blocker 2026-04-24
+- Attempted to execute the remaining Android matrix locally from this branch by provisioning an emulator:
+  - installed `system-images;android-36.1;google_apis;arm64-v8a`
+  - created AVD `NexioAuth36`
+  - launched the emulator with `-no-window -no-audio -wipe-data -no-snapshot -accel off`
+- Result: the guest never progressed past `adb offline`, so the app could not be installed or exercised for cold-start / upgrade / token-loss / revoked-device / explicit sign-out runtime checks.
+- Emulator evidence from the host:
+  - `adb devices -l` remained `emulator-5554 offline`
+  - emulator logs reported `hvf is not enabled on this aarch64 host`
+  - emulator logs repeatedly reported `qemu-system-aarch64-headless: qemu_mprotect__osdep: mprotect failed: Permission denied`
+- Because no physical Android/TV device is attached to this machine and the local emulator cannot reach a usable online state, the remaining Android validation item is still pending external runtime access.
