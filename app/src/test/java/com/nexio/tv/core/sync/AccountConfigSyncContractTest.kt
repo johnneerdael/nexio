@@ -106,24 +106,36 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `local reset suppression serializes account pushes before payload build and remote rpc`() {
+    fun `local reset suppression serializes account push snapshot without holding mutex during remote rpc`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val pushStart = source.indexOf("suspend fun pushToRemote()")
         val pullStart = source.indexOf("suspend fun pullFromRemoteAndApply", startIndex = pushStart)
         val pushBody = source.substring(pushStart, pullStart)
 
         val mutexLock = pushBody.indexOf("applyingRemoteMutex.withLock")
+        val snapshotReturn = pushBody.indexOf("AccountPushSnapshot(")
+        val snapshotLockRelease = pushBody.indexOf(
+            "} ?: return@withContext Result.success(Unit)",
+            startIndex = snapshotReturn
+        )
         val firstLiveSessionCheck = pushBody.indexOf("if (!hasLiveFullAccountSession())")
         val payloadBuild = pushBody.indexOf("val payload = buildLocalPayload()")
         val secondLiveSessionCheck = pushBody.indexOf("if (!hasLiveFullAccountSession())", startIndex = payloadBuild)
-        val remotePushRpc = pushBody.indexOf("\"sync_push_account_settings_v7\"")
+        val remoteCall = pushBody.indexOf("withJwtRefreshRetry")
+        val remotePushRpc = pushBody.indexOf("\"sync_push_account_settings_v7\"", startIndex = remoteCall)
 
         assertTrue("pushToRemote must acquire the same mutex as local reset suppression", mutexLock >= 0)
         assertTrue("live session check must happen inside the guarded section", mutexLock < firstLiveSessionCheck)
         assertTrue("payload must be built only after the guarded live session check", firstLiveSessionCheck < payloadBuild)
+        assertTrue("payload snapshot must be returned from the guarded section", payloadBuild < snapshotReturn)
+        assertTrue("payload snapshot mutex must be released before remote calls", snapshotReturn < snapshotLockRelease)
         assertTrue(
             "pushToRemote must re-check live session after payload build and before remote push RPC",
             secondLiveSessionCheck in (payloadBuild + 1) until remotePushRpc
+        )
+        assertTrue(
+            "pushToRemote must not hold the local reset mutex while executing withJwtRefreshRetry",
+            snapshotLockRelease < remoteCall
         )
     }
 
