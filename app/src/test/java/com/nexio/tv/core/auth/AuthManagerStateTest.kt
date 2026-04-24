@@ -1,7 +1,6 @@
 package com.nexio.tv.core.auth
 
 import com.nexio.tv.domain.model.AuthState
-import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,14 +10,31 @@ import org.junit.Test
 
 class AuthManagerStateTest {
     @Test
-    fun `stock device state exposes canonical default profile addons and account config`() {
+    fun `stock device state exposes canonical default profile and addons`() {
         assertEquals(1, stockDefaultProfile().id)
         assertEquals("Default", stockDefaultProfile().name)
         assertEquals(
             listOf("https://v3-cinemeta.strem.io", "https://opensubtitles-v3.strem.io"),
             stockAddonInstallConfigs().map { it.url }
         )
-        assertEquals(AccountConfigSyncPayload(), stockAccountConfigSyncPayload())
+    }
+
+    @Test
+    fun `stock account config defines explicit local signed out defaults`() {
+        val stock = stockAccountConfigSyncPayload()
+
+        assertEquals(7, stock.schemaVersion)
+        assertEquals("TRAKT", stock.playback.streamSelection.trackingProvider)
+        assertTrue(stock.formatter.enabled)
+        assertEquals("universal", stock.formatter.selectedTemplateId)
+        assertNull(stock.formatter.customTemplate)
+        assertFalse(stock.integrations.debrid.realDebrid.connected)
+        assertFalse(stock.integrations.debrid.premiumize.configured)
+        assertFalse(stock.integrations.debrid.torBox.configured)
+        assertFalse(stock.integrations.debrid.easyDebrid.configured)
+        assertTrue(stock.integrations.tvdb.enabled)
+        assertTrue(stock.integrations.tvdb.configured)
+        assertEquals("VALID", stock.integrations.tvdb.validationStatus)
     }
 
     @Test
