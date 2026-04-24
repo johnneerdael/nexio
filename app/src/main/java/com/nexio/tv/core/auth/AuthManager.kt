@@ -746,7 +746,7 @@ class AuthManager @Inject constructor(
                     )
                 },
                 importAuthTokens = { accessToken, refreshToken ->
-                    auth.importAuthToken(accessToken, refreshToken)
+                    importPersistedOwnerSession(accessToken, refreshToken)
                     authenticatedUserFromAccessToken(accessToken)?.let { authenticatedUser ->
                         publishAuthenticatedUser(
                             userId = authenticatedUser.userId,
@@ -792,7 +792,7 @@ class AuthManager @Inject constructor(
             }
         }
         val result = json.decodeFromString<DurableDeviceSessionExchangeResult>(body)
-        auth.importAuthToken(result.accessToken, result.refreshToken)
+        importPersistedOwnerSession(result.accessToken, result.refreshToken)
         return true
     }
 
@@ -822,6 +822,21 @@ class AuthManager @Inject constructor(
         }
         val result = json.decodeFromString<DurableDeviceCredentialActivationResult>(body)
         check(result.activated) { "Device credential activation did not succeed" }
+    }
+
+    private suspend fun importPersistedOwnerSession(
+        accessToken: String,
+        refreshToken: String
+    ) {
+        // Jan Auth's default importAuthToken() path skips user retrieval.
+        // On device that left the SDK's persisted SettingsSessionManager entry
+        // pointing at the earlier anonymous QR session after restart.
+        auth.importAuthToken(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            retrieveUser = true,
+            autoRefresh = false
+        )
     }
 
     private suspend fun reconcileDurableCredentialAfterManualAccountAuth() {

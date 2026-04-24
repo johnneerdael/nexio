@@ -25,6 +25,15 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `owner session imports explicitly retrieve user before persisting`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+
+        assertTrue(source.contains("retrieveUser = true"))
+        assertTrue(source.contains("autoRefresh = false"))
+        assertTrue(source.contains("importPersistedOwnerSession("))
+    }
+
+    @Test
     fun `authoritative refresh rejection with durable credential falls through to durable recovery`() {
         assertEquals(
             AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY,
