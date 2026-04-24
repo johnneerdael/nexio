@@ -71,23 +71,27 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `revoked during running session clears stale refresh token before forcing reconnect`() = runTest {
-        var durableCredentialCleared = false
-        var persistedRefreshToken: String? = "stale-refresh-token"
-        var resetCalled = false
-        var terminalState: String? = null
+    fun `authoritative durable rejection disables live sync before local stock reset writes`() = runTest {
+        val events = mutableListOf<String>()
 
         handleAuthoritativeDurableCredentialRejection(
-            resetLocalAccountState = { resetCalled = true },
-            clearDurableCredential = { durableCredentialCleared = true },
-            clearSupabaseSession = { persistedRefreshToken = null },
-            transitionToReconnectState = { terminalState = "SessionLost" }
+            disableLiveAccountSync = { events += "disable-live-sync" },
+            resetLocalAccountState = { events += "reset-local-stock" },
+            clearDurableCredential = { events += "clear-durable" },
+            clearSupabaseSession = { events += "clear-session" },
+            transitionToReconnectState = { events += "session-lost" }
         )
 
-        assertTrue(resetCalled)
-        assertTrue(durableCredentialCleared)
-        assertNull(persistedRefreshToken)
-        assertEquals("SessionLost", terminalState)
+        assertEquals(
+            listOf(
+                "disable-live-sync",
+                "reset-local-stock",
+                "clear-durable",
+                "clear-session",
+                "session-lost"
+            ),
+            events
+        )
     }
 
     @Test
@@ -98,6 +102,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         )
 
         handleAuthoritativeDurableCredentialRejection(
+            disableLiveAccountSync = {},
             resetLocalAccountState = {},
             clearDurableCredential = {
                 localCredential = DurableDeviceCredentialSnapshot()

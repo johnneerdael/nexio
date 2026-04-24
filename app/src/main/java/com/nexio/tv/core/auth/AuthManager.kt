@@ -656,6 +656,9 @@ class AuthManager @Inject constructor(
 
     private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection() {
         handleAuthoritativeDurableCredentialRejection(
+            disableLiveAccountSync = {
+                transitionToSessionLost()
+            },
             resetLocalAccountState = {
                 localAccountResetCoordinator.resetToSignedOutStockState()
             },
@@ -1038,11 +1041,13 @@ internal fun resolveRefreshFailureAction(
 }
 
 internal suspend fun handleAuthoritativeDurableCredentialRejection(
+    disableLiveAccountSync: () -> Unit,
     resetLocalAccountState: suspend () -> Unit,
     clearDurableCredential: suspend () -> Unit,
     clearSupabaseSession: suspend () -> Unit,
     transitionToReconnectState: () -> Unit
 ) {
+    disableLiveAccountSync()
     try {
         resetLocalAccountState()
     } catch (clearError: Exception) {

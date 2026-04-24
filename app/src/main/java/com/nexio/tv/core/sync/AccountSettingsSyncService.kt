@@ -488,21 +488,29 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    suspend fun resetLocalAccountConfigToDefaults() = withContext(Dispatchers.IO) {
-        applyingRemoteMutex.withLock {
-            isApplyingRemote = true
-            pushJob?.cancel()
-            pushJob = null
-            try {
-                applySharedAccountConfigSyncSettings(stockAccountConfigSyncPayload())
-                clearLocalAccountSecrets()
-                synchronized(pendingChangedPaths) {
-                    pendingChangedPaths.clear()
-                    pendingChangedPathsGeneration += 1L
+    suspend fun runWithLocalResetPushSuppressed(block: suspend () -> Unit) {
+        withContext(Dispatchers.IO) {
+            applyingRemoteMutex.withLock {
+                isApplyingRemote = true
+                pushJob?.cancel()
+                pushJob = null
+                try {
+                    block()
+                    synchronized(pendingChangedPaths) {
+                        pendingChangedPaths.clear()
+                        pendingChangedPathsGeneration += 1L
+                    }
+                } finally {
+                    isApplyingRemote = false
                 }
-            } finally {
-                isApplyingRemote = false
             }
+        }
+    }
+
+    suspend fun resetLocalAccountConfigToDefaults() {
+        runWithLocalResetPushSuppressed {
+            applySharedAccountConfigSyncSettings(stockAccountConfigSyncPayload())
+            clearLocalAccountSecrets()
         }
     }
 
