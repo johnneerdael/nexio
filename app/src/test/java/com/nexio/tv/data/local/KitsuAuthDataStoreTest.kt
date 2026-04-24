@@ -57,7 +57,7 @@ class KitsuAuthDataStoreTest {
         KitsuAuthDataStore(factory, manager)
 
     @Test
-    fun `clearAuth clears requested profile without depending on active profile`() = runTest {
+    fun `clearAuth resets requested profile without depending on active profile`() = runTest {
         val profileManager = makeManager()
         val authStore = makeAuthStore(profileManager)
 
@@ -95,5 +95,33 @@ class KitsuAuthDataStoreTest {
         assertTrue(profile2.isAuthenticated)
         assertEquals("secondary-user", profile2.username)
         assertTrue(profile2.includeNsfw)
+    }
+
+    @Test
+    fun `clear removes active profile tokens while preserving non-secret settings`() = runTest {
+        val profileManager = makeManager()
+        val authStore = makeAuthStore(profileManager)
+
+        authStore.save(
+            KitsuAuthSnapshot(
+                enabled = false,
+                username = "saved-user",
+                accessToken = "token",
+                refreshToken = "refresh",
+                expiresAtEpochSeconds = 1234L,
+                includeNsfw = true
+            )
+        )
+
+        authStore.clear()
+
+        val state = authStore.state.first()
+        assertFalse(state.isAuthenticated)
+        assertNull(state.accessToken)
+        assertNull(state.refreshToken)
+        assertNull(state.expiresAtEpochSeconds)
+        assertFalse(state.enabled)
+        assertEquals("saved-user", state.username)
+        assertTrue(state.includeNsfw)
     }
 }

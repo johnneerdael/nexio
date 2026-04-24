@@ -81,7 +81,11 @@ class KitsuAuthDataStore @Inject constructor(
     }
 
     override suspend fun clear() {
-        clearAuth(profileManager.activeProfileId.value)
+        store().edit { preferences ->
+            preferences.remove(accessTokenKey)
+            preferences.remove(refreshTokenKey)
+            preferences.remove(expiresAtKey)
+        }
     }
 
     override suspend fun clearAuth(profileId: Int) {
