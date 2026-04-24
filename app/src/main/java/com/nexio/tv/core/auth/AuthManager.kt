@@ -18,7 +18,10 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -33,6 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -76,11 +80,16 @@ class AuthManager @Inject constructor(
                         val user = auth.currentUserOrNull()
                         if (user != null) {
                             publishAuthenticatedUser(user.id, user.email)
-                        } else if (isReturningUser()) {
-                            // Session says Authenticated but user hasn't been
-                            // hydrated yet — for a returning user, treat as
-                            // recoverable and show the reconnect nudge.
-                            transitionToSessionLost()
+                        } else {
+                            val recoveredUser = authenticatedUserFromAccessToken(auth.currentAccessTokenOrNull())
+                            if (recoveredUser != null) {
+                                publishAuthenticatedUser(recoveredUser.userId, recoveredUser.email)
+                            } else if (isReturningUser()) {
+                                // Session says Authenticated but user hasn't been
+                                // hydrated yet — for a returning user, treat as
+                                // recoverable and show the reconnect nudge.
+                                transitionToSessionLost()
+                            }
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
@@ -738,6 +747,12 @@ class AuthManager @Inject constructor(
                 },
                 importAuthTokens = { accessToken, refreshToken ->
                     auth.importAuthToken(accessToken, refreshToken)
+                    authenticatedUserFromAccessToken(accessToken)?.let { authenticatedUser ->
+                        publishAuthenticatedUser(
+                            userId = authenticatedUser.userId,
+                            email = authenticatedUser.email
+                        )
+                    }
                 }
             )
             Result.success(Unit)
@@ -1007,6 +1022,39 @@ internal data class AuthenticatedSessionPublication(
     val authState: AuthState,
     val sessionUserId: String?
 )
+
+internal data class AuthenticatedAccessTokenUser(
+    val userId: String,
+    val email: String?
+)
+
+internal fun authenticatedUserFromAccessToken(accessToken: String?): AuthenticatedAccessTokenUser? {
+    val token = accessToken?.trim().orEmpty()
+    if (token.isBlank()) return null
+
+    val parts = token.split('.')
+    if (parts.size < 2) return null
+
+    val payloadJson = runCatching {
+        val paddedPayload = parts[1]
+            .replace('-', '+')
+            .replace('_', '/')
+            .let { payload ->
+                payload + "=".repeat((4 - payload.length % 4) % 4)
+            }
+        String(Base64.getDecoder().decode(paddedPayload))
+    }.getOrNull() ?: return null
+
+    val payload = runCatching {
+        Json.parseToJsonElement(payloadJson).jsonObject
+    }.getOrNull() ?: return null
+
+    val userId = payload["sub"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    if (userId.isBlank()) return null
+
+    val email = payload["email"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+    return AuthenticatedAccessTokenUser(userId = userId, email = email)
+}
 
 internal fun resolveAuthenticatedSessionPublication(
     userId: String,
