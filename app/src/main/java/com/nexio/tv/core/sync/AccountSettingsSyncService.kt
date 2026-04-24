@@ -1575,10 +1575,8 @@ class AccountSettingsSyncService @Inject constructor(
             Log.w(
                 TAG,
                 "resolveRemoteTraktSecrets: local token (createdAt=$localCreatedAt) is newer " +
-                    "than remote (createdAt=$remoteCreatedAt); preserving local and pushing upstream"
+                    "than remote (createdAt=$remoteCreatedAt); preserving local"
             )
-            runCatching { syncTraktSecretsToRemote() }
-                .onFailure { e -> Log.w(TAG, "Failed to push local Trakt tokens after stale-remote detection", e) }
         }
 
         return ResolvedRemoteTraktSecrets(

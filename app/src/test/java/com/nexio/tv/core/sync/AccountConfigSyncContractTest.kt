@@ -198,6 +198,10 @@ class AccountConfigSyncContractTest {
                 lockBody.contains("applyRemoteSecrets(snapshot.settings)") ||
                 lockBody.contains("withJwtRefreshRetry")
         )
+        assertFalse(
+            "pull secret resolution must not push local reset-cleared Trakt secrets upstream",
+            source.contains("runCatching { syncTraktSecretsToRemote() }")
+        )
     }
 
     @Test
