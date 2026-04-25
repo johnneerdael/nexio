@@ -1284,6 +1284,7 @@ internal suspend fun handleManualSignOut(
         throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed preparing durable device credential revoke on sign-out", clearError)
+        return
     }
     try {
         revokeDurableCredential()

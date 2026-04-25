@@ -198,6 +198,32 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `manual sign out keeps local durable credential when pending revoke cannot be prepared`() = runTest {
+        val events = mutableListOf<String>()
+
+        handleManualSignOut(
+            resetLocalAccountState = { events += "reset-local-stock" },
+            clearPresenceMarker = { events += "clear-presence" },
+            prepareDurableCredentialRevoke = {
+                events += "prepare-pending-revoke"
+                error("failed to persist pending revoke")
+            },
+            revokeDurableCredential = { events += "revoke-durable-remote" },
+            clearDurableCredential = { events += "clear-durable-local" },
+            clearSupabaseSession = { events += "clear-supabase-session" }
+        )
+
+        assertEquals(
+            listOf(
+                "reset-local-stock",
+                "clear-presence",
+                "prepare-pending-revoke"
+            ),
+            events
+        )
+    }
+
+    @Test
     fun `manual sign out saves pending revoke before remote revoke and local clear`() {
         val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
         val signOutStart = source.indexOf("suspend fun signOut()")
