@@ -16,6 +16,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.contentOrNull
@@ -904,6 +905,8 @@ class AuthManager @Inject constructor(
             }
         } catch (e: AuthoritativeDurableCredentialRejectionException) {
             DurableCredentialRemoteStatus.REVOKED
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Durable credential status check failed; keeping current auth state", e)
             DurableCredentialRemoteStatus.UNKNOWN
