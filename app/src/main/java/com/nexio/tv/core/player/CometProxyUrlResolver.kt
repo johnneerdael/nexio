@@ -72,9 +72,12 @@ object CometProxyUrlResolver {
     private val lock = Any()
     private val cache = object : LinkedHashMap<String, CacheEntry>(MAX_CACHE_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CacheEntry>?): Boolean {
-            return size > MAX_CACHE_ENTRIES
+            if (size <= MAX_CACHE_ENTRIES) return false
+            eldest?.value?.resolvedUrl?.let { reverseCache.remove(it) }
+            return true
         }
     }
+    private val reverseCache: MutableMap<String, String> = HashMap()
     private val inFlight: MutableMap<String, CompletableDeferred<String?>> = HashMap()
 
     @Volatile
@@ -96,6 +99,7 @@ object CometProxyUrlResolver {
     internal fun resetForTesting() {
         synchronized(lock) {
             cache.clear()
+            reverseCache.clear()
             inFlight.clear()
         }
         transportOverride = null
@@ -174,11 +178,63 @@ object CometProxyUrlResolver {
         synchronized(lock) {
             inFlight.remove(url)
             if (result != null) {
-                cache[url] = CacheEntry(resolvedUrl = result, storedAtMs = currentTimeMs())
+                cache[url] = CacheEntry(
+                    resolvedUrl = result,
+                    storedAtMs = currentTimeMs(),
+                    headers = headers ?: emptyMap(),
+                    addonHost = addonHost
+                )
+                reverseCache[result] = url
             }
         }
         ownDeferred.complete(result)
         return result
+    }
+
+    /**
+     * Returns the addon proxy URL that originally resolved to [resolvedUrl], or
+     * null if no entry exists or the entry has expired. Used by the auth-recovery
+     * interceptor to find a proxy URL it can re-call to mint a fresh signed link.
+     */
+    fun proxyUrlFor(resolvedUrl: String): String? {
+        synchronized(lock) {
+            val proxy = reverseCache[resolvedUrl] ?: return null
+            val entry = cache[proxy] ?: run {
+                reverseCache.remove(resolvedUrl)
+                return null
+            }
+            return if (currentTimeMs() - entry.storedAtMs <= CACHE_TTL_MS) proxy else null
+        }
+    }
+
+    /**
+     * Returns the headers associated with the most recent successful resolve
+     * of [proxyUrl]. Used during recovery so the re-resolution call carries the
+     * same auth context as the original.
+     */
+    fun lastHeadersFor(proxyUrl: String): Map<String, String>? {
+        synchronized(lock) { return cache[proxyUrl]?.headers }
+    }
+
+    /**
+     * Returns the [addonHost] passed to the most recent successful resolve.
+     */
+    fun lastAddonHostFor(proxyUrl: String): String? {
+        synchronized(lock) { return cache[proxyUrl]?.addonHost }
+    }
+
+    /**
+     * Drops both forward and reverse cache entries for [proxyUrl]. Call after
+     * receiving a 401/403/410 from the resolved URL so the next resolve issues
+     * a fresh upstream request rather than serving the stale mapping.
+     */
+    fun invalidate(proxyUrl: String) {
+        synchronized(lock) {
+            val entry = cache.remove(proxyUrl)
+            if (entry != null) {
+                reverseCache.remove(entry.resolvedUrl)
+            }
+        }
     }
 
     /**
@@ -292,7 +348,12 @@ object CometProxyUrlResolver {
         return builder.toString().take(220)
     }
 
-    private data class CacheEntry(val resolvedUrl: String, val storedAtMs: Long)
+    private data class CacheEntry(
+        val resolvedUrl: String,
+        val storedAtMs: Long,
+        val headers: Map<String, String>,
+        val addonHost: String?
+    )
 
     internal fun interface Transport {
         fun execute(url: String, headers: Map<String, String>?): String?
