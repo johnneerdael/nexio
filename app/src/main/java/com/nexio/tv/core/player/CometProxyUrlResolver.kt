@@ -33,6 +33,7 @@ object CometProxyUrlResolver {
     private const val MAX_CACHE_ENTRIES = 64
     private const val CACHE_TTL_MS = 50L * 60L * 1000L // 50 minutes, safely under Comet's 60-minute TTL
     private const val REQUEST_TIMEOUT_MS = 8_000L
+    private const val INVALIDATE_DEBOUNCE_MS = 30_000L
 
     private val knownProxyHosts: Set<String> = setOf(
         // Comet instances — 302 redirect, 1h server cache
@@ -79,6 +80,7 @@ object CometProxyUrlResolver {
     }
     private val reverseCache: MutableMap<String, String> = HashMap()
     private val inFlight: MutableMap<String, CompletableDeferred<String?>> = HashMap()
+    private val lastInvalidatedAtMs: MutableMap<String, Long> = HashMap()
 
     @Volatile
     private var transportOverride: Transport? = null
@@ -101,6 +103,7 @@ object CometProxyUrlResolver {
             cache.clear()
             reverseCache.clear()
             inFlight.clear()
+            lastInvalidatedAtMs.clear()
         }
         transportOverride = null
         clockOverride = null
@@ -227,13 +230,22 @@ object CometProxyUrlResolver {
      * Drops both forward and reverse cache entries for [proxyUrl]. Call after
      * receiving a 401/403/410 from the resolved URL so the next resolve issues
      * a fresh upstream request rather than serving the stale mapping.
+     *
+     * Returns `true` if the invalidation was honoured, `false` if it was
+     * suppressed by the [INVALIDATE_DEBOUNCE_MS] rate-limit (used to prevent
+     * cascade re-resolution when many in-flight requests fail at once).
      */
-    fun invalidate(proxyUrl: String) {
+    fun invalidate(proxyUrl: String): Boolean {
         synchronized(lock) {
+            val now = currentTimeMs()
+            val last = lastInvalidatedAtMs[proxyUrl]
+            if (last != null && now - last < INVALIDATE_DEBOUNCE_MS) return false
             val entry = cache.remove(proxyUrl)
             if (entry != null) {
                 reverseCache.remove(entry.resolvedUrl)
             }
+            lastInvalidatedAtMs[proxyUrl] = now
+            return true
         }
     }
 

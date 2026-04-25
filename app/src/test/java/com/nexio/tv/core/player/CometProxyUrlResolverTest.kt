@@ -337,4 +337,21 @@ class CometProxyUrlResolverTest {
 
         assertEquals(headers, CometProxyUrlResolver.lastHeadersFor(cometUrl))
     }
+
+    @Test
+    fun `invalidate is rate-limited per proxy url`() = runBlocking {
+        var now = 1_000L
+        CometProxyUrlResolver.setClockForTesting { now }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolvedUrl }
+        CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
+
+        assertTrue(CometProxyUrlResolver.invalidate(cometUrl))
+        // Second invalidate within the 30s debounce window must report no-op.
+        now += 5_000L
+        assertFalse(CometProxyUrlResolver.invalidate(cometUrl))
+        // After the window elapses, invalidate is honoured again.
+        now += 30_000L
+        CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
+        assertTrue(CometProxyUrlResolver.invalidate(cometUrl))
+    }
 }
