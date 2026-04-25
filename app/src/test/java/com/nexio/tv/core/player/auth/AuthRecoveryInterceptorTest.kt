@@ -41,6 +41,71 @@ class AuthRecoveryInterceptorTest {
     }
 
     @Test
+    fun `passes through unrelated 401 when url has no proxy mapping`() {
+        server.enqueue(MockResponse().setResponseCode(401))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+        val unknownUrl = server.url("/orphan").toString()
+
+        val response = client.newCall(Request.Builder().url(unknownUrl).build()).execute()
+        response.use { assertEquals(401, it.code) }
+
+        val attempts = AuthRecoveryTracker.snapshot()
+        assertEquals(1, attempts.size)
+        assertEquals(AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN, attempts.first().outcome)
+    }
+
+    @Test
+    fun `gives up after exhausting maxAttemptsPerSession`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                MockResponse().setResponseCode(401)
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor(maxAttemptsPerSession = 1)).build()
+
+        val first = client.newCall(Request.Builder().url(resolved).build()).execute()
+        first.use { assertEquals(401, it.code) }
+        val second = client.newCall(Request.Builder().url(resolved).build()).execute()
+        second.use { assertEquals(401, it.code) }
+
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(outcomes.contains(AuthRecoveryTracker.Outcome.GAVE_UP))
+    }
+
+    @Test
+    fun `respects resolver debounce when invalidate is rate-limited`() {
+        val proxy = "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n"
+        val resolved = server.url("/cdn").toString()
+        var now = 1_000L
+        CometProxyUrlResolver.setClockForTesting { now }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        runBlocking { CometProxyUrlResolver.resolve(proxy, headers = emptyMap()) }
+        // Force prior invalidate so the next one is rate-limited.
+        CometProxyUrlResolver.invalidate(proxy)
+        // Re-resolve so reverseCache is repopulated, but lastInvalidatedAtMs is fresh.
+        runBlocking { CometProxyUrlResolver.resolve(proxy, headers = emptyMap()) }
+
+        server.enqueue(MockResponse().setResponseCode(401))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        val response = client.newCall(Request.Builder().url(resolved).build()).execute()
+        response.use { assertEquals(401, it.code) }
+
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(outcomes.contains(AuthRecoveryTracker.Outcome.RATE_LIMITED))
+    }
+
+    @Test
     fun `recovers from 401 by re-resolving and retrying once`() {
         val resolvedFirst = server.url("/cdn/first").toString()
         val resolvedSecond = server.url("/cdn/second").toString()
