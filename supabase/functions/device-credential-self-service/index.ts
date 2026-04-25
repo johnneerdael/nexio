@@ -13,6 +13,17 @@ type CredentialSelfServiceBody = {
   action?: unknown;
 };
 
+type CredentialSelfServiceClients = {
+  adminClient: {
+    from: (table: string) => any;
+  };
+};
+
+type CredentialSelfServiceHandlerDependencies = {
+  createSupabaseClients?: () => CredentialSelfServiceClients;
+  now?: () => Date;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -88,82 +99,131 @@ function invalidCredentialResponse(): Response {
   return json({ error: "Invalid durable device credential" }, 401);
 }
 
-async function handleRequest(req: Request): Promise<Response> {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+function invalidRequestResponse(): Response {
+  return json({ error: "Invalid request" }, 400);
+}
 
-  if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
-  }
+function serviceUnavailableResponse(): Response {
+  return json({ error: "Credential self service unavailable" }, 500);
+}
 
+function logInternalError(context: string, error: unknown) {
+  console.error(`[device-credential-self-service] ${context}`, error);
+}
+
+async function parseCredentialSelfServiceBody(req: Request) {
   try {
-    const body = normalizeCredentialSelfServiceBody(await req.json());
-    const { adminClient } = createSupabaseClients();
-
-    const { data: credentialRow, error: credentialError } = await adminClient
-      .from("device_credentials")
-      .select("credential_hash, status")
-      .eq("device_public_id", body.devicePublicId)
-      .maybeSingle();
-
-    if (credentialError) {
-      return json({
-        error: `Device credential lookup failed: ${credentialError.message}`,
-      }, 500);
-    }
-
-    if (!credentialRow) {
-      return invalidCredentialResponse();
-    }
-
-    const candidateHash = await hashDeviceCredential(
-      body.devicePublicId,
-      body.deviceSecret,
-    );
-
-    if (candidateHash !== credentialRow.credential_hash) {
-      return invalidCredentialResponse();
-    }
-
-    if (body.action === "status") {
-      return json(
-        buildCredentialSelfServicePayload(
-          credentialRow.status as CredentialStatus,
-        ),
-        200,
-      );
-    }
-
-    const update = buildCredentialSelfServiceUpdate(new Date().toISOString());
-    const { error: revokeError } = await adminClient
-      .from("device_credentials")
-      .update(update)
-      .eq("device_public_id", body.devicePublicId)
-      .eq("status", "active");
-
-    if (revokeError) {
-      return json({
-        error: `Device credential revoke failed: ${revokeError.message}`,
-      }, 500);
-    }
-
-    return json(buildCredentialSelfServicePayload("revoked"), 200);
+    return normalizeCredentialSelfServiceBody(await req.json());
   } catch (error) {
     if (
       error instanceof Error &&
       error.message === "Invalid durable device credential"
     ) {
-      return invalidCredentialResponse();
+      throw error;
     }
 
-    const message = error instanceof Error ? error.message : "Unexpected error";
-    const status = message === "Invalid durable device credential action"
-      ? 400
-      : 500;
-    return json({ error: message }, status);
+    throw new Error("Invalid durable device credential request");
   }
 }
+
+function isCredentialStatus(status: unknown): status is CredentialStatus {
+  return status === "active" || status === "revoked";
+}
+
+export function createCredentialSelfServiceHandler(
+  dependencies: CredentialSelfServiceHandlerDependencies = {},
+) {
+  const clientsFactory = dependencies.createSupabaseClients ??
+    createSupabaseClients;
+  const now = dependencies.now ?? (() => new Date());
+
+  return async function handleRequest(req: Request): Promise<Response> {
+    if (req.method === "OPTIONS") {
+      return new Response("ok", { headers: corsHeaders });
+    }
+
+    if (req.method !== "POST") {
+      return json({ error: "Method not allowed" }, 405);
+    }
+
+    try {
+      const body = await parseCredentialSelfServiceBody(req);
+      const { adminClient } = clientsFactory();
+
+      const { data: credentialRow, error: credentialError } = await adminClient
+        .from("device_credentials")
+        .select("credential_hash, status")
+        .eq("device_public_id", body.devicePublicId)
+        .maybeSingle();
+
+      if (credentialError) {
+        logInternalError("credential lookup failed", credentialError);
+        return serviceUnavailableResponse();
+      }
+
+      if (!credentialRow) {
+        return invalidCredentialResponse();
+      }
+
+      const candidateHash = await hashDeviceCredential(
+        body.devicePublicId,
+        body.deviceSecret,
+      );
+
+      if (candidateHash !== credentialRow.credential_hash) {
+        return invalidCredentialResponse();
+      }
+
+      if (!isCredentialStatus(credentialRow.status)) {
+        logInternalError("credential row has invalid status", {
+          device_public_id: body.devicePublicId,
+          status: credentialRow.status,
+        });
+        return serviceUnavailableResponse();
+      }
+
+      if (body.action === "status" || credentialRow.status === "revoked") {
+        return json(
+          buildCredentialSelfServicePayload(credentialRow.status),
+          200,
+        );
+      }
+
+      const update = buildCredentialSelfServiceUpdate(now().toISOString());
+      const { error: revokeError } = await adminClient
+        .from("device_credentials")
+        .update(update)
+        .eq("device_public_id", body.devicePublicId)
+        .eq("status", "active");
+
+      if (revokeError) {
+        logInternalError("credential revoke failed", revokeError);
+        return serviceUnavailableResponse();
+      }
+
+      return json(buildCredentialSelfServicePayload("revoked"), 200);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Invalid durable device credential"
+      ) {
+        return invalidCredentialResponse();
+      }
+
+      if (
+        error instanceof Error &&
+        error.message === "Invalid durable device credential request"
+      ) {
+        return invalidRequestResponse();
+      }
+
+      logInternalError("unexpected request failure", error);
+      return serviceUnavailableResponse();
+    }
+  };
+}
+
+const handleRequest = createCredentialSelfServiceHandler();
 
 if (import.meta.main) {
   Deno.serve(handleRequest);

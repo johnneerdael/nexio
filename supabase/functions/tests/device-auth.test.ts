@@ -22,6 +22,7 @@ import {
 import {
   buildCredentialSelfServicePayload,
   buildCredentialSelfServiceUpdate,
+  createCredentialSelfServiceHandler,
   normalizeCredentialSelfServiceBody,
 } from "../device-credential-self-service/index.ts";
 
@@ -131,7 +132,9 @@ test("buildApprovalExchangePayload prefers requested display name and trims it",
   assert.equal(payload.device_model, "Chromecast");
   assert.equal(payload.device_platform, "Android TV");
   assert.equal(payload.used_at, null);
-  assert.ok(typeof payload.expires_at === "string" && payload.expires_at.length > 0);
+  assert.ok(
+    typeof payload.expires_at === "string" && payload.expires_at.length > 0,
+  );
   assert.equal("status" in payload, false);
   assert.equal("last_seen_at" in payload, false);
   assert.equal("revoked_at" in payload, false);
@@ -219,7 +222,11 @@ test("replacePendingCredentialHandoff retires prior unused handoffs before inser
               operations.push({ op: "eq", column, value });
               return {
                 async is(nullColumn: string, nullValue: null) {
-                  operations.push({ op: "is", column: nullColumn, value: nullValue });
+                  operations.push({
+                    op: "is",
+                    column: nullColumn,
+                    value: nullValue,
+                  });
                   return { error: null };
                 },
               };
@@ -246,7 +253,10 @@ test("replacePendingCredentialHandoff retires prior unused handoffs before inser
     },
   });
 
-  await replacePendingCredentialHandoff({ adminClient: adminClient as never, credentialRow });
+  await replacePendingCredentialHandoff({
+    adminClient: adminClient as never,
+    credentialRow,
+  });
 
   assert.equal(operations[0]?.op, "update");
   assert.deepEqual(operations[1], {
@@ -261,7 +271,8 @@ test("replacePendingCredentialHandoff retires prior unused handoffs before inser
   });
   assert.equal(operations[3]?.op, "insert");
   assert.equal(
-    (operations[3] as { payload: { device_user_id: string } }).payload?.device_user_id,
+    (operations[3] as { payload: { device_user_id: string } }).payload
+      ?.device_user_id,
     "requester-user-id",
   );
 });
@@ -286,11 +297,17 @@ test("isCredentialHandoffExpired rejects missing, invalid, and past handoffs", (
   assert.equal(isCredentialHandoffExpired(null), true);
   assert.equal(isCredentialHandoffExpired("not-a-date"), true);
   assert.equal(
-    isCredentialHandoffExpired("2026-04-23T10:00:00.000Z", Date.parse("2026-04-23T10:00:00.000Z")),
+    isCredentialHandoffExpired(
+      "2026-04-23T10:00:00.000Z",
+      Date.parse("2026-04-23T10:00:00.000Z"),
+    ),
     true,
   );
   assert.equal(
-    isCredentialHandoffExpired("2026-04-23T10:00:01.000Z", Date.parse("2026-04-23T10:00:00.000Z")),
+    isCredentialHandoffExpired(
+      "2026-04-23T10:00:01.000Z",
+      Date.parse("2026-04-23T10:00:00.000Z"),
+    ),
     false,
   );
 });
@@ -570,4 +587,369 @@ test("buildCredentialSelfServiceUpdate revokes with a timestamp", () => {
     buildCredentialSelfServiceUpdate("2026-04-25T12:00:00.000Z"),
     { status: "revoked", revoked_at: "2026-04-25T12:00:00.000Z" },
   );
+});
+
+type FakeCredentialRow = {
+  credential_hash: string;
+  status: "active" | "revoked";
+};
+
+type FakeCredentialSelfServiceClient = {
+  calls: Array<Record<string, unknown>>;
+  createSupabaseClients: () => {
+    adminClient: {
+      from: (table: string) => {
+        select: (columns: string) => {
+          eq: (column: string, value: string) => unknown;
+          maybeSingle: () => Promise<{
+            data: FakeCredentialRow | null;
+            error: Error | null;
+          }>;
+        };
+        update: (payload: Record<string, unknown>) => unknown;
+      };
+    };
+  };
+};
+
+function createFakeCredentialSelfServiceClient(options: {
+  row?: FakeCredentialRow | null;
+  lookupError?: Error | null;
+  updateError?: Error | null;
+} = {}): FakeCredentialSelfServiceClient {
+  const calls: Array<Record<string, unknown>> = [];
+
+  const selectBuilder = {
+    eq(column: string, value: string) {
+      calls.push({ op: "lookup_eq", column, value });
+      return selectBuilder;
+    },
+    async maybeSingle() {
+      calls.push({ op: "maybeSingle" });
+      return {
+        data: options.row ?? null,
+        error: options.lookupError ?? null,
+      };
+    },
+  };
+
+  const updateBuilder = {
+    eq(column: string, value: string) {
+      calls.push({ op: "update_eq", column, value });
+      return updateBuilder;
+    },
+    then(resolve: (value: { error: Error | null }) => unknown) {
+      return Promise.resolve({ error: options.updateError ?? null }).then(
+        resolve,
+      );
+    },
+  };
+
+  return {
+    calls,
+    createSupabaseClients: () => ({
+      adminClient: {
+        from(table: string) {
+          calls.push({ op: "from", table });
+          return {
+            select(columns: string) {
+              calls.push({ op: "select", columns });
+              return selectBuilder;
+            },
+            update(payload: Record<string, unknown>) {
+              calls.push({ op: "update", payload });
+              return updateBuilder;
+            },
+          };
+        },
+      },
+    }),
+  };
+}
+
+function selfServiceRequest(body: unknown, method = "POST"): Request {
+  return new Request("http://localhost/device-credential-self-service", {
+    method,
+    body: typeof body === "string" ? body : JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function readJson(response: Response): Promise<Record<string, unknown>> {
+  return await response.json();
+}
+
+async function withCapturedConsoleError<T>(
+  callback: (calls: unknown[][]) => Promise<T>,
+): Promise<{ calls: unknown[][]; result: T }> {
+  const originalConsoleError = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+
+  try {
+    return { calls, result: await callback(calls) };
+  } finally {
+    console.error = originalConsoleError;
+  }
+}
+
+test("credential self-service handler responds to OPTIONS without dependencies", async () => {
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: () => {
+      throw new Error("Supabase should not be created for OPTIONS");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/device-credential-self-service", {
+      method: "OPTIONS",
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "ok");
+});
+
+test("credential self-service handler rejects non-POST methods", async () => {
+  const handler = createCredentialSelfServiceHandler();
+
+  const response = await handler(
+    new Request("http://localhost/device-credential-self-service", {
+      method: "GET",
+    }),
+  );
+
+  assert.equal(response.status, 405);
+  assert.deepEqual(await readJson(response), { error: "Method not allowed" });
+});
+
+test("credential self-service handler returns a generic response for malformed body", async () => {
+  const handler = createCredentialSelfServiceHandler();
+
+  const response = await handler(selfServiceRequest("{"));
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await readJson(response), { error: "Invalid request" });
+});
+
+test("credential self-service handler returns a generic response for invalid action", async () => {
+  const handler = createCredentialSelfServiceHandler();
+
+  const response = await handler(selfServiceRequest({
+    device_public_id: "tv_public",
+    device_secret: "secret",
+    action: "delete",
+  }));
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await readJson(response), { error: "Invalid request" });
+});
+
+test("credential self-service handler hides lookup errors and logs internal details", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    lookupError: new Error("relation device_credentials does not exist"),
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const { calls, result: response } = await withCapturedConsoleError<Response>(
+    () =>
+      handler(selfServiceRequest({
+        device_public_id: "tv_public",
+        device_secret: "secret",
+        action: "status",
+      })),
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await readJson(response), {
+    error: "Credential self service unavailable",
+  });
+  assert.match(String(calls), /relation device_credentials does not exist/);
+});
+
+test("credential self-service handler hides dependency setup errors", async () => {
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: () => {
+      throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+    },
+  });
+
+  const { calls, result: response } = await withCapturedConsoleError<Response>(
+    () =>
+      handler(selfServiceRequest({
+        device_public_id: "tv_public",
+        device_secret: "secret",
+        action: "status",
+      })),
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await readJson(response), {
+    error: "Credential self service unavailable",
+  });
+  assert.match(String(calls), /Missing SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("credential self-service handler returns invalid credential for mismatched secret", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    row: {
+      credential_hash: await hashDeviceCredential("tv_public", "other-secret"),
+      status: "active",
+    },
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const response = await handler(selfServiceRequest({
+    device_public_id: "tv_public",
+    device_secret: "secret",
+    action: "status",
+  }));
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await readJson(response), {
+    error: "Invalid durable device credential",
+  });
+});
+
+test("credential self-service handler returns active status for valid credential", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    row: {
+      credential_hash: await hashDeviceCredential("tv_public", "secret"),
+      status: "active",
+    },
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const response = await handler(selfServiceRequest({
+    device_public_id: "tv_public",
+    device_secret: "secret",
+    action: "status",
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    status: "active",
+    active: true,
+    revoked: false,
+  });
+});
+
+test("credential self-service handler returns revoked status for valid credential", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    row: {
+      credential_hash: await hashDeviceCredential("tv_public", "secret"),
+      status: "revoked",
+    },
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const response = await handler(selfServiceRequest({
+    device_public_id: "tv_public",
+    device_secret: "secret",
+    action: "status",
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    status: "revoked",
+    active: false,
+    revoked: true,
+  });
+});
+
+test("credential self-service handler revokes an active credential row", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    row: {
+      credential_hash: await hashDeviceCredential("tv_public", "secret"),
+      status: "active",
+    },
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const response = await handler(selfServiceRequest({
+    device_public_id: "tv_public",
+    device_secret: "secret",
+    action: "revoke",
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    status: "revoked",
+    active: false,
+    revoked: true,
+  });
+  assert.equal(fake.calls.filter((call) => call.op === "update").length, 1);
+  assert.deepEqual(
+    fake.calls.filter((call) => call.op === "update_eq"),
+    [
+      { op: "update_eq", column: "device_public_id", value: "tv_public" },
+      { op: "update_eq", column: "status", value: "active" },
+    ],
+  );
+});
+
+test("credential self-service handler hides revoke errors and logs internal details", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    row: {
+      credential_hash: await hashDeviceCredential("tv_public", "secret"),
+      status: "active",
+    },
+    updateError: new Error("PostgREST update failed: permission denied"),
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const { calls, result: response } = await withCapturedConsoleError<Response>(
+    () =>
+      handler(selfServiceRequest({
+        device_public_id: "tv_public",
+        device_secret: "secret",
+        action: "revoke",
+      })),
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await readJson(response), {
+    error: "Credential self service unavailable",
+  });
+  assert.match(String(calls), /PostgREST update failed/);
+});
+
+test("credential self-service handler treats repeated revoke as idempotent", async () => {
+  const fake = createFakeCredentialSelfServiceClient({
+    row: {
+      credential_hash: await hashDeviceCredential("tv_public", "secret"),
+      status: "revoked",
+    },
+  });
+  const handler = createCredentialSelfServiceHandler({
+    createSupabaseClients: fake.createSupabaseClients,
+  });
+
+  const response = await handler(selfServiceRequest({
+    device_public_id: "tv_public",
+    device_secret: "secret",
+    action: "revoke",
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    status: "revoked",
+    active: false,
+    revoked: true,
+  });
+  assert.equal(fake.calls.some((call) => call.op === "update"), false);
 });
