@@ -73,6 +73,7 @@ class AuthManager @Inject constructor(
     private var cachedEffectiveUserSourceUserId: String? = null
 
     init {
+        retryPendingDurableCredentialRevoke()
         observeSessionStatus()
     }
 
@@ -562,8 +563,11 @@ class AuthManager @Inject constructor(
                 clearPresenceMarker = {
                     authPresenceDataStore.clear()
                 },
+                prepareDurableCredentialRevoke = {
+                    prepareDurableCredentialRevokeForLogout()
+                },
                 revokeDurableCredential = {
-                    revokeDurableDeviceCredentialIfPresent()
+                    revokePendingDurableCredentialIfPresent()
                 },
                 clearDurableCredential = {
                     durableDeviceCredentialStore.clear()
@@ -572,6 +576,8 @@ class AuthManager @Inject constructor(
                     auth.signOut()
                 }
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Sign out failed", e)
         } finally {
@@ -923,6 +929,27 @@ class AuthManager @Inject constructor(
         return json.decodeFromString<DurableCredentialSelfServiceResponse>(body)
     }
 
+    private suspend fun prepareDurableCredentialRevokeForLogout() {
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (!credential.isComplete) return
+        durableDeviceCredentialStore.savePendingRevoke(
+            devicePublicId = credential.devicePublicId.orEmpty(),
+            deviceSecret = credential.deviceSecret.orEmpty()
+        )
+    }
+
+    private fun retryPendingDurableCredentialRevoke() {
+        scope.launch {
+            try {
+                revokePendingDurableCredentialIfPresent()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Pending durable credential revoke retry failed", e)
+            }
+        }
+    }
+
     private suspend fun validateDurableCredentialStillActive(): DurableCredentialRemoteStatus {
         val credential = durableDeviceCredentialStore.snapshot()
         if (!credential.isComplete) return DurableCredentialRemoteStatus.UNKNOWN
@@ -978,16 +1005,18 @@ class AuthManager @Inject constructor(
         check(result.activated) { "Device credential activation did not succeed" }
     }
 
-    private suspend fun revokeDurableDeviceCredentialIfPresent() {
-        val devicePublicId = durableDeviceCredentialStore.snapshot().devicePublicId
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: return
+    private suspend fun revokePendingDurableCredentialIfPresent() {
+        val pending = durableDeviceCredentialStore.pendingRevokeSnapshot()
+        if (!pending.isComplete) return
 
-        val params = buildJsonObject {
-            put("p_device_public_id", devicePublicId)
+        val response = callDurableCredentialSelfService(
+            devicePublicId = pending.devicePublicId.orEmpty(),
+            deviceSecret = pending.deviceSecret.orEmpty(),
+            action = "revoke"
+        )
+        if (response.revoked || response.status.equals("revoked", ignoreCase = true)) {
+            durableDeviceCredentialStore.clearPendingRevoke()
         }
-        postgrest.rpc("revoke_device_credential", params)
     }
 
     private suspend fun importPersistedOwnerSession(
@@ -1230,27 +1259,43 @@ internal suspend fun handleAuthoritativeDurableCredentialRejection(
 internal suspend fun handleManualSignOut(
     resetLocalAccountState: suspend () -> Unit,
     clearPresenceMarker: suspend () -> Unit,
+    prepareDurableCredentialRevoke: suspend () -> Unit,
     revokeDurableCredential: suspend () -> Unit,
     clearDurableCredential: suspend () -> Unit,
     clearSupabaseSession: suspend () -> Unit
 ) {
     try {
         resetLocalAccountState()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed resetting local account state on sign-out", clearError)
     }
     try {
         clearPresenceMarker()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed clearing auth presence marker on sign-out", clearError)
     }
     try {
+        prepareDurableCredentialRevoke()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed preparing durable device credential revoke on sign-out", clearError)
+    }
+    try {
         revokeDurableCredential()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed revoking durable device credential on sign-out", clearError)
     }
     try {
         clearDurableCredential()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed clearing durable device credential on sign-out", clearError)
     }

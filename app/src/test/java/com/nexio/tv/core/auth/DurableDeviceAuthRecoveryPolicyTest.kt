@@ -154,6 +154,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         handleManualSignOut(
             resetLocalAccountState = { resetCalled = true },
             clearPresenceMarker = { presenceMarkerCleared = true },
+            prepareDurableCredentialRevoke = {},
             revokeDurableCredential = {},
             clearDurableCredential = { durableCredentialCleared = true },
             clearSupabaseSession = { supabaseSessionCleared = true }
@@ -173,6 +174,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         handleManualSignOut(
             resetLocalAccountState = { events += "reset-local-stock" },
             clearPresenceMarker = { events += "clear-presence" },
+            prepareDurableCredentialRevoke = { events += "prepare-pending-revoke" },
             revokeDurableCredential = { events += "revoke-durable-remote" },
             clearDurableCredential = { events += "clear-durable-local" },
             clearSupabaseSession = { events += "clear-supabase-session" }
@@ -182,14 +184,46 @@ class DurableDeviceAuthRecoveryPolicyTest {
             listOf(
                 "reset-local-stock",
                 "clear-presence",
+                "prepare-pending-revoke",
                 "revoke-durable-remote",
                 "clear-durable-local",
                 "clear-supabase-session"
             ),
             events
         )
-        assertTrue(source.contains("revokeDurableDeviceCredentialIfPresent()"))
-        assertTrue(source.contains("postgrest.rpc(\"revoke_device_credential\""))
+        assertTrue(source.contains("revokePendingDurableCredentialIfPresent()"))
+        assertTrue(source.contains("callDurableCredentialSelfService("))
+        assertTrue(source.contains("action = \"revoke\""))
+        assertTrue(source.contains("durableDeviceCredentialStore.clearPendingRevoke()"))
+    }
+
+    @Test
+    fun `manual sign out saves pending revoke before remote revoke and local clear`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val signOutStart = source.indexOf("suspend fun signOut()")
+        val signOutEnd = source.indexOf("fun clearEffectiveUserIdCache()", startIndex = signOutStart)
+        val signOutBody = source.substring(signOutStart, signOutEnd)
+
+        assertTrue(signOutBody.contains("prepareDurableCredentialRevokeForLogout()"))
+        assertTrue(signOutBody.contains("revokePendingDurableCredentialIfPresent()"))
+        assertTrue(
+            signOutBody.indexOf("prepareDurableCredentialRevokeForLogout()") <
+                signOutBody.indexOf("revokePendingDurableCredentialIfPresent()")
+        )
+        assertTrue(
+            signOutBody.indexOf("revokePendingDurableCredentialIfPresent()") <
+                signOutBody.indexOf("durableDeviceCredentialStore.clear()")
+        )
+    }
+
+    @Test
+    fun `startup retries pending durable credential revoke`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val initStart = source.indexOf("init {")
+        val initEnd = source.indexOf("private fun observeSessionStatus()", startIndex = initStart)
+        val initBody = source.substring(initStart, initEnd)
+
+        assertTrue(initBody.contains("retryPendingDurableCredentialRevoke()"))
     }
 
     @Test
