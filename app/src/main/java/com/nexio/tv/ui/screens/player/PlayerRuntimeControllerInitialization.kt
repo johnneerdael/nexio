@@ -500,50 +500,32 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             
             subtitleDelayUs.set(_uiState.value.subtitleDelayMs.toLong() * 1000L)
-            val dv5SoftwareToneMapEnabled = playerSettings.experimentalDv5ToneMapToSdrEnabled
-            isDv5SoftwareToneMapSettingEnabledForCurrentPlayback = dv5SoftwareToneMapEnabled
-            val dv5HardwareToneMapEnabled =
-                playerSettings.experimentalDv5HardwareToneMapToSdrEnabled
-            val dv5HardwareToneMapCpuFallbackEnabled =
-                playerSettings.experimentalDv5HardwareToneMapCpuFallbackEnabled
-            isDv5HardwareToneMapSettingEnabledForCurrentPlayback = dv5HardwareToneMapEnabled
-            val dv5ToneMapNativeBuildSupported = FfmpegLibrary.supportsExperimentalDv5ToneMapToSdr()
-            val dv5SoftwareToneMapRuntimeSupported =
-                FfmpegLibrary.supportsExperimentalDv5SoftwareToneMapToSdrRuntime()
-            isDv5HardwareToneMapNativeSupportedForCurrentPlayback = dv5ToneMapNativeBuildSupported
-            isDv5SoftwareToneMapNativeSupportedForCurrentPlayback =
-                dv5ToneMapNativeBuildSupported && dv5SoftwareToneMapRuntimeSupported
-            val dv5HardwareForced = dv5HardwareToneMapPreferredStreamUrls.contains(url)
-            val dv5SoftwareForced = !dv5HardwareForced &&
-                dv5SoftwareToneMapPreferredStreamUrls.contains(url)
-            val dv5DetectedByProfile = dv5SoftwareForced || dv5HardwareForced
+            // DV5→SDR tone-map experimental feature was retired alongside the
+            // libplacebo build chain. The state vars stay so downstream observers
+            // / tracks that log them keep compiling, but the path is permanently
+            // inactive.
+            val dv5SoftwareToneMapEnabled = false
+            isDv5SoftwareToneMapSettingEnabledForCurrentPlayback = false
+            val dv5HardwareToneMapEnabled = false
+            val dv5HardwareToneMapCpuFallbackEnabled = false
+            isDv5HardwareToneMapSettingEnabledForCurrentPlayback = false
+            val dv5ToneMapNativeBuildSupported = false
+            val dv5SoftwareToneMapRuntimeSupported = false
+            isDv5HardwareToneMapNativeSupportedForCurrentPlayback = false
+            isDv5SoftwareToneMapNativeSupportedForCurrentPlayback = false
+            val dv5HardwareForced = false
+            val dv5SoftwareForced = false
+            val dv5DetectedByProfile = false
             val displaySupportsDolbyVision = displayHdrCapabilities.supportsDolbyVision
             isCurrentDisplayDolbyVisionCapable = displaySupportsDolbyVision
             val shieldDevice = context.isNvidiaShieldDevice()
             isCurrentDeviceNvidiaShield = shieldDevice
-            val dv5HardwareToneMapActive = dv5HardwareToneMapEnabled &&
-                isDv5HardwareToneMapNativeSupportedForCurrentPlayback &&
-                shieldDevice &&
-                !displaySupportsDolbyVision &&
-                dv5HardwareForced
-            isDv5HardwareToneMapActiveForCurrentPlayback = dv5HardwareToneMapActive
-            val dv5SoftwareToneMapActive = dv5SoftwareToneMapEnabled &&
-                !dv5HardwareToneMapActive &&
-                isDv5SoftwareToneMapNativeSupportedForCurrentPlayback &&
-                !displaySupportsDolbyVision &&
-                dv5SoftwareForced
-            isDv5SoftwareToneMapActiveForCurrentPlayback = dv5SoftwareToneMapActive
-            if (dv5SoftwareToneMapEnabled && !isDv5SoftwareToneMapNativeSupportedForCurrentPlayback) {
-                Log.w(
-                    PlayerRuntimeController.TAG,
-                    "DV5_SW_TONEMAP: unavailable at runtime; software path disabled " +
-                        "nativeBuild=$dv5ToneMapNativeBuildSupported " +
-                        "runtimeVulkan=$dv5SoftwareToneMapRuntimeSupported " +
-                        "shieldDevice=$shieldDevice host=${url.safeHost()}"
-                )
-            }
+            val dv5HardwareToneMapActive = false
+            isDv5HardwareToneMapActiveForCurrentPlayback = false
+            val dv5SoftwareToneMapActive = false
+            isDv5SoftwareToneMapActiveForCurrentPlayback = false
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(
-                enabled = dv5HardwareToneMapActive,
+                enabled = false,
                 streamUrl = url
             )
             val dolbyVisionHookInstalledForPlayback = MatroskaDolbyVisionHookInstaller.maybeInstall(

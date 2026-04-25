@@ -117,42 +117,6 @@ fun DebugSettingsContent(
                 )
             }
 
-            item(key = "debug_toggle_dv5_sw_tonemap") {
-                DebugToggleCard(
-                    title = stringResource(R.string.audio_dv5_tonemap_title),
-                    subtitle = stringResource(R.string.audio_dv5_tonemap_sub),
-                    checked = uiState.dv5ToneMapToSdrEnabled,
-                    onToggle = {
-                        viewModel.onEvent(DebugSettingsEvent.ToggleDv5ToneMapToSdr(it))
-                    }
-                )
-            }
-
-            item(key = "debug_toggle_dv5_hw_tonemap") {
-                DebugToggleCard(
-                    title = stringResource(R.string.audio_dv5_hw_tonemap_title),
-                    subtitle = stringResource(R.string.audio_dv5_hw_tonemap_sub),
-                    checked = uiState.dv5HardwareToneMapToSdrEnabled,
-                    onToggle = {
-                        viewModel.onEvent(DebugSettingsEvent.ToggleDv5HardwareToneMapToSdr(it))
-                    }
-                )
-            }
-
-            item(key = "debug_toggle_dv5_hw_cpu_fallback") {
-                DebugToggleCard(
-                    title = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_title),
-                    subtitle = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_sub),
-                    checked = uiState.dv5HardwareToneMapCpuFallbackEnabled,
-                    enabled = uiState.dv5HardwareToneMapToSdrEnabled,
-                    onToggle = {
-                        viewModel.onEvent(
-                            DebugSettingsEvent.ToggleDv5HardwareToneMapCpuFallback(it)
-                        )
-                    }
-                )
-            }
-
             // ── TVDB Diagnostics ──
             item(key = "debug_tvdb_diagnostics_header") {
                 Spacer(modifier = Modifier.height(8.dp))
