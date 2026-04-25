@@ -1,7 +1,9 @@
 package com.nexio.tv.ui.screens.player
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.util.UnstableApi
+import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.StreamBingeGroupResolver
@@ -443,10 +445,12 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     resetNextEpisodeCardState(clearEpisode = false)
 
     _exoPlayer?.let { player ->
+        val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
         scope.launch {
             try {
                 val mediaSource = withContext(Dispatchers.IO) {
-                    mediaSourceFactory.createMediaSource(url, newHeaders)
+                    val playableUrl = prepareMediaSourceUrl(url, newHeaders, addonHost)
+                    mediaSourceFactory.createMediaSource(playableUrl, newHeaders)
                 }
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
@@ -779,10 +783,12 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
 
     _exoPlayer?.let { player ->
+        val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
         scope.launch {
             try {
                 val mediaSource = withContext(Dispatchers.IO) {
-                    mediaSourceFactory.createMediaSource(url, newHeaders)
+                    val playableUrl = prepareMediaSourceUrl(url, newHeaders, addonHost)
+                    mediaSourceFactory.createMediaSource(playableUrl, newHeaders)
                 }
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
@@ -977,3 +983,26 @@ internal fun PlayerRuntimeController.playNextEpisode() {
         }
     }
 }
+
+/**
+ * If [url] is a Comet/Meteor/StremThru proxy URL, resolve it once via
+ * [CometProxyUrlResolver] (populating both forward and reverse cache so the
+ * playback OkHttp interceptor can recover any later 401/403/410). When [url]
+ * is not a proxy or resolution fails, the original [url] is returned unchanged
+ * so downstream behaviour is preserved.
+ */
+internal fun prepareMediaSourceUrl(
+    url: String,
+    headers: Map<String, String>,
+    addonHost: String?
+): String {
+    if (!CometProxyUrlResolver.isCometProxy(url, addonHost)) return url
+    return CometProxyUrlResolver.resolveBlocking(url, headers, addonHost) ?: url
+}
+
+@VisibleForTesting
+internal fun prepareMediaSourceUrlForTesting(
+    url: String,
+    headers: Map<String, String>,
+    addonHost: String?
+): String = prepareMediaSourceUrl(url, headers, addonHost)
