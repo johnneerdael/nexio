@@ -446,6 +446,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
 
     _exoPlayer?.let { player ->
         val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
+        scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
         scope.launch {
             try {
                 val mediaSource = withContext(Dispatchers.IO) {
@@ -784,6 +785,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     _exoPlayer?.let { player ->
         val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
+        scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
         scope.launch {
             try {
                 val mediaSource = withContext(Dispatchers.IO) {

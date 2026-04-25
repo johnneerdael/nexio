@@ -47,6 +47,15 @@ class AuthRecoveryInterceptor(
             return response
         }
 
+        when (val ipState = PlaybackAuthFingerprintHolder.current()?.compareNow()) {
+            is EgressIpFingerprint.State.Changed -> Log.w(
+                TAG,
+                "EGRESS_IP_SHIFTED baseline=${ipState.baseline} current=${ipState.current} " +
+                    "proxyHost=${original.url.host}"
+            )
+            else -> Unit
+        }
+
         val invalidated = CometProxyUrlResolver.invalidate(proxyUrl)
         if (!invalidated) {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RATE_LIMITED)

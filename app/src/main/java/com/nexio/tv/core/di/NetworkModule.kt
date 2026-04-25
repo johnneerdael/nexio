@@ -16,6 +16,8 @@ import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.OkHttpImdbSearchService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransport
 import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
+import com.nexio.tv.core.player.auth.EgressIpFingerprint
+import com.nexio.tv.core.player.auth.PlaybackAuthFingerprintHolder
 import com.nexio.tv.data.repository.benchmark.DirectDiscardBenchmarkTransport
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
@@ -125,6 +127,22 @@ private fun OkHttpClient.Builder.addKitsuBrowserHeaders(
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+
+    /**
+     * Egress-IP fingerprint shared by playback auth-recovery diagnostics.
+     * Uses the non-playback [OkHttpClient] (no auth-recovery interceptor) to
+     * avoid a Hilt cycle: the playback client depends on
+     * [AuthRecoveryInterceptor], which reads this fingerprint via
+     * [PlaybackAuthFingerprintHolder].
+     */
+    @Provides
+    @Singleton
+    fun provideEgressIpFingerprint(
+        okHttpClient: OkHttpClient
+    ): EgressIpFingerprint = EgressIpFingerprint(
+        client = okHttpClient,
+        probeUrl = "https://api.ipify.org/"
+    ).also { PlaybackAuthFingerprintHolder.setInstance(it) }
 
     @Provides
     @Singleton
