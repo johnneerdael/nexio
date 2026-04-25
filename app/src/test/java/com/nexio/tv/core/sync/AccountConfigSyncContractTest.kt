@@ -110,11 +110,17 @@ class AccountConfigSyncContractTest {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val suppressionStart = source.indexOf("suspend fun runWithLocalResetPushSuppressed")
         val resetStart = source.indexOf("suspend fun resetLocalAccountConfigToDefaults()")
+        val suppressionEnd = source.indexOf("suspend fun resetLocalAccountConfigToDefaults()", startIndex = suppressionStart)
+            .takeIf { it > suppressionStart }
+            ?: source.indexOf("private fun hasLiveFullAccountSession", startIndex = suppressionStart)
         val resetEnd = source.indexOf("private fun hasLiveFullAccountSession", startIndex = resetStart)
-        val suppressionBody = source.substring(suppressionStart, resetStart)
+            .takeIf { it > resetStart }
+            ?: source.length
+        val suppressionBody = source.substring(suppressionStart, suppressionEnd)
         val resetBody = source.substring(resetStart, resetEnd)
 
         assertTrue(resetBody.contains("runWithLocalResetPushSuppressed {"))
+        assertTrue(suppressionBody.contains("applyingRemoteMutex.withLock"))
         assertTrue(suppressionBody.contains("pushJob?.cancel()"))
         assertTrue(suppressionBody.contains("pushJob = null"))
         assertTrue(suppressionBody.contains("isApplyingRemote = true"))
