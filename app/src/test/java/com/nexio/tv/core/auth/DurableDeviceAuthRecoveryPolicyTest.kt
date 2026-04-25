@@ -253,6 +253,33 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `auth lifecycle retries pending durable credential revoke`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val observeStart = source.indexOf("private fun observeSessionStatus()")
+        val readPresenceStart = source.indexOf("private suspend fun readHadAuthenticatedSession()", startIndex = observeStart)
+        val observeBody = source.substring(observeStart, readPresenceStart)
+
+        assertTrue(observeBody.contains("auth.sessionStatus.collect { status ->"))
+        assertTrue(observeBody.contains("retryPendingDurableCredentialRevoke()"))
+        assertTrue(observeBody.indexOf("retryPendingDurableCredentialRevoke()") < observeBody.indexOf("when (status)"))
+    }
+
+    @Test
+    fun `manual sign out clears local Supabase session when remote sign out fails`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val signOutStart = source.indexOf("suspend fun signOut()")
+        val signOutEnd = source.indexOf("fun clearEffectiveUserIdCache()", startIndex = signOutStart)
+        val signOutBody = source.substring(signOutStart, signOutEnd)
+        val clearSessionStart = signOutBody.indexOf("clearSupabaseSession = {")
+        val clearSessionEnd = signOutBody.indexOf("\n                }\n            )", startIndex = clearSessionStart)
+        val clearSessionBody = signOutBody.substring(clearSessionStart, clearSessionEnd)
+
+        assertTrue(clearSessionBody.contains("auth.signOut()"))
+        assertTrue(clearSessionBody.contains("auth.clearSession()"))
+        assertTrue(clearSessionBody.indexOf("auth.signOut()") < clearSessionBody.indexOf("auth.clearSession()"))
+    }
+
+    @Test
     fun `not authenticated startup ignores cached identity without a live session`() {
         assertEquals(
             NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY,

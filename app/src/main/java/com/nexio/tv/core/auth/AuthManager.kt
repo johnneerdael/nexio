@@ -80,6 +80,7 @@ class AuthManager @Inject constructor(
     private fun observeSessionStatus() {
         scope.launch {
             auth.sessionStatus.collect { status ->
+                retryPendingDurableCredentialRevoke()
                 when (status) {
                     is SessionStatus.Authenticated -> {
                         val user = auth.currentUserOrNull()
@@ -573,7 +574,14 @@ class AuthManager @Inject constructor(
                     durableDeviceCredentialStore.clear()
                 },
                 clearSupabaseSession = {
-                    auth.signOut()
+                    try {
+                        auth.signOut()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Remote Supabase sign-out failed; clearing local session", e)
+                        auth.clearSession()
+                    }
                 }
             )
         } catch (e: CancellationException) {
@@ -1240,16 +1248,22 @@ internal suspend fun handleAuthoritativeDurableCredentialRejection(
     disableLiveAccountSync()
     try {
         resetLocalAccountState()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed resetting local account state after authoritative revoke", clearError)
     }
     try {
         clearDurableCredential()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed clearing durable credential after authoritative revoke", clearError)
     }
     try {
         clearSupabaseSession()
+    } catch (clearError: CancellationException) {
+        throw clearError
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed clearing local Supabase session after authoritative revoke", clearError)
     }
