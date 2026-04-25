@@ -19,6 +19,11 @@ import {
   buildBackfillResponsePayload,
   normalizeBackfillBody,
 } from "../device-credential-backfill/index.ts";
+import {
+  buildCredentialSelfServicePayload,
+  buildCredentialSelfServiceUpdate,
+  normalizeCredentialSelfServiceBody,
+} from "../device-credential-self-service/index.ts";
 
 const migrationContractText = String.raw`
 device_public_id text not null check (length(trim(device_public_id)) > 0),
@@ -504,5 +509,65 @@ test("tv login start migration includes device name in the approval url", () => 
   assert.match(
     migrationContractText,
     /v_web_url := v_web_url \|\| '&device_name=' \|\| public\.url_encode\(v_device_name\);/,
+  );
+});
+
+test("normalizeCredentialSelfServiceBody trims status requests", () => {
+  assert.deepEqual(
+    normalizeCredentialSelfServiceBody({
+      device_public_id: "  tv_public  ",
+      device_secret: "  secret  ",
+      action: " status ",
+    }),
+    {
+      devicePublicId: "tv_public",
+      deviceSecret: "secret",
+      action: "status",
+    },
+  );
+});
+
+test("normalizeCredentialSelfServiceBody trims revoke requests", () => {
+  assert.deepEqual(
+    normalizeCredentialSelfServiceBody({
+      device_public_id: "  tv_public  ",
+      device_secret: "  secret  ",
+      action: " revoke ",
+    }),
+    {
+      devicePublicId: "tv_public",
+      deviceSecret: "secret",
+      action: "revoke",
+    },
+  );
+});
+
+test("normalizeCredentialSelfServiceBody rejects unsupported actions", () => {
+  assert.throws(
+    () =>
+      normalizeCredentialSelfServiceBody({
+        device_public_id: "tv_public",
+        device_secret: "secret",
+        action: "delete",
+      }),
+    /Invalid durable device credential action/,
+  );
+});
+
+test("buildCredentialSelfServicePayload exposes active and revoked states", () => {
+  assert.deepEqual(
+    buildCredentialSelfServicePayload("active"),
+    { status: "active", active: true, revoked: false },
+  );
+  assert.deepEqual(
+    buildCredentialSelfServicePayload("revoked"),
+    { status: "revoked", active: false, revoked: true },
+  );
+});
+
+test("buildCredentialSelfServiceUpdate revokes with a timestamp", () => {
+  assert.deepEqual(
+    buildCredentialSelfServiceUpdate("2026-04-25T12:00:00.000Z"),
+    { status: "revoked", revoked_at: "2026-04-25T12:00:00.000Z" },
   );
 });
