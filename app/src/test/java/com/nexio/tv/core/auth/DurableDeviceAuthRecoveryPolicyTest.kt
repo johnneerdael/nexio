@@ -440,6 +440,28 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `authenticated session publication validates durable credential status`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val authenticatedBranchStart = source.indexOf("is SessionStatus.Authenticated ->")
+        val notAuthenticatedBranchStart = source.indexOf("is SessionStatus.NotAuthenticated ->")
+        val authenticatedBranch = source.substring(authenticatedBranchStart, notAuthenticatedBranchStart)
+
+        assertTrue(authenticatedBranch.contains("enforceDurableCredentialStillActive()"))
+        assertTrue(authenticatedBranch.indexOf("enforceDurableCredentialStillActive()") < authenticatedBranch.indexOf("publishAuthenticatedUser("))
+    }
+
+    @Test
+    fun `refresh token recovery validates durable credential status before refreshing`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val refreshStart = source.indexOf("suspend fun refreshSessionIfJwtExpired")
+        val refreshEnd = source.indexOf("private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection")
+        val refreshBody = source.substring(refreshStart, refreshEnd)
+
+        assertTrue(refreshBody.contains("enforceDurableCredentialStillActive()"))
+        assertTrue(refreshBody.indexOf("enforceDurableCredentialStillActive()") < refreshBody.indexOf("auth.refreshCurrentSession()"))
+    }
+
+    @Test
     fun `qr exchange imports auth only after durable credential save succeeds`() = runTest {
         val calls = mutableListOf<String>()
 

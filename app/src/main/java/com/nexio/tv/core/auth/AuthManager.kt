@@ -84,6 +84,10 @@ class AuthManager @Inject constructor(
                         val user = auth.currentUserOrNull()
                         if (user != null) {
                             val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                            if (hasDurableCredential) {
+                                enforceDurableCredentialStillActive()
+                                if (_authState.value is AuthState.SessionLost) return@collect
+                            }
                             if (
                                 shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
                                     userId = user.id,
@@ -246,6 +250,10 @@ class AuthManager @Inject constructor(
                 if (auth.currentUserOrNull() != null) return
                 val session = auth.currentSessionOrNull()
                 val credential = durableDeviceCredentialStore.snapshot()
+                if (credential.isComplete) {
+                    enforceDurableCredentialStillActive()
+                    if (_authState.value is AuthState.SessionLost) return
+                }
                 when (
                     resolveJwtExpiryRecoveryAction(
                         hasRefreshToken = session?.refreshToken?.isNotBlank() == true,
@@ -560,6 +568,10 @@ class AuthManager @Inject constructor(
     suspend fun refreshSessionIfJwtExpired(error: Throwable): Boolean {
         if (!error.isJwtExpiredError()) return false
         val credential = durableDeviceCredentialStore.snapshot()
+        if (credential.isComplete) {
+            enforceDurableCredentialStillActive()
+            if (_authState.value is AuthState.SessionLost) return false
+        }
         val hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true
         return when (
             resolveJwtExpiryRecoveryAction(
