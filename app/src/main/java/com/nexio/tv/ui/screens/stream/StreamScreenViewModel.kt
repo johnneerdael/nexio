@@ -1076,10 +1076,25 @@ class StreamScreenViewModel @Inject constructor(
         isFinalPass: Boolean
     ): StreamPlaybackInfo? {
         if (organizedStreams.isEmpty()) return null
-        val eligibleStreams = applyDeterministicOriginalLanguageGuard(
+        val languageFiltered = applyDeterministicOriginalLanguageGuard(
             originalLanguage = originalLanguage,
             streams = organizedStreams
-        ).filterNot { it.hasBlockedDeterministicAutoplayFilename() }
+        )
+        val titleFiltered = applyDeterministicTitleGuard(
+            contentName = contentName,
+            streams = languageFiltered
+        )
+        val rejectedTitleCount = languageFiltered.size - titleFiltered.size
+        if (rejectedTitleCount > 0) {
+            Log.i(
+                TAG,
+                "DETERMINISTIC_TITLE_GUARD contentName=${contentName ?: "none"} " +
+                    "in=${languageFiltered.size} out=${titleFiltered.size} " +
+                    "rejected=$rejectedTitleCount"
+            )
+        }
+        val eligibleStreams = titleFiltered
+            .filterNot { it.hasBlockedDeterministicAutoplayFilename() }
         if (eligibleStreams.isEmpty()) return null
 
         val event = benchmarkAwareStreamScorer.scoreWithManualCap(
@@ -1721,6 +1736,61 @@ internal fun applyDeterministicOriginalLanguageGuard(
             parsedLanguages = stream.parsed.languages
         )
     }
+}
+
+/**
+ * Reject deterministic-autoplay candidates whose parsed filename title doesn't
+ * look like the requested content. Defends against upstream cross-show
+ * contamination — addons occasionally label one show's torrent under another
+ * show's media id (observed: Comet returning Dune Prophecy torrents under
+ * One Piece's tt0388629), which historically leaked all the way through to
+ * playback because no layer compared the candidate's title to the requested
+ * title before scoring.
+ *
+ * Match rule is bi-directional token-subset on alphanumeric tokens: accept
+ * when the requested title's tokens are a subset of the parsed title's tokens
+ * (parsed has extra year/edition tokens) OR vice versa (requested has extra
+ * year tokens). No-op when either side is missing — manual selection or
+ * unparseable filenames must not be filtered.
+ */
+internal fun applyDeterministicTitleGuard(
+    contentName: String?,
+    streams: List<StreamCardModel>
+): List<StreamCardModel> {
+    if (contentName.isNullOrBlank()) return streams
+    return streams.filterNot { stream ->
+        shouldRejectDeterministicAutoplayForTitle(
+            contentName = contentName,
+            parsedTitle = stream.parsed.title
+        )
+    }
+}
+
+internal fun shouldRejectDeterministicAutoplayForTitle(
+    contentName: String?,
+    parsedTitle: String?
+): Boolean {
+    if (contentName.isNullOrBlank()) return false
+    if (parsedTitle.isNullOrBlank()) return false
+    val expected = titleTokens(contentName)
+    val candidate = titleTokens(parsedTitle)
+    if (expected.isEmpty() || candidate.isEmpty()) return false
+    val expectedIsSubset = candidate.containsAll(expected)
+    val candidateIsSubset = expected.containsAll(candidate)
+    return !(expectedIsSubset || candidateIsSubset)
+}
+
+private fun titleTokens(value: String): Set<String> {
+    return value
+        .lowercase(Locale.US)
+        // Strip elision apostrophes so "Marvel's" tokenizes as one word, not
+        // two ("marvel" + "s"). Other intra-word marks (hyphens, periods) are
+        // legitimate separators and stay split.
+        .replace("'", "")
+        .replace("’", "")
+        .split(Regex("[^\\p{L}\\p{N}]+"))
+        .filter { it.isNotBlank() }
+        .toSet()
 }
 
 internal fun shouldRejectDeterministicAutoplayForOriginalLanguage(
