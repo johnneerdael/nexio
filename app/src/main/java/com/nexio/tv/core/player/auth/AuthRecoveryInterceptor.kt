@@ -25,17 +25,33 @@ import java.util.concurrent.atomic.AtomicInteger
  * down. All outcomes go through [AuthRecoveryTracker].
  */
 class AuthRecoveryInterceptor(
-    private val maxAttemptsPerSession: Int = 3
+    private val maxAttemptsPerSession: Int = 3,
+    private val maxForwardEntries: Int = 64
 ) : Interceptor {
 
     private val attemptsRemaining = AtomicInteger(maxAttemptsPerSession)
 
+    /**
+     * Stale → fresh URL forwards established by past recoveries. After we
+     * recover `oldUrl → newUrl`, any later request to `oldUrl` is
+     * transparently rewritten to `newUrl` before being dispatched. Without
+     * this, a long-running writer that loops on the same source URL would
+     * burn one recovery attempt per chunk after a CDN flip.
+     */
+    private val forwardLock = Any()
+    private val staleUrlForwards: LinkedHashMap<String, String> =
+        object : LinkedHashMap<String, String>(maxForwardEntries, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
+                size > maxForwardEntries
+        }
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-        val response = chain.proceed(original)
+        val rewritten = applyStaleForward(original) ?: original
+        val response = chain.proceed(rewritten)
         if (!AuthFailureCodes.matches(response.code)) return response
 
-        val originalUrl = original.url.toString()
+        val originalUrl = rewritten.url.toString()
         val proxyUrl = CometProxyUrlResolver.proxyUrlFor(originalUrl)
         if (proxyUrl == null) {
             AuthRecoveryTracker.record(originalUrl, response.code, AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN)
@@ -56,21 +72,24 @@ class AuthRecoveryInterceptor(
             else -> Unit
         }
 
+        // Capture the headers + addonHost first because invalidate() drops the
+        // cache entry that backs lastHeadersFor / lastAddonHostFor.
+        val headers = CometProxyUrlResolver.lastHeadersFor(proxyUrl) ?: emptyMap()
+        val addonHost = CometProxyUrlResolver.lastAddonHostFor(proxyUrl)
+
         val invalidated = CometProxyUrlResolver.invalidate(proxyUrl)
         if (!invalidated) {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RATE_LIMITED)
             return response
         }
 
-        val headers = CometProxyUrlResolver.lastHeadersFor(proxyUrl) ?: emptyMap()
-        val addonHost = CometProxyUrlResolver.lastAddonHostFor(proxyUrl)
         val freshUrl = CometProxyUrlResolver.resolveBlocking(proxyUrl, headers, addonHost)
         if (freshUrl.isNullOrBlank()) {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
             return response
         }
 
-        val rewritten = rewriteUrl(original, freshUrl) ?: run {
+        val retryRequest = rewriteUrl(rewritten, freshUrl) ?: run {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
             return response
         }
@@ -79,15 +98,35 @@ class AuthRecoveryInterceptor(
         Log.i(
             TAG,
             "RETRYING_AFTER_AUTH_FAIL status=${response.code} " +
-                "fromHost=${original.url.host} toHost=${rewritten.url.host}"
+                "fromHost=${rewritten.url.host} toHost=${retryRequest.url.host}"
         )
-        val retried = chain.proceed(rewritten)
+        val retried = chain.proceed(retryRequest)
         if (retried.isSuccessful) {
+            registerForward(originalUrl, freshUrl)
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RECOVERED)
         } else {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
         }
         return retried
+    }
+
+    private fun applyStaleForward(request: Request): Request? {
+        val current = request.url.toString()
+        val forwarded = synchronized(forwardLock) { staleUrlForwards[current] } ?: return null
+        if (forwarded == current) return null
+        val parsed = forwarded.toHttpUrlOrNull() ?: return null
+        return request.newBuilder().url(parsed).build()
+    }
+
+    private fun registerForward(staleUrl: String, freshUrl: String) {
+        if (staleUrl == freshUrl) return
+        synchronized(forwardLock) {
+            staleUrlForwards[staleUrl] = freshUrl
+            // If the fresh URL was itself a previously-recovered target, drop
+            // any chain entry pointing at it so a future failure on freshUrl
+            // does not infinitely loop through the forward map.
+            staleUrlForwards.entries.removeAll { (k, _) -> k == freshUrl }
+        }
     }
 
     private fun rewriteUrl(original: Request, freshUrl: String): Request? {
