@@ -106,6 +106,23 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `local account reset suppresses pending account config pushes`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val resetStart = source.indexOf("suspend fun resetLocalAccountConfigToDefaults()")
+        val suppressionStart = source.indexOf("suspend fun runWithLocalResetPushSuppressed", startIndex = resetStart)
+        val nextFunction = source.indexOf("private fun hasLiveFullAccountSession", startIndex = suppressionStart)
+        val resetAndSuppressionBody = source.substring(resetStart, nextFunction)
+
+        assertTrue(resetAndSuppressionBody.contains("runWithLocalResetPushSuppressed {"))
+        assertTrue(resetAndSuppressionBody.contains("pushJob?.cancel()"))
+        assertTrue(resetAndSuppressionBody.contains("pushJob = null"))
+        assertTrue(resetAndSuppressionBody.contains("isApplyingRemote = true"))
+        assertTrue(resetAndSuppressionBody.contains("pendingChangedPaths.clear()"))
+        assertTrue(resetAndSuppressionBody.contains("pendingChangedPathsGeneration += 1L"))
+        assertTrue(resetAndSuppressionBody.contains("isApplyingRemote = false"))
+    }
+
+    @Test
     fun `local reset suppression serializes account push snapshot without holding mutex during remote rpc`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
         val pushStart = source.indexOf("suspend fun pushToRemote()")
