@@ -108,18 +108,19 @@ class AccountConfigSyncContractTest {
     @Test
     fun `local account reset suppresses pending account config pushes`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val suppressionStart = source.indexOf("suspend fun runWithLocalResetPushSuppressed")
         val resetStart = source.indexOf("suspend fun resetLocalAccountConfigToDefaults()")
-        val suppressionStart = source.indexOf("suspend fun runWithLocalResetPushSuppressed", startIndex = resetStart)
-        val nextFunction = source.indexOf("private fun hasLiveFullAccountSession", startIndex = suppressionStart)
-        val resetAndSuppressionBody = source.substring(resetStart, nextFunction)
+        val resetEnd = source.indexOf("private fun hasLiveFullAccountSession", startIndex = resetStart)
+        val suppressionBody = source.substring(suppressionStart, resetStart)
+        val resetBody = source.substring(resetStart, resetEnd)
 
-        assertTrue(resetAndSuppressionBody.contains("runWithLocalResetPushSuppressed {"))
-        assertTrue(resetAndSuppressionBody.contains("pushJob?.cancel()"))
-        assertTrue(resetAndSuppressionBody.contains("pushJob = null"))
-        assertTrue(resetAndSuppressionBody.contains("isApplyingRemote = true"))
-        assertTrue(resetAndSuppressionBody.contains("pendingChangedPaths.clear()"))
-        assertTrue(resetAndSuppressionBody.contains("pendingChangedPathsGeneration += 1L"))
-        assertTrue(resetAndSuppressionBody.contains("isApplyingRemote = false"))
+        assertTrue(resetBody.contains("runWithLocalResetPushSuppressed {"))
+        assertTrue(suppressionBody.contains("pushJob?.cancel()"))
+        assertTrue(suppressionBody.contains("pushJob = null"))
+        assertTrue(suppressionBody.contains("isApplyingRemote = true"))
+        assertTrue(suppressionBody.contains("pendingChangedPaths.clear()"))
+        assertTrue(suppressionBody.contains("pendingChangedPathsGeneration += 1L"))
+        assertTrue(suppressionBody.contains("isApplyingRemote = false"))
     }
 
     @Test
