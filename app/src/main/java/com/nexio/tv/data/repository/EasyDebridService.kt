@@ -80,6 +80,9 @@ class EasyDebridService @Inject constructor(
         }.getOrNull()
         val body = response?.body()
         val userId = body?.id?.trim().orEmpty()
+        if (easyDebridSettingsDataStore.settings.first().apiKey.trim() != apiKey) {
+            return
+        }
         if (response?.isSuccessful == true && userId.isNotBlank()) {
             _accountState.value = EasyDebridAccountState(
                 apiKey = apiKey,

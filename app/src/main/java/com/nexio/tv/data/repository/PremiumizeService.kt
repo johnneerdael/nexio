@@ -73,6 +73,9 @@ class PremiumizeService @Inject constructor(
 
         val response = runCatching { premiumizeApi.getAccountInfo(apiKey) }.getOrNull()
         val body = response?.body()
+        if (premiumizeSettingsDataStore.settings.first().apiKey.trim() != apiKey) {
+            return
+        }
         if (response?.isSuccessful == true && body?.status?.equals("success", ignoreCase = true) == true) {
             _accountState.value = PremiumizeAccountState(
                 apiKey = apiKey,

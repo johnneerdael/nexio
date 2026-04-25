@@ -78,6 +78,9 @@ class TorBoxService @Inject constructor(
             torBoxApi.getCurrentUser(authorization = "Bearer $apiKey")
         }.getOrNull()
         val body = response?.body()
+        if (torBoxSettingsDataStore.settings.first().apiKey.trim() != apiKey) {
+            return
+        }
         if (response?.isSuccessful == true && body?.success != false) {
             _accountState.value = TorBoxAccountState(
                 apiKey = apiKey,
