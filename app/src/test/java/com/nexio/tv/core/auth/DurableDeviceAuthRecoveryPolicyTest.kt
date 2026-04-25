@@ -95,6 +95,20 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `status check transport failures keep durable auth state`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val methodStart = source.indexOf("private suspend fun validateDurableCredentialStillActive()")
+        val methodEnd = source.indexOf("private suspend fun activateDurableDeviceCredential", startIndex = methodStart)
+        val methodBody = source.substring(methodStart, methodEnd)
+
+        assertTrue(methodBody.contains("catch (e: AuthoritativeDurableCredentialRejectionException)"))
+        assertTrue(methodBody.contains("DurableCredentialRemoteStatus.REVOKED"))
+        assertTrue(methodBody.contains("catch (e: Exception)"))
+        assertTrue(methodBody.contains("DurableCredentialRemoteStatus.UNKNOWN"))
+        assertTrue(methodBody.indexOf("catch (e: Exception)") > methodBody.indexOf("catch (e: AuthoritativeDurableCredentialRejectionException)"))
+    }
+
+    @Test
     fun `authoritative durable rejection disables live sync before local stock reset writes`() = runTest {
         val events = mutableListOf<String>()
 
