@@ -118,6 +118,55 @@ class DurableDeviceCredentialStoreTest {
         assertEquals("owner-a", snapshot.ownerUserId)
     }
 
+    @Test
+    fun `pending revoke survives active credential clear without becoming recoverable`() = runTest {
+        val fixture = storeFixture()
+        val store = fixture.store
+
+        store.save(
+            devicePublicId = "active-public-id",
+            deviceSecret = "active-secret",
+            ownerUserId = "owner-id"
+        )
+        store.savePendingRevoke(
+            devicePublicId = "active-public-id",
+            deviceSecret = "active-secret"
+        )
+        store.clear()
+
+        val active = store.snapshot()
+        val pending = store.pendingRevokeSnapshot()
+
+        assertFalse(active.isComplete)
+        assertEquals("active-public-id", pending.devicePublicId)
+        assertEquals("active-secret", pending.deviceSecret)
+        assertTrue(pending.isComplete)
+    }
+
+    @Test
+    fun `clear pending revoke removes only pending revoke data`() = runTest {
+        val fixture = storeFixture()
+        val store = fixture.store
+
+        store.save(
+            devicePublicId = "active-public-id",
+            deviceSecret = "active-secret",
+            ownerUserId = "owner-id"
+        )
+        store.savePendingRevoke(
+            devicePublicId = "pending-public-id",
+            deviceSecret = "pending-secret"
+        )
+        store.clearPendingRevoke()
+
+        val active = store.snapshot()
+        val pending = store.pendingRevokeSnapshot()
+
+        assertTrue(active.isComplete)
+        assertEquals("active-public-id", active.devicePublicId)
+        assertFalse(pending.isComplete)
+    }
+
     private fun storeFixture(): StoreFixture {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val file = File(context.filesDir, "test-durable-${UUID.randomUUID()}.preferences_pb")

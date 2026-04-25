@@ -39,6 +39,14 @@ data class DurableDeviceCredentialSnapshot(
         get() = !devicePublicId.isNullOrBlank() && !deviceSecret.isNullOrBlank()
 }
 
+data class PendingDurableCredentialRevokeSnapshot(
+    val devicePublicId: String? = null,
+    val deviceSecret: String? = null
+) {
+    val isComplete: Boolean
+        get() = !devicePublicId.isNullOrBlank() && !deviceSecret.isNullOrBlank()
+}
+
 internal interface DurableDeviceSecretProtector {
     fun encrypt(plaintext: String): String
     fun decrypt(ciphertext: String): String?
@@ -102,6 +110,8 @@ class DurableDeviceCredentialStore internal constructor(
     private val devicePublicIdKey = stringPreferencesKey("device_public_id")
     private val deviceSecretKey = stringPreferencesKey("device_secret")
     private val ownerUserIdKey = stringPreferencesKey("owner_user_id")
+    private val pendingRevokeDevicePublicIdKey = stringPreferencesKey("pending_revoke_device_public_id")
+    private val pendingRevokeDeviceSecretKey = stringPreferencesKey("pending_revoke_device_secret")
 
     suspend fun snapshot(): DurableDeviceCredentialSnapshot {
         val prefs = dataStore.data.first()
@@ -125,6 +135,25 @@ class DurableDeviceCredentialStore internal constructor(
         )
     }
 
+    suspend fun pendingRevokeSnapshot(): PendingDurableCredentialRevokeSnapshot {
+        val prefs = dataStore.data.first()
+        val rawSecret = prefs[pendingRevokeDeviceSecretKey]
+        val secret = rawSecret?.let { stored ->
+            runCatching { secretProtector.decrypt(stored) }.getOrNull()
+        }
+
+        if (rawSecret != null && secret == null) {
+            dataStore.edit { mutablePrefs ->
+                mutablePrefs.remove(pendingRevokeDeviceSecretKey)
+            }
+        }
+
+        return PendingDurableCredentialRevokeSnapshot(
+            devicePublicId = prefs[pendingRevokeDevicePublicIdKey]?.trim()?.takeIf { it.isNotBlank() },
+            deviceSecret = secret
+        )
+    }
+
     suspend fun save(devicePublicId: String, deviceSecret: String, ownerUserId: String? = null) {
         val normalizedPublicId = devicePublicId.trim()
         val normalizedSecret = deviceSecret.trim()
@@ -145,6 +174,27 @@ class DurableDeviceCredentialStore internal constructor(
             } else {
                 prefs[ownerUserIdKey] = normalizedOwnerUserId
             }
+        }
+    }
+
+    suspend fun savePendingRevoke(devicePublicId: String, deviceSecret: String) {
+        val normalizedPublicId = devicePublicId.trim()
+        val normalizedSecret = deviceSecret.trim()
+        dataStore.edit { prefs ->
+            if (normalizedPublicId.isBlank() || normalizedSecret.isBlank()) {
+                prefs.remove(pendingRevokeDevicePublicIdKey)
+                prefs.remove(pendingRevokeDeviceSecretKey)
+            } else {
+                prefs[pendingRevokeDevicePublicIdKey] = normalizedPublicId
+                prefs[pendingRevokeDeviceSecretKey] = secretProtector.encrypt(normalizedSecret)
+            }
+        }
+    }
+
+    suspend fun clearPendingRevoke() {
+        dataStore.edit { prefs ->
+            prefs.remove(pendingRevokeDevicePublicIdKey)
+            prefs.remove(pendingRevokeDeviceSecretKey)
         }
     }
 
