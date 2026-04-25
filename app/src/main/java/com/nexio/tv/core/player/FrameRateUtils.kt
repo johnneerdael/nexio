@@ -457,9 +457,13 @@ object FrameRateUtils {
         headers: Map<String, String> = emptyMap()
     ): FrameRateDetection? {
         return runCatching {
-            parseFfmpegStreamMetadata(
-                FfmpegStreamMetadataProbe.probeBlocking(sourceUrl, headers)
-            )
+            PlayProbeCache.get(sourceUrl, headers)?.let { cached ->
+                Log.i(TAG, "FFmpeg frame rate probe reused per-play metadata streams=${cached.streams.size}")
+                return@runCatching parseFfmpegStreamMetadata(cached)
+            }
+            val metadata = FfmpegStreamMetadataProbe.probeBlocking(sourceUrl, headers)
+            if (metadata != null) PlayProbeCache.put(sourceUrl, headers, metadata)
+            parseFfmpegStreamMetadata(metadata)
         }.getOrElse { error ->
             Log.w(TAG, "FFmpeg frame rate probe failed: ${error.message}")
             null

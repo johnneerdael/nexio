@@ -507,6 +507,11 @@ class FfmpegDolbyVisionProfileProbe(
             } else {
                 FfmpegStreamMetadataProbe.parse(backend.probeStreamMetadataJson(url, headerBlob))
             }
+            // Stash for downstream play-time consumers (ASS/SSA pipeline init, AFR
+            // detection) so the same per-play probe serves all three sites.
+            if (metadata != null) {
+                PlayProbeCache.put(url = url, headers = headers, metadata = metadata)
+            }
             val parsedResult = parseStreamMetadataProbeResult(
                 metadata = metadata,
                 device = deviceSnapshot

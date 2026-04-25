@@ -49,6 +49,7 @@ import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
+import com.nexio.tv.core.player.PlayProbeCache
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.core.player.queryDisplayHdrCapabilities
 import com.nexio.tv.core.player.resolveDolbyVisionBaseLayerDecision
@@ -264,11 +265,19 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             ) {
                 val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(currentAddonBaseUrl)
-                val metadata = withTimeoutOrNull(ASS_SSA_STARTUP_PROBE_TIMEOUT_MS) {
+                val cached = PlayProbeCache.get(url, headers)
+                val metadata = cached ?: withTimeoutOrNull(ASS_SSA_STARTUP_PROBE_TIMEOUT_MS) {
                     FfmpegStreamMetadataProbe.probe(
                         url = url,
                         headers = headers,
                         addonHost = addonHost
+                    )?.also { PlayProbeCache.put(url, headers, it) }
+                }
+                if (cached != null) {
+                    Log.i(
+                        PlayerRuntimeController.TAG,
+                        "ASS_SSA_RENDER: reusing per-play metadata probe " +
+                            "host=${url.safeHost()} streams=${cached.streams.size}"
                     )
                 }
                 if (metadata?.hasEmbeddedAssSsaSubtitleStream == true) {
