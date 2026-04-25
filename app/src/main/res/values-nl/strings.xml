@@ -883,12 +883,6 @@
     <string name="audio_iec_packer_dtshd_passthrough_sub">Sta toe dat DTS-HD MA-, HRA- en DTS:X-familiestreams het Kodi IEC-packerpad gebruiken.</string>
     <string name="audio_iec_packer_dtshd_core_fallback_title">DTS-HD kernterugval</string>
     <string name="audio_iec_packer_dtshd_core_fallback_sub">Wanneer DTS-HD-passthrough is uitgeschakeld, terugvallen op DTS-kernpassthrough indien ondersteund.</string>
-    <string name="audio_dv5_tonemap_title">DV5 - Tonemapping naar SDR</string>
-    <string name="audio_dv5_tonemap_sub">Dwingt waarschijnlijke DV5-weergave via het software Dolby Vision-pad en maakt de uitvoer tone-mapped naar SDR wanneer apparaatweergave instabiel is.</string>
-    <string name="audio_dv5_hw_tonemap_title">DV5 - Hardware-decodering tonemapping (Experimenteel)</string>
-    <string name="audio_dv5_hw_tonemap_sub">Behoudt hardwaredecoding op NVIDIA Shield en leest Dolby Vision RPU-metadata op tijdstempel voor experimentele DV5-naar-SDR-tonemapvalidatie.</string>
-    <string name="audio_dv5_hw_tonemap_cpu_fallback_title">DV5 - Shield CPU-terugvalpad</string>
-    <string name="audio_dv5_hw_tonemap_cpu_fallback_sub">Gebruikt CPU-leesbare YUV_420_888-invoer voor het hardware DV5-tonemappad. Aanbevolen voor Shield-apparaten waarbij Vulkan AHardwareBuffer-import VK_FORMAT_UNDEFINED retourneert.</string>
     <string name="streams_service_wrap_title">Service Wrap</string>
     <string name="streams_service_wrap_sub">Los hash-gebaseerde addon-resultaten op via uw Real-Debrid- en Premiumize-accounts. Alleen gecachte wrapped streams worden weergegeven.</string>
     <string name="layout_section_trailer_screensaver">Trailer-screensaver</string>

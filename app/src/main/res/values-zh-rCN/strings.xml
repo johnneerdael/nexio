@@ -877,12 +877,6 @@
     <string name="audio_iec_packer_dtshd_passthrough_sub">允许 DTS-HD MA、HRA 和 DTS:X 系列流使用 Kodi IEC 打包器路径。</string>
     <string name="audio_iec_packer_dtshd_core_fallback_title">DTS-HD 核心回退</string>
     <string name="audio_iec_packer_dtshd_core_fallback_sub">当 DTS-HD 直通禁用时，如支持则回退到 DTS 核心直通。</string>
-    <string name="audio_dv5_tonemap_title">DV5 - 色调映射至 SDR</string>
-    <string name="audio_dv5_tonemap_sub">强制将可能的 DV5 播放通过软件 Dolby Vision 路径，并在设备播放不稳定时将输出色调映射至 SDR。</string>
-    <string name="audio_dv5_hw_tonemap_title">DV5 - 硬件解码色调映射（实验性）</string>
-    <string name="audio_dv5_hw_tonemap_sub">在 NVIDIA Shield 上保持硬件解码，并通过时间戳读取 Dolby Vision RPU 元数据，用于实验性 DV5 到 SDR 色调映射验证。</string>
-    <string name="audio_dv5_hw_tonemap_cpu_fallback_title">DV5 - Shield CPU 回读回退</string>
-    <string name="audio_dv5_hw_tonemap_cpu_fallback_sub">使用 CPU 可读的 YUV_420_888 输入用于硬件 DV5 色调映射路径。推荐用于 Vulkan AHardwareBuffer 导入返回 VK_FORMAT_UNDEFINED 的 Shield 设备。</string>
     <string name="streams_service_wrap_title">服务封装</string>
     <string name="streams_service_wrap_sub">通过您的 Real-Debrid 和 Premiumize 账户解析基于哈希的插件结果。仅显示已缓存的封装流。</string>
     <string name="layout_section_trailer_screensaver">预告片屏保</string>

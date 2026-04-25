@@ -877,12 +877,6 @@
     <string name="audio_iec_packer_dtshd_passthrough_sub">DTS-HD MA-, HRA- und DTS:X-Familie-Streams erlauben, den Kodi IEC-Packer-Pfad zu verwenden.</string>
     <string name="audio_iec_packer_dtshd_core_fallback_title">DTS-HD Core-Fallback</string>
     <string name="audio_iec_packer_dtshd_core_fallback_sub">Wenn DTS-HD-Passthrough deaktiviert ist, auf DTS-Core-Passthrough zurückfallen, falls unterstützt.</string>
-    <string name="audio_dv5_tonemap_title">DV5 - Tone-Map zu SDR</string>
-    <string name="audio_dv5_tonemap_sub">Erzwingt wahrscheinliche DV5-Wiedergabe über den Software-Dolby-Vision-Pfad und tone-mapped die Ausgabe zu SDR, wenn die Gerätewiedergabe instabil ist.</string>
-    <string name="audio_dv5_hw_tonemap_title">DV5 - Hardware-Dekodierungs-Tone-Map (Experimentell)</string>
-    <string name="audio_dv5_hw_tonemap_sub">Behält Hardware-Dekodierung auf NVIDIA Shield bei und greift auf Dolby Vision RPU-Metadaten per Zeitstempel für experimentelle DV5-zu-SDR-Tone-Map-Validierung zu.</string>
-    <string name="audio_dv5_hw_tonemap_cpu_fallback_title">DV5 - Shield CPU-Readback-Fallback</string>
-    <string name="audio_dv5_hw_tonemap_cpu_fallback_sub">Verwendet CPU-lesbaren YUV_420_888-Eingang für den Hardware-DV5-Tone-Map-Pfad. Empfohlen für Shield-Geräte, bei denen Vulkan AHardwareBuffer-Import VK_FORMAT_UNDEFINED zurückgibt.</string>
     <string name="streams_service_wrap_title">Service Wrap</string>
     <string name="streams_service_wrap_sub">Hash-basierte Addon-Ergebnisse über Ihre Real-Debrid- und Premiumize-Konten auflösen. Es werden nur gecachte Wrapped-Streams angezeigt.</string>
     <string name="layout_section_trailer_screensaver">Trailer-Bildschirmschoner</string>
