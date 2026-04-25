@@ -60,6 +60,19 @@ object CometProxyUrlResolver {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Private OkHttp client used for the resolver's own redirect probes.
+     *
+     * **Invariant:** this client must NOT share an interceptor stack with the
+     * playback `OkHttpClient` provided by `NetworkModule`. The playback client
+     * has [com.nexio.tv.core.player.auth.AuthRecoveryInterceptor] installed,
+     * which calls [recoverProxyBlocking]. If this client were the playback
+     * client, the leader's `runBlocking` would park the OkHttp dispatcher
+     * thread while the resolver's outbound call recursively requeued onto
+     * the same dispatcher — an immediate self-deadlock. Keep this client
+     * standalone (no shared dispatcher, no shared interceptors) under all
+     * circumstances.
+     */
     private val clientHolder: Lazy<OkHttpClient> = lazy {
         OkHttpClient.Builder()
             .followRedirects(false)
@@ -263,23 +276,32 @@ object CometProxyUrlResolver {
      *
      * Semantics:
      * - **Leader path:** the first concurrent caller drops the forward cache
-     *   entry, registers an in-flight deferred, runs [fetchLocation], and
-     *   write-throughs the new resolution. Returns the fresh URL.
+     *   entry (capturing the prior resolvedUrl so its reverseCache entry can
+     *   be cleaned up at write-through), registers an in-flight deferred,
+     *   runs [fetchLocation], and write-throughs the new resolution. Returns
+     *   the fresh URL.
      * - **Peer path:** subsequent callers within the same recovery window
      *   discover the in-flight deferred and await it (subject to
      *   [REQUEST_TIMEOUT_MS]). They get the leader's result without issuing
      *   a second network call.
      * - **Debounced path:** if [INVALIDATE_DEBOUNCE_MS] has not elapsed since
      *   the last leader for this proxy AND no in-flight peer is running, the
-     *   call returns the current cached resolution (if any) — which will
-     *   be the freshly-recovered URL from the recent leader, allowing
-     *   stragglers to pick up the recovery without re-running it.
+     *   call returns whatever [cache] currently holds for the proxy. This is
+     *   typically the freshly-recovered URL from the recent leader (so
+     *   stragglers pick up the recovery without re-running it), but may be
+     *   `null` if the cached entry has expired naturally (50-min TTL) and
+     *   the next leader has not yet been allowed by the debounce. Callers
+     *   handle a `null` return as "give up" — the next request after the
+     *   debounce window elapses will lead a fresh resolve.
      *
-     * The reverseCache entry for the *previous* resolved URL is intentionally
-     * retained during the recovery window so peers can still resolve it via
-     * [proxyUrlFor]. It will be naturally dropped once the LRU bound forces
-     * eviction, or kept indefinitely as a benign duplicate pointing at the
-     * same proxy.
+     * The reverseCache entry for the *previous* resolved URL is retained from
+     * the moment the leader removes the forward cache entry until the leader
+     * write-throughs the new resolution. Peers arriving in that window can
+     * still find the proxy via [proxyUrlFor] (which falls back to
+     * [inFlight] membership). Once the leader publishes the new resolution,
+     * the prior reverseCache entry is dropped to keep the map bounded —
+     * without this cleanup, every successful recovery would leak one
+     * reverseCache entry for the lifetime of the process.
      */
     fun recoverProxyBlocking(
         proxyUrl: String,
@@ -290,6 +312,7 @@ object CometProxyUrlResolver {
 
         val deferred: CompletableDeferred<String?>
         val isLeader: Boolean
+        var prevResolvedUrl: String? = null
         synchronized(lock) {
             val existing = inFlight[proxyUrl]
             if (existing != null) {
@@ -304,8 +327,11 @@ object CometProxyUrlResolver {
                 deferred = CompletableDeferred()
                 inFlight[proxyUrl] = deferred
                 lastInvalidatedAtMs[proxyUrl] = now
-                cache.remove(proxyUrl)
-                // Note: reverseCache entries are intentionally retained.
+                prevResolvedUrl = cache.remove(proxyUrl)?.resolvedUrl
+                // Note: the prior reverseCache entry is intentionally retained
+                // during the resolve window so concurrent peers can still
+                // discover the proxy via proxyUrlFor()'s in-flight fallback.
+                // It is dropped at write-through below.
                 isLeader = true
             }
         }
@@ -326,6 +352,13 @@ object CometProxyUrlResolver {
 
         synchronized(lock) {
             inFlight.remove(proxyUrl)
+            // Drop the prior reverseCache entry now that the recovery window
+            // is closing. Skip if the new resolution happens to be identical
+            // to the prior one (unlikely but defensive — would leave the
+            // reverseCache without a route to the proxy).
+            prevResolvedUrl?.let { prior ->
+                if (prior != result) reverseCache.remove(prior)
+            }
             if (result != null) {
                 cache[proxyUrl] = CacheEntry(
                     resolvedUrl = result,

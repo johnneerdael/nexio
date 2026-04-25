@@ -13,16 +13,33 @@ import java.util.concurrent.atomic.AtomicInteger
  * the upstream debrid CDN returns 401/403/410. Recovery flow:
  *
  *  1. Detect the failing request URL is a previously-resolved proxy URL via
- *     [CometProxyUrlResolver.proxyUrlFor].
- *  2. Call [CometProxyUrlResolver.invalidate] (debounced inside the resolver)
- *     and re-issue [CometProxyUrlResolver.resolveBlocking] to mint a fresh
- *     CDN URL.
- *  3. Rewrite the in-flight request's URL (preserving headers and Range) and
- *     reissue once.
+ *     [CometProxyUrlResolver.proxyUrlFor]. (The proxyUrlFor lookup is
+ *     tolerant of the in-flight recovery window — peers arriving while a
+ *     leader is mid-resolve still find the proxy.)
+ *  2. Call [CometProxyUrlResolver.recoverProxyBlocking], a coalescing
+ *     leader/peer/debounced state machine: the first concurrent caller leads
+ *     a single network resolve; later callers within the same window await
+ *     the leader's `CompletableDeferred`; debounced stragglers receive
+ *     whatever the leader most recently cached. This replaces an earlier
+ *     invalidate-then-resolve sequence which raced concurrent failing
+ *     requests into NO_PROXY_KNOWN / RATE_LIMITED branches under burst
+ *     failures (the parallel-range data source can have up to 12 concurrent
+ *     connections per host).
+ *  3. Rewrite the in-flight request's URL (preserving headers and Range)
+ *     and reissue once.
+ *  4. On success, register `staleUrl → freshUrl` in [staleUrlForwards] so
+ *     subsequent requests by the same caller (e.g. a long-running disk
+ *     spool writer that loops on the same source URL) are silently
+ *     redirected to the fresh URL without burning another recovery attempt.
+ *     Chain entries pointing at the now-stale URL are promoted in the same
+ *     critical section so chains stay rooted at a live URL.
  *
- * The interceptor is bounded by [maxAttemptsPerSession] (default 3 across the
- * whole interceptor instance) to prevent thrash when a debrid host is broadly
- * down. All outcomes go through [AuthRecoveryTracker].
+ * The interceptor is bounded by [maxAttemptsPerSession] (default 3) to
+ * prevent thrash when a debrid host is broadly down, and by
+ * [maxForwardEntries] (default 64, LRU) to bound the stale-URL map. Both
+ * are reset by [resetSessionState], called from
+ * [com.nexio.tv.ui.screens.player.PlayerRuntimeController] at stream start.
+ * All outcomes go through [AuthRecoveryTracker].
  */
 class AuthRecoveryInterceptor(
     private val maxAttemptsPerSession: Int = 3,
