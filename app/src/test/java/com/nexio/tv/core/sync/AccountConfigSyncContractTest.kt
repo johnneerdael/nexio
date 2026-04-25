@@ -108,6 +108,9 @@ class AccountConfigSyncContractTest {
     @Test
     fun `local account reset suppresses pending account config pushes`() {
         val source = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt").readText()
+        val premiumizeSource = File("app/src/main/java/com/nexio/tv/data/repository/PremiumizeService.kt").readText()
+        val torBoxSource = File("app/src/main/java/com/nexio/tv/data/repository/TorBoxService.kt").readText()
+        val easyDebridSource = File("app/src/main/java/com/nexio/tv/data/repository/EasyDebridService.kt").readText()
         val suppressionStart = source.indexOf("suspend fun runWithLocalResetPushSuppressed")
         val resetStart = source.indexOf("suspend fun resetLocalAccountConfigToDefaults()")
         val suppressionEnd = source.indexOf("suspend fun resetLocalAccountConfigToDefaults()", startIndex = suppressionStart)
@@ -123,9 +126,9 @@ class AccountConfigSyncContractTest {
         assertTrue(source.contains("premiumizeService.clearLocalAccountState()"))
         assertTrue(source.contains("torBoxService.clearLocalAccountState()"))
         assertTrue(source.contains("easyDebridService.clearLocalAccountState()"))
-        assertTrue(source.contains("premiumizeSettingsDataStore.settings.first().apiKey.trim() != apiKey"))
-        assertTrue(source.contains("torBoxSettingsDataStore.settings.first().apiKey.trim() != apiKey"))
-        assertTrue(source.contains("easyDebridSettingsDataStore.settings.first().apiKey.trim() != apiKey"))
+        assertTrue(premiumizeSource.contains("premiumizeSettingsDataStore.settings.first().apiKey.trim() != apiKey"))
+        assertTrue(torBoxSource.contains("torBoxSettingsDataStore.settings.first().apiKey.trim() != apiKey"))
+        assertTrue(easyDebridSource.contains("easyDebridSettingsDataStore.settings.first().apiKey.trim() != apiKey"))
         assertTrue(suppressionBody.contains("applyingRemoteMutex.withLock"))
         assertTrue(suppressionBody.contains("pushJob?.cancel()"))
         assertTrue(suppressionBody.contains("pushJob = null"))
