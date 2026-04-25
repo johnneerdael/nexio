@@ -30,6 +30,7 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
+import com.nexio.tv.core.di.NEXIO_PLAYBACK_USER_AGENT
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
@@ -703,7 +704,7 @@ internal class PlayerMediaSourceFactory(
         return OkHttpDataSource.Factory(playbackOkHttpClient).apply {
             setDefaultRequestProperties(headers)
             if (!headers.containsKey("User-Agent")) {
-                setUserAgent(DEFAULT_USER_AGENT)
+                setUserAgent(NEXIO_PLAYBACK_USER_AGENT)
             }
         }
     }
@@ -1269,9 +1270,6 @@ internal class PlayerMediaSourceFactory(
         private const val LIVE_CACHE_RECONFIGURE_MIN_DELTA_BYTES = 64L * 1024L * 1024L
         private const val SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB = 24
         private const val DISK_SPOOL_STARTUP_PREWARM_TIMEOUT_MS = 120_000L
-        private const val DEFAULT_USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         @Volatile private var sharedSimpleCache: SimpleCache? = null
         @Volatile private var cacheDatabaseProvider: DatabaseProvider? = null
         @Volatile private var configuredVodCacheMaxBytes: Long = -1L
