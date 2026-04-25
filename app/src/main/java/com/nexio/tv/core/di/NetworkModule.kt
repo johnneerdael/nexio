@@ -15,6 +15,7 @@ import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.OkHttpImdbSearchService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransport
+import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
 import com.nexio.tv.data.repository.benchmark.DirectDiscardBenchmarkTransport
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
@@ -50,6 +51,18 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Named
 import javax.inject.Singleton
+
+/**
+ * Single source of truth for the User-Agent presented to debrid CDNs by every
+ * playback HTTP path (ExoPlayer's OkHttpDataSource, DiskSpoolWriter, the
+ * parallel range data source, the warm-ahead loop, and the resolver's redirect
+ * probe). UA divergence between paths has been observed to trigger mid-stream
+ * 401s on Real-Debrid edge nodes when the resolved download token is bound to
+ * the original requester's UA.
+ */
+internal const val NEXIO_PLAYBACK_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 private object TraktHttpTrace {
     private val requestCounter = AtomicLong(0L)
@@ -188,6 +201,14 @@ object NetworkModule {
                 }
                 response
             }
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val request = if (original.header("User-Agent") == null) {
+                    original.newBuilder().header("User-Agent", NEXIO_PLAYBACK_USER_AGENT).build()
+                } else original
+                chain.proceed(request)
+            }
+            .addInterceptor(AuthRecoveryInterceptor())
             .build()
     }
 
