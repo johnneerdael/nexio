@@ -440,14 +440,49 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
-    fun `authenticated session publication validates durable credential status`() {
+    fun `authenticated session publication validates durable credential status before current-user publish`() {
         val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
-        val authenticatedBranchStart = source.indexOf("is SessionStatus.Authenticated ->")
-        val notAuthenticatedBranchStart = source.indexOf("is SessionStatus.NotAuthenticated ->")
-        val authenticatedBranch = source.substring(authenticatedBranchStart, notAuthenticatedBranchStart)
+        val currentUserBranchStart = source.indexOf("if (user != null) {")
+        val recoveredUserBranchStart = source.indexOf("val recoveredUser = authenticatedUserFromAccessToken")
+        val currentUserBranch = source.substring(currentUserBranchStart, recoveredUserBranchStart)
 
-        assertTrue(authenticatedBranch.contains("enforceDurableCredentialStillActive()"))
-        assertTrue(authenticatedBranch.indexOf("enforceDurableCredentialStillActive()") < authenticatedBranch.indexOf("publishAuthenticatedUser("))
+        assertTrue(currentUserBranch.contains("enforceDurableCredentialStillActive()"))
+        assertTrue(currentUserBranch.indexOf("enforceDurableCredentialStillActive()") < currentUserBranch.indexOf("publishAuthenticatedUser("))
+    }
+
+    @Test
+    fun `authenticated session publication validates durable credential status before access-token fallback publish`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val recoveredUserBranchStart = source.indexOf("val recoveredUser = authenticatedUserFromAccessToken")
+        val notAuthenticatedBranchStart = source.indexOf("is SessionStatus.NotAuthenticated ->")
+        val recoveredUserBranch = source.substring(recoveredUserBranchStart, notAuthenticatedBranchStart)
+
+        assertTrue(recoveredUserBranch.contains("enforceDurableCredentialStillActive()"))
+        assertTrue(recoveredUserBranch.indexOf("enforceDurableCredentialStillActive()") < recoveredUserBranch.indexOf("publishAuthenticatedUser("))
+    }
+
+    @Test
+    fun `silent session recovery validates durable credential status before early durable branch`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val recoveryStart = source.indexOf("private suspend fun attemptSilentSessionRecovery")
+        val recoveryEnd = source.indexOf("private fun transitionToSessionLost")
+        val recoveryBody = source.substring(recoveryStart, recoveryEnd)
+        val earlyBreak = recoveryBody.indexOf("if (shouldAttemptDurableAfterRefreshRejection) break")
+
+        assertTrue(recoveryBody.contains("enforceDurableCredentialStillActive()"))
+        assertTrue(recoveryBody.indexOf("enforceDurableCredentialStillActive()") < earlyBreak)
+        assertTrue(recoveryBody.indexOf("enforceDurableCredentialStillActive()") < recoveryBody.indexOf("restoreSupabaseSessionFromDurableCredential()"))
+    }
+
+    @Test
+    fun `silent session recovery rethrows cancellation before broad exception handling`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val recoveryStart = source.indexOf("private suspend fun attemptSilentSessionRecovery")
+        val recoveryEnd = source.indexOf("private fun transitionToSessionLost")
+        val recoveryBody = source.substring(recoveryStart, recoveryEnd)
+
+        assertTrue(recoveryBody.contains("catch (e: CancellationException)"))
+        assertTrue(recoveryBody.indexOf("catch (e: CancellationException)") < recoveryBody.indexOf("catch (e: Exception)"))
     }
 
     @Test

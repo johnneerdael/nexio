@@ -117,6 +117,11 @@ class AuthManager @Inject constructor(
                         } else {
                             val recoveredUser = authenticatedUserFromAccessToken(auth.currentAccessTokenOrNull())
                             if (recoveredUser != null) {
+                                val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                                if (hasDurableCredential) {
+                                    enforceDurableCredentialStillActive()
+                                    if (_authState.value is AuthState.SessionLost) return@collect
+                                }
                                 publishAuthenticatedUser(recoveredUser.userId, recoveredUser.email)
                             } else if (isReturningUser()) {
                                 // Session says Authenticated but user hasn't been
@@ -242,6 +247,11 @@ class AuthManager @Inject constructor(
         // init, user, and session. If the user re-appears, Supabase will emit
         // Authenticated on its own and we'll pick it up in the collector.
         var shouldAttemptDurableAfterRefreshRejection = ignoreCachedRefreshToken
+        var credential = durableDeviceCredentialStore.snapshot()
+        if (credential.isComplete) {
+            enforceDurableCredentialStillActive()
+            if (_authState.value is AuthState.SessionLost) return
+        }
         for (attempt in 0 until 3) {
             if (shouldAttemptDurableAfterRefreshRejection) break
             delay(500L * (attempt + 1))
@@ -249,7 +259,7 @@ class AuthManager @Inject constructor(
                 auth.awaitInitialization()
                 if (auth.currentUserOrNull() != null) return
                 val session = auth.currentSessionOrNull()
-                val credential = durableDeviceCredentialStore.snapshot()
+                credential = durableDeviceCredentialStore.snapshot()
                 if (credential.isComplete) {
                     enforceDurableCredentialStillActive()
                     if (_authState.value is AuthState.SessionLost) return
@@ -268,6 +278,8 @@ class AuthManager @Inject constructor(
                     }
                     JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> Unit
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 when (
                     resolveRefreshFailureAction(
@@ -295,10 +307,15 @@ class AuthManager @Inject constructor(
                 }
             }
         }
+        credential = durableDeviceCredentialStore.snapshot()
+        if (credential.isComplete) {
+            enforceDurableCredentialStillActive()
+            if (_authState.value is AuthState.SessionLost) return
+        }
         if (
             shouldAttemptDurableSessionRecovery(
                 hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
-                credential = durableDeviceCredentialStore.snapshot(),
+                credential = credential,
                 ignoreCachedRefreshToken = shouldAttemptDurableAfterRefreshRejection
             )
         ) {
