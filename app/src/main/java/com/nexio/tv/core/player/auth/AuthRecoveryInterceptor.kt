@@ -32,6 +32,22 @@ class AuthRecoveryInterceptor(
     private val attemptsRemaining = AtomicInteger(maxAttemptsPerSession)
 
     /**
+     * Reset per-session state at the start of a new playback session: the
+     * recovery attempt budget is replenished and any [staleUrlForwards] from a
+     * prior session are cleared. The interceptor itself is a process-lifetime
+     * singleton (it lives on the playback [okhttp3.OkHttpClient]), but its
+     * recovery budget and URL-rewrite map are conceptually per-session — without
+     * this call the budget silently exhausts after a few stream switches.
+     *
+     * Wired into [com.nexio.tv.ui.screens.player.PlayerRuntimeController]'s
+     * stream-start path next to [EgressIpFingerprint.captureBaseline].
+     */
+    fun resetSessionState() {
+        attemptsRemaining.set(maxAttemptsPerSession)
+        synchronized(forwardLock) { staleUrlForwards.clear() }
+    }
+
+    /**
      * Stale → fresh URL forwards established by past recoveries. After we
      * recover `oldUrl → newUrl`, any later request to `oldUrl` is
      * transparently rewritten to `newUrl` before being dispatched. Without

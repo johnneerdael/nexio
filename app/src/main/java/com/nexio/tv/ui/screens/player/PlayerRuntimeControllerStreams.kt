@@ -446,6 +446,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
 
     _exoPlayer?.let { player ->
         val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
+        authRecoveryInterceptor.resetSessionState()
         scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
         scope.launch {
             try {
@@ -785,6 +786,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     _exoPlayer?.let { player ->
         val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
+        authRecoveryInterceptor.resetSessionState()
         scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
         scope.launch {
             try {

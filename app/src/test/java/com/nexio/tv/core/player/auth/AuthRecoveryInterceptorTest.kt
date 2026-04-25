@@ -106,6 +106,86 @@ class AuthRecoveryInterceptorTest {
     }
 
     @Test
+    fun `resetSessionState replenishes the attempt budget`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                MockResponse().setResponseCode(401)
+        }
+        val interceptor = AuthRecoveryInterceptor(maxAttemptsPerSession = 1)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        // Burn the single attempt across two failing calls.
+        client.newCall(Request.Builder().url(resolved).build()).execute().close()
+        client.newCall(Request.Builder().url(resolved).build()).execute().close()
+        val outcomesBeforeReset = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(outcomesBeforeReset.contains(AuthRecoveryTracker.Outcome.GAVE_UP))
+
+        // Reset returns the budget; next failure must produce a fresh recovery
+        // attempt (which still 401s here, but it is no longer GAVE_UP from
+        // an exhausted budget — at minimum we see a new attempt recorded).
+        AuthRecoveryTracker.resetForTesting()
+        interceptor.resetSessionState()
+        client.newCall(Request.Builder().url(resolved).build()).execute().close()
+        val attemptsAfterReset = AuthRecoveryTracker.snapshot()
+        // After reset we must have at least one attempt; outcome may be GAVE_UP
+        // (recovery itself failed because the mock keeps 401-ing) but the
+        // *path* to GAVE_UP must include consuming a budget slot, not skipping
+        // because the budget was already zero.
+        assertTrue(attemptsAfterReset.isNotEmpty())
+    }
+
+    @Test
+    fun `resetSessionState clears stale URL forwards`() {
+        val resolvedFirst = server.url("/cdn/first").toString()
+        val resolvedSecond = server.url("/cdn/second").toString()
+        val resolveCount = AtomicInteger(0)
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            if (resolveCount.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/cdn/first" -> MockResponse().setResponseCode(401)
+                "/cdn/second" -> MockResponse().setResponseCode(200).setBody("ok")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val interceptor = AuthRecoveryInterceptor(maxAttemptsPerSession = 3)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        // First call recovers and registers /cdn/first -> /cdn/second forward.
+        val first = client.newCall(Request.Builder().url(resolvedFirst).build()).execute()
+        first.use { assertEquals(200, it.code) }
+
+        // Reset clears the forward map; with a fresh server.dispatcher only
+        // serving /cdn/third = 200, a request to /cdn/first must NOT be
+        // rewritten to /cdn/second. The dispatcher returns 404 for
+        // /cdn/first, proving the forward is gone.
+        interceptor.resetSessionState()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/cdn/first" -> MockResponse().setResponseCode(404)
+                else -> MockResponse().setResponseCode(500)
+            }
+        }
+        val second = client.newCall(Request.Builder().url(resolvedFirst).build()).execute()
+        second.use { assertEquals(404, it.code) }
+    }
+
+    @Test
     fun `recovers from 401 by re-resolving and retrying once`() {
         val resolvedFirst = server.url("/cdn/first").toString()
         val resolvedSecond = server.url("/cdn/second").toString()

@@ -52,6 +52,7 @@ class PlayerViewModel @Inject constructor(
     private val playbackActivityTracker: PlaybackActivityTracker,
     @Named("playback") private val playbackOkHttpClient: OkHttpClient,
     private val egressIpFingerprint: com.nexio.tv.core.player.auth.EgressIpFingerprint,
+    private val authRecoveryInterceptor: com.nexio.tv.core.player.auth.AuthRecoveryInterceptor,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -75,6 +76,7 @@ class PlayerViewModel @Inject constructor(
         playbackActivityTracker = playbackActivityTracker,
         playbackOkHttpClient = playbackOkHttpClient,
         egressIpFingerprint = egressIpFingerprint,
+        authRecoveryInterceptor = authRecoveryInterceptor,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

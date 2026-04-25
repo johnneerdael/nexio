@@ -68,6 +68,7 @@ class PlayerRuntimeController(
     internal val playbackActivityTracker: PlaybackActivityTracker,
     internal val playbackOkHttpClient: OkHttpClient,
     internal val egressIpFingerprint: com.nexio.tv.core.player.auth.EgressIpFingerprint,
+    internal val authRecoveryInterceptor: com.nexio.tv.core.player.auth.AuthRecoveryInterceptor,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {

@@ -182,12 +182,26 @@ object NetworkModule {
      * per host does not break RD/PM CDN behaviour; keeping it at 5 for benchmark would
      * have undersold per-host concurrency and made benchmark numbers incomparable to playback.
      */
+    /**
+     * Singleton [AuthRecoveryInterceptor] so callers (e.g.,
+     * [com.nexio.tv.ui.screens.player.PlayerRuntimeController]) can call
+     * [AuthRecoveryInterceptor.resetSessionState] at the start of each
+     * playback session. Without DI ownership the interceptor would be a
+     * process-lifetime instance with no handle to reset its budget or
+     * stale-URL forward map.
+     */
+    @Provides
+    @Singleton
+    fun provideAuthRecoveryInterceptor(): AuthRecoveryInterceptor =
+        AuthRecoveryInterceptor()
+
     @Provides
     @Singleton
     @Named("playback")
     fun providePlaybackOkHttpClient(
         @ApplicationContext context: Context,
-        @Named("playback.callTimeoutMs") callTimeoutMs: Long
+        @Named("playback.callTimeoutMs") callTimeoutMs: Long,
+        authRecoveryInterceptor: AuthRecoveryInterceptor
     ): OkHttpClient {
         // Shared dispatcher: maxRequestsPerHost=12 proved safe by locked-envelope work.
         val dispatcher = Dispatcher().apply {
@@ -226,7 +240,7 @@ object NetworkModule {
                 } else original
                 chain.proceed(request)
             }
-            .addInterceptor(AuthRecoveryInterceptor())
+            .addInterceptor(authRecoveryInterceptor)
             .build()
     }
 
