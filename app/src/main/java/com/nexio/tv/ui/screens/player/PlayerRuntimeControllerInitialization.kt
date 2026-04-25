@@ -46,6 +46,7 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
 import com.nexio.tv.core.player.CometProxyUrlResolver
+import com.nexio.tv.core.player.auth.PlaybackErrorClassifier
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
@@ -1165,9 +1166,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             retryCurrentStreamFromStartAfter416()
                             return
                         }
+                        val classification = PlaybackErrorClassifier.classify(error)
+                        val userMessage = when (classification) {
+                            is PlaybackErrorClassifier.Classification.LinkExpired,
+                            is PlaybackErrorClassifier.Classification.Forbidden -> classification.userMessage
+                            else -> detailedError
+                        }
                         _uiState.update {
                             it.copy(
-                                error = detailedError,
+                                error = userMessage,
                                 showLoadingOverlay = false,
                                 showPauseOverlay = false
                             )
