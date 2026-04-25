@@ -205,11 +205,17 @@ object FfmpegStreamMetadataProbe {
     ): ProbeTarget? {
         val originalHeaderBlob = headers.toProbeHeaderBlob()
         if (CometProxyUrlResolver.isCometProxy(url, addonHost)) {
+            // Probing the proxy URL is unsafe: addon proxies frequently answer the
+            // resolver's HEAD-style request with a 2xx body that doesn't reflect the
+            // actual file (CF-cached preview, sample, empty stub). If we can't get
+            // the real CDN URL, return null and let the caller skip the probe — the
+            // gate handles that as PROBE_FAILED and walks fallback candidates.
             val resolved = CometProxyUrlResolver.resolveBlocking(url, headers, addonHost)
-            val probeUrl = resolved?.takeIf { it.isNotBlank() } ?: url
+                ?.takeIf { it.isNotBlank() }
+                ?: return null
             return ProbeTarget(
-                url = probeUrl,
-                requestHeadersBlob = if (probeUrl != url) null else originalHeaderBlob
+                url = resolved,
+                requestHeadersBlob = if (resolved != url) null else originalHeaderBlob
             )
         }
         if (!isResolveProxyUrl(url)) {

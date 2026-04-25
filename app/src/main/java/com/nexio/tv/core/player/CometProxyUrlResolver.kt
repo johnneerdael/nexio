@@ -241,22 +241,28 @@ object CometProxyUrlResolver {
             .url(url)
             .get()
             .header("Range", "bytes=0-0")
+        val forwardedHeaderKeys = mutableListOf<String>()
         headers?.forEach { (key, value) ->
             if (!key.equals("Range", ignoreCase = true)) {
                 requestBuilder.header(key, value)
+                forwardedHeaderKeys += key
             }
         }
         clientHolder.value.newCall(requestBuilder.build()).execute().use { response ->
             val location = response.header("Location")
-            when {
-                response.code in 300..399 && !location.isNullOrBlank() -> location
-                response.code in 200..299 -> {
-                    // Proxy-bytes mode: the URL is effectively its own CDN. Cache
-                    // identity so we don't re-probe.
-                    url
-                }
-                else -> null
+            val locationHost = runCatching { location?.toHttpUrlOrNull()?.host }.getOrNull()
+            val (decision, resolved) = when {
+                response.code in 300..399 && !location.isNullOrBlank() -> "redirect" to location
+                else -> "null-no-redirect" to null
             }
+            Log.i(
+                TAG,
+                "RESOLVE_RESPONSE url=${sanitize(url)} status=${response.code} " +
+                    "protocol=${response.protocol} locationPresent=${!location.isNullOrBlank()} " +
+                    "locationHost=${locationHost ?: "none"} decision=$decision " +
+                    "forwardedHeaderKeys=${forwardedHeaderKeys.joinToString(prefix = "[", postfix = "]")}"
+            )
+            resolved
         }
     }
 
@@ -264,8 +270,26 @@ object CometProxyUrlResolver {
         return clockOverride?.invoke() ?: System.currentTimeMillis()
     }
 
+    /**
+     * Build a short, candidate-distinguishing label for a Comet proxy URL.
+     * The auth blob in the path is identical across all candidates from the same
+     * addon config, so a simple prefix-truncate makes sibling RESOLVE_RESPONSE
+     * lines indistinguishable. Prefer host + last 2 path segments + torrent_name
+     * if present.
+     */
     private fun sanitize(url: String): String {
-        return url.substringBefore('?').take(160)
+        val parsed = runCatching { url.toHttpUrlOrNull() }.getOrNull()
+            ?: return url.substringBefore('?').take(160)
+        val host = parsed.host
+        val segments = parsed.encodedPathSegments
+        val tail = segments.takeLast(2).joinToString(prefix = "/", separator = "/")
+        val torrentName = parsed.queryParameter("torrent_name")?.take(80)
+        val builder = StringBuilder()
+        builder.append(host).append(tail)
+        if (!torrentName.isNullOrBlank()) {
+            builder.append("?torrent_name=").append(torrentName)
+        }
+        return builder.toString().take(220)
     }
 
     private data class CacheEntry(val resolvedUrl: String, val storedAtMs: Long)

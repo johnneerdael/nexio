@@ -174,4 +174,56 @@ class FfmpegStreamMetadataProbeTest {
         assertFalse(command.contains("-headers"))
         assertTrue(command.endsWith("'https://example.test/video.mkv'"))
     }
+
+    @Test
+    fun probeBlockingSkipsProbeWhenCometResolverReturnsNull() {
+        val cometUrl = "https://comet.feels.legal/cfg/playback/" +
+            "09b382fa312ad70adaba13d707b500697e72e6fb/0/0/n/n?torrent_name=x"
+        var backendCalls = 0
+        // Resolver returns null → represents the case where Comet/CF answered
+        // with 2xx-without-Location (or any non-3xx). Probe must not fall back
+        // to probing the proxy URL — the proxy bytes lie.
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> null }
+        FfmpegStreamMetadataProbe.setBackendForTesting(
+            object : FfmpegStreamMetadataBackend {
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    backendCalls += 1
+                    return """{"streams":[{"codec_type":"video","codec_name":"h264"}]}"""
+                }
+            }
+        )
+
+        val result = FfmpegStreamMetadataProbe.probeBlocking(cometUrl)
+
+        assertNull(result)
+        assertEquals(0, backendCalls)
+        CometProxyUrlResolver.resetForTesting()
+    }
+
+    @Test
+    fun probeBlockingSkipsProbeWhenCometResolverReturnsBlank() {
+        val cometUrl = "https://comet.feels.legal/cfg/playback/h/0/0/n/n"
+        var backendCalls = 0
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> "   " }
+        FfmpegStreamMetadataProbe.setBackendForTesting(
+            object : FfmpegStreamMetadataBackend {
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    backendCalls += 1
+                    return """{"streams":[]}"""
+                }
+            }
+        )
+
+        val result = FfmpegStreamMetadataProbe.probeBlocking(cometUrl)
+
+        assertNull(result)
+        assertEquals(0, backendCalls)
+        CometProxyUrlResolver.resetForTesting()
+    }
 }
