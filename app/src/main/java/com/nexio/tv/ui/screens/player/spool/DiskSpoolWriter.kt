@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player.spool
 
 import android.util.Log
+import com.nexio.tv.core.player.auth.AuthFailureCodes
 import java.io.EOFException
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -276,6 +277,12 @@ internal class DiskSpoolWriter(
                         return@executeCancellable start
                     }
                     if (!response.isSuccessful) {
+                        if (AuthFailureCodes.matches(response.code)) {
+                            throw UnrecoverableHttpException(
+                                response.code,
+                                "Auth-failure response ${response.code} for range $start-$endInclusive"
+                            )
+                        }
                         throw IOException("Unexpected response ${response.code} for range $start-$endInclusive")
                     }
 
@@ -283,6 +290,8 @@ internal class DiskSpoolWriter(
                         ?: throw IOException("Missing response body for range $start-$endInclusive")
                     downloadRangeIntoSession(source, start, endInclusive, session, ioBuffer)
                 }
+            } catch (throwable: UnrecoverableHttpException) {
+                throw throwable
             } catch (throwable: IOException) {
                 if (isCancelled()) {
                     return start
@@ -301,6 +310,8 @@ internal class DiskSpoolWriter(
         }
         return start
     }
+
+    internal class UnrecoverableHttpException(val statusCode: Int, message: String) : IOException(message)
 
     private fun <T> executeCancellable(
         call: Call,
