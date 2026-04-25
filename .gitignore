@@ -84,3 +84,6 @@ tools/
 state/
 docs/superpowers/
 .openrouter.env
+.libplacebo-build/
+third_party/libplacebo-prebuilt-*/
+.kitsu
