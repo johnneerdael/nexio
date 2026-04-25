@@ -202,11 +202,17 @@ object CometProxyUrlResolver {
     fun proxyUrlFor(resolvedUrl: String): String? {
         synchronized(lock) {
             val proxy = reverseCache[resolvedUrl] ?: return null
-            val entry = cache[proxy] ?: run {
-                reverseCache.remove(resolvedUrl)
-                return null
+            val entry = cache[proxy]
+            if (entry != null) {
+                return if (currentTimeMs() - entry.storedAtMs <= CACHE_TTL_MS) proxy else null
             }
-            return if (currentTimeMs() - entry.storedAtMs <= CACHE_TTL_MS) proxy else null
+            // Forward entry is gone but a recovery is in flight for this
+            // proxy — peers should still be able to find it so they can
+            // await the leader's result. Without this, concurrent failing
+            // requests during the recovery window race-fail to NO_PROXY_KNOWN.
+            if (inFlight.containsKey(proxy)) return proxy
+            reverseCache.remove(resolvedUrl)
+            return null
         }
     }
 
@@ -247,6 +253,91 @@ object CometProxyUrlResolver {
             lastInvalidatedAtMs[proxyUrl] = now
             return true
         }
+    }
+
+    /**
+     * Coalescing recovery: invalidate (subject to debounce) and re-resolve in a
+     * single critical section, so concurrent failing requests for the same
+     * [proxyUrl] await one shared resolve instead of racing each other into
+     * NO_PROXY_KNOWN / RATE_LIMITED branches.
+     *
+     * Semantics:
+     * - **Leader path:** the first concurrent caller drops the forward cache
+     *   entry, registers an in-flight deferred, runs [fetchLocation], and
+     *   write-throughs the new resolution. Returns the fresh URL.
+     * - **Peer path:** subsequent callers within the same recovery window
+     *   discover the in-flight deferred and await it (subject to
+     *   [REQUEST_TIMEOUT_MS]). They get the leader's result without issuing
+     *   a second network call.
+     * - **Debounced path:** if [INVALIDATE_DEBOUNCE_MS] has not elapsed since
+     *   the last leader for this proxy AND no in-flight peer is running, the
+     *   call returns the current cached resolution (if any) — which will
+     *   be the freshly-recovered URL from the recent leader, allowing
+     *   stragglers to pick up the recovery without re-running it.
+     *
+     * The reverseCache entry for the *previous* resolved URL is intentionally
+     * retained during the recovery window so peers can still resolve it via
+     * [proxyUrlFor]. It will be naturally dropped once the LRU bound forces
+     * eviction, or kept indefinitely as a benign duplicate pointing at the
+     * same proxy.
+     */
+    fun recoverProxyBlocking(
+        proxyUrl: String,
+        headers: Map<String, String>?,
+        addonHost: String?
+    ): String? {
+        if (!isCometProxy(proxyUrl, addonHost)) return null
+
+        val deferred: CompletableDeferred<String?>
+        val isLeader: Boolean
+        synchronized(lock) {
+            val existing = inFlight[proxyUrl]
+            if (existing != null) {
+                deferred = existing
+                isLeader = false
+            } else {
+                val now = currentTimeMs()
+                val last = lastInvalidatedAtMs[proxyUrl]
+                if (last != null && now - last < INVALIDATE_DEBOUNCE_MS) {
+                    return cache[proxyUrl]?.resolvedUrl
+                }
+                deferred = CompletableDeferred()
+                inFlight[proxyUrl] = deferred
+                lastInvalidatedAtMs[proxyUrl] = now
+                cache.remove(proxyUrl)
+                // Note: reverseCache entries are intentionally retained.
+                isLeader = true
+            }
+        }
+
+        if (!isLeader) {
+            return runCatching {
+                runBlocking(Dispatchers.IO) {
+                    withTimeoutOrNull(REQUEST_TIMEOUT_MS) { deferred.await() }
+                }
+            }.getOrNull()
+        }
+
+        val result = runCatching {
+            runBlocking(Dispatchers.IO) {
+                withTimeoutOrNull(REQUEST_TIMEOUT_MS) { fetchLocation(proxyUrl, headers) }
+            }
+        }.getOrNull()
+
+        synchronized(lock) {
+            inFlight.remove(proxyUrl)
+            if (result != null) {
+                cache[proxyUrl] = CacheEntry(
+                    resolvedUrl = result,
+                    storedAtMs = currentTimeMs(),
+                    headers = headers ?: emptyMap(),
+                    addonHost = addonHost
+                )
+                reverseCache[result] = proxyUrl
+            }
+        }
+        deferred.complete(result)
+        return result
     }
 
     /**

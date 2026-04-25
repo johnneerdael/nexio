@@ -92,20 +92,25 @@ class AuthRecoveryInterceptor(
             else -> Unit
         }
 
-        // Capture the headers + addonHost first because invalidate() drops the
-        // cache entry that backs lastHeadersFor / lastAddonHostFor.
+        // Capture the headers + addonHost first because the recovery may drop
+        // the cache entry that backs lastHeadersFor / lastAddonHostFor.
         val headers = CometProxyUrlResolver.lastHeadersFor(proxyUrl) ?: emptyMap()
         val addonHost = CometProxyUrlResolver.lastAddonHostFor(proxyUrl)
 
-        val invalidated = CometProxyUrlResolver.invalidate(proxyUrl)
-        if (!invalidated) {
-            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RATE_LIMITED)
-            return response
-        }
-
-        val freshUrl = CometProxyUrlResolver.resolveBlocking(proxyUrl, headers, addonHost)
+        // Single coalescing recovery call: leader resolves, peers await the
+        // leader's result, debounced callers pick up the leader's freshly-
+        // cached URL. Replaces the older invalidate-then-resolve sequence
+        // which raced into NO_PROXY_KNOWN under concurrent failures.
+        val freshUrl = CometProxyUrlResolver.recoverProxyBlocking(proxyUrl, headers, addonHost)
         if (freshUrl.isNullOrBlank()) {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
+            return response
+        }
+        if (freshUrl == originalUrl) {
+            // Recovery returned the same URL we just failed on (debounced and
+            // cache had not been refreshed yet). No retry would help; treat
+            // as rate-limited so telemetry is honest.
+            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RATE_LIMITED)
             return response
         }
 

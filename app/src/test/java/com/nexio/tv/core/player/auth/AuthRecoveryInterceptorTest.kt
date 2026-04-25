@@ -335,6 +335,74 @@ class AuthRecoveryInterceptorTest {
     }
 
     @Test
+    fun `concurrent failing requests for same proxy coalesce onto a single recovery`() {
+        val resolvedFirst = server.url("/cdn/first").toString()
+        val resolvedSecond = server.url("/cdn/second").toString()
+        val transportCalls = AtomicInteger(0)
+        // Add a small delay to the slow-path resolve so the second request
+        // races into the in-flight window while the first is still resolving.
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            val n = transportCalls.getAndIncrement()
+            Thread.sleep(150)
+            if (n == 0) resolvedFirst else resolvedSecond
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        val firstHits = AtomicInteger(0)
+        val secondHits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/cdn/first" -> {
+                    firstHits.incrementAndGet()
+                    MockResponse().setResponseCode(401)
+                }
+                "/cdn/second" -> {
+                    secondHits.incrementAndGet()
+                    MockResponse().setResponseCode(200).setBody("ok")
+                }
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val interceptor = AuthRecoveryInterceptor(maxAttemptsPerSession = 5)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        // Reset the transport-call counter — we only care about resolves
+        // triggered during recovery, not the initial population above.
+        val transportCallsAtRecoveryStart = transportCalls.get()
+
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        try {
+            val results = (1..2).map {
+                pool.submit<Int> {
+                    client.newCall(Request.Builder().url(resolvedFirst).build())
+                        .execute().use { it.code }
+                }
+            }
+            val codes = results.map { it.get(10, java.util.concurrent.TimeUnit.SECONDS) }
+            assertEquals(listOf(200, 200), codes)
+        } finally {
+            pool.shutdown()
+        }
+
+        // The transport (the network call inside the resolver) ran exactly
+        // once during recovery — the second concurrent request awaited the
+        // leader instead of issuing a duplicate resolve.
+        assertEquals(
+            "expected exactly one resolver transport call during recovery",
+            1,
+            transportCalls.get() - transportCallsAtRecoveryStart
+        )
+        // /cdn/first received both initial 401s (one per concurrent request);
+        // /cdn/second received both retried 200s.
+        assertEquals(2, firstHits.get())
+        assertEquals(2, secondHits.get())
+    }
+
+    @Test
     fun `recovers from 401 by re-resolving and retrying once`() {
         val resolvedFirst = server.url("/cdn/first").toString()
         val resolvedSecond = server.url("/cdn/second").toString()
