@@ -28,6 +28,10 @@ class PremiumizeService @Inject constructor(
 
     fun observeAccountState(): Flow<PremiumizeAccountState> = accountState
 
+    fun clearLocalAccountState() {
+        _accountState.value = PremiumizeAccountState()
+    }
+
     suspend fun validateAndSaveApiKey(rawValue: String): Result<PremiumizeAccountState> {
         val apiKey = rawValue.trim()
         if (apiKey.isBlank()) {

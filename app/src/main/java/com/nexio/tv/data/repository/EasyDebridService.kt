@@ -28,6 +28,10 @@ class EasyDebridService @Inject constructor(
 
     fun observeAccountState(): Flow<EasyDebridAccountState> = accountState
 
+    fun clearLocalAccountState() {
+        _accountState.value = EasyDebridAccountState()
+    }
+
     suspend fun validateAndSaveApiKey(rawValue: String): Result<EasyDebridAccountState> {
         val apiKey = rawValue.trim()
         if (apiKey.isBlank()) {

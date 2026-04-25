@@ -120,6 +120,9 @@ class AccountConfigSyncContractTest {
         val resetBody = source.substring(resetStart, resetEnd)
 
         assertTrue(resetBody.contains("runWithLocalResetPushSuppressed {"))
+        assertTrue(source.contains("premiumizeService.clearLocalAccountState()"))
+        assertTrue(source.contains("torBoxService.clearLocalAccountState()"))
+        assertTrue(source.contains("easyDebridService.clearLocalAccountState()"))
         assertTrue(suppressionBody.contains("applyingRemoteMutex.withLock"))
         assertTrue(suppressionBody.contains("pushJob?.cancel()"))
         assertTrue(suppressionBody.contains("pushJob = null"))

@@ -28,6 +28,10 @@ class TorBoxService @Inject constructor(
 
     fun observeAccountState(): Flow<TorBoxAccountState> = accountState
 
+    fun clearLocalAccountState() {
+        _accountState.value = TorBoxAccountState()
+    }
+
     suspend fun validateAndSaveApiKey(rawValue: String): Result<TorBoxAccountState> {
         val apiKey = rawValue.trim()
         if (apiKey.isBlank()) {
