@@ -480,9 +480,13 @@ class DurableDeviceAuthRecoveryPolicyTest {
         val recoveryStart = source.indexOf("private suspend fun attemptSilentSessionRecovery")
         val recoveryEnd = source.indexOf("private fun transitionToSessionLost")
         val recoveryBody = source.substring(recoveryStart, recoveryEnd)
+        val durableRestore = recoveryBody.substring(
+            recoveryBody.indexOf("if (restoreSupabaseSessionFromDurableCredential()) return"),
+            recoveryBody.indexOf("Durable credential session recovery failed")
+        )
 
-        assertTrue(recoveryBody.contains("catch (e: CancellationException)"))
-        assertTrue(recoveryBody.indexOf("catch (e: CancellationException)") < recoveryBody.indexOf("catch (e: Exception)"))
+        assertTrue(durableRestore.contains("catch (e: CancellationException)"))
+        assertTrue(durableRestore.indexOf("catch (e: CancellationException)") < durableRestore.indexOf("catch (e: Exception)"))
     }
 
     @Test
@@ -494,6 +498,33 @@ class DurableDeviceAuthRecoveryPolicyTest {
 
         assertTrue(refreshBody.contains("enforceDurableCredentialStillActive()"))
         assertTrue(refreshBody.indexOf("enforceDurableCredentialStillActive()") < refreshBody.indexOf("auth.refreshCurrentSession()"))
+    }
+
+    @Test
+    fun `refresh token recovery rethrows cancellation before broad exception handling`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+        val refreshStart = source.indexOf("suspend fun refreshSessionIfJwtExpired")
+        val refreshEnd = source.indexOf("private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection")
+        val refreshBody = source.substring(refreshStart, refreshEnd)
+        val directDurableRecovery = refreshBody.substring(
+            refreshBody.indexOf("JWT expired; restoring Supabase session from durable credential"),
+            refreshBody.indexOf("Durable credential was authoritatively rejected after JWT expiry")
+        )
+        val liveRefresh = refreshBody.substring(
+            refreshBody.indexOf("auth.refreshCurrentSession()"),
+            refreshBody.indexOf("resolveRefreshFailureAction(")
+        )
+        val fallbackDurableRecovery = refreshBody.substring(
+            refreshBody.indexOf("Refresh token was authoritatively rejected after JWT expiry; restoring Supabase session from durable credential"),
+            refreshBody.indexOf("Durable credential was authoritatively rejected after refresh rejection")
+        )
+
+        assertTrue(directDurableRecovery.contains("catch (recoveryError: CancellationException)"))
+        assertTrue(directDurableRecovery.indexOf("catch (recoveryError: CancellationException)") < directDurableRecovery.indexOf("catch (recoveryError: Exception)"))
+        assertTrue(liveRefresh.contains("catch (refreshError: CancellationException)"))
+        assertTrue(liveRefresh.indexOf("catch (refreshError: CancellationException)") < liveRefresh.indexOf("catch (refreshError: Exception)"))
+        assertTrue(fallbackDurableRecovery.contains("catch (recoveryError: CancellationException)"))
+        assertTrue(fallbackDurableRecovery.indexOf("catch (recoveryError: CancellationException)") < fallbackDurableRecovery.indexOf("catch (recoveryError: Exception)"))
     }
 
     @Test

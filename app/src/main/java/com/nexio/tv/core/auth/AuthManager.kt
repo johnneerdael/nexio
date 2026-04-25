@@ -321,6 +321,8 @@ class AuthManager @Inject constructor(
         ) {
             try {
                 if (restoreSupabaseSessionFromDurableCredential()) return
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 when (
                     resolveDurableRecoveryFailureAction(
@@ -600,6 +602,8 @@ class AuthManager @Inject constructor(
                 try {
                     Log.w(TAG, "JWT expired; restoring Supabase session from durable credential")
                     restoreSupabaseSessionFromDurableCredential()
+                } catch (recoveryError: CancellationException) {
+                    throw recoveryError
                 } catch (recoveryError: Exception) {
                     when (
                         resolveDurableRecoveryFailureAction(
@@ -626,6 +630,8 @@ class AuthManager @Inject constructor(
                     Log.w(TAG, "JWT expired; refreshing Supabase session and retrying request")
                     auth.refreshCurrentSession()
                     true
+                } catch (refreshError: CancellationException) {
+                    throw refreshError
                 } catch (refreshError: Exception) {
                     when (
                         resolveRefreshFailureAction(
@@ -641,6 +647,8 @@ class AuthManager @Inject constructor(
                                     refreshError
                                 )
                                 restoreSupabaseSessionFromDurableCredential()
+                            } catch (recoveryError: CancellationException) {
+                                throw recoveryError
                             } catch (recoveryError: Exception) {
                                 when (
                                     resolveDurableRecoveryFailureAction(
