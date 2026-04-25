@@ -4,6 +4,7 @@
 - [x] 1.2 Add explicit stock account-config defaults.
 - [x] 1.3 Add profile-explicit Kitsu auth clearing and use it from account reset.
 - [x] 1.4 Add local reset suppression coverage so reset writes cannot push stock defaults remotely.
+- [x] 1.5 Revoke the local durable device credential in Supabase during manual logout before clearing local auth state.
 
 ## 2. Verification
 

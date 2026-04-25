@@ -13,6 +13,14 @@ When a user manually logs out or a durable device credential is authoritatively 
 - **AND** integration credentials are cleared locally
 - **AND** tracking and formatter settings match the stock defaults
 
+#### Scenario: Manual logout revokes the local durable credential remotely
+
+- **GIVEN** the device has a full account session and a local durable device credential
+- **WHEN** the user manually logs out on the device
+- **THEN** the app revokes that durable credential in Supabase before clearing the local Supabase session
+- **AND** the app clears the local durable credential after the revoke attempt
+- **AND** future app starts cannot silently recover using the logged-out durable credential
+
 #### Scenario: Remote durable-auth revoke resets without remote push
 
 - **GIVEN** the device has a full account session and local account sync observers are active

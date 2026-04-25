@@ -130,6 +130,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         handleManualSignOut(
             resetLocalAccountState = { resetCalled = true },
             clearPresenceMarker = { presenceMarkerCleared = true },
+            revokeDurableCredential = {},
             clearDurableCredential = { durableCredentialCleared = true },
             clearSupabaseSession = { supabaseSessionCleared = true }
         )
@@ -138,6 +139,33 @@ class DurableDeviceAuthRecoveryPolicyTest {
         assertTrue(presenceMarkerCleared)
         assertTrue(durableCredentialCleared)
         assertTrue(supabaseSessionCleared)
+    }
+
+    @Test
+    fun `manual sign out revokes durable credential before clearing local credential and session`() = runTest {
+        val events = mutableListOf<String>()
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+
+        handleManualSignOut(
+            resetLocalAccountState = { events += "reset-local-stock" },
+            clearPresenceMarker = { events += "clear-presence" },
+            revokeDurableCredential = { events += "revoke-durable-remote" },
+            clearDurableCredential = { events += "clear-durable-local" },
+            clearSupabaseSession = { events += "clear-supabase-session" }
+        )
+
+        assertEquals(
+            listOf(
+                "reset-local-stock",
+                "clear-presence",
+                "revoke-durable-remote",
+                "clear-durable-local",
+                "clear-supabase-session"
+            ),
+            events
+        )
+        assertTrue(source.contains("revokeDurableDeviceCredentialIfPresent()"))
+        assertTrue(source.contains("postgrest.rpc(\"revoke_device_credential\""))
     }
 
     @Test

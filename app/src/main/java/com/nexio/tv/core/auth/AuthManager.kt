@@ -532,6 +532,9 @@ class AuthManager @Inject constructor(
                 clearPresenceMarker = {
                     authPresenceDataStore.clear()
                 },
+                revokeDurableCredential = {
+                    revokeDurableDeviceCredentialIfPresent()
+                },
                 clearDurableCredential = {
                     durableDeviceCredentialStore.clear()
                 },
@@ -860,6 +863,18 @@ class AuthManager @Inject constructor(
         check(result.activated) { "Device credential activation did not succeed" }
     }
 
+    private suspend fun revokeDurableDeviceCredentialIfPresent() {
+        val devicePublicId = durableDeviceCredentialStore.snapshot().devicePublicId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+
+        val params = buildJsonObject {
+            put("p_device_public_id", devicePublicId)
+        }
+        postgrest.rpc("revoke_device_credential", params)
+    }
+
     private suspend fun importPersistedOwnerSession(
         accessToken: String,
         refreshToken: String
@@ -1069,6 +1084,7 @@ internal suspend fun handleAuthoritativeDurableCredentialRejection(
 internal suspend fun handleManualSignOut(
     resetLocalAccountState: suspend () -> Unit,
     clearPresenceMarker: suspend () -> Unit,
+    revokeDurableCredential: suspend () -> Unit,
     clearDurableCredential: suspend () -> Unit,
     clearSupabaseSession: suspend () -> Unit
 ) {
@@ -1081,6 +1097,11 @@ internal suspend fun handleManualSignOut(
         clearPresenceMarker()
     } catch (clearError: Exception) {
         Log.w(TAG, "Failed clearing auth presence marker on sign-out", clearError)
+    }
+    try {
+        revokeDurableCredential()
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed revoking durable device credential on sign-out", clearError)
     }
     try {
         clearDurableCredential()
