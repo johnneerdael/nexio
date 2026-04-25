@@ -23,13 +23,39 @@ class TorBoxService @Inject constructor(
     private val torBoxApi: TorBoxApi,
     private val torBoxSettingsDataStore: TorBoxSettingsDataStore
 ) {
+    private val accountStateLock = Any()
+    private var accountStateGeneration = 0L
     private val _accountState = MutableStateFlow(TorBoxAccountState())
     val accountState: StateFlow<TorBoxAccountState> = _accountState.asStateFlow()
 
     fun observeAccountState(): Flow<TorBoxAccountState> = accountState
 
     fun clearLocalAccountState() {
-        _accountState.value = TorBoxAccountState()
+        replaceAccountState(TorBoxAccountState())
+    }
+
+    private fun replaceAccountState(state: TorBoxAccountState) {
+        synchronized(accountStateLock) {
+            accountStateGeneration += 1L
+            _accountState.value = state
+        }
+    }
+
+    private fun currentAccountStateGeneration(): Long =
+        synchronized(accountStateLock) { accountStateGeneration }
+
+    private fun replaceRefreshedAccountState(
+        observedGeneration: Long,
+        observedApiKey: String,
+        currentApiKey: String,
+        state: TorBoxAccountState
+    ) {
+        synchronized(accountStateLock) {
+            if (accountStateGeneration != observedGeneration || currentApiKey != observedApiKey) {
+                return
+            }
+            _accountState.value = state
+        }
     }
 
     suspend fun validateAndSaveApiKey(rawValue: String): Result<TorBoxAccountState> {
@@ -37,7 +63,7 @@ class TorBoxService @Inject constructor(
         if (apiKey.isBlank()) {
             torBoxSettingsDataStore.setApiKey("")
             val cleared = TorBoxAccountState()
-            _accountState.value = cleared
+            replaceAccountState(cleared)
             return Result.success(cleared)
         }
 
@@ -63,38 +89,47 @@ class TorBoxService @Inject constructor(
             plan = body?.data?.plan,
             isConnected = true
         )
-        _accountState.value = state
+        replaceAccountState(state)
         return Result.success(state)
     }
 
     suspend fun refreshAccountState() {
         val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
         if (apiKey.isBlank()) {
-            _accountState.value = TorBoxAccountState()
+            replaceAccountState(TorBoxAccountState())
             return
         }
+        val observedGeneration = currentAccountStateGeneration()
 
         val response = runCatching {
             torBoxApi.getCurrentUser(authorization = "Bearer $apiKey")
         }.getOrNull()
         val body = response?.body()
-        if (torBoxSettingsDataStore.settings.first().apiKey.trim() != apiKey) {
-            return
-        }
+        val currentApiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
         if (response?.isSuccessful == true && body?.success != false) {
-            _accountState.value = TorBoxAccountState(
-                apiKey = apiKey,
-                email = body?.data?.email,
-                plan = body?.data?.plan,
-                isConnected = true
+            replaceRefreshedAccountState(
+                observedGeneration = observedGeneration,
+                observedApiKey = apiKey,
+                currentApiKey = currentApiKey,
+                state = TorBoxAccountState(
+                    apiKey = apiKey,
+                    email = body?.data?.email,
+                    plan = body?.data?.plan,
+                    isConnected = true
+                )
             )
             return
         }
 
-        _accountState.value = TorBoxAccountState(
-            apiKey = apiKey,
-            isConnected = false,
-            errorMessage = body?.detail ?: body?.error ?: "TorBox authentication failed"
+        replaceRefreshedAccountState(
+            observedGeneration = observedGeneration,
+            observedApiKey = apiKey,
+            currentApiKey = currentApiKey,
+            state = TorBoxAccountState(
+                apiKey = apiKey,
+                isConnected = false,
+                errorMessage = body?.detail ?: body?.error ?: "TorBox authentication failed"
+            )
         )
     }
 }

@@ -23,13 +23,39 @@ class EasyDebridService @Inject constructor(
     private val easyDebridApi: EasyDebridApi,
     private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore
 ) {
+    private val accountStateLock = Any()
+    private var accountStateGeneration = 0L
     private val _accountState = MutableStateFlow(EasyDebridAccountState())
     val accountState: StateFlow<EasyDebridAccountState> = _accountState.asStateFlow()
 
     fun observeAccountState(): Flow<EasyDebridAccountState> = accountState
 
     fun clearLocalAccountState() {
-        _accountState.value = EasyDebridAccountState()
+        replaceAccountState(EasyDebridAccountState())
+    }
+
+    private fun replaceAccountState(state: EasyDebridAccountState) {
+        synchronized(accountStateLock) {
+            accountStateGeneration += 1L
+            _accountState.value = state
+        }
+    }
+
+    private fun currentAccountStateGeneration(): Long =
+        synchronized(accountStateLock) { accountStateGeneration }
+
+    private fun replaceRefreshedAccountState(
+        observedGeneration: Long,
+        observedApiKey: String,
+        currentApiKey: String,
+        state: EasyDebridAccountState
+    ) {
+        synchronized(accountStateLock) {
+            if (accountStateGeneration != observedGeneration || currentApiKey != observedApiKey) {
+                return
+            }
+            _accountState.value = state
+        }
     }
 
     suspend fun validateAndSaveApiKey(rawValue: String): Result<EasyDebridAccountState> {
@@ -37,7 +63,7 @@ class EasyDebridService @Inject constructor(
         if (apiKey.isBlank()) {
             easyDebridSettingsDataStore.setApiKey("")
             val cleared = EasyDebridAccountState()
-            _accountState.value = cleared
+            replaceAccountState(cleared)
             return Result.success(cleared)
         }
 
@@ -64,39 +90,48 @@ class EasyDebridService @Inject constructor(
             paidUntil = body?.paidUntil,
             isConnected = true
         )
-        _accountState.value = state
+        replaceAccountState(state)
         return Result.success(state)
     }
 
     suspend fun refreshAccountState() {
         val apiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
         if (apiKey.isBlank()) {
-            _accountState.value = EasyDebridAccountState()
+            replaceAccountState(EasyDebridAccountState())
             return
         }
+        val observedGeneration = currentAccountStateGeneration()
 
         val response = runCatching {
             easyDebridApi.getUserDetails(authorization = "Bearer $apiKey")
         }.getOrNull()
         val body = response?.body()
         val userId = body?.id?.trim().orEmpty()
-        if (easyDebridSettingsDataStore.settings.first().apiKey.trim() != apiKey) {
-            return
-        }
+        val currentApiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
         if (response?.isSuccessful == true && userId.isNotBlank()) {
-            _accountState.value = EasyDebridAccountState(
-                apiKey = apiKey,
-                userId = userId,
-                paidUntil = body?.paidUntil,
-                isConnected = true
+            replaceRefreshedAccountState(
+                observedGeneration = observedGeneration,
+                observedApiKey = apiKey,
+                currentApiKey = currentApiKey,
+                state = EasyDebridAccountState(
+                    apiKey = apiKey,
+                    userId = userId,
+                    paidUntil = body?.paidUntil,
+                    isConnected = true
+                )
             )
             return
         }
 
-        _accountState.value = EasyDebridAccountState(
-            apiKey = apiKey,
-            isConnected = false,
-            errorMessage = body?.message ?: body?.error ?: "EasyDebrid authentication failed"
+        replaceRefreshedAccountState(
+            observedGeneration = observedGeneration,
+            observedApiKey = apiKey,
+            currentApiKey = currentApiKey,
+            state = EasyDebridAccountState(
+                apiKey = apiKey,
+                isConnected = false,
+                errorMessage = body?.message ?: body?.error ?: "EasyDebrid authentication failed"
+            )
         )
     }
 }
