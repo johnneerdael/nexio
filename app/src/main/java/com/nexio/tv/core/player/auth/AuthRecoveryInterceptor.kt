@@ -47,6 +47,10 @@ class AuthRecoveryInterceptor(
         synchronized(forwardLock) { staleUrlForwards.clear() }
     }
 
+    @androidx.annotation.VisibleForTesting
+    internal fun staleForwardsSnapshotForTesting(): Map<String, String> =
+        synchronized(forwardLock) { LinkedHashMap(staleUrlForwards) }
+
     /**
      * Stale → fresh URL forwards established by past recoveries. After we
      * recover `oldUrl → newUrl`, any later request to `oldUrl` is
@@ -137,10 +141,19 @@ class AuthRecoveryInterceptor(
     private fun registerForward(staleUrl: String, freshUrl: String) {
         if (staleUrl == freshUrl) return
         synchronized(forwardLock) {
+            // Promote any existing chain that landed on the now-stale URL:
+            // entries A → staleUrl must become A → freshUrl, otherwise a
+            // request for A would be rewritten to a URL that has just been
+            // invalidated and has no live reverse-cache entry, falling
+            // through to NO_PROXY_KNOWN → raw 401.
+            val toPromote = staleUrlForwards.entries
+                .filter { (_, v) -> v == staleUrl }
+                .map { it.key }
+            toPromote.forEach { staleUrlForwards[it] = freshUrl }
             staleUrlForwards[staleUrl] = freshUrl
-            // If the fresh URL was itself a previously-recovered target, drop
-            // any chain entry pointing at it so a future failure on freshUrl
-            // does not infinitely loop through the forward map.
+            // If the fresh URL was itself a previously-recovered target,
+            // drop the entry where it was the stale key so we don't carry
+            // a self-referencing rewrite.
             staleUrlForwards.entries.removeAll { (k, _) -> k == freshUrl }
         }
     }

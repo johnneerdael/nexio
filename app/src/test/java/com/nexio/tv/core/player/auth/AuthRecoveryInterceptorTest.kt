@@ -14,6 +14,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -103,6 +104,154 @@ class AuthRecoveryInterceptorTest {
 
         val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
         assertTrue(outcomes.contains(AuthRecoveryTracker.Outcome.RATE_LIMITED))
+    }
+
+    @Test
+    fun `second request to a previously-recovered URL is rewritten without consuming an attempt`() {
+        val resolvedFirst = server.url("/cdn/first").toString()
+        val resolvedSecond = server.url("/cdn/second").toString()
+        val resolveCount = AtomicInteger(0)
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            if (resolveCount.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        val firstHits = AtomicInteger(0)
+        val secondHits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/cdn/first" -> {
+                    firstHits.incrementAndGet()
+                    MockResponse().setResponseCode(401)
+                }
+                "/cdn/second" -> {
+                    secondHits.incrementAndGet()
+                    MockResponse().setResponseCode(200).setBody("ok")
+                }
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val interceptor = AuthRecoveryInterceptor(maxAttemptsPerSession = 1)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        // First call: 401 → recovered → /cdn/first hit once, /cdn/second hit once.
+        client.newCall(Request.Builder().url(resolvedFirst).build()).execute().close()
+        assertEquals(1, firstHits.get())
+        assertEquals(1, secondHits.get())
+        // Second call to the same stale URL must be rewritten before dispatch.
+        // /cdn/first must NOT be hit again, /cdn/second receives the request directly.
+        client.newCall(Request.Builder().url(resolvedFirst).build()).execute().close()
+        assertEquals("stale URL must not be hit a second time", 1, firstHits.get())
+        assertEquals("rewritten request must reach the fresh URL", 2, secondHits.get())
+        // The recovery counter increments only once — no second attempt was burned.
+        assertEquals(1, AuthRecoveryTracker.recoveredCount())
+    }
+
+    @Test
+    fun `recovering B to C drops a prior A to B forward to avoid chain rewrites`() {
+        // Manufacture an A→B forward by recovering once (A=401, B=200), then
+        // flip the dispatcher so B starts 401-ing and C=200, drive a B-side
+        // recovery, and assert the forward map no longer contains an A→B
+        // chain entry — only B→C remains, with A's entry promoted/removed.
+        val urlA = server.url("/A").toString()
+        val urlB = server.url("/B").toString()
+        val urlC = server.url("/C").toString()
+        val resolveCount = AtomicInteger(0)
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            when (resolveCount.getAndIncrement()) {
+                0 -> urlA
+                1 -> urlB
+                else -> urlC
+            }
+        }
+        val proxy = "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n"
+        var clock = 1_000L
+        CometProxyUrlResolver.setClockForTesting { clock }
+        runBlocking { CometProxyUrlResolver.resolve(proxy, headers = emptyMap()) }
+
+        // Phase 1: A=401, B=200 → first recovery registers A→B.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/A" -> MockResponse().setResponseCode(401)
+                "/B" -> MockResponse().setResponseCode(200).setBody("ok")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val interceptor = AuthRecoveryInterceptor(maxAttemptsPerSession = 5)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        client.newCall(Request.Builder().url(urlA).build()).execute().close()
+        assertEquals(mapOf(urlA to urlB), interceptor.staleForwardsSnapshotForTesting())
+
+        // Phase 2: flip dispatcher so B starts failing, C is fresh; advance
+        // the clock past the 30s invalidate debounce so the next recovery
+        // can re-resolve.
+        clock += 31_000L
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/A" -> MockResponse().setResponseCode(401)
+                "/B" -> MockResponse().setResponseCode(401)
+                "/C" -> MockResponse().setResponseCode(200).setBody("ok")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        // Hit B directly (not via the A→B forward path) so the interceptor
+        // sees a 401 attributed to B's URL and runs a fresh recovery to C.
+        client.newCall(Request.Builder().url(urlB).build()).execute().close()
+
+        val forwards = interceptor.staleForwardsSnapshotForTesting()
+        assertEquals("B→C must be registered: $forwards", urlC, forwards[urlB])
+        assertEquals(
+            "A→B must be promoted to A→C so requests for A do not land on a now-stale B: $forwards",
+            urlC,
+            forwards[urlA]
+        )
+    }
+
+    @Test
+    fun `LRU evicts oldest forward entries when maxForwardEntries is exceeded`() {
+        val interceptor = AuthRecoveryInterceptor(maxAttemptsPerSession = 100, maxForwardEntries = 4)
+        val resolveResults = (1..10).map { server.url("/r$it").toString() }
+        val resolveCount = AtomicInteger(0)
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            resolveResults[resolveCount.getAndIncrement().coerceAtMost(resolveResults.lastIndex)]
+        }
+        var clock = 1_000L
+        CometProxyUrlResolver.setClockForTesting { clock }
+
+        // Establish 5 distinct proxy → resolved mappings, then drive a
+        // recovery on each of the 5 first-resolved URLs to populate
+        // staleUrlForwards with 5 entries (max is 4).
+        val proxies = (1..5).map { i ->
+            "https://comet.feels.legal/p$i/playback/x/0/0/n/n?torrent_name=t&name=n"
+        }
+        runBlocking { proxies.forEach { CometProxyUrlResolver.resolve(it, headers = emptyMap()) } }
+
+        val staleUrls = resolveResults.subList(0, 5) // r1..r5 are the originals
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path ?: return MockResponse().setResponseCode(404)
+                val isStaleSlot = staleUrls.any { it.endsWith(path) }
+                return if (isStaleSlot) MockResponse().setResponseCode(401)
+                else MockResponse().setResponseCode(200).setBody("ok")
+            }
+        }
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+        staleUrls.forEachIndexed { i, stale ->
+            client.newCall(Request.Builder().url(stale).build()).execute().close()
+            // Advance clock past invalidate debounce between recoveries on
+            // distinct proxies (each proxy has its own debounce key).
+            clock += 31_000L * (i + 1)
+        }
+
+        val forwards = interceptor.staleForwardsSnapshotForTesting()
+        assertEquals("LRU bound respected", 4, forwards.size)
+        assertFalse("oldest entry evicted", forwards.containsKey(staleUrls[0]))
+        assertTrue("newest entry retained", forwards.containsKey(staleUrls[4]))
     }
 
     @Test
