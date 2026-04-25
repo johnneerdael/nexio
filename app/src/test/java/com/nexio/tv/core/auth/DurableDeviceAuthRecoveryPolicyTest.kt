@@ -71,6 +71,30 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `revoked durable credential status resets local auth state`() {
+        assertEquals(
+            DurableCredentialStatusAction.RESET_TO_STOCK_AND_SESSION_LOST,
+            resolveDurableCredentialStatusAction(DurableCredentialRemoteStatus.REVOKED)
+        )
+    }
+
+    @Test
+    fun `active durable credential status keeps current auth state`() {
+        assertEquals(
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE,
+            resolveDurableCredentialStatusAction(DurableCredentialRemoteStatus.ACTIVE)
+        )
+    }
+
+    @Test
+    fun `unknown durable credential status keeps current auth state`() {
+        assertEquals(
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE,
+            resolveDurableCredentialStatusAction(DurableCredentialRemoteStatus.UNKNOWN)
+        )
+    }
+
+    @Test
     fun `authoritative durable rejection disables live sync before local stock reset writes`() = runTest {
         val events = mutableListOf<String>()
 

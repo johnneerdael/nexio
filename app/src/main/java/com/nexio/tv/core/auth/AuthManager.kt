@@ -36,6 +36,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -677,6 +679,18 @@ class AuthManager @Inject constructor(
         )
     }
 
+    private suspend fun enforceDurableCredentialStillActive() {
+        when (
+            resolveDurableCredentialStatusAction(validateDurableCredentialStillActive())
+        ) {
+            DurableCredentialStatusAction.RESET_TO_STOCK_AND_SESSION_LOST -> {
+                Log.w(TAG, "Durable credential is revoked; clearing local auth state")
+                clearLocalAuthStateAfterAuthoritativeDurableRejection()
+            }
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE -> Unit
+        }
+    }
+
     suspend fun startTvLoginSession(deviceNonce: String, deviceName: String?, redirectBaseUrl: String): Result<TvLoginStartResult> {
         return try {
             Result.success(
@@ -833,6 +847,67 @@ class AuthManager @Inject constructor(
         val result = json.decodeFromString<DurableDeviceSessionExchangeResult>(body)
         importPersistedOwnerSession(result.accessToken, result.refreshToken)
         return true
+    }
+
+    private suspend fun callDurableCredentialSelfService(
+        devicePublicId: String,
+        deviceSecret: String,
+        action: String
+    ): DurableCredentialSelfServiceResponse {
+        val payload = buildJsonObject {
+            put("device_public_id", devicePublicId)
+            put("device_secret", deviceSecret)
+            put("action", action)
+        }.toString()
+        val request = Request.Builder()
+            .url("${BuildConfig.SUPABASE_URL}/functions/v1/device-credential-self-service")
+            .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        val body = withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    if (response.code == 401 || response.code == 403) {
+                        throw AuthoritativeDurableCredentialRejectionException(
+                            "Durable credential self-service failed (${response.code}): $responseBody"
+                        )
+                    }
+                    throw IllegalStateException(
+                        "Durable credential self-service failed (${response.code}): $responseBody"
+                    )
+                }
+                responseBody
+            }
+        }
+
+        return json.decodeFromString<DurableCredentialSelfServiceResponse>(body)
+    }
+
+    private suspend fun validateDurableCredentialStillActive(): DurableCredentialRemoteStatus {
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (!credential.isComplete) return DurableCredentialRemoteStatus.UNKNOWN
+
+        return try {
+            val response = callDurableCredentialSelfService(
+                devicePublicId = credential.devicePublicId.orEmpty(),
+                deviceSecret = credential.deviceSecret.orEmpty(),
+                action = "status"
+            )
+            when {
+                response.revoked || response.status.equals("revoked", ignoreCase = true) ->
+                    DurableCredentialRemoteStatus.REVOKED
+                response.active || response.status.equals("active", ignoreCase = true) ->
+                    DurableCredentialRemoteStatus.ACTIVE
+                else -> DurableCredentialRemoteStatus.UNKNOWN
+            }
+        } catch (e: AuthoritativeDurableCredentialRejectionException) {
+            DurableCredentialRemoteStatus.REVOKED
+        } catch (e: Exception) {
+            Log.w(TAG, "Durable credential status check failed; keeping current auth state", e)
+            DurableCredentialRemoteStatus.UNKNOWN
+        }
     }
 
     private suspend fun activateDurableDeviceCredential(
@@ -992,6 +1067,37 @@ internal enum class RefreshFailureAction {
     ATTEMPT_DURABLE_RECOVERY,
     TRANSITION_SIGNED_OUT,
     KEEP_CURRENT_AUTH_STATE
+}
+
+@Serializable
+private data class DurableCredentialSelfServiceResponse(
+    val status: String = "",
+    val active: Boolean = false,
+    val revoked: Boolean = false,
+    @SerialName("error") val error: String? = null
+)
+
+internal enum class DurableCredentialRemoteStatus {
+    ACTIVE,
+    REVOKED,
+    UNKNOWN
+}
+
+internal enum class DurableCredentialStatusAction {
+    KEEP_CURRENT_AUTH_STATE,
+    RESET_TO_STOCK_AND_SESSION_LOST
+}
+
+internal fun resolveDurableCredentialStatusAction(
+    status: DurableCredentialRemoteStatus
+): DurableCredentialStatusAction {
+    return when (status) {
+        DurableCredentialRemoteStatus.REVOKED ->
+            DurableCredentialStatusAction.RESET_TO_STOCK_AND_SESSION_LOST
+        DurableCredentialRemoteStatus.ACTIVE,
+        DurableCredentialRemoteStatus.UNKNOWN ->
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE
+    }
 }
 
 internal fun resolveNotAuthenticatedStartupAction(
