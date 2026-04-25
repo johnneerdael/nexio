@@ -391,23 +391,6 @@ val syncFilteredMainAssets by tasks.registering(Sync::class) {
     into(filteredMainAssetsDir)
 }
 
-val generatedShadercJniLibsDir = layout.buildDirectory.dir("generated/jniLibs/shaderc")
-val syncShadercRuntimeJniLibs by tasks.registering(Sync::class) {
-    // FFmpeg's libavfilter/libswscale keep a runtime NEEDED on libshaderc_shared.so
-    // when the staged libplacebo toolchain is enabled. If the shared runtime is
-    // missing from the APK, ffmpegJNI fails to load and every native probe
-    // returns null before JNI is entered.
-    from(rootProject.file("third_party/libplacebo-prebuilt-v7.360.0")) {
-        include("*/lib/libshaderc_shared.so")
-        eachFile {
-            val abi = path.substringBefore('/')
-            path = "$abi/$name"
-        }
-        includeEmptyDirs = false
-    }
-    into(generatedShadercJniLibsDir)
-}
-
 val generatedCxxRuntimeJniLibsDir = layout.buildDirectory.dir("generated/jniLibs/cxxRuntime")
 val syncCxxRuntimeJniLibs by tasks.registering(Sync::class) {
     val abiToTriple = mapOf(
@@ -432,7 +415,7 @@ val syncCxxRuntimeJniLibs by tasks.registering(Sync::class) {
 }
 
 tasks.named("preBuild").configure {
-    dependsOn(syncShadercRuntimeJniLibs, syncCxxRuntimeJniLibs)
+    dependsOn(syncCxxRuntimeJniLibs)
 }
 
 android {
@@ -612,7 +595,6 @@ android {
             jniLibs.srcDirs(
                 "src/main/_jni_disabled",
                 "src/main/jniLibs",
-                generatedShadercJniLibsDir,
                 generatedCxxRuntimeJniLibsDir
             )
             assets.setSrcDirs(listOf(syncFilteredMainAssets))
@@ -627,7 +609,6 @@ android {
                 "lib/*/libavcodec.so",
                 "lib/*/libavformat.so",
                 "lib/*/libavutil.so",
-                "lib/*/libshaderc_shared.so",
                 "lib/*/libswscale.so",
                 "lib/*/libswresample.so"
             )
