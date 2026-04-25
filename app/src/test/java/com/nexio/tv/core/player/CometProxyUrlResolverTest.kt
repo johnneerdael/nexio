@@ -291,4 +291,50 @@ class CometProxyUrlResolverTest {
         delay(30)
         assertEquals(1, calls.get())
     }
+
+    @Test
+    fun `proxyUrlFor returns originating proxy after a successful resolve`() = runBlocking {
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolvedUrl }
+
+        val out = CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
+
+        assertEquals(resolvedUrl, out)
+        assertEquals(cometUrl, CometProxyUrlResolver.proxyUrlFor(resolvedUrl))
+    }
+
+    @Test
+    fun `invalidate removes both forward and reverse mappings`() = runBlocking {
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolvedUrl }
+        CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
+
+        CometProxyUrlResolver.invalidate(cometUrl)
+
+        assertNull(CometProxyUrlResolver.proxyUrlFor(resolvedUrl))
+    }
+
+    @Test
+    fun `invalidate replays the transport on next resolve`() = runBlocking {
+        val first = "https://43-4.download.real-debrid.com/d/FIRST/movie.mp4"
+        val second = "https://44-1.download.real-debrid.com/d/SECOND/movie.mp4"
+        val calls = AtomicInteger(0)
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            if (calls.getAndIncrement() == 0) first else second
+        }
+        CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
+
+        CometProxyUrlResolver.invalidate(cometUrl)
+        val out = CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
+
+        assertEquals(second, out)
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun `lastHeadersFor returns headers retained from most recent resolve`() = runBlocking {
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolvedUrl }
+        val headers = mapOf("X-Foo" to "bar")
+        CometProxyUrlResolver.resolve(cometUrl, headers = headers)
+
+        assertEquals(headers, CometProxyUrlResolver.lastHeadersFor(cometUrl))
+    }
 }
