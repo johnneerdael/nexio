@@ -231,6 +231,7 @@ data class PlayerSettings(
     val shadowAutoplayDataCollectionEnabled: Boolean = false,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
     val skipPlaceholderStreamsEnabled: Boolean = true,
+    val probeProfilingDiagnosticEnabled: Boolean = false,
     val filterEpisodeMismatchStreamsEnabled: Boolean = true,
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
@@ -531,6 +532,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val shadowAutoplayDataCollectionEnabledKey = booleanPreferencesKey("shadow_autoplay_data_collection_enabled")
     private val filterWebDolbyVisionStreamsEnabledKey = booleanPreferencesKey("filter_web_dolby_vision_streams_enabled")
     private val skipPlaceholderStreamsEnabledKey = booleanPreferencesKey("skip_placeholder_streams_enabled")
+    private val probeProfilingDiagnosticEnabledKey = booleanPreferencesKey("probe_profiling_diagnostic_enabled")
     private val filterEpisodeMismatchStreamsEnabledKey = booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
     private val filterMovieYearMismatchStreamsEnabledKey = booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
@@ -834,6 +836,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 shadowAutoplayDataCollectionEnabled = prefs[shadowAutoplayDataCollectionEnabledKey] ?: false,
                 filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
                 skipPlaceholderStreamsEnabled = prefs[skipPlaceholderStreamsEnabledKey] ?: true,
+                probeProfilingDiagnosticEnabled = prefs[probeProfilingDiagnosticEnabledKey] ?: false,
                 filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
                 filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
@@ -1215,6 +1218,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setSkipPlaceholderStreamsEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[skipPlaceholderStreamsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setProbeProfilingDiagnosticEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[probeProfilingDiagnosticEnabledKey] = enabled
         }
     }
 
