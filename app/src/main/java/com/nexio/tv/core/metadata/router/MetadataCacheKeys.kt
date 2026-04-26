@@ -15,10 +15,12 @@ class MetadataCacheKeys @Inject constructor() {
     fun routerDecisionKey(
         parentId: String,
         sourceContext: MetadataSourceContext,
-        routingPolicyVersion: String
+        routingPolicyVersion: String,
+        mediaKind: MetadataMediaKind? = null
     ): String =
         "router:v$routingPolicyVersion:parent=${parentId.trim()}" +
-            ":addon=${sourceContext.addonId.orEmpty()}:catalog=${sourceContext.catalogId.orEmpty()}"
+            ":addon=${sourceContext.addonId.orEmpty()}:catalog=${sourceContext.catalogId.orEmpty()}" +
+            mediaKind?.let { ":mediaKind=${it.name.lowercase()}" }.orEmpty()
 
     fun resolvedDocumentKey(
         route: MetadataRoute,
@@ -44,7 +46,14 @@ class MetadataCacheKeys @Inject constructor() {
             ":addon=${route.sourceContext.addonId.keyPart()}" +
             ":catalog=${route.sourceContext.catalogId.keyPart()}" +
             ":language=${route.language.keyPart()}" +
-            ":season=${route.seasonNumber?.toString().keyPart()}"
+            ":season=${route.seasonNumber?.toString().keyPart()}" +
+            ":targetIds=${route.targetIds.targetIdsKeyPart()}"
 
     private fun String?.keyPart(): String = this ?: "none"
+
+    private fun Map<MetadataPrimaryProvider, String>.targetIdsKeyPart(): String =
+        entries
+            .sortedBy { it.key.name }
+            .joinToString(",") { "${it.key.name.lowercase()}=${it.value}" }
+            .ifEmpty { "none" }
 }

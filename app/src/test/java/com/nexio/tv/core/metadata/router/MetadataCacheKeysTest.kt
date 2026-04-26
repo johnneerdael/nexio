@@ -26,6 +26,34 @@ class MetadataCacheKeysTest {
     }
 
     @Test
+    fun `router decision key differs when media kind is included`() {
+        val movieKey = cacheKeys.routerDecisionKey(
+            parentId = "tt123",
+            sourceContext = MetadataSourceContext(
+                addonId = "crunchyroll",
+                catalogId = "anime-popular"
+            ),
+            routingPolicyVersion = "3",
+            mediaKind = MetadataMediaKind.MOVIE
+        )
+        val seriesKey = cacheKeys.routerDecisionKey(
+            parentId = "tt123",
+            sourceContext = MetadataSourceContext(
+                addonId = "crunchyroll",
+                catalogId = "anime-popular"
+            ),
+            routingPolicyVersion = "3",
+            mediaKind = MetadataMediaKind.SERIES
+        )
+
+        assertEquals(
+            "router:v3:parent=tt123:addon=crunchyroll:catalog=anime-popular:mediaKind=movie",
+            movieKey
+        )
+        assertNotEquals(movieKey, seriesKey)
+    }
+
+    @Test
     fun `resolved document key changes when field policy version changes`() {
         val route = route()
 
@@ -43,6 +71,38 @@ class MetadataCacheKeysTest {
         )
 
         assertNotEquals(fieldPolicyV1, fieldPolicyV2)
+    }
+
+    @Test
+    fun `resolved document key changes when target ids change`() {
+        val tmdbRoute = route(targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550"))
+        val tvdbRoute = route(targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:78901"))
+
+        val tmdbKey = cacheKeys.resolvedDocumentKey(
+            route = tmdbRoute,
+            depth = MetadataDepth.DETAIL_CORE,
+            fieldPolicyVersion = "fields-v1",
+            artworkPolicyVersion = "artwork-v1"
+        )
+        val tvdbKey = cacheKeys.resolvedDocumentKey(
+            route = tvdbRoute,
+            depth = MetadataDepth.DETAIL_CORE,
+            fieldPolicyVersion = "fields-v1",
+            artworkPolicyVersion = "artwork-v1"
+        )
+
+        assertNotEquals(tmdbKey, tvdbKey)
+    }
+
+    @Test
+    fun `artwork decision key changes when target ids change`() {
+        val tmdbRoute = route(targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550"))
+        val tvdbRoute = route(targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:78901"))
+
+        val tmdbKey = cacheKeys.artworkDecisionKey(tmdbRoute, artworkPolicyVersion = "artwork-v1")
+        val tvdbKey = cacheKeys.artworkDecisionKey(tvdbRoute, artworkPolicyVersion = "artwork-v1")
+
+        assertNotEquals(tmdbKey, tvdbKey)
     }
 
     @Test
@@ -113,7 +173,9 @@ class MetadataCacheKeysTest {
         assertEquals("metadata:image-blob:sha256:abc123", cacheKeys.imageBlobKey(urlHash = "abc123"))
     }
 
-    private fun route(): MetadataRoute =
+    private fun route(
+        targetIds: Map<MetadataPrimaryProvider, String> = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550")
+    ): MetadataRoute =
         MetadataRoute(
             provider = MetadataPrimaryProvider.TMDB,
             parentId = "tmdb:550",
@@ -123,7 +185,7 @@ class MetadataCacheKeysTest {
                 addonId = "cinemeta",
                 catalogId = "popular"
             ),
-            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550"),
+            targetIds = targetIds,
             trace = listOf(
                 MetadataRouteTrace(
                     reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
