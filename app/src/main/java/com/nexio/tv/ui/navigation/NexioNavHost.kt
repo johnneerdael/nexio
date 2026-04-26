@@ -22,6 +22,7 @@ import com.nexio.tv.ui.screens.AndroidTvFeedBrowserScreen
 import com.nexio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nexio.tv.ui.screens.home.HomeScreen
 import com.nexio.tv.ui.screens.home.HomeViewModel
+import com.nexio.tv.ui.screens.home.recordContinueWatchingRouteContextForPlayback
 import com.nexio.tv.ui.screens.home.resolveContinueWatchingRuntimeMinutes
 import com.nexio.tv.ui.screens.home.withHydratedRuntimeMinutes
 import com.nexio.tv.ui.screens.addon.AddonManagerScreen
@@ -174,6 +175,7 @@ fun NexioNavHost(
                 },
                 onContinueWatchingClick = { item ->
                     homeScope.launch {
+                        homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
                         val route = buildContinueWatchingStreamRouteWithHydration(
                             item = item,
                             deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
@@ -186,6 +188,7 @@ fun NexioNavHost(
                 },
                 onContinueWatchingStartFromBeginning = { item ->
                     homeScope.launch {
+                        homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
                         val route = buildContinueWatchingStreamRouteWithHydration(
                             item = item,
                             deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
@@ -199,6 +202,7 @@ fun NexioNavHost(
                 },
                 onContinueWatchingManualStreamSelection = { item ->
                     homeScope.launch {
+                        homeViewModel.recordContinueWatchingRouteContextForPlayback(item)
                         val route = buildContinueWatchingManualSelectionStreamRouteWithHydration(
                             item = item,
                             resolveRuntimeMinutes = { candidate ->
