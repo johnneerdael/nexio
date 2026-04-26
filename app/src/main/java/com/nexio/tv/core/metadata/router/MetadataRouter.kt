@@ -237,6 +237,7 @@ class MetadataRouter @Inject constructor(
             reason = reason,
             sourceContext = normalized.sourceContext,
             language = normalized.language,
+            seasonNumber = normalized.seasonNumber,
             targetIds = mapOf(provider to targetId),
             targetIdRequiresIdentityResolution = requiresIdentityResolution,
             trace = trace.toList()

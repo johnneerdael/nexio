@@ -77,8 +77,9 @@ class ProviderPlanExecutor @Inject constructor() {
                 role = ProviderPlanRole.PRIMARY_CORE
             )
         )
+        val needsTranslation = !isDefaultTvdbLanguage(route.language)
 
-        if (depth == MetadataDepth.DETAIL_CORE && !isDefaultTvdbLanguage(route.language)) {
+        if (depth in tvdbCoreTranslationDepths && needsTranslation) {
             steps += step(
                 apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
                 provider = MetadataPrimaryProvider.TVDB,
@@ -93,12 +94,14 @@ class ProviderPlanExecutor @Inject constructor() {
                 provider = MetadataPrimaryProvider.TVDB,
                 role = ProviderPlanRole.SEASON
             )
-            steps += step(
-                apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
-                provider = MetadataPrimaryProvider.TVDB,
-                role = ProviderPlanRole.SEASON,
-                required = false
-            )
+            if (needsTranslation) {
+                steps += step(
+                    apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
+                    provider = MetadataPrimaryProvider.TVDB,
+                    role = ProviderPlanRole.SEASON,
+                    required = false
+                )
+            }
         }
 
         return steps
@@ -148,6 +151,14 @@ class ProviderPlanExecutor @Inject constructor() {
             ?: return true
 
         return normalized in setOf("en", "eng", "en-us", "en-gb")
+    }
+
+    private companion object {
+        val tvdbCoreTranslationDepths = setOf(
+            MetadataDepth.DETAIL_CORE,
+            MetadataDepth.DETAIL_MEDIA,
+            MetadataDepth.DETAIL_SECONDARY
+        )
     }
 
     private fun step(

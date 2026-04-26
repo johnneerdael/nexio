@@ -64,6 +64,7 @@ data class MetadataRoute(
     val reason: MetadataDecisionReason,
     val sourceContext: MetadataSourceContext,
     val language: String? = null,
+    val seasonNumber: Int? = null,
     val targetIds: Map<MetadataPrimaryProvider, String>,
     val targetIdRequiresIdentityResolution: Boolean = false,
     val trace: List<MetadataRouteTrace>
