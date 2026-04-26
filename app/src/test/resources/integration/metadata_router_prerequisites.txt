@@ -1,0 +1,28 @@
+# IntegrationRuntime shapes required before MetadataRouter primary-authority work starts.
+# This gate is intentionally limited to TMDB, TVDB, and Kitsu primary metadata routes.
+tmdb.find.external_id
+tmdb.movie.core
+tmdb.tv.core
+tmdb.season.episodes
+tmdb.movie.videos
+tmdb.tv.videos
+tmdb.movie.recommendations
+tmdb.tv.recommendations
+tmdb.movie.reviews
+tmdb.tv.reviews
+tvdb.login
+tvdb.remoteid.lookup
+tvdb.series.extended
+tvdb.series.translation
+tvdb.series.episodes.season_type
+tvdb.series.episodes.language
+tvdb.episode.translation
+tvdb.updates
+kitsu.discovery.trending
+kitsu.anime.core
+kitsu.anime.episodes
+kitsu.castings
+kitsu.anime_staff
+kitsu.anime_productions
+kitsu.media_relationships
+kitsu.search.text
