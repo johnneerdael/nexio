@@ -719,11 +719,6 @@ internal fun HomeViewModel.mergeFocusedItemEnrichment(
 }
 
 internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaPreview): TvMetadataEnrichment? {
-    resolveHomeRequestIfAvailable(
-        item = item,
-        depth = MetadataDepth.PREVIEW,
-        language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
-    )
     if (item.type.isHomeTvContent() || AnimeStremioId.parse(item.id) != null) {
         return metadataRouterFacade.fetchTvEnrichment(
             metadataRequest = MetadataRequest(

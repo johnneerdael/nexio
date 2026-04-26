@@ -75,6 +75,22 @@ class MetadataRouterBoundaryTest {
         )
     }
 
+    @Test
+    fun `home preview paths do not execute router preview requests`() {
+        val homeFiles = File("app/src/main/java/com/nexio/tv/ui/screens/home")
+            .walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .toList()
+
+        val offenders = homeFiles.filter { file ->
+            Regex("""\bMetadataDepth\.PREVIEW\b""").containsMatchIn(file.readText())
+        }.map { it.invariantSeparatorsPath }
+
+        if (offenders.isNotEmpty()) {
+            fail("Home preview rendering must stay addon-only and must not invoke MetadataRouter PREVIEW: $offenders")
+        }
+    }
+
     private fun productionRegexScan(
         forbiddenPatterns: Map<String, Regex>,
         allowedPaths: Set<String> = emptySet()
