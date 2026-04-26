@@ -149,6 +149,22 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TMDB movie SEASON is rejected because season episodes are TV-only`() {
+        val error = assertThrows(IllegalStateException::class.java) {
+            executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TMDB,
+                    mediaKind = MetadataMediaKind.MOVIE,
+                    seasonNumber = 3
+                ),
+                depth = MetadataDepth.SEASON
+            )
+        }
+
+        assertTrue(error.message!!.contains("TMDB SEASON provider plan requires SERIES mediaKind"))
+    }
+
+    @Test
     fun `TVDB DETAIL_CORE with non-default language includes optional series translation`() {
         val plan = executor.buildPlan(
             route = route(
