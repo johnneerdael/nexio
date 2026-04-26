@@ -24,11 +24,13 @@ permissions:
   contents: write
 
 jobs:
-  stable-release:
-    name: Build and publish stable release
+  stable_context:
+    name: Prepare stable release metadata
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable')
     runs-on: ubuntu-latest
-
+    outputs:
+      stable_tag: ${{ steps.stable_version.outputs.tag }}
+      build_sha: ${{ steps.stable_version.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,73 +38,24 @@ jobs:
           fetch-depth: 0
           submodules: false
           token: ${{ secrets.SUBMODULES_PAT || github.token }}
-
       - name: Configure GitHub token auth for private submodules
         env:
           GH_SUBMODULE_TOKEN: ${{ secrets.SUBMODULES_PAT || github.token }}
         run: |
           set -euo pipefail
           git config --global url."https://x-access-token:${GH_SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
-
       - name: Initialize nested submodules
         run: |
           git submodule sync --recursive
           git submodule update --init --recursive media dovi_tool tools/frontiersimulator
 
-      - name: Prepare bundled FFmpeg prebuilts
-        run: |
-          set -euo pipefail
-
-          PREBUILT_DIR="${GITHUB_WORKSPACE}/media/libraries/decoder_ffmpeg/prebuilt/ffmpeg"
-          if [ ! -d "${PREBUILT_DIR}/android-libs" ]; then
-            echo "Bundled FFmpeg prebuilts not found at ${PREBUILT_DIR}" >&2
-            echo "Run ./scripts/build_ffmpeg_prebuilts.sh (or regenerate) and commit media/libraries/decoder_ffmpeg/prebuilt/ffmpeg" >&2
-            exit 1
-          fi
-
-          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            for lib in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so libavfilter.so; do
-              if [ ! -f "${PREBUILT_DIR}/android-libs/${abi}/${lib}" ]; then
-                echo "Missing ${lib} for ${abi} in bundled prebuilts" >&2
-                exit 1
-              fi
-            done
-          done
-
-          echo "NEXIO_PREBUILT_FFMPEG_ROOT=${PREBUILT_DIR}" >> "$GITHUB_ENV"
-
-      - name: Prepare signing key from secret
-        env:
-          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
-            echo "Missing release signing secrets. Set RELEASE_KEY_ALIAS, RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_PASSWORD."
-            exit 1
-          fi
-
-          if [ ! -f "nexio.jks" ]; then
-            if [ -z "${KEYSTORE_BASE64:-}" ]; then
-              echo "Missing RELEASE_KEYSTORE_BASE64 and local nexio.jks not present"
-              exit 1
-            fi
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > nexio.jks
-          fi
-
-          echo "KEYSTORE_FILE=$(pwd)/nexio.jks" >> "$GITHUB_ENV"
-          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-
       - name: Apply stable release version from tag
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable')
+        id: stable_version
         env:
           INPUT_TAG: ${{ inputs.release_tag }}
           EVENT_TAG: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
         run: |
           set -euo pipefail
 
@@ -115,7 +68,7 @@ jobs:
           VERSION_NAME="${TAG_NAME#v}"
           if ! echo "$VERSION_NAME" | grep -Eq '^[0-9]+(\.[0-9]+)*([.-].*)?$'; then
             echo "Resolved version name '$VERSION_NAME' does not look like a release tag" >&2
-            exit 1
+              exit 1
           fi
 
           CURRENT_VERSION_CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' app/build.gradle.kts | head -n 1)
@@ -128,141 +81,315 @@ jobs:
           perl -0pi -e "s/versionCode[[:space:]]*=[[:space:]]*[0-9]+/versionCode = ${NEW_VERSION_CODE}/" app/build.gradle.kts
           perl -0pi -e "s/versionName[[:space:]]*=[[:space:]]*\"[^\"]*\"/versionName = \"${VERSION_NAME}\"/" app/build.gradle.kts
 
-          echo "versionCode=${NEW_VERSION_CODE}"
-          echo "versionName=${VERSION_NAME}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$RELEASE_TYPE" = "stable" ]; then
+            if ! git diff --quiet -- app/build.gradle.kts; then
+              git config user.name "${GITHUB_ACTOR}"
+              git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+              git add app/build.gradle.kts
+              git commit -m "chore(release): bump version to ${VERSION_NAME}"
+              git push origin "HEAD:${GITHUB_REF_NAME}"
+            fi
+          fi
 
-      - name: Commit stable version bump
-        if: github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable'
+          echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "versionCode=${NEW_VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "versionName=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+
+  stable_build_universal:
+    name: Stable release universal APK
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    continue-on-error: true
+    needs: stable_context
+    env:
+      GRADLE_COMMON_ARGS: >-
+        --no-daemon --stacktrace
+        -Dorg.gradle.workers.max=2
+        -Dorg.gradle.jvmargs=-Xms768m -Xmx5g
+        -Dkotlin.compiler.execution.strategy=in-process
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+          ref: ${{ needs.stable_context.outputs.build_sha }}
+          token: ${{ secrets.SUBMODULES_PAT || github.token }}
+      - name: Configure GitHub token auth for private submodules
         env:
-          INPUT_TAG: ${{ inputs.release_tag }}
-          EVENT_TAG: ${{ github.ref_name }}
+          GH_SUBMODULE_TOKEN: ${{ secrets.SUBMODULES_PAT || github.token }}
         run: |
           set -euo pipefail
-
-          TAG_NAME="${INPUT_TAG:-$EVENT_TAG}"
-          if [ -z "$TAG_NAME" ]; then
-            echo "Stable release tag could not be resolved." >&2
+          git config --global url."https://x-access-token:${GH_SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive media dovi_tool tools/frontiersimulator
+      - name: Prepare bundled FFmpeg prebuilts
+        run: |
+          set -euo pipefail
+          PREBUILT_DIR="${GITHUB_WORKSPACE}/media/libraries/decoder_ffmpeg/prebuilt/ffmpeg"
+          if [ ! -d "${PREBUILT_DIR}/android-libs" ]; then
+            echo "Bundled FFmpeg prebuilts not found at ${PREBUILT_DIR}" >&2
+            echo "Run ./scripts/build_ffmpeg_prebuilts.sh (or regenerate) and commit media/libraries/decoder_ffmpeg/prebuilt/ffmpeg" >&2
             exit 1
           fi
-
-          VERSION_NAME="${TAG_NAME#v}"
-          if git diff --quiet -- app/build.gradle.kts; then
-            echo "No version changes to commit."
-            exit 0
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for lib in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so libavfilter.so; do
+              if [ ! -f "${PREBUILT_DIR}/android-libs/${abi}/${lib}" ]; then
+                echo "Missing ${lib} for ${abi} in bundled prebuilts" >&2
+                exit 1
+              fi
+            done
+          done
+          echo "NEXIO_PREBUILT_FFMPEG_ROOT=${PREBUILT_DIR}" >> "$GITHUB_ENV"
+      - name: Prepare signing key from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "Missing release signing secrets. Set RELEASE_KEY_ALIAS, RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_PASSWORD."
+            exit 1
           fi
-
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-          git add app/build.gradle.kts
-          git commit -m "chore(release): bump version to ${VERSION_NAME}"  
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-
+          if [ ! -f "nexio.jks" ]; then
+            if [ -z "${KEYSTORE_BASE64:-}" ]; then
+              echo "Missing RELEASE_KEYSTORE_BASE64 and local nexio.jks not present"
+              exit 1
+            fi
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > nexio.jks
+          fi
+          echo "KEYSTORE_FILE=$(pwd)/nexio.jks" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-
-      - name: Build release APK (prefer universal, fallback armv7)
-        id: stable_release_build
+      - name: Build release universal APK
+        id: stable_universal_build
+        timeout-minutes: 120
         run: |
           set -euo pipefail
+          STARTED_AT="$(date -u +%s)"
+          ./gradlew ${GRADLE_COMMON_ARGS} :app:lintUniversalRelease :app:assembleUniversalRelease \
+            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
+          DURATION_SEC=$(( $(date -u +%s) - STARTED_AT ))
+          echo "Universal build succeeded in ${DURATION_SEC}s"
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Universal release APK not found after successful build." >&2
+            exit 1
+          fi
+          mkdir -p app/build/outputs/apk/release
+          cp "$APK_PATH" app/build/outputs/apk/release/nexio_universal_stable.apk
+          echo "apk_path=app/build/outputs/apk/release/nexio_universal_stable.apk" >> "$GITHUB_OUTPUT"
+      - name: Upload universal APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stable-universal-apk
+          path: app/build/outputs/apk/release/nexio_universal_stable.apk
+          if-no-files-found: error
 
-          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"; then
-            APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
-            if [ -z "$APK_PATH" ]; then
-              echo "Universal release APK not found after successful build." >&2
+  stable_build_armv7:
+    name: Stable release armv7 APK
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: stable_context
+    env:
+      GRADLE_COMMON_ARGS: >-
+        --no-daemon --stacktrace
+        -Dorg.gradle.workers.max=2
+        -Dorg.gradle.jvmargs=-Xms768m -Xmx5g
+        -Dkotlin.compiler.execution.strategy=in-process
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+          ref: ${{ needs.stable_context.outputs.build_sha }}
+          token: ${{ secrets.SUBMODULES_PAT || github.token }}
+      - name: Configure GitHub token auth for private submodules
+        env:
+          GH_SUBMODULE_TOKEN: ${{ secrets.SUBMODULES_PAT || github.token }}
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${GH_SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive media dovi_tool tools/frontiersimulator
+      - name: Prepare bundled FFmpeg prebuilts
+        run: |
+          set -euo pipefail
+          PREBUILT_DIR="${GITHUB_WORKSPACE}/media/libraries/decoder_ffmpeg/prebuilt/ffmpeg"
+          if [ ! -d "${PREBUILT_DIR}/android-libs" ]; then
+            echo "Bundled FFmpeg prebuilts not found at ${PREBUILT_DIR}" >&2
+            echo "Run ./scripts/build_ffmpeg_prebuilts.sh (or regenerate) and commit media/libraries/decoder_ffmpeg/prebuilt/ffmpeg" >&2
+            exit 1
+          fi
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for lib in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so libavfilter.so; do
+              if [ ! -f "${PREBUILT_DIR}/android-libs/${abi}/${lib}" ]; then
+                echo "Missing ${lib} for ${abi} in bundled prebuilts" >&2
+                exit 1
+              fi
+            done
+          done
+          echo "NEXIO_PREBUILT_FFMPEG_ROOT=${PREBUILT_DIR}" >> "$GITHUB_ENV"
+      - name: Prepare signing key from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "Missing release signing secrets. Set RELEASE_KEY_ALIAS, RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_PASSWORD."
+            exit 1
+          fi
+          if [ ! -f "nexio.jks" ]; then
+            if [ -z "${KEYSTORE_BASE64:-}" ]; then
+              echo "Missing RELEASE_KEYSTORE_BASE64 and local nexio.jks not present"
               exit 1
             fi
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > nexio.jks
+          fi
+          echo "KEYSTORE_FILE=$(pwd)/nexio.jks" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build release armv7 APK
+        id: stable_armv7_build
+        run: |
+          set -euo pipefail
+          STARTED_AT="$(date -u +%s)"
+          ./gradlew ${GRADLE_COMMON_ARGS} :app:lintArmv7Release :app:assembleArmv7Release \
+            -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a \
+            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
+          DURATION_SEC=$(( $(date -u +%s) - STARTED_AT ))
+          echo "Armv7 release build succeeded in ${DURATION_SEC}s"
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "armv7 release APK not found after successful build." >&2
+            exit 1
+          fi
+          mkdir -p app/build/outputs/apk/release
+          cp "$APK_PATH" app/build/outputs/apk/release/nexio_armv7_stable.apk
+          echo "apk_path=app/build/outputs/apk/release/nexio_armv7_stable.apk" >> "$GITHUB_OUTPUT"
+      - name: Upload armv7 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stable-armv7-apk
+          path: app/build/outputs/apk/release/nexio_armv7_stable.apk
+          if-no-files-found: error
 
-            echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+  stable_release:
+    name: Build and publish stable release
+    if: always() && needs.stable_context.result == 'success' && (needs.stable_build_universal.result == 'success' || needs.stable_build_armv7.result == 'success')
+    runs-on: ubuntu-latest
+    needs:
+      - stable_context
+      - stable_build_universal
+      - stable_build_armv7
+    steps:
+      - name: Download stable universal APK artifact
+        id: stable_universal_artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: stable-universal-apk
+          path: artifacts/stable/universal
+      - name: Download stable armv7 APK artifact
+        id: stable_armv7_artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: stable-armv7-apk
+          path: artifacts/stable/armv7
+      - name: Select stable APK artifact
+        id: stable_asset
+        run: |
+          set -euo pipefail
+          UNIVERSAL_APK=$(find artifacts/stable/universal -type f -name "*.apk" | head -n 1 || true)
+          ARMV7_APK=$(find artifacts/stable/armv7 -type f -name "*.apk" | head -n 1 || true)
+          if [ -n "$UNIVERSAL_APK" ]; then
+            mkdir -p app/build/outputs/apk/release
+            cp "$UNIVERSAL_APK" app/build/outputs/apk/release/nexio_stable.apk
+            echo "path=app/build/outputs/apk/release/nexio_stable.apk" >> "$GITHUB_OUTPUT"
             echo "variant=universal" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          echo "Universal release build failed, retrying armv7..."
-          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release \
-            -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a \
-            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "armv7 release APK not found after successful fallback build." >&2
-            exit 1
+          if [ -n "$ARMV7_APK" ]; then
+            mkdir -p app/build/outputs/apk/release
+            cp "$ARMV7_APK" app/build/outputs/apk/release/nexio_stable.apk
+            echo "path=app/build/outputs/apk/release/nexio_stable.apk" >> "$GITHUB_OUTPUT"
+            echo "variant=armv7" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-
-          echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
-          echo "variant=armv7" >> "$GITHUB_OUTPUT"
-
-      - name: Verify release APK signature
+          echo "No stable APK artifact was produced." >&2
+          exit 1
+      - name: Verify stable APK signature
         run: |
           set -euo pipefail
-
-          APK_PATH="${{ steps.stable_release_build.outputs.apk_path }}"
-          if [ -z "$APK_PATH" ]; then
-            echo "Stable APK artifact not found" >&2
-            exit 1
-          fi
-
+          APK_PATH="${{ steps.stable_asset.outputs.path }}"
           APKSIGNER="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           if [ -n "$APKSIGNER" ]; then
             APKSIGNER="$(find "$APKSIGNER/build-tools" -path '*/apksigner' -type f 2>/dev/null | sort -V | tail -n 1)"
           fi
-
           if [ -z "$APKSIGNER" ]; then
             APKSIGNER="$(command -v apksigner || true)"
           fi
-
           if [ -z "$APKSIGNER" ]; then
             echo "apksigner not found in runner environment" >&2
             exit 1
           fi
-
           "$APKSIGNER" verify --print-certs "$APK_PATH"
-
-      - name: Prepare stable APK filename
-        id: stable_asset
-        env:
-          INPUT_TAG: ${{ inputs.release_tag }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-
-          APK_PATH="${{ steps.stable_release_build.outputs.apk_path }}"
-          if [ -z "$APK_PATH" ]; then
-            echo "Stable APK artifact not found" >&2
-            exit 1
-          fi
-
-          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && { [ "$TAG" = "main" ] || [ -z "$TAG" ]; }; then
-            echo "Release tag is required for manual stable runs. Set workflow input release_tag." >&2
-            exit 1
-          fi
-
-          mkdir -p app/build/outputs/apk/release
-          cp "$APK_PATH" app/build/outputs/apk/release/nexio_stable.apk
-          echo "path=app/build/outputs/apk/release/nexio_stable.apk" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
       - name: Publish/update stable release
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          TAG="${{ steps.stable_asset.outputs.tag }}"
+          TAG="${{ needs.stable_context.outputs.stable_tag }}"
           ASSET="${{ steps.stable_asset.outputs.path }}"
-
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$TAG" = "main" ]; then
+            echo "Release tag is required for manual stable runs. Set workflow input release_tag." >&2
+            exit 1
+          fi
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "$ASSET" --clobber
           else
             gh release create "$TAG" "$ASSET" --title "Nexio ${TAG}" --generate-notes
           fi
 
-  beta-release:
-    name: Build and publish beta release
+  beta-universal-build:
+    name: Beta release universal APK
     if: startsWith(github.ref, 'refs/tags/beta-') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'beta')
     runs-on: ubuntu-latest
-
+    timeout-minutes: 180
+    continue-on-error: true
+    env:
+      GRADLE_COMMON_ARGS: >-
+        --no-daemon --stacktrace
+        -Dorg.gradle.workers.max=2
+        -Dorg.gradle.jvmargs=-Xms768m -Xmx5g
+        -Dkotlin.compiler.execution.strategy=in-process
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -338,87 +465,214 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Build release APK (prefer universal, fallback armv7)
-        id: beta_release_build
+      - name: Build release universal APK
+        id: beta_universal_build
+        timeout-minutes: 120
         run: |
           set -euo pipefail
+          UNIVERSAL_STARTED_AT="$(date -u +%s)"
+          ./gradlew ${GRADLE_COMMON_ARGS} :app:lintUniversalRelease :app:assembleUniversalRelease \
+            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
+          DURATION_SEC=$(( $(date -u +%s) - UNIVERSAL_STARTED_AT ))
+          echo "Universal release build succeeded in ${DURATION_SEC}s"
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Universal release APK not found after successful build." >&2
+            exit 1
+          fi
+          mkdir -p app/build/outputs/apk/release
+          cp "$APK_PATH" app/build/outputs/apk/release/nexio_universal_beta.apk
+          echo "apk_path=app/build/outputs/apk/release/nexio_universal_beta.apk" >> "$GITHUB_OUTPUT"
+      - name: Upload universal APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-universal-apk
+          path: app/build/outputs/apk/release/nexio_universal_beta.apk
+          if-no-files-found: error
 
-          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"; then
-            APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
-            if [ -z "$APK_PATH" ]; then
-              echo "Universal release APK not found after successful build." >&2
+  beta-armv7-build:
+    name: Beta release armv7 APK
+    if: startsWith(github.ref, 'refs/tags/beta-') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'beta')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GRADLE_COMMON_ARGS: >-
+        --no-daemon --stacktrace
+        -Dorg.gradle.workers.max=2
+        -Dorg.gradle.jvmargs=-Xms768m -Xmx5g
+        -Dkotlin.compiler.execution.strategy=in-process
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+          token: ${{ secrets.SUBMODULES_PAT || github.token }}
+
+      - name: Configure GitHub token auth for private submodules
+        env:
+          GH_SUBMODULE_TOKEN: ${{ secrets.SUBMODULES_PAT || github.token }}
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${GH_SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive media dovi_tool tools/frontiersimulator
+
+      - name: Prepare bundled FFmpeg prebuilts
+        run: |
+          set -euo pipefail
+          PREBUILT_DIR="${GITHUB_WORKSPACE}/media/libraries/decoder_ffmpeg/prebuilt/ffmpeg"
+          if [ ! -d "${PREBUILT_DIR}/android-libs" ]; then
+            echo "Bundled FFmpeg prebuilts not found at ${PREBUILT_DIR}" >&2
+            echo "Run ./scripts/build_ffmpeg_prebuilts.sh (or regenerate) and commit media/libraries/decoder_ffmpeg/prebuilt/ffmpeg" >&2
+            exit 1
+          fi
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for lib in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so libavfilter.so; do
+              if [ ! -f "${PREBUILT_DIR}/android-libs/${abi}/${lib}" ]; then
+                echo "Missing ${lib} for ${abi} in bundled prebuilts" >&2
+                exit 1
+              fi
+            done
+          done
+          echo "NEXIO_PREBUILT_FFMPEG_ROOT=${PREBUILT_DIR}" >> "$GITHUB_ENV"
+
+      - name: Prepare signing key from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "Missing release signing secrets. Set RELEASE_KEY_ALIAS, RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_PASSWORD."
+            exit 1
+          fi
+          if [ ! -f "nexio.jks" ]; then
+            if [ -z "${KEYSTORE_BASE64:-}" ]; then
+              echo "Missing RELEASE_KEYSTORE_BASE64 and local nexio.jks not present"
               exit 1
             fi
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > nexio.jks
+          fi
+          echo "KEYSTORE_FILE=$(pwd)/nexio.jks" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
 
-            echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build release armv7 APK
+        id: beta_armv7_build
+        run: |
+          set -euo pipefail
+          STARTED_AT="$(date -u +%s)"
+          ./gradlew ${GRADLE_COMMON_ARGS} :app:lintArmv7Release :app:assembleArmv7Release \
+            -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a \
+            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
+          DURATION_SEC=$(( $(date -u +%s) - STARTED_AT ))
+          echo "Armv7 release build succeeded in ${DURATION_SEC}s"
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "armv7 release APK not found after successful build." >&2
+            exit 1
+          fi
+          mkdir -p app/build/outputs/apk/release
+          cp "$APK_PATH" app/build/outputs/apk/release/nexio_armv7_beta.apk
+          echo "apk_path=app/build/outputs/apk/release/nexio_armv7_beta.apk" >> "$GITHUB_OUTPUT"
+      - name: Upload armv7 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-armv7-apk
+          path: app/build/outputs/apk/release/nexio_armv7_beta.apk
+          if-no-files-found: error
+
+  beta_release:
+    name: Build and publish beta release
+    if: always() && (needs['beta-universal-build'].result == 'success' || needs['beta-armv7-build'].result == 'success')
+    runs-on: ubuntu-latest
+    needs:
+      - beta-universal-build
+      - beta-armv7-build
+    steps:
+      - name: Download beta universal APK artifact
+        id: beta_universal_artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: beta-universal-apk
+          path: artifacts/beta/universal
+      - name: Download beta armv7 APK artifact
+        id: beta_armv7_artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: beta-armv7-apk
+          path: artifacts/beta/armv7
+      - name: Select beta APK artifact
+        id: beta_asset
+        run: |
+          set -euo pipefail
+          UNIVERSAL_APK=$(find artifacts/beta/universal -type f -name "*.apk" | head -n 1 || true)
+          ARMV7_APK=$(find artifacts/beta/armv7 -type f -name "*.apk" | head -n 1 || true)
+          if [ -n "$UNIVERSAL_APK" ]; then
+            mkdir -p app/build/outputs/apk/release
+            cp "$UNIVERSAL_APK" app/build/outputs/apk/release/nexio_beta.apk
+            echo "path=app/build/outputs/apk/release/nexio_beta.apk" >> "$GITHUB_OUTPUT"
             echo "variant=universal" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          echo "Universal release build failed, retrying armv7..."
-          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release \
-            -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a \
-            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "armv7 release APK not found after successful fallback build." >&2
-            exit 1
+          if [ -n "$ARMV7_APK" ]; then
+            mkdir -p app/build/outputs/apk/release
+            cp "$ARMV7_APK" app/build/outputs/apk/release/nexio_beta.apk
+            echo "path=app/build/outputs/apk/release/nexio_beta.apk" >> "$GITHUB_OUTPUT"
+            echo "variant=armv7" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-
-          echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
-          echo "variant=armv7" >> "$GITHUB_OUTPUT"
-
+          echo "No beta APK artifact was produced." >&2
+          exit 1
       - name: Verify beta APK signature
         run: |
           set -euo pipefail
-
-          APK_PATH="${{ steps.beta_release_build.outputs.apk_path }}"
-          if [ -z "$APK_PATH" ]; then
-            echo "Beta APK artifact not found" >&2
-            exit 1
-          fi
-
+          APK_PATH="${{ steps.beta_asset.outputs.path }}"
           APKSIGNER="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           if [ -n "$APKSIGNER" ]; then
             APKSIGNER="$(find "$APKSIGNER/build-tools" -path '*/apksigner' -type f 2>/dev/null | sort -V | tail -n 1)"
           fi
-
           if [ -z "$APKSIGNER" ]; then
             APKSIGNER="$(command -v apksigner || true)"
           fi
-
           if [ -z "$APKSIGNER" ]; then
             echo "apksigner not found in runner environment" >&2
             exit 1
           fi
-
           "$APKSIGNER" verify --print-certs "$APK_PATH"
-
       - name: Prepare beta APK filename
-        id: beta_asset
+        id: beta_asset_path
         run: |
           set -euo pipefail
-
-          APK_PATH="${{ steps.beta_release_build.outputs.apk_path }}"
+          APK_PATH="${{ steps.beta_asset.outputs.path }}"
           if [ -z "$APK_PATH" ]; then
             echo "Beta APK artifact not found" >&2
             exit 1
           fi
-
-          mkdir -p app/build/outputs/apk/release
-          cp "$APK_PATH" app/build/outputs/apk/release/nexio_beta.apk
-          echo "path=app/build/outputs/apk/release/nexio_beta.apk" >> "$GITHUB_OUTPUT"
-
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
       - name: Publish moving beta pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="beta"
-          ASSET="${{ steps.beta_asset.outputs.path }}"
-
+          ASSET="${{ steps.beta_asset_path.outputs.path }}"
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release delete "$TAG" --cleanup-tag --yes
           fi
-
           gh release create "$TAG" "$ASSET" --prerelease --title "Nexio Beta (${GITHUB_SHA:0:7})"

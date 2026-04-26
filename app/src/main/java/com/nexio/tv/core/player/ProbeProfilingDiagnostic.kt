@@ -81,17 +81,6 @@ object ProbeProfilingDiagnostic {
 
         val sessionStartedAtMs = System.currentTimeMillis()
         coroutineScope {
-            val primaryProxy = async {
-                runProbe(
-                    label = "primary_proxy_direct",
-                    streamKey = primaryStreamKey,
-                    url = primaryUrl,
-                    headers = primaryHeaders,
-                    addonHost = null,
-                    routeThroughResolver = false,
-                    perProbeTimeoutMs = perProbeTimeoutMs
-                )
-            }
             val primaryResolved = async {
                 runProbe(
                     label = "primary_resolve_cdn",
@@ -127,8 +116,7 @@ object ProbeProfilingDiagnostic {
                     }
                 }
             }
-            val outcomes = listOf(primaryProxy, primaryResolved).map { it.await() } +
-                fallbackJobs.map { it.await() }
+            val outcomes = listOf(primaryResolved.await()) + fallbackJobs.map { it.await() }
             val sessionElapsedMs = System.currentTimeMillis() - sessionStartedAtMs
             // Per-probe lines are already emitted by runProbe immediately on
             // completion — this final summary just identifies the winner so we

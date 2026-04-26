@@ -1068,6 +1068,41 @@ class StreamScreenViewModel @Inject constructor(
         return result.playbackInfo
     }
 
+    /**
+     * Fire [CometProxyUrlResolver.prewarm] for the top deterministic autoplay
+     * candidates BEFORE the resolve-budget candidate-selection loop runs.
+     *
+     * Without this, every candidate's first call to
+     * [CometProxyUrlResolver.lastResolutionFor] returns `null` (the resolver
+     * has never seen the URL), the resolve-budget predicate waits its full
+     * deadline expecting a verdict that never lands, and autoplay falls
+     * through to "no candidate ready" — i.e. autoplay never picks a stream.
+     *
+     * The existing [prewarmCometProxyCandidates] only fires AFTER autoplay
+     * has committed to a primary, which is too late for our pre-commit
+     * readiness check.
+     */
+    private fun prewarmTopAutoplayCandidatesForResolveBudget(
+        event: ShadowAutoPlayDecisionEvent,
+        eligibleStreams: List<StreamCardModel>
+    ) {
+        val candidates = event.winners
+            .asSequence()
+            .mapNotNull { decision ->
+                eligibleStreams.firstOrNull { it.matchesShadowStreamKey(decision.streamKey) }
+            }
+            .take(DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT)
+        candidates.forEach { item ->
+            val url = item.stream.getStreamUrl() ?: return@forEach
+            val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(item.stream.addonBaseUrl)
+            CometProxyUrlResolver.prewarm(
+                url,
+                item.stream.behaviorHints?.proxyHeaders?.request,
+                addonHost
+            )
+        }
+    }
+
     private fun prewarmCometProxyCandidates(playbackInfo: StreamPlaybackInfo) {
         val primaryAddonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(playbackInfo.addonBaseUrl)
         playbackInfo.url?.let {
@@ -1161,6 +1196,15 @@ class StreamScreenViewModel @Inject constructor(
         if (!isFinalPass && !earlyFinishDecision.triggered && !earlyFinishFallbackReached) {
             return null
         }
+
+        // Prewarm the top-N candidate proxy URLs BEFORE the resolve-budget
+        // candidate-selection loop runs. Without this, `lastResolutionFor()`
+        // returns null for every URL the resolver hasn't seen yet, so the
+        // resolve-budget predicate always exhausts its 4s window with no
+        // verdict and skips every candidate. The existing
+        // `prewarmCometProxyCandidates` only fires AFTER autoplay commits to
+        // a primary, which is too late for our pre-commit readiness check.
+        prewarmTopAutoplayCandidatesForResolveBudget(event = event, eligibleStreams = eligibleStreams)
 
         val resolveBudgetDeadlineMs = System.currentTimeMillis() + AUTOPLAY_RESOLVE_BUDGET_MS
         val selectedCandidate = selectDeterministicAutoplayCandidate(
@@ -1572,18 +1616,40 @@ internal fun resolveReadyPredicateWithDeadline(
     nowMs: () -> Long = { System.currentTimeMillis() },
     pollSleepMs: Long = 50L
 ): suspend (StreamCardModel) -> Boolean = predicate@{ candidate ->
+    val streamKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
     val url = candidate.stream.getStreamUrl()
-        ?: return@predicate false
+        ?: run {
+            Log.i(TAG, "AUTOPLAY_RESOLVE_CANDIDATE_VISITED stream=$streamKey verdict=no_url waitedMs=0 outcome=skipped")
+            return@predicate false
+        }
+    val startedAtMs = nowMs()
+    val initialVerdict = CometProxyUrlResolver.lastResolutionFor(url)
+    val isProxy = CometProxyUrlResolver.isCometProxy(url, candidate.stream.addonBaseUrl?.let {
+        CometProxyUrlResolver.hostOfAddonBaseUrl(it)
+    })
+    Log.i(
+        TAG,
+        "AUTOPLAY_RESOLVE_CANDIDATE_VISITED stream=$streamKey verdict=${initialVerdict?.let { it::class.simpleName } ?: "null"} " +
+            "isProxyEligible=$isProxy budgetRemainingMs=${(deadlineEpochMs - startedAtMs).coerceAtLeast(0)}"
+    )
     while (true) {
-        when (CometProxyUrlResolver.lastResolutionFor(url)) {
+        when (val verdict = CometProxyUrlResolver.lastResolutionFor(url)) {
             is com.nexio.tv.core.player.ProxyResolution.Redirected,
-            com.nexio.tv.core.player.ProxyResolution.NotEligible -> return@predicate true
+            com.nexio.tv.core.player.ProxyResolution.NotEligible -> {
+                Log.i(
+                    TAG,
+                    "AUTOPLAY_RESOLVE_CANDIDATE_READY stream=$streamKey verdict=${verdict::class.simpleName} " +
+                        "waitedMs=${nowMs() - startedAtMs}"
+                )
+                return@predicate true
+            }
             com.nexio.tv.core.player.ProxyResolution.Placeholder,
             com.nexio.tv.core.player.ProxyResolution.ResolveFailed -> {
                 Log.i(
                     TAG,
-                    "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=${candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey} " +
-                        "reason=resolver_terminal_non_redirected"
+                    "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=$streamKey " +
+                        "reason=resolver_terminal_non_redirected verdict=${verdict::class.simpleName} " +
+                        "waitedMs=${nowMs() - startedAtMs}"
                 )
                 return@predicate false
             }
@@ -1591,8 +1657,9 @@ internal fun resolveReadyPredicateWithDeadline(
                 if (nowMs() >= deadlineEpochMs) {
                     Log.i(
                         TAG,
-                        "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=${candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey} " +
-                            "reason=resolve_budget_exhausted"
+                        "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=$streamKey " +
+                            "reason=resolve_budget_exhausted isProxyEligible=$isProxy " +
+                            "waitedMs=${nowMs() - startedAtMs}"
                     )
                     return@predicate false
                 }

@@ -37,7 +37,9 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
+import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
+import com.nexio.tv.data.trailer.buildStableYouTubeRequestHeaders
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -156,7 +158,12 @@ fun TrailerPlayer(
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
             DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
         } else {
-            DefaultMediaSourceFactory(DefaultHttpDataSource.Factory())
+            DefaultMediaSourceFactory(
+                DefaultHttpDataSource.Factory()
+                    .setUserAgent(YOUTUBE_STABLE_WEB_USER_AGENT)
+                    .setDefaultRequestProperties(buildStableYouTubeRequestHeaders())
+                    .setAllowCrossProtocolRedirects(true)
+            )
         }
     }
 

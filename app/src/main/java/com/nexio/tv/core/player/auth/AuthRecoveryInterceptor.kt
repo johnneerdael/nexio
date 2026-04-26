@@ -91,6 +91,18 @@ class AuthRecoveryInterceptor(
         val isTransient = TransientFailureCodes.matches(response.code)
         if (!isAuth && !isTransient) return response
 
+        // Always emit when we see a recoverable failure, even before deciding
+        // whether to recover. Surfaces the case where 5xx responses reach the
+        // interceptor but get short-circuited by NO_PROXY_KNOWN / GAVE_UP /
+        // RATE_LIMITED, which used to be invisible until the per-outcome line
+        // fired.
+        Log.i(
+            TAG,
+            "AUTH_RECOVERY_INTERCEPTED status=${response.code} " +
+                "bucket=${if (isAuth) "auth" else "transient"} " +
+                "host=${rewritten.url.host} attemptsRemainingBeforeDecrement=${attemptsRemaining.get()}"
+        )
+
         val originalUrl = rewritten.url.toString()
         val proxyUrl = CometProxyUrlResolver.proxyUrlFor(originalUrl)
         if (proxyUrl == null) {
