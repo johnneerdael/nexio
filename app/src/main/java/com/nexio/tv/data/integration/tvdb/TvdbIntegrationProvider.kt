@@ -32,6 +32,7 @@ import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesData
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import com.nexio.tv.data.integration.metadata.LocalizationPolicy
+import com.nexio.tv.data.integration.metadata.LocalizedEpisodeBundle
 import com.nexio.tv.data.integration.metadata.TvdbEpisodeLocalization
 import com.nexio.tv.data.integration.metadata.tvdbSeriesTranslationCacheKey
 import com.nexio.tv.data.remote.api.TvdbUpdatesResponse
@@ -367,7 +368,20 @@ class TvdbIntegrationProvider @Inject constructor(
         seasonType: String,
         requestedLanguage: String?,
         season: Int? = null
-    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> =
+        fetchLocalizedSeasonEpisodeBundle(
+            tvdbId = tvdbId,
+            seasonType = seasonType,
+            requestedLanguage = requestedLanguage,
+            season = season
+        ).episodes.mapValues { it.value.metadata }
+
+    internal suspend fun fetchLocalizedSeasonEpisodeBundle(
+        tvdbId: Int,
+        seasonType: String,
+        requestedLanguage: String?,
+        season: Int? = null
+    ): LocalizedEpisodeBundle {
         val policy = LocalizationPolicy.tvdb(requestedLanguage)
         val englishEpisodes = fetchSeriesEpisodesTranslated(
             tvdbId = tvdbId,
@@ -376,10 +390,17 @@ class TvdbIntegrationProvider @Inject constructor(
             season = season,
             localizationPolicyVersion = policy.policyVersion
         )?.episodes.orEmpty()
-        if (englishEpisodes.isEmpty()) return emptyMap()
+        if (englishEpisodes.isEmpty()) {
+            return TvdbEpisodeLocalization.mergeEnglishBaseBundle(
+                policy = policy,
+                englishEpisodes = emptyList(),
+                localizedSeasonEpisodes = emptyList(),
+                perEpisodeTranslations = emptyMap()
+            )
+        }
 
         if (policy.requestedIsFallback) {
-            return TvdbEpisodeLocalization.mergeEnglishBase(
+            return TvdbEpisodeLocalization.mergeEnglishBaseBundle(
                 policy = policy,
                 englishEpisodes = englishEpisodes,
                 localizedSeasonEpisodes = emptyList(),
@@ -408,7 +429,7 @@ class TvdbIntegrationProvider @Inject constructor(
             }
             .toMap()
 
-        return TvdbEpisodeLocalization.mergeEnglishBase(
+        return TvdbEpisodeLocalization.mergeEnglishBaseBundle(
             policy = policy,
             englishEpisodes = englishEpisodes,
             localizedSeasonEpisodes = localizedEpisodes,

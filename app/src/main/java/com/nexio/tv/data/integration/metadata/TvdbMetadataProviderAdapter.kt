@@ -53,12 +53,12 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                 emptyCandidate(this.provider)
             }
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE -> {
-                episodeMetadata += integrationProvider.fetchLocalizedSeasonEpisodeMetadata(
+                episodeMetadata += integrationProvider.fetchLocalizedSeasonEpisodeBundle(
                     tvdbId = tvdbId,
                     seasonType = "default",
                     requestedLanguage = language,
                     season = route.seasonNumber
-                )
+                ).episodes.mapValues { it.value.metadata }
                 emptyCandidate(this.provider)
             }
             TvdbApiShapes.EPISODE_TRANSLATION -> emptyCandidate(this.provider)

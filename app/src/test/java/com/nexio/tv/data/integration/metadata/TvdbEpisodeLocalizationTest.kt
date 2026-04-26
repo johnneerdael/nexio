@@ -156,6 +156,41 @@ class TvdbEpisodeLocalizationTest {
     }
 
     @Test
+    fun `localized episode bundle records selected language fallback and rejected candidates`() {
+        val bundle = TvdbEpisodeLocalization.mergeEnglishBaseBundle(
+            policy = LocalizationPolicy.tvdb("nl"),
+            englishEpisodes = listOf(
+                episode(
+                    id = 501,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42
+                )
+            ),
+            localizedSeasonEpisodes = listOf(
+                episode(
+                    id = 501,
+                    number = 1,
+                    name = "Nederlandse titel",
+                    overview = "N/A",
+                    runtime = 99
+                )
+            ),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        val localized = bundle.episodes.getValue(1 to 1)
+        assertEquals("Nederlandse titel", localized.metadata.title)
+        assertEquals("English overview", localized.metadata.overview)
+        assertEquals("nld", localized.fieldSources.getValue("title").selectedLanguage.providerCode)
+        assertEquals("eng", localized.fieldSources.getValue("overview").selectedLanguage.providerCode)
+        assertEquals(FallbackRole.LANGUAGE_FALLBACK, localized.fieldSources.getValue("overview").fallbackRole)
+        assertEquals(1, bundle.perEpisodeTranslationFallbacksAttempted)
+        assertEquals(8, bundle.maxPerEpisodeTranslationFallbacksAllowed)
+    }
+
+    @Test
     fun `missing localized episode falls back to english metadata`() {
         val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
             englishEpisodes = listOf(
