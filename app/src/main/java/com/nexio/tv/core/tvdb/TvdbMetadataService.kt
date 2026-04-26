@@ -272,24 +272,44 @@ class TvdbMetadataService @Inject constructor(
         }
 
         val records = response.body()?.data?.episodes.orEmpty()
-        val translatedOverviewsById = fetchTranslatedSeasonEpisodeOverviews(
+        val seasonTranslations = fetchTranslatedSeasonEpisodeRecords(
             authorization = authorization,
             seriesId = identity.tvdbId,
             seasonNumber = seasonNumber,
             language = normalizedLanguage
         )
-        val perEpisodeTranslatedOverviewsById = fetchPerEpisodeTranslationOverviews(
+        val perEpisodeTranslations = fetchPerEpisodeTranslationRecords(
             authorization = authorization,
             episodeIds = records.mapNotNull { record -> record.id }
-                .filterNot { episodeId -> episodeId in translatedOverviewsById },
+                .filterNot { episodeId -> episodeId in seasonTranslations },
             language = normalizedLanguage
         )
-        val allTranslatedOverviewsById = translatedOverviewsById + perEpisodeTranslatedOverviewsById
+        val translationsById = seasonTranslations + perEpisodeTranslations
+
+        val missingEpisodeIds = records.mapNotNull { record -> record.id }
+            .filterNot { episodeId -> episodeId in translationsById }
+        val englishTranslationsById = if (normalizedLanguage == "eng" || missingEpisodeIds.isEmpty()) {
+            emptyMap()
+        } else {
+            val englishSeason = fetchTranslatedSeasonEpisodeRecords(
+                authorization = authorization,
+                seriesId = identity.tvdbId,
+                seasonNumber = seasonNumber,
+                language = "eng"
+            )
+            val englishPerEpisode = fetchPerEpisodeTranslationRecords(
+                authorization = authorization,
+                episodeIds = missingEpisodeIds.filterNot { it in englishSeason },
+                language = "eng"
+            )
+            englishSeason + englishPerEpisode
+        }
 
         val mapped = records
             .map { record ->
                 record.toEpisodeMetadata(
-                    translatedOverview = record.id?.let { allTranslatedOverviewsById[it] }
+                    translation = record.id?.let { translationsById[it] },
+                    fallbackTranslation = record.id?.let { englishTranslationsById[it] }
                 )
             }
             .filter { metadata -> metadata.seasonNumber == seasonNumber }
@@ -391,13 +411,12 @@ class TvdbMetadataService @Inject constructor(
         )
     }
 
-    private suspend fun fetchTranslatedSeasonEpisodeOverviews(
+    private suspend fun fetchTranslatedSeasonEpisodeRecords(
         authorization: String,
         seriesId: Int,
         seasonNumber: Int,
         language: String
-    ): Map<Int, String> {
-        if (language == "eng") return emptyMap()
+    ): Map<Int, TvdbTranslationRecord> {
         return runCatching {
             tvdbApi.getSeriesEpisodesTranslated(
                 authorization = authorization,
@@ -417,21 +436,27 @@ class TvdbMetadataService @Inject constructor(
             .orEmpty()
             .mapNotNull { record ->
                 val id = record.id ?: return@mapNotNull null
-                val overview = record.overview.trimmed() ?: return@mapNotNull null
-                id to overview
+                val name = record.name.trimmed()
+                val overview = record.overview.trimmed()
+                if (name == null && overview == null) return@mapNotNull null
+                id to TvdbTranslationRecord(
+                    name = name,
+                    overview = overview,
+                    language = language
+                )
             }
             .toMap()
     }
 
-    private suspend fun fetchPerEpisodeTranslationOverviews(
+    private suspend fun fetchPerEpisodeTranslationRecords(
         authorization: String,
         episodeIds: List<Int>,
         language: String
-    ): Map<Int, String> {
-        if (language == "eng" || episodeIds.isEmpty()) return emptyMap()
-        val translated = linkedMapOf<Int, String>()
+    ): Map<Int, TvdbTranslationRecord> {
+        if (episodeIds.isEmpty()) return emptyMap()
+        val translations = linkedMapOf<Int, TvdbTranslationRecord>()
         episodeIds.distinct().forEach { episodeId ->
-            val overview = runCatching {
+            val record = runCatching {
                 tvdbApi.getEpisodeTranslation(
                     authorization = authorization,
                     id = episodeId,
@@ -443,22 +468,26 @@ class TvdbMetadataService @Inject constructor(
                 ?.takeIf { response -> response.isSuccessful }
                 ?.body()
                 ?.data
-                .overviewText()
-            if (overview != null) {
-                translated[episodeId] = overview
+            if (record != null) {
+                translations[episodeId] = record
             }
         }
-        return translated
+        return translations
     }
 
     private fun TvdbEpisodeRecord.toEpisodeMetadata(
-        translatedOverview: String? = null
+        translation: TvdbTranslationRecord? = null,
+        fallbackTranslation: TvdbTranslationRecord? = null
     ): TvEpisodeMetadata {
+        val translatedTitle = translation?.name.trimmed()
+            ?: fallbackTranslation?.name.trimmed()
+        val translatedOverview = translation?.overview.trimmed()
+            ?: fallbackTranslation?.overview.trimmed()
         val base = TvEpisodeMetadata(
             providerEpisodeId = id?.let { "tvdb:$it" },
             seasonNumber = seasonNumber,
             episodeNumber = number,
-            title = name.trimmed(),
+            title = translatedTitle ?: name.trimmed(),
             overview = translatedOverview ?: overview.trimmed(),
             thumbnail = image.trimmed(),
             airDate = aired.trimmed(),
