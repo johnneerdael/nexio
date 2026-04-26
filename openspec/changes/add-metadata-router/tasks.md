@@ -60,3 +60,14 @@
 - [ ] Add architecture tests banning `TvMetadataRouter` imports in production call sites.
 - [ ] Add architecture tests banning raw provider APIs, auth services, Retrofit, and OkHttp clients in router/resolver layers.
 - [ ] Re-run the IntegrationRuntime audit and focused MetadataRouter gate tests.
+
+## P0 Production Ownership Remediation
+
+- [ ] MetadataRouterFacade executes ProviderExecutionPlan through runtime-backed adapters.
+- [ ] ProviderMetadataRouter/TvMetadataRouter are not invoked by MetadataRouterFacade.
+- [ ] Provider-native conflicts are identity-resolved before ProviderPlanExecutor builds provider calls.
+- [ ] PREVIEW depth is addon-only and does not call router/provider/network paths.
+- [ ] FieldResolver creates final resolved metadata output for home/detail/player/CW paths.
+- [ ] UI/ViewModel/Worker metadata paths do not call TmdbMetadataService, KitsuMetadataService, TvdbMetadataService, ProviderMetadataRouter, TvMetadataRouter, Retrofit APIs, auth services, or OkHttp for final metadata output.
+- [ ] Continue Watching stale routing versions reroute once and persist upgraded snapshots.
+- [ ] Architecture tests fail on legacy metadata execution paths.
