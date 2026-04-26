@@ -141,14 +141,14 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Lint and build universal release APK
-        run: ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease
+      - name: Lint and build armv7 release APK
+        run: ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
 
       - name: Verify release APK signature
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "Stable APK artifact not found" >&2
             exit 1
@@ -178,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "Stable APK artifact not found" >&2
             exit 1
@@ -267,14 +267,14 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Lint and build universal release APK
-        run: ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease
+      - name: Lint and build armv7 release APK
+        run: ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
 
       - name: Verify beta APK signature
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "Beta APK artifact not found" >&2
             exit 1
@@ -301,7 +301,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "Beta APK artifact not found" >&2
             exit 1
