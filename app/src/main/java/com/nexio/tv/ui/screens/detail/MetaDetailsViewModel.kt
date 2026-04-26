@@ -2428,6 +2428,8 @@ class MetaDetailsViewModel @Inject constructor(
                 applyEpisodeWatchOverride(episodeKeys, watched = true)
                 watchProgressRepository.markAsCompletedBatch(meta, season, seasonEpisodes)
                 showMessage(context.getString(R.string.detail_marked_episodes_watched, seasonEpisodes.size))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val episodeKeys = _uiState.value.episodeWatchOverrides
                     .filterKeys { it.first == season }
