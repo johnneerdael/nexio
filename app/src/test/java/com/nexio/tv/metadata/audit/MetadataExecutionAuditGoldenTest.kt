@@ -172,6 +172,9 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(scenarioNames.contains("kitsu-anime-core-warm-cache"))
         assertTrue(scenarioNames.contains("stale-on-429"))
         assertTrue(scenarioNames.contains("production-caller-ownership"))
+        assertTrue(scenarioNames.contains("tvdb-localized-english-fallback"))
+        assertTrue(scenarioNames.contains("tmdb-localized-english-fallback"))
+        assertTrue(scenarioNames.contains("kitsu-localized-field-fallback"))
 
         val allItems = bundle.reports.flatMap { it.items }
         assertTrue(allItems.any { it.itemId == "tt26443597" && it.routing?.provider == MetadataPrimaryProvider.TMDB })
@@ -180,6 +183,36 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(allItems.any { it.routing?.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
         assertTrue(bundle.reports.all { it.verdict == AuditVerdict.PASS })
         bundle.reports.forEach(MetadataAuditAssertions::assertLocalizationFallbackStaysWithinProvider)
+    }
+
+    @Test
+    fun `localized audit scenarios record same provider english fallback policy`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+
+        val tvdb = bundle.localizedScenario("tvdb-localized-english-fallback")
+        val tmdb = bundle.localizedScenario("tmdb-localized-english-fallback")
+        val kitsu = bundle.localizedScenario("kitsu-localized-field-fallback")
+
+        assertEquals(MetadataPrimaryProvider.TVDB, tvdb.provider)
+        assertEquals("nld", tvdb.requestedLanguage)
+        assertEquals("eng", tvdb.fallbackLanguage)
+        assertFalse(tvdb.providerFallbackUsed)
+
+        assertEquals(MetadataPrimaryProvider.TMDB, tmdb.provider)
+        assertEquals("nl-NL", tmdb.requestedLanguage)
+        assertEquals("en-US", tmdb.fallbackLanguage)
+        assertFalse(tmdb.providerFallbackUsed)
+
+        assertEquals(MetadataPrimaryProvider.KITSU, kitsu.provider)
+        assertEquals("nl", kitsu.requestedLanguage)
+        assertEquals("en", kitsu.fallbackLanguage)
+        assertFalse(kitsu.providerFallbackUsed)
+
+        listOf(tvdb, tmdb, kitsu).forEach { localization ->
+            assertEquals(2, localization.policyVersion)
+            assertTrue(localization.payloads.isNotEmpty())
+            assertTrue(localization.payloads.all { it.cacheKey.contains("policy:2") })
+        }
     }
 
     @Test
@@ -369,6 +402,10 @@ class MetadataExecutionAuditGoldenTest {
             ?: error("Missing fixture $path")
         return resource.readText()
     }
+
+    private fun MetadataExecutionReportBundle.localizedScenario(name: String): LocalizationEvent =
+        reports.single { it.scenario.name == name }.items.single().localization
+            ?: error("Missing localization event for $name")
 
     private val Int.daysMs: Long get() = this * 24L * 60L * 60L * 1_000L
 }

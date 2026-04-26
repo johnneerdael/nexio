@@ -480,6 +480,18 @@ class MetadataAuditRunner private constructor(
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
                 scenario = MetadataAuditScenario("production-caller-ownership", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), productionCallerOwnership = true)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_series_nfx.json",
+                scenario = MetadataAuditScenario("tvdb-localized-english-fallback", MetadataDepth.DETAIL_CORE, language = "nl-NL", visibleItemIds = setOf("tt14403178"))
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("tmdb-localized-english-fallback", MetadataDepth.DETAIL_CORE, language = "nl-NL", visibleItemIds = setOf("tt16431404"))
+            ),
+            ScenarioSpec(
+                fixtureName = "anime_kitsu_trending.json",
+                scenario = MetadataAuditScenario("kitsu-localized-field-fallback", MetadataDepth.DETAIL_CORE, language = "nl-NL", visibleItemIds = setOf("kitsu:7442"))
             )
         )
 
