@@ -2,6 +2,10 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
@@ -199,6 +203,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             item = item.toContinueWatchingProviderPreview(),
             fallbackContentId = item.providerFallbackContentId(),
             tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = metadataRouterFacadeOrNull()
+                ?: defaultMetadataRouterFacadeForManualConstruction(),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
@@ -206,6 +212,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         )
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
             tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = metadataRouterFacadeOrNull()
+                ?: defaultMetadataRouterFacadeForManualConstruction(),
             item = item,
             language = tvdbLanguage
         )
@@ -296,13 +304,27 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
 }
 
 internal suspend fun localizedContinueWatchingEpisodeDescription(
-    tvMetadataRouter: com.nexio.tv.core.tvdb.TvMetadataRouter,
+    tvMetadataRouter: ProviderMetadataRouter,
+    metadataRouterFacade: com.nexio.tv.core.metadata.router.MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     item: ContinueWatchingItem,
     language: String? = null
 ): String? {
     val season = item.season() ?: return null
     val episode = item.episode() ?: return null
     if (!isSeriesType(item.contentType())) return null
+
+    runCatching {
+        metadataRouterFacade.resolveRequest(
+            MetadataRequest(
+                contentId = item.contentId(),
+                contentType = ContentType.fromString(item.contentType()),
+                sourceContext = MetadataSourceContext(itemType = item.contentType()),
+                language = language,
+                seasonNumber = season,
+                depth = MetadataDepth.SEASON
+            )
+        )
+    }
 
     return tvMetadataRouter.fetchEpisodeEnrichment(
         TvMetadataRequest(

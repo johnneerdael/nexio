@@ -1,5 +1,12 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.AnimeIdSource
+import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.anime.ContentMediaKind
+import javax.inject.Inject
+import javax.inject.Singleton
+
 enum class AnimeIdScheme { KITSU, MAL, ANILIST, ANIDB, IMDB, TMDB, TVDB, UNKNOWN }
 
 data class ParsedMetadataId(
@@ -24,6 +31,30 @@ data class AnimeIdentityLookup(
 
 interface AnimeIdentityIndex {
     suspend fun resolveKitsuId(id: ParsedMetadataId): String?
+}
+
+@Singleton
+class AssetAnimeIdentityIndex @Inject constructor(
+    private val mappingService: AnimeIdMappingService
+) : AnimeIdentityIndex {
+    override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
+        val source = id.scheme.toAnimeIdSource() ?: return null
+        val animeId = AnimeStremioId(source = source, value = id.value)
+        return mappingService.resolveKitsuId(animeId, ContentMediaKind.SERIES)
+            ?: mappingService.resolveKitsuId(animeId, ContentMediaKind.MOVIE)
+    }
+
+    private fun AnimeIdScheme.toAnimeIdSource(): AnimeIdSource? =
+        when (this) {
+            AnimeIdScheme.KITSU -> AnimeIdSource.KITSU
+            AnimeIdScheme.MAL -> AnimeIdSource.MAL
+            AnimeIdScheme.ANILIST -> AnimeIdSource.ANILIST
+            AnimeIdScheme.ANIDB -> AnimeIdSource.ANIDB
+            AnimeIdScheme.IMDB -> AnimeIdSource.IMDB
+            AnimeIdScheme.TMDB,
+            AnimeIdScheme.TVDB -> null
+            AnimeIdScheme.UNKNOWN -> null
+        }
 }
 
 object MetadataIdParser {

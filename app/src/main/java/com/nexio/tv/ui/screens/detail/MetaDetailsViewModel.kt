@@ -9,14 +9,24 @@ import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.anime.ContentMediaKind
+import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRequestNormalizer
+import com.nexio.tv.core.metadata.router.MetadataRouter
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
+import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
@@ -84,13 +94,20 @@ import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 
-private fun missingTvMetadataRouterForManualConstruction(): TvMetadataRouter {
-    error("TvMetadataRouter must be provided to MetaDetailsViewModel")
-}
-
 private fun missingKitsuMetadataServiceForManualConstruction(): KitsuMetadataService {
     error("KitsuMetadataService must be provided to MetaDetailsViewModel")
 }
+
+private fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFacade =
+    MetadataRouterFacade(
+        router = MetadataRouter(
+            normalizer = MetadataRequestNormalizer(),
+            animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+            idMappingStore = InMemoryIdMappingStore()
+        ),
+        providerPlanExecutor = ProviderPlanExecutor(),
+        resolverOrchestrator = ResolverOrchestrator()
+    )
 
 private fun debugLog(tag: String, message: String) {
     if (!BuildConfig.DEBUG) return
@@ -181,7 +198,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
-    private val tvMetadataRouter: TvMetadataRouter = missingTvMetadataRouterForManualConstruction(),
+    private val tvMetadataRouter: ProviderMetadataRouter,
+    private val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     private val kitsuMetadataService: KitsuMetadataService = missingKitsuMetadataServiceForManualConstruction(),
     private val profileBoundary: ProfileBoundary,
     private val mdbListRepository: MDBListRepository,
@@ -1315,6 +1333,12 @@ class MetaDetailsViewModel @Inject constructor(
         }
         val tvdbLanguage = currentTvdbLanguageTag()
         val tvDecision = if (isTvContent || hasAnimeId) {
+            resolveMetadataFacadeSidecar(
+                contentId = meta.id,
+                contentType = tmdbContentType,
+                language = tvdbLanguage,
+                depth = MetadataDepth.DETAIL_CORE
+            )
             tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(
                     contentId = meta.id,
@@ -1734,6 +1758,16 @@ class MetaDetailsViewModel @Inject constructor(
 
         val seasonNumbers = targetMeta.videos.mapNotNull { it.season }.distinct()
 
+        seasonNumbers.forEach { season ->
+            resolveMetadataFacadeSidecar(
+                contentId = targetMeta.id,
+                contentType = tmdbContentType,
+                language = tvdbLanguage,
+                seasonNumber = season,
+                depth = MetadataDepth.SEASON
+            )
+        }
+
         val episodeDecision = tvMetadataRouter.fetchEpisodeEnrichment(
             TvMetadataRequest(
                 contentId = targetMeta.id,
@@ -1793,6 +1827,27 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun currentTvdbLanguageTag(): String {
         return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
+    }
+
+    private suspend fun resolveMetadataFacadeSidecar(
+        contentId: String,
+        contentType: ContentType,
+        language: String?,
+        seasonNumber: Int? = null,
+        depth: MetadataDepth
+    ) {
+        runCatching {
+            metadataRouterFacade.resolveRequest(
+                MetadataRequest(
+                    contentId = contentId,
+                    contentType = contentType,
+                    sourceContext = MetadataSourceContext(itemType = contentType.toApiString()),
+                    language = language,
+                    seasonNumber = seasonNumber,
+                    depth = depth
+                )
+            )
+        }
     }
 
     private fun ContentType.toAnimeMediaKind(): ContentMediaKind =
@@ -2301,6 +2356,13 @@ class MetaDetailsViewModel @Inject constructor(
                 val tmdbContentType = resolveTmdbContentType(meta)
                 val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
                 val seasonEpisodes = if (isTvContent) {
+                    resolveMetadataFacadeSidecar(
+                        contentId = meta.id,
+                        contentType = tmdbContentType,
+                        language = null,
+                        seasonNumber = season,
+                        depth = MetadataDepth.SEASON
+                    )
                     tvMetadataRouter.fetchSeasonEpisodes(
                         contentId = meta.id,
                         fallbackContentId = itemId,

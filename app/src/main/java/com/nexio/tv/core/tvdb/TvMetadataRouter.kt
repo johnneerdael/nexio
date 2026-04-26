@@ -14,6 +14,10 @@ import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -31,8 +35,8 @@ class TvMetadataRouter @Inject constructor(
     private val credentialHealth: TvdbCredentialHealth,
     private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
     private val kitsuMetadataService: KitsuMetadataService? = null
-) {
-    suspend fun fetchEnrichment(
+) : ProviderMetadataRouter {
+    override suspend fun fetchEnrichment(
         request: TvMetadataRequest
     ): TvMetadataDecision<TvMetadataEnrichment> {
         tryFetchKitsuEnrichment(request)?.let { return it }
@@ -100,7 +104,7 @@ class TvMetadataRouter @Inject constructor(
         )
     }
 
-    suspend fun fetchEpisodeEnrichment(
+    override suspend fun fetchEpisodeEnrichment(
         request: TvMetadataRequest
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
         tryFetchKitsuEpisodeEnrichment(request)?.let { return it }
@@ -148,11 +152,11 @@ class TvMetadataRouter @Inject constructor(
         )
     }
 
-    suspend fun fetchSeasonEpisodes(
+    override suspend fun fetchSeasonEpisodes(
         contentId: String,
         fallbackContentId: String?,
         seasonNumber: Int,
-        language: String? = null
+        language: String?
     ): TvMetadataDecision<List<TvSeasonEpisode>> {
         val request = TvMetadataRequest(
             contentId = contentId,
@@ -646,4 +650,14 @@ class TvMetadataRouter @Inject constructor(
     }
 
     private fun ContentType.isTv(): Boolean = this == ContentType.SERIES || this == ContentType.TV
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class TvMetadataRouterBindingModule {
+    @Binds
+    @Singleton
+    abstract fun bindProviderMetadataRouter(
+        impl: TvMetadataRouter
+    ): ProviderMetadataRouter
 }

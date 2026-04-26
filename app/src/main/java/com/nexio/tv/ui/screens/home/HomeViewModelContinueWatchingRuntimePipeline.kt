@@ -1,6 +1,9 @@
 package com.nexio.tv.ui.screens.home
 
 import android.util.Log
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
@@ -35,6 +38,18 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     if (isSeriesType(contentType)) {
         val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
         if (season != null && episode != null) {
+            runCatching {
+                metadataRouterFacadeOrNull()?.resolveRequest(
+                    MetadataRequest(
+                        contentId = contentId,
+                        contentType = parseContinueWatchingContentType(contentType),
+                        sourceContext = MetadataSourceContext(itemType = contentType),
+                        language = tvdbLanguage,
+                        seasonNumber = season,
+                        depth = MetadataDepth.SEASON
+                    )
+                )
+            }
             val episodeRuntime = tvMetadataRouter.fetchEpisodeEnrichment(
                 TvMetadataRequest(
                     contentId = contentId,
@@ -46,6 +61,17 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
             ).value?.get(season to episode)?.runtimeMinutes
             if (episodeRuntime != null && episodeRuntime > 0) return episodeRuntime
         } else {
+            runCatching {
+                metadataRouterFacadeOrNull()?.resolveRequest(
+                    MetadataRequest(
+                        contentId = contentId,
+                        contentType = parseContinueWatchingContentType(contentType),
+                        sourceContext = MetadataSourceContext(itemType = contentType),
+                        language = tvdbLanguage,
+                        depth = MetadataDepth.DETAIL_CORE
+                    )
+                )
+            }
             val enrichment = tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(
                     contentId = contentId,
