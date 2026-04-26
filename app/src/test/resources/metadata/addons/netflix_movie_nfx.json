@@ -1,0 +1,13 @@
+{
+  "addonId": "netflix",
+  "catalogId": "netflix-movie",
+  "catalogType": "movie",
+  "items": [
+    {
+      "id": "tt16431404",
+      "type": "movie",
+      "name": "Netflix Movie",
+      "poster": "https://example.test/netflix-movie.jpg"
+    }
+  ]
+}

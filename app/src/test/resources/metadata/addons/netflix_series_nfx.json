@@ -1,0 +1,13 @@
+{
+  "addonId": "netflix",
+  "catalogId": "netflix-series",
+  "catalogType": "series",
+  "items": [
+    {
+      "id": "tt14403178",
+      "type": "series",
+      "name": "Netflix Series",
+      "poster": "https://example.test/netflix-series.jpg"
+    }
+  ]
+}

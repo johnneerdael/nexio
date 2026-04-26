@@ -376,6 +376,18 @@ val generateIntegrationRuntimeAudit by tasks.registering(com.nexio.build.integra
     failOnFailVerdict.set(providers.gradleProperty("integrationRuntimeAudit.failOnFailVerdict").map(String::toBoolean).orElse(true))
 }
 
+tasks.register<Test>("generateMetadataExecutionAudit") {
+    group = "verification"
+    description = "Runs metadata execution audit and writes JSON/Markdown reports."
+    val sourceTest = tasks.named<Test>("testUniversalDebugUnitTest")
+    testClassesDirs = sourceTest.get().testClassesDirs
+    classpath = sourceTest.get().classpath
+    filter {
+        includeTestsMatching("com.nexio.tv.metadata.audit.MetadataExecutionAuditGoldenTest")
+        includeTestsMatching("com.nexio.tv.metadata.audit.MetadataArchitectureBoundaryTest")
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
     dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)

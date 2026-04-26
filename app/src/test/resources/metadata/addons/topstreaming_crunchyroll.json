@@ -1,0 +1,15 @@
+{
+  "addonId": "topstreaming",
+  "catalogId": "crunchyroll-anime",
+  "catalogType": "series",
+  "sourceName": "Crunchyroll",
+  "items": [
+    {
+      "id": "tt12343534",
+      "type": "series",
+      "name": "Crunchyroll IMDb Anime",
+      "poster": "https://example.test/crunchyroll.jpg",
+      "animeType": null
+    }
+  ]
+}

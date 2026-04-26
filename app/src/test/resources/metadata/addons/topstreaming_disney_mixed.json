@@ -1,0 +1,19 @@
+{
+  "addonId": "topstreaming",
+  "catalogId": "disney-mixed",
+  "catalogType": "series",
+  "items": [
+    {
+      "id": "tt26443597",
+      "type": "movie",
+      "name": "Disney Movie",
+      "poster": "https://example.test/disney-movie.jpg"
+    },
+    {
+      "id": "tt27444205",
+      "type": "series",
+      "name": "Disney Series",
+      "poster": "https://example.test/disney-series.jpg"
+    }
+  ]
+}

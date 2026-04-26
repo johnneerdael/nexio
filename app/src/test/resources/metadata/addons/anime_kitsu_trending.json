@@ -1,0 +1,13 @@
+{
+  "addonId": "kitsu",
+  "catalogId": "trending-anime",
+  "catalogType": "series",
+  "items": [
+    {
+      "id": "kitsu:7442",
+      "type": "series",
+      "name": "Kitsu Anime",
+      "poster": "https://example.test/kitsu.jpg"
+    }
+  ]
+}
