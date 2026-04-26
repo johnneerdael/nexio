@@ -20,6 +20,8 @@ enum class MetadataMediaKind { MOVIE, SERIES, ANIME, UNKNOWN }
 
 enum class MetadataDepth { PREVIEW, DETAIL_CORE, DETAIL_MEDIA, DETAIL_SECONDARY, SEASON, PLAYER }
 
+enum class ProviderPlanRole { PRIMARY_CORE, MEDIA, SECONDARY, SEASON, PLAYER }
+
 data class MetadataSourceContext(
     val addonId: String? = null,
     val catalogId: String? = null,
@@ -65,4 +67,17 @@ data class MetadataRoute(
     val targetIds: Map<MetadataPrimaryProvider, String>,
     val targetIdRequiresIdentityResolution: Boolean = false,
     val trace: List<MetadataRouteTrace>
+)
+
+data class ProviderPlanStep(
+    val apiShapeId: String,
+    val provider: MetadataPrimaryProvider,
+    val role: ProviderPlanRole,
+    val required: Boolean
+)
+
+data class ProviderExecutionPlan(
+    val route: MetadataRoute,
+    val depth: MetadataDepth,
+    val steps: List<ProviderPlanStep>
 )
