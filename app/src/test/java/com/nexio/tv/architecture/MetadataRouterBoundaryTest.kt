@@ -6,6 +6,8 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class MetadataRouterBoundaryTest {
+    private val productionRoots = listOf(File("app/src/main/java/com/nexio/tv"))
+
     @Test
     fun `production callers use metadata router facade instead of legacy tv metadata router`() {
         val offenders = productionRegexScan(
@@ -58,4 +60,24 @@ class MetadataRouterBoundaryTest {
             Regex("""\bclass\s+MetadataRouterFacade\b""").containsMatchIn(facade.readText())
         )
     }
+
+    private fun productionRegexScan(
+        forbiddenPatterns: Map<String, Regex>,
+        allowedPaths: Set<String> = emptySet()
+    ): List<String> =
+        productionRoots.flatMap { root ->
+            root.walkTopDown()
+                .filter { file -> file.isFile && file.extension == "kt" }
+                .filterNot { file -> allowedPaths.any { suffix -> file.invariantSeparatorsPath.endsWith(suffix) } }
+                .flatMap { file ->
+                    val content = file.readText()
+                    forbiddenPatterns
+                        .filterValues { pattern -> pattern.containsMatchIn(content) }
+                        .keys
+                        .map { match -> "${file.invariantSeparatorsPath}:$match" }
+                }
+        }.toList()
+
+    private fun productionAllowedPathSuffixes(vararg suffixes: String): Set<String> =
+        suffixes.toSet()
 }

@@ -450,20 +450,32 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
-    fun `plan executor rejects unsupported PREVIEW and PLAYER depths`() {
-        listOf(MetadataDepth.PREVIEW, MetadataDepth.PLAYER).forEach { depth ->
-            val error = assertThrows("depth=$depth", IllegalStateException::class.java) {
-                executor.buildPlan(
-                    route = route(
-                        provider = MetadataPrimaryProvider.TMDB,
-                        mediaKind = MetadataMediaKind.MOVIE
-                    ),
-                    depth = depth
-                )
-            }
-
-            assertTrue(error.message!!.contains("Unsupported provider plan depth $depth"))
+    fun `plan executor rejects unsupported PREVIEW depth`() {
+        val error = assertThrows(IllegalStateException::class.java) {
+            executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TMDB,
+                    mediaKind = MetadataMediaKind.MOVIE
+                ),
+                depth = MetadataDepth.PREVIEW
+            )
         }
+
+        assertTrue(error.message!!.contains("Unsupported provider plan depth ${MetadataDepth.PREVIEW}"))
+    }
+
+    @Test
+    fun `PLAYER depth builds route-only plan without provider metadata shapes`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.MOVIE
+            ),
+            depth = MetadataDepth.PLAYER
+        )
+
+        assertEquals(MetadataDepth.PLAYER, plan.depth)
+        assertEquals(emptyList<String>(), plan.apiShapeIds())
     }
 
     private fun ProviderExecutionPlan.apiShapeIds(): List<String> = steps.map { it.apiShapeId }

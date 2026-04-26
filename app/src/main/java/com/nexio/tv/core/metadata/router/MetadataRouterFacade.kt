@@ -31,11 +31,7 @@ class MetadataRouterFacade @Inject constructor(
         }
 
         val route = router.route(request)
-        val plan = if (request.depth == MetadataDepth.PLAYER) {
-            null
-        } else {
-            providerPlanExecutor.buildPlan(route = route, depth = request.depth)
-        }
+        val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
 
         return MetadataFacadeResult(
             route = route,
