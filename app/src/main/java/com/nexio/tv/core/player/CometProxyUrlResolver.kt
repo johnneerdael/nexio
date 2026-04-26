@@ -18,6 +18,47 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
+ * Outcome of a single redirect-disabled probe issued by [CometProxyUrlResolver].
+ *
+ * - [Redirected]    addon returned `3xx` with a usable `Location` header.
+ * - [Placeholder]   addon returned `200 OK` with `Content-Type: video/*`,
+ *                   served from the addon's own host. Treated as a captioned
+ *                   "error video" placeholder; autoplay should skip it.
+ * - [NotEligible]   URL did not pass [CometProxyUrlResolver.isCometProxy]
+ *                   gates. Caller should treat the URL as opaque.
+ * - [ResolveFailed] network error, non-`video/*` `200`, missing Content-Type,
+ *                   `4xx`, or `5xx`. Caller should fall back to the original
+ *                   URL.
+ */
+sealed class ProxyResolution {
+    data class Redirected(val url: String) : ProxyResolution()
+    object Placeholder : ProxyResolution()
+    object NotEligible : ProxyResolution()
+    object ResolveFailed : ProxyResolution()
+}
+
+/**
+ * Pure response classifier extracted so it can be unit-tested without the
+ * surrounding OkHttp / coroutine machinery. Drives the `decision=` field of
+ * the [CometProxyUrlResolver] `RESOLVE_RESPONSE` log line.
+ */
+internal fun classifyHttpResponse(
+    code: Int,
+    location: String?,
+    contentType: String?,
+): ProxyResolution {
+    if (code in 300..399 && !location.isNullOrBlank()) {
+        return ProxyResolution.Redirected(location)
+    }
+    if (code == 200 && contentType != null &&
+        contentType.trim().lowercase(Locale.ROOT).startsWith("video/")
+    ) {
+        return ProxyResolution.Placeholder
+    }
+    return ProxyResolution.ResolveFailed
+}
+
+/**
  * Resolves Comet addon `/playback/` proxy URLs to the underlying debrid CDN URL
  * by following the 302 `Location` header once and caching the result.
  *
@@ -421,10 +462,20 @@ object CometProxyUrlResolver {
         return runCatching { addonBaseUrl.toHttpUrlOrNull()?.host }.getOrNull()
     }
 
-    private suspend fun fetchLocation(url: String, headers: Map<String, String>?): String? {
+    private suspend fun fetchClassification(
+        url: String,
+        headers: Map<String, String>?,
+    ): ProxyResolution {
         val transport = transportOverride ?: defaultTransport
         return withContext(Dispatchers.IO) {
             transport.execute(url, headers)
+        }
+    }
+
+    private suspend fun fetchLocation(url: String, headers: Map<String, String>?): String? {
+        return when (val outcome = fetchClassification(url, headers)) {
+            is ProxyResolution.Redirected -> outcome.url
+            else -> null
         }
     }
 
@@ -442,19 +493,24 @@ object CometProxyUrlResolver {
         }
         clientHolder.value.newCall(requestBuilder.build()).execute().use { response ->
             val location = response.header("Location")
+            val contentType = response.header("Content-Type")
             val locationHost = runCatching { location?.toHttpUrlOrNull()?.host }.getOrNull()
-            val (decision, resolved) = when {
-                response.code in 300..399 && !location.isNullOrBlank() -> "redirect" to location
-                else -> "null-no-redirect" to null
+            val outcome = classifyHttpResponse(response.code, location, contentType)
+            val decision = when (outcome) {
+                is ProxyResolution.Redirected -> "redirect"
+                ProxyResolution.Placeholder -> "placeholder"
+                ProxyResolution.NotEligible -> "not-eligible"
+                ProxyResolution.ResolveFailed -> "failed"
             }
             Log.i(
                 TAG,
                 "RESOLVE_RESPONSE url=${sanitize(url)} status=${response.code} " +
                     "protocol=${response.protocol} locationPresent=${!location.isNullOrBlank()} " +
-                    "locationHost=${locationHost ?: "none"} decision=$decision " +
+                    "locationHost=${locationHost ?: "none"} contentType=${contentType ?: "none"} " +
+                    "decision=$decision " +
                     "forwardedHeaderKeys=${forwardedHeaderKeys.joinToString(prefix = "[", postfix = "]")}"
             )
-            resolved
+            outcome
         }
     }
 
@@ -492,6 +548,6 @@ object CometProxyUrlResolver {
     )
 
     internal fun interface Transport {
-        fun execute(url: String, headers: Map<String, String>?): String?
+        fun execute(url: String, headers: Map<String, String>?): ProxyResolution
     }
 }
