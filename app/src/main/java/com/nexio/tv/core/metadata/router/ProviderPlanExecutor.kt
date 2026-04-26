@@ -3,6 +3,7 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,6 +24,8 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private fun tmdbSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {
+        validateMediaKind(route, MetadataMediaKind.MOVIE, MetadataMediaKind.SERIES)
+
         val isSeries = route.mediaKind == MetadataMediaKind.SERIES
         val steps = mutableListOf<ProviderPlanStep>()
 
@@ -65,6 +68,8 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private fun tvdbSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {
+        validateMediaKind(route, MetadataMediaKind.SERIES)
+
         val steps = mutableListOf(
             step(
                 apiShapeId = TvdbApiShapes.SERIES_EXTENDED,
@@ -73,7 +78,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         )
 
-        if (depth == MetadataDepth.DETAIL_CORE && route.language != null && route.language != "en") {
+        if (depth == MetadataDepth.DETAIL_CORE && TvdbLanguageMapper.normalize(route.language) != "eng") {
             steps += step(
                 apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
                 provider = MetadataPrimaryProvider.TVDB,
@@ -100,6 +105,8 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private fun kitsuSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {
+        validateMediaKind(route, MetadataMediaKind.ANIME)
+
         val steps = mutableListOf(
             step(
                 apiShapeId = KitsuApiShapes.ANIME_CORE,
@@ -124,6 +131,12 @@ class ProviderPlanExecutor @Inject constructor() {
         }
 
         return steps
+    }
+
+    private fun validateMediaKind(route: MetadataRoute, vararg allowed: MetadataMediaKind) {
+        check(route.mediaKind in allowed) {
+            "Invalid mediaKind ${route.mediaKind} for provider ${route.provider}; expected ${allowed.joinToString()}"
+        }
     }
 
     private fun step(
