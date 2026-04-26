@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.player.CometProxyUrlResolver
+import com.nexio.tv.core.player.ProxyResolution
 import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.StreamBingeGroupResolver
@@ -1001,7 +1002,15 @@ internal fun prepareMediaSourceUrl(
     addonHost: String?
 ): String {
     if (!CometProxyUrlResolver.isCometProxy(url, addonHost)) return url
-    return CometProxyUrlResolver.resolveBlocking(url, headers, addonHost) ?: url
+    return when (val outcome = CometProxyUrlResolver.resolveBlocking(url, headers, addonHost)) {
+        is ProxyResolution.Redirected -> outcome.url
+        // Manual-selection path deliberately ignores Placeholder verdicts —
+        // the user gets whatever they tapped. NotEligible / ResolveFailed
+        // fall back to the original URL (legacy null-handling behaviour).
+        ProxyResolution.Placeholder,
+        ProxyResolution.NotEligible,
+        ProxyResolution.ResolveFailed -> url
+    }
 }
 
 @VisibleForTesting

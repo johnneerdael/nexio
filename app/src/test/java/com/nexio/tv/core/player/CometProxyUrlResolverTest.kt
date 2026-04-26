@@ -196,7 +196,7 @@ class CometProxyUrlResolverTest {
     }
 
     @Test
-    fun `resolve returns null for non-Comet urls`() = runBlocking {
+    fun `resolve returns NotEligible for non-Comet urls`() = runBlocking {
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
             error("transport should not be called for non-Comet urls")
         }
@@ -204,7 +204,7 @@ class CometProxyUrlResolverTest {
             "https://torrentio.strem.fun/resolve/realdebrid/key/h/null/0/f.mkv",
             headers = null
         )
-        assertNull(result)
+        assertEquals(ProxyResolution.NotEligible, result)
     }
 
     @Test
@@ -219,8 +219,8 @@ class CometProxyUrlResolverTest {
         val first = CometProxyUrlResolver.resolve(cometUrl, null)
         val second = CometProxyUrlResolver.resolve(cometUrl, null)
 
-        assertEquals(resolvedUrl, first)
-        assertEquals(resolvedUrl, second)
+        assertEquals(ProxyResolution.Redirected(resolvedUrl), first)
+        assertEquals(ProxyResolution.Redirected(resolvedUrl), second)
         assertEquals(1, calls.get())
     }
 
@@ -237,18 +237,18 @@ class CometProxyUrlResolverTest {
         CometProxyUrlResolver.setClockForTesting { clock.nowMs }
 
         val first = CometProxyUrlResolver.resolve(cometUrl, null)
-        assertEquals("$resolvedUrl?v=1", first)
+        assertEquals(ProxyResolution.Redirected("$resolvedUrl?v=1"), first)
 
         // Within TTL → cache hit
         clock.nowMs += 10 * 60 * 1000
         val cached = CometProxyUrlResolver.resolve(cometUrl, null)
-        assertEquals("$resolvedUrl?v=1", cached)
+        assertEquals(ProxyResolution.Redirected("$resolvedUrl?v=1"), cached)
         assertEquals(1, calls.get())
 
         // Past TTL → re-fetch
         clock.nowMs += 51 * 60 * 1000
         val refreshed = CometProxyUrlResolver.resolve(cometUrl, null)
-        assertEquals("$resolvedUrl?v=2", refreshed)
+        assertEquals(ProxyResolution.Redirected("$resolvedUrl?v=2"), refreshed)
         assertEquals(2, calls.get())
     }
 
@@ -265,12 +265,12 @@ class CometProxyUrlResolverTest {
             .map { async { CometProxyUrlResolver.resolve(cometUrl, null) } }
             .awaitAll()
 
-        assertTrue(results.all { it == resolvedUrl })
+        assertTrue(results.all { it == ProxyResolution.Redirected(resolvedUrl) })
         assertEquals(1, calls.get())
     }
 
     @Test
-    fun `resolve returns null on transport failure and does not cache`() = runBlocking {
+    fun `resolve returns ResolveFailed on transport failure and does not cache`() = runBlocking {
         val calls = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
             calls.incrementAndGet()
@@ -280,8 +280,8 @@ class CometProxyUrlResolverTest {
         val first = CometProxyUrlResolver.resolve(cometUrl, null)
         val second = CometProxyUrlResolver.resolve(cometUrl, null)
 
-        assertNull(first)
-        assertNull(second)
+        assertEquals(ProxyResolution.ResolveFailed, first)
+        assertEquals(ProxyResolution.ResolveFailed, second)
         assertEquals(2, calls.get())
     }
 
@@ -306,14 +306,14 @@ class CometProxyUrlResolverTest {
     }
 
     @Test
-    fun `resolveBlocking returns cached value`() {
+    fun `resolveBlocking returns Redirected for cached value`() {
         CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected(resolvedUrl) }
         val result = CometProxyUrlResolver.resolveBlocking(cometUrl, null)
-        assertEquals(resolvedUrl, result)
+        assertEquals(ProxyResolution.Redirected(resolvedUrl), result)
     }
 
     @Test
-    fun `resolveBlocking returns null for non-Comet`() {
+    fun `resolveBlocking returns NotEligible for non-Comet`() {
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
             error("transport should not be called for non-Comet urls")
         }
@@ -321,7 +321,7 @@ class CometProxyUrlResolverTest {
             "https://torrentio.strem.fun/resolve/x/y/z/null/0/f.mkv",
             null
         )
-        assertNull(result)
+        assertEquals(ProxyResolution.NotEligible, result)
     }
 
     @Test
@@ -337,7 +337,7 @@ class CometProxyUrlResolverTest {
         job!!.join()
 
         val resolved = CometProxyUrlResolver.resolve(cometUrl, null)
-        assertEquals(resolvedUrl, resolved)
+        assertEquals(ProxyResolution.Redirected(resolvedUrl), resolved)
         assertEquals(1, calls.get())
     }
 
@@ -374,7 +374,7 @@ class CometProxyUrlResolverTest {
 
         val out = CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
 
-        assertEquals(resolvedUrl, out)
+        assertEquals(ProxyResolution.Redirected(resolvedUrl), out)
         assertEquals(cometUrl, CometProxyUrlResolver.proxyUrlFor(resolvedUrl))
     }
 
@@ -402,7 +402,7 @@ class CometProxyUrlResolverTest {
         CometProxyUrlResolver.invalidate(cometUrl)
         val out = CometProxyUrlResolver.resolve(cometUrl, headers = emptyMap())
 
-        assertEquals(second, out)
+        assertEquals(ProxyResolution.Redirected(second), out)
         assertEquals(2, calls.get())
     }
 

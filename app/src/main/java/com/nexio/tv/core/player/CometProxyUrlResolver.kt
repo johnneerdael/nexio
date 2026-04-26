@@ -133,7 +133,7 @@ object CometProxyUrlResolver {
         }
     }
     private val reverseCache: MutableMap<String, String> = HashMap()
-    private val inFlight: MutableMap<String, CompletableDeferred<String?>> = HashMap()
+    private val inFlight: MutableMap<String, CompletableDeferred<ProxyResolution>> = HashMap()
     private val lastInvalidatedAtMs: MutableMap<String, Long> = HashMap()
 
     @Volatile
@@ -200,16 +200,16 @@ object CometProxyUrlResolver {
         url: String,
         headers: Map<String, String>?,
         addonHost: String? = null
-    ): String? {
-        if (!isCometProxy(url, addonHost)) return null
+    ): ProxyResolution {
+        if (!isCometProxy(url, addonHost)) return ProxyResolution.NotEligible
 
-        val ownDeferred: CompletableDeferred<String?>
-        val waitFor: CompletableDeferred<String?>?
+        val ownDeferred: CompletableDeferred<ProxyResolution>
+        val waitFor: CompletableDeferred<ProxyResolution>?
         synchronized(lock) {
             val now = currentTimeMs()
             cache[url]?.let { entry ->
                 if (now - entry.storedAtMs <= CACHE_TTL_MS) {
-                    return entry.resolvedUrl
+                    return ProxyResolution.Redirected(entry.resolvedUrl)
                 }
                 cache.remove(url)
             }
@@ -228,24 +228,24 @@ object CometProxyUrlResolver {
             return waitFor.await()
         }
 
-        val result = runCatching { fetchLocation(url, headers) }
+        val outcome: ProxyResolution = runCatching { fetchClassification(url, headers) }
             .onFailure { Log.w(TAG, "Resolve failed url=${sanitize(url)} error=${it.message}") }
-            .getOrNull()
+            .getOrElse { ProxyResolution.ResolveFailed }
 
         synchronized(lock) {
             inFlight.remove(url)
-            if (result != null) {
+            if (outcome is ProxyResolution.Redirected) {
                 cache[url] = CacheEntry(
-                    resolvedUrl = result,
+                    resolvedUrl = outcome.url,
                     storedAtMs = currentTimeMs(),
                     headers = headers ?: emptyMap(),
                     addonHost = addonHost
                 )
-                reverseCache[result] = url
+                reverseCache[outcome.url] = url
             }
         }
-        ownDeferred.complete(result)
-        return result
+        ownDeferred.complete(outcome)
+        return outcome
     }
 
     /**
@@ -351,7 +351,7 @@ object CometProxyUrlResolver {
     ): String? {
         if (!isCometProxy(proxyUrl, addonHost)) return null
 
-        val deferred: CompletableDeferred<String?>
+        val deferred: CompletableDeferred<ProxyResolution>
         val isLeader: Boolean
         var prevResolvedUrl: String? = null
         synchronized(lock) {
@@ -378,19 +378,21 @@ object CometProxyUrlResolver {
         }
 
         if (!isLeader) {
-            return runCatching {
+            val peerOutcome: ProxyResolution? = runCatching {
                 runBlocking(Dispatchers.IO) {
                     withTimeoutOrNull(REQUEST_TIMEOUT_MS) { deferred.await() }
                 }
             }.getOrNull()
+            return (peerOutcome as? ProxyResolution.Redirected)?.url
         }
 
-        val result = runCatching {
+        val outcome: ProxyResolution = runCatching {
             runBlocking(Dispatchers.IO) {
-                withTimeoutOrNull(REQUEST_TIMEOUT_MS) { fetchLocation(proxyUrl, headers) }
+                withTimeoutOrNull(REQUEST_TIMEOUT_MS) { fetchClassification(proxyUrl, headers) }
             }
-        }.getOrNull()
+        }.getOrNull() ?: ProxyResolution.ResolveFailed
 
+        val resolvedUrl: String? = (outcome as? ProxyResolution.Redirected)?.url
         synchronized(lock) {
             inFlight.remove(proxyUrl)
             // Drop the prior reverseCache entry now that the recovery window
@@ -398,20 +400,20 @@ object CometProxyUrlResolver {
             // to the prior one (unlikely but defensive — would leave the
             // reverseCache without a route to the proxy).
             prevResolvedUrl?.let { prior ->
-                if (prior != result) reverseCache.remove(prior)
+                if (prior != resolvedUrl) reverseCache.remove(prior)
             }
-            if (result != null) {
+            if (resolvedUrl != null) {
                 cache[proxyUrl] = CacheEntry(
-                    resolvedUrl = result,
+                    resolvedUrl = resolvedUrl,
                     storedAtMs = currentTimeMs(),
                     headers = headers ?: emptyMap(),
                     addonHost = addonHost
                 )
-                reverseCache[result] = proxyUrl
+                reverseCache[resolvedUrl] = proxyUrl
             }
         }
-        deferred.complete(result)
-        return result
+        deferred.complete(outcome)
+        return resolvedUrl
     }
 
     /**
@@ -423,13 +425,13 @@ object CometProxyUrlResolver {
         url: String,
         headers: Map<String, String>?,
         addonHost: String? = null
-    ): String? {
-        if (!isCometProxy(url, addonHost)) return null
+    ): ProxyResolution {
+        if (!isCometProxy(url, addonHost)) return ProxyResolution.NotEligible
         return runCatching {
             runBlocking(Dispatchers.IO) {
                 withTimeoutOrNull(REQUEST_TIMEOUT_MS) { resolve(url, headers, addonHost) }
             }
-        }.getOrNull()
+        }.getOrNull() ?: ProxyResolution.ResolveFailed
     }
 
     /**
