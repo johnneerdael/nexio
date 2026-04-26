@@ -1,5 +1,6 @@
 package com.nexio.tv.core.sync
 
+import android.util.Log
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
@@ -295,7 +296,15 @@ internal suspend fun buildRemoteAddonInstallConfigs(
         .sortedBy { it.sortOrder }
         .filter { it.enabled }
         .mapNotNull { addon ->
-            resolveAddonUrl(addon).getOrNull()
+            resolveAddonUrl(addon)
+                .onFailure { error ->
+                    Log.w(
+                        "AccountConfigSyncContract",
+                        "buildRemoteAddonInstallConfigs: failed to resolve addon url=${addon.url}",
+                        error
+                    )
+                }
+                .getOrNull()
                 ?.takeIf { it.isNotBlank() }
                 ?.let { url ->
                     AddonPreferences.AddonInstallConfig(
