@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -201,6 +202,28 @@ class MetadataRouterPrecedenceTest {
         assertThrows(IllegalArgumentException::class.java) {
             runTest { router.route(request("tmdb:550", ContentType.MOVIE, depth = MetadataDepth.PREVIEW)) }
         }
+    }
+
+    @Test
+    fun `preview uses addon title without invoking anime identity lookups`() {
+        val animeIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.IMDB, "tt0388629", "7442"))
+        )
+        val router = router(animeIndex = animeIndex)
+        val request = request(
+            "imdb:tt0388629",
+            ContentType.SERIES,
+            depth = MetadataDepth.PREVIEW,
+            sourceContext = MetadataSourceContext(addonMetadata = HomeDisplayMetadata(title = "Initial Preview Title"))
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            runTest { router.route(request) }
+        }
+
+        assertEquals("MetadataRouter does not route preview-depth requests", error.message)
+        assertEquals("Initial Preview Title", request.sourceContext.addonMetadata?.title)
+        assertEquals(emptyList<AnimeIdentityLookup>(), animeIndex.lookups)
     }
 
     @Test

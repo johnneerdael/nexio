@@ -19,6 +19,23 @@ enum class MetadataDecisionReason {
 enum class MetadataMediaKind { MOVIE, SERIES, ANIME, UNKNOWN }
 
 enum class MetadataDepth { PREVIEW, DETAIL_CORE, DETAIL_MEDIA, DETAIL_SECONDARY, SEASON, PLAYER }
+enum class ResolverType {
+    ADDON_DISPLAY,
+    RATING,
+    ARTWORK,
+    REVIEWS,
+    TRACKING,
+    SKIP_SEGMENTS,
+    TRAILERS,
+    RECOMMENDATIONS,
+    ORGANIZATION_PERSON
+}
+
+data class ResolverSchedule(
+    val depth: MetadataDepth,
+    val localResolvers: List<ResolverType>,
+    val networkResolvers: List<ResolverType>
+)
 
 enum class ProviderPlanRole { PRIMARY_CORE, MEDIA, SECONDARY, SEASON, PLAYER }
 
