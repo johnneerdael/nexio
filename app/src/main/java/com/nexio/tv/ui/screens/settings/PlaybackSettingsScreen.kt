@@ -303,6 +303,9 @@ internal fun PlaybackSettingsContent(
                 onSetSkipPlaceholderStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setSkipPlaceholderStreamsEnabled(enabled) }
                 },
+                onSetProbeProfilingDiagnosticEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setProbeProfilingDiagnosticEnabled(enabled) }
+                },
                 onSetFilterEpisodeMismatchStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFilterEpisodeMismatchStreamsEnabled(enabled) }
                 },

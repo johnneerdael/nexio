@@ -96,6 +96,27 @@ object FfmpegStreamMetadataProbe {
         probeBlocking(url = url, headers = headers, addonHost = addonHost)
     }
 
+    /**
+     * Diagnostic-only: probe [url] directly with no [CometProxyUrlResolver]
+     * routing. Useful for measuring whether libavformat's built-in redirect
+     * following can compete with our explicit-resolve-then-probe path. Bypasses
+     * the in-memory cache so each invocation actually issues a probe. Returns
+     * the parsed result on success or null on failure / native unavailable.
+     *
+     * Callers should gate invocations behind a settings flag — this is not for
+     * the production fast path.
+     */
+    suspend fun probeRawForDiagnostic(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): FfmpegStreamMetadataProbeResult? = withContext(Dispatchers.IO) {
+        val headerBlob = headers.toProbeHeaderBlob()
+        val rawJson = runCatching {
+            synchronized(nativeProbeLock) { backend.probeStreamMetadataJson(url, headerBlob) }
+        }.getOrNull() ?: return@withContext null
+        runCatching { parse(rawJson) }.getOrNull()
+    }
+
     fun probeBlocking(
         url: String,
         headers: Map<String, String> = emptyMap(),

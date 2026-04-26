@@ -520,6 +520,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSkipPlaceholderStreamsEnabled(enabled)
     }
 
+    suspend fun setProbeProfilingDiagnosticEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setProbeProfilingDiagnosticEnabled(enabled)
+    }
+
     suspend fun setFilterEpisodeMismatchStreamsEnabled(enabled: Boolean) {
         playerSettingsDataStore.setFilterEpisodeMismatchStreamsEnabled(enabled)
     }

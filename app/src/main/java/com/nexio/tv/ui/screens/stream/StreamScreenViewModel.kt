@@ -20,6 +20,7 @@ import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
 import com.nexio.tv.core.player.DolbyVisionAutoPlayDecisionReason
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
+import com.nexio.tv.core.player.ProbeProfilingDiagnostic
 import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
@@ -1055,6 +1056,15 @@ class StreamScreenViewModel @Inject constructor(
             "AUTOPLAY_HERO_GATED_RESOLUTION_READY selected=${result.playbackInfo.streamKey ?: "unknown"} " +
                 "overlayActive=true readyForPlayback=true"
         )
+        if (probeProfilingDiagnosticEnabled) {
+            // Fire-and-forget diagnostic. Runs the proxy-vs-CDN race + parallel
+            // fanout to fallback candidates in the background. Does not block
+            // playback start; only logs metrics.
+            ProbeProfilingDiagnostic.launch(
+                scope = viewModelScope,
+                playbackInfo = result.playbackInfo
+            )
+        }
         return result.playbackInfo
     }
 

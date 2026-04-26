@@ -123,6 +123,7 @@ internal fun PlaybackSettingsSections(
     onSetServiceWrapEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
     onSetSkipPlaceholderStreamsEnabled: (Boolean) -> Unit,
+    onSetProbeProfilingDiagnosticEnabled: (Boolean) -> Unit,
     onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
@@ -403,6 +404,7 @@ internal fun PlaybackSettingsSections(
                 onSetServiceWrapEnabled = onSetServiceWrapEnabled,
                 onSetFilterWebDolbyVisionStreamsEnabled = onSetFilterWebDolbyVisionStreamsEnabled,
                 onSetSkipPlaceholderStreamsEnabled = onSetSkipPlaceholderStreamsEnabled,
+                onSetProbeProfilingDiagnosticEnabled = onSetProbeProfilingDiagnosticEnabled,
                 onSetFilterEpisodeMismatchStreamsEnabled = onSetFilterEpisodeMismatchStreamsEnabled,
                 onSetFilterMovieYearMismatchStreamsEnabled = onSetFilterMovieYearMismatchStreamsEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
