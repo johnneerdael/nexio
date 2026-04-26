@@ -8,6 +8,7 @@ import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
+import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
@@ -254,6 +255,37 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
     } catch (e: Exception) {
         Log.w(HomeViewModel.TAG, "Provider enrichment failed for continue watching item $contentId: ${e.message}")
         item
+    }
+}
+
+internal suspend fun HomeViewModel.recordContinueWatchingRouteContextForPlayback(
+    item: ContinueWatchingItem
+) {
+    try {
+        val contentType = ContentType.fromString(item.contentType())
+        val route = metadataRouterFacade.resolveRequest(
+            MetadataRequest(
+                contentId = item.contentId(),
+                contentType = contentType,
+                sourceContext = MetadataSourceContext(
+                    itemType = item.contentType(),
+                    addonMetadata = item.displayMetadata()
+                ),
+                seasonNumber = item.season(),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        ).route ?: return
+        continueWatchingSnapshotService.recordMetadataSnapshot(
+            itemKey = homeDisplayItemKey(item.contentType(), item.contentId()),
+            metadataSnapshot = ContinueWatchingMetadataSnapshot.fromRoute(
+                route = route,
+                clickTimeDisplayMetadata = item.displayMetadata()
+            )
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // Playback navigation should not be blocked by route-context persistence.
     }
 }
 
