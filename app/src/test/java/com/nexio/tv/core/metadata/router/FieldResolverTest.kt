@@ -79,4 +79,35 @@ class FieldResolverTest {
             document.ignoredOverwrites
         )
     }
+
+    @Test
+    fun `secondary overwrite is traced when primary owns field`() {
+        val primary = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            fields = mapOf(
+                ResolvedField.TITLE to FieldValue("Primary Title", FieldOwner.PRIMARY)
+            )
+        )
+        val secondary = MetadataCandidate(
+            provider = MetadataPrimaryProvider.KITSU,
+            fields = mapOf(
+                ResolvedField.TITLE to FieldValue("Secondary Title", FieldOwner.PRIMARY)
+            )
+        )
+
+        val result = resolver.resolve(primary = primary, secondary = listOf(secondary))
+
+        assertEquals("Primary Title", result.title)
+        assertEquals(
+            listOf(
+                IgnoredFieldOverwrite(
+                    field = ResolvedField.TITLE,
+                    existingOwner = FieldOwner.PRIMARY,
+                    attemptedOwner = FieldOwner.PRIMARY,
+                    attemptedValue = "Secondary Title"
+                )
+            ),
+            result.ignoredOverwrites
+        )
+    }
 }
