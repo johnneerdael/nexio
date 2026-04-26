@@ -86,6 +86,7 @@ class MetadataAuditReportWriter {
                     appendLine("          \"forbiddenOverwrites\": [${item.forbiddenOverwrites.joinToString { forbiddenOverwriteJson(it) }}],")
                     appendLine("          \"continueWatchingSnapshot\": ${continueWatchingJson(item.continueWatchingSnapshot, indent = "          ")},")
                     appendLine("          \"identityResolution\": ${identityResolutionJson(item.identityResolution)},")
+                    appendLine("          \"localization\": ${localizationJson(item.localization)},")
                     appendLine("          \"productionCallerOwnership\": [${item.productionCallerOwnership.joinToString { productionCallerOwnershipJson(it) }}]")
                     append("        }")
                     if (itemIndex != report.items.lastIndex) append(",")
@@ -240,6 +241,7 @@ class MetadataAuditReportWriter {
                         }
                         appendLine()
                     }
+                    appendLocalization(item.localization)
                     if (item.forbiddenOverwrites.isNotEmpty()) {
                         appendLine("#### Forbidden overwrites")
                         item.forbiddenOverwrites.forEach {
@@ -298,6 +300,21 @@ class MetadataAuditReportWriter {
         appendLine()
     }
 
+    private fun StringBuilder.appendLocalization(event: LocalizationEvent?) {
+        event ?: return
+        appendLine("#### Localization")
+        appendLine("| Provider | Requested | Fallback | Policy | Provider fallback used | Per-episode fallbacks |")
+        appendLine("|---|---|---|---:|---:|---:|")
+        appendLine("| `${event.provider}` | `${event.requestedLanguage}` | `${event.fallbackLanguage}` | `${event.policyVersion}` | `${event.providerFallbackUsed}` | `${event.perEpisodeTranslationFallbacksAttempted}/${event.maxPerEpisodeTranslationFallbacksAllowed}` |")
+        appendLine()
+        appendLine("| API shape | Language | Cache decision | Network | Cache key |")
+        appendLine("|---|---|---|---:|---|")
+        event.payloads.forEach {
+            appendLine("| `${it.apiShapeId}` | `${it.language}` | `${it.cacheDecision}` | `${it.executedNetwork}` | `${it.cacheKey}` |")
+        }
+        appendLine()
+    }
+
     private fun summaryJson(summary: AuditSummaries, indent: String): String =
         """{"totalItems":${summary.totalItems},"routedItems":${summary.routedItems},"networkCalls":${summary.networkCalls},"cacheHits":${summary.cacheHits},"cacheMisses":${summary.cacheMisses},"staleHits":${summary.staleHits},"forbiddenOverwrites":${summary.forbiddenOverwrites},"policyViolations":${summary.policyViolations}}"""
 
@@ -340,6 +357,14 @@ class MetadataAuditReportWriter {
 
     private fun productionCallerOwnershipJson(event: ProductionCallerOwnershipEvent): String =
         """{"pathName":"${event.pathName}","entrypoint":"${event.entrypoint}","facadeOrRepositoryCalled":${event.facadeOrRepositoryCalled},"providerPlanRunnerExpected":${event.providerPlanRunnerExpected},"fieldResolverExpected":${event.fieldResolverExpected},"legacyRouterUsedAfterFacade":${event.legacyRouterUsedAfterFacade}}"""
+
+    private fun localizationJson(event: LocalizationEvent?): String =
+        event?.let {
+            """{"provider":"${it.provider}","requestedLanguage":"${it.requestedLanguage}","fallbackLanguage":"${it.fallbackLanguage}","policyVersion":${it.policyVersion},"providerFallbackAllowedForMissingLocalizedFields":${it.providerFallbackAllowedForMissingLocalizedFields},"providerFallbackUsed":${it.providerFallbackUsed},"perEpisodeTranslationFallbacksAttempted":${it.perEpisodeTranslationFallbacksAttempted},"maxPerEpisodeTranslationFallbacksAllowed":${it.maxPerEpisodeTranslationFallbacksAllowed},"payloads":[${it.payloads.joinToString { payload -> localizationPayloadJson(payload) }}]}"""
+        } ?: "null"
+
+    private fun localizationPayloadJson(payload: LocalizationPayloadReport): String =
+        """{"apiShapeId":"${payload.apiShapeId}","language":"${payload.language}","cacheKey":"${payload.cacheKey}","cacheDecision":"${payload.cacheDecision}","executedNetwork":${payload.executedNetwork}}"""
 
     private fun gitWorktreeJson(state: GitWorktreeState): String =
         """{"state":"${state.state}","dirtyFileCount":${state.dirtyFileCount},"untrackedFileCount":${state.untrackedFileCount}}"""

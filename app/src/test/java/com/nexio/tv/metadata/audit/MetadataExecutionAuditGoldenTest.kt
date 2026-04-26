@@ -179,6 +179,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(allItems.any { it.itemId == "tt12343534" && it.routing?.provider == MetadataPrimaryProvider.KITSU })
         assertTrue(allItems.any { it.routing?.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
         assertTrue(bundle.reports.all { it.verdict == AuditVerdict.PASS })
+        bundle.reports.forEach(MetadataAuditAssertions::assertLocalizationFallbackStaysWithinProvider)
     }
 
     @Test
@@ -329,6 +330,8 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(json.contains("crunchyroll-imdb-anime-detail-core"))
         assertTrue(json.contains("field-ownership-conflict"))
         assertTrue(json.contains("identityResolution"))
+        assertTrue(json.contains("\"localization\""))
+        assertTrue(json.contains("\"providerFallbackUsed\""))
         assertTrue(json.contains("productionCallerOwnership"))
         assertTrue(markdown.contains("Metadata Execution Audit Bundle"))
         assertTrue(markdown.contains("Git SHA"))
@@ -337,6 +340,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(markdown.contains("Execution identity resolved"))
         assertTrue(markdown.contains("provider-native-conflict"))
         assertTrue(markdown.contains("Identity resolution"))
+        assertTrue(markdown.contains("Localization"))
         assertTrue(markdown.contains("Production caller ownership"))
     }
 
