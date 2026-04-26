@@ -910,7 +910,8 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                                 currentStreamBingeGroup
                             } else {
                                 null
-                            }
+                            },
+                            probeUrlWorks = playbackPreflightIntegrationProvider::rangeProbeWorks
                         )
                         selectedStream != null
                     }

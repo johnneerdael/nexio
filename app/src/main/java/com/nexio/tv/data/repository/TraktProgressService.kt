@@ -2,8 +2,9 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeSummaryDto
@@ -85,8 +86,7 @@ internal fun shouldPreferEpisodeHistoryEntry(
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class TraktProgressService @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
+    private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
     private val metaRepository: MetaRepository
 ) {
@@ -418,7 +418,7 @@ class TraktProgressService @Inject constructor(
         return runtimeRegistry.stateFor(
             TrackingRuntimeSession(
                 provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
-                profileId = traktAuthService.currentTraktProfileId()
+                profileId = traktIntegrationProvider.currentTraktProfileId()
             )
         )
     }
@@ -437,11 +437,10 @@ class TraktProgressService @Inject constructor(
         cachedActivities?.let { cached ->
             if (now - cachedActivitiesAtMs < maxAgeMs) return cached
         }
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getLastActivities(authHeader)
-        } ?: return null
-        if (!response.isSuccessful) return null
-        val body = response.body() ?: return null
+        val body = when (val result = traktIntegrationProvider.getLastActivities()) {
+            is IntegrationCallResult.Success -> result.value
+            else -> return null
+        }
         cachedActivities = body
         cachedActivitiesAtMs = System.currentTimeMillis()
         return body
@@ -533,12 +532,10 @@ class TraktProgressService @Inject constructor(
             }
         }
 
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getUserStats(authorization = authHeader, id = "me")
-        } ?: return null
-
-        if (!response.isSuccessful) return null
-        val body = response.body() ?: return null
+        val body = when (val result = traktIntegrationProvider.getUserStats(id = "me")) {
+            is IntegrationCallResult.Success -> result.value
+            else -> return null
+        }
 
         val totalMinutes = (body.movies?.minutes ?: 0) + (body.episodes?.minutes ?: 0)
         val stats = TraktCachedStats(
@@ -1081,7 +1078,7 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun refreshRemoteSnapshot() {
-        if (!traktAuthService.isCircuitClosed()) {
+        if (!traktIntegrationProvider.isCircuitClosed()) {
             trace("refreshRemoteSnapshot: circuit breaker open, skipping")
             throw IOException("Trakt circuit breaker is open")
         }
@@ -1321,22 +1318,15 @@ class TraktProgressService @Inject constructor(
 
             watchedMoviesLastAttemptAtMs = now
             trace("watched-movies fetch: requesting /sync/watched/movies")
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-                traktApi.getWatched(
-                    authorization = authHeader,
-                    type = "movies"
-                )
-            } ?: run {
-                trace("watched-movies fetch: request returned null (network/auth failure)")
-                return@withLock watchedMoviesState.value
+            val watchedMovieItems = when (val result = traktIntegrationProvider.getWatched(type = "movies")) {
+                is IntegrationCallResult.Success -> result.value
+                else -> {
+                    trace("watched-movies fetch: request returned null (network/auth failure)")
+                    return@withLock watchedMoviesState.value
+                }
             }
 
-            if (!response.isSuccessful) {
-                trace("watched-movies fetch: non-success code=${response.code()}")
-                return@withLock watchedMoviesState.value
-            }
-
-            val watchedMovies = response.body().orEmpty()
+            val watchedMovies = watchedMovieItems
                 .flatMap { item ->
                     watchedMovieLookupKeys(item.movie?.ids)
                 }
@@ -1404,22 +1394,15 @@ class TraktProgressService @Inject constructor(
 
             watchedShowsLastAttemptAtMs = now
             trace("watched-shows fetch: requesting /sync/watched/shows?extended=noseasons")
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-                traktApi.getWatchedShows(
-                    authorization = authHeader,
-                    extended = "noseasons"
-                )
-            } ?: run {
-                trace("watched-shows fetch: request returned null (network/auth failure)")
-                return@withLock watchedShowsState.value
+            val watchedShowItems = when (val result = traktIntegrationProvider.getWatchedShows(extended = "noseasons")) {
+                is IntegrationCallResult.Success -> result.value
+                else -> {
+                    trace("watched-shows fetch: request returned null (network/auth failure)")
+                    return@withLock watchedShowsState.value
+                }
             }
 
-            if (!response.isSuccessful) {
-                trace("watched-shows fetch: non-success code=${response.code()}")
-                return@withLock watchedShowsState.value
-            }
-
-            val watchedShows = response.body().orEmpty()
+            val watchedShows = watchedShowItems
                 .mapNotNull(::mapWatchedShowItem)
                 .associateBy { it.contentId }
 
@@ -1502,22 +1485,20 @@ class TraktProgressService @Inject constructor(
         val limit = 100
 
         while (true) {
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-                traktApi.getHiddenItems(
-                    authorization = authHeader,
-                    section = section,
-                    type = type,
-                    page = page,
-                    limit = limit
-                )
-            } ?: break
-
-            if (!response.isSuccessful) break
-            val body = response.body().orEmpty()
+            val pageResult = when (val result = traktIntegrationProvider.getHiddenItems(
+                section = section,
+                type = type,
+                page = page,
+                limit = limit
+            )) {
+                is IntegrationCallResult.Success -> result.value
+                else -> break
+            }
+            val body = pageResult.body
             if (body.isEmpty()) break
             items += body
 
-            val pageCount = response.headers()["X-Pagination-Page-Count"]?.toIntOrNull() ?: 1
+            val pageCount = pageResult.pageCount ?: 1
             if (page >= pageCount || body.size < limit) break
             page += 1
         }
@@ -1543,18 +1524,15 @@ class TraktProgressService @Inject constructor(
     ): Map<Int, com.nexio.tv.data.repository.trakt.TraktEpisodeRef> {
         if (episodeNumbers.isEmpty()) return emptyMap()
         val pathId = toTraktPathId(showContentId)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getSeasonEpisodes(
-                authorization = authHeader,
+        val seasonEpisodes: List<TraktEpisodeSummaryDto> =
+            when (val result = traktIntegrationProvider.getSeasonEpisodes(
                 id = pathId,
                 season = season,
                 extended = "full"
-            )
-        }
-        val seasonEpisodes: List<TraktEpisodeSummaryDto> = response
-            ?.takeIf { it.isSuccessful }
-            ?.body()
-            .orEmpty()
+            )) {
+                is IntegrationCallResult.Success -> result.value
+                else -> emptyList()
+            }
 
         val byNumber: Map<Int, Int> = seasonEpisodes
             .mapNotNull { dto ->
@@ -1588,17 +1566,15 @@ class TraktProgressService @Inject constructor(
         season: Int,
         episode: Int
     ): TraktEpisodeSummaryDto? {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getEpisodeSummary(
-                authorization = authHeader,
-                id = pathId,
-                season = season,
-                episode = episode,
-                extended = "full"
-            )
-        } ?: return null
-        if (!response.isSuccessful) return null
-        return response.body()
+        return when (val result = traktIntegrationProvider.getEpisodeSummary(
+            id = pathId,
+            season = season,
+            episode = episode,
+            extended = "full"
+        )) {
+            is IntegrationCallResult.Success -> result.value
+            else -> null
+        }
     }
 
     private suspend fun deriveNextUpFromWatchedShows(
@@ -1741,20 +1717,15 @@ class TraktProgressService @Inject constructor(
         hiddenProgress: HiddenProgressSnapshot
     ): TraktNextUpValidationResult {
         return try {
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-                traktApi.getShowProgressWatched(
-                    authorization = authHeader,
-                    id = toTraktPathId(candidate.contentId),
-                    lastActivity = "watched"
-                )
-            } ?: return TraktNextUpValidationResult.Failed
-
-            if (!response.isSuccessful) {
-                trace("next-up validation failed: show=${candidate.contentId} code=${response.code()}")
-                return TraktNextUpValidationResult.Failed
+            val progress = when (val result = traktIntegrationProvider.getShowProgressWatched(
+                id = toTraktPathId(candidate.contentId),
+                lastActivity = "watched"
+            )) {
+                is IntegrationCallResult.Success -> result.value
+                else -> return TraktNextUpValidationResult.Failed
             }
 
-            val nextEpisode = response.body()?.nextEpisode
+            val nextEpisode = progress.nextEpisode
                 ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val season = nextEpisode.season ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val episode = nextEpisode.number ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
@@ -1850,16 +1821,14 @@ class TraktProgressService @Inject constructor(
         val maxPages = 20
 
         while (page <= maxPages) {
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-                traktApi.getEpisodeHistory(
-                    authorization = authHeader,
-                    page = page,
-                    limit = pageLimit
-                )
-            } ?: break
-
-            if (!response.isSuccessful) break
-            val items = response.body().orEmpty()
+            val pageResult = when (val result = traktIntegrationProvider.getEpisodeHistory(
+                page = page,
+                limit = pageLimit
+            )) {
+                is IntegrationCallResult.Success -> result.value
+                else -> break
+            }
+            val items = pageResult.body
             if (items.isEmpty()) break
 
             var shouldStop = false
@@ -1875,7 +1844,7 @@ class TraktProgressService @Inject constructor(
                 }
             }
 
-            val pageCount = response.headers()["X-Pagination-Page-Count"]?.toIntOrNull()
+            val pageCount = pageResult.pageCount
             if (items.size < pageLimit || shouldStop || (pageCount != null && page >= pageCount)) break
             page += 1
         }
@@ -1924,16 +1893,14 @@ class TraktProgressService @Inject constructor(
         val completed = mutableMapOf<Pair<Int, Int>, WatchProgress>()
         var hasCompletedSnapshot = false
 
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getShowProgressWatched(
-                authorization = authHeader,
-                id = pathId
-            )
+        val progressResponse = when (val result = traktIntegrationProvider.getShowProgressWatched(id = pathId)) {
+            is IntegrationCallResult.Success -> result.value
+            else -> null
         }
 
-        if (response?.isSuccessful == true) {
+        if (progressResponse != null) {
             hasCompletedSnapshot = true
-            val seasons = response.body()?.seasons.orEmpty()
+            val seasons = progressResponse.seasons.orEmpty()
             seasons.forEach { season ->
                 mapSeasonProgress(contentId, season).forEach { progress ->
                     val seasonNum = progress.season ?: return@forEach
@@ -1981,16 +1948,14 @@ class TraktProgressService @Inject constructor(
             }
         }
 
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getPlayback(
-                authorization = authHeader,
-                type = type,
-                startAt = startAt,
-                endAt = endAt
-            )
-        } ?: return emptyList()
-
-        val value = if (response.isSuccessful) response.body().orEmpty() else emptyList()
+        val value = when (val result = traktIntegrationProvider.getPlayback(
+            type = type,
+            startAt = startAt,
+            endAt = endAt
+        )) {
+            is IntegrationCallResult.Success -> result.value
+            else -> emptyList()
+        }
         if (startAt == null && endAt == null) {
             cacheMutex.withLock {
                 val timed = TimedCache(value = value, updatedAtMs = now)

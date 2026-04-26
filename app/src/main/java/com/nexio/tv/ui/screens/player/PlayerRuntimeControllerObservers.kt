@@ -7,7 +7,6 @@ import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
-import com.nexio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
@@ -17,6 +16,7 @@ import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -49,7 +49,7 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
 
     // Compute hash lazily for providers that support OpenSubtitles-style matching.
     if (currentVideoHash == null && currentStreamUrl.isNotBlank()) {
-        val result = OpenSubtitlesHasher.compute(currentStreamUrl, currentHeaders)
+        val result = openSubtitlesHashIntegrationProvider.compute(currentStreamUrl, currentHeaders)
         if (result != null) {
             currentVideoHash = result.hash
             if (currentVideoSize == null) currentVideoSize = result.fileSize
@@ -112,6 +112,11 @@ internal fun PlayerRuntimeController.fetchAddonSubtitles() {
                 ) 
             }
             tryAutoSelectPreferredSubtitleFromAvailableTracks()
+        } catch (e: CancellationException) {
+            _uiState.update {
+                it.copy(isLoadingAddonSubtitles = false)
+            }
+            throw e
         } catch (e: Exception) {
             _uiState.update { 
                 it.copy(

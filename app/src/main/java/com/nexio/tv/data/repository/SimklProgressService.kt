@@ -4,10 +4,10 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.nexio.tv.data.integration.simkl.transport.SimklProgressTransport
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklProgressSyncState
 import com.nexio.tv.data.local.SimklProgressSyncStateStore
-import com.nexio.tv.data.remote.SimklRequestGate
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.CoroutineScope
@@ -23,22 +23,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.Instant
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class SimklProgressService @Inject constructor(
-    @Named("simkl") private val okHttpClient: OkHttpClient,
+    private val transport: SimklProgressTransport,
     private val simklAuthDataStore: SimklAuthDataStore,
-    private val syncStateStore: SimklProgressSyncStateStore,
-    private val requestGate: SimklRequestGate
+    private val syncStateStore: SimklProgressSyncStateStore
 ) {
     private class SimklProgressRuntimeState(
         persisted: SimklProgressSyncState = SimklProgressSyncState()
@@ -581,7 +574,7 @@ class SimklProgressService @Inject constructor(
         accessToken: String,
         method: String = "GET"
     ): JsonObject? {
-        val text = executeRequest(url = url, accessToken = accessToken, method = method) ?: return null
+        val text = transport.executeRequest(url = url, accessToken = accessToken, method = method) ?: return null
         return runCatching { gson.fromJson(text, JsonObject::class.java) }
             .onFailure { Log.w("SimklProgress", "Failed to parse object for $url", it) }
             .getOrNull()
@@ -591,7 +584,7 @@ class SimklProgressService @Inject constructor(
         url: String,
         accessToken: String
     ): JsonArray? {
-        val text = executeRequest(url = url, accessToken = accessToken) ?: return null
+        val text = transport.executeRequest(url = url, accessToken = accessToken) ?: return null
         return runCatching { gson.fromJson(text, JsonArray::class.java) }
             .onFailure { Log.w("SimklProgress", "Failed to parse array for $url", it) }
             .getOrNull()
@@ -604,35 +597,6 @@ class SimklProgressService @Inject constructor(
         val array = fetchJsonArray(url = url, accessToken = accessToken) ?: return emptyList()
         return array.mapNotNull { element ->
             runCatching { element.asJsonObject }.getOrNull()
-        }
-    }
-
-    private suspend fun executeRequest(
-        url: String,
-        accessToken: String,
-        method: String = "GET"
-    ): String? = withContext(Dispatchers.IO) {
-        val builder = Request.Builder()
-            .url(url.toHttpUrlOrNull() ?: return@withContext null)
-            .header("Authorization", "Bearer $accessToken")
-        val request = if (method == "POST") {
-            builder.post(ByteArray(0).toRequestBody(null)).build()
-        } else {
-            builder.get().build()
-        }
-        requestGate.acquire {
-            runCatching {
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.w("SimklProgress", "Request failed ${response.code} ${request.url}")
-                        return@use null
-                    }
-                    response.body?.string()
-                }
-            }.getOrElse {
-                Log.w("SimklProgress", "Request error ${request.url}", it)
-                null
-            }
         }
     }
 

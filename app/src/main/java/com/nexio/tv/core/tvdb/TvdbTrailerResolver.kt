@@ -1,8 +1,8 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
@@ -29,8 +29,7 @@ sealed interface TvdbTrailerLookupResult {
 class TvdbTrailerResolver @Inject constructor(
     private val tvdbSettingsDataStore: TvdbSettingsDataStore,
     private val tvdbIdentityService: TvdbIdentityService,
-    private val tvdbApi: TvdbApi,
-    private val authService: TvdbAuthService,
+    private val tvdbIntegrationProvider: TvdbIntegrationProvider,
     private val tvdbTrailerMapper: TvdbTrailerMapper
 ) {
     private val seriesRecordInFlight = ConcurrentHashMap<Int, CompletableDeferred<TvdbSeriesExtendedRecord?>>()
@@ -137,23 +136,15 @@ class TvdbTrailerResolver @Inject constructor(
         }
 
         return try {
-            val authorization = authService.bearerToken() ?: run {
-                deferred.complete(null)
-                return null
-            }
             runCatching {
-                tvdbApi.getSeriesExtended(
-                    authorization = authorization,
-                    id = identity.tvdbId,
+                tvdbIntegrationProvider.fetchSeriesExtended(
+                    tvdbId = identity.tvdbId,
                     meta = null,
                     short = false
                 )
             }.onFailure { error ->
                 Log.w(TAG, "TVDB series trailer request failed reason=${error.javaClass.simpleName}")
             }.getOrNull()
-                ?.takeIf { it.isSuccessful }
-                ?.body()
-                ?.data
                 .also { deferred.complete(it) }
         } finally {
             seriesRecordInFlight.remove(identity.tvdbId, deferred)

@@ -20,6 +20,7 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Query("sort") sort: String? = null,
         @Query("filter[categories]") category: String? = null,
+        @Query("filter[text]") text: String? = null,
         @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeResource>>

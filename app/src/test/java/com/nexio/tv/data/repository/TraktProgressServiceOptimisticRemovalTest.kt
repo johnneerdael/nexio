@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
 import com.nexio.tv.domain.model.WatchProgress
@@ -18,8 +20,11 @@ class TraktProgressServiceOptimisticRemovalTest {
             every { currentTraktProfileId() } returns 1
         }
         val service = TraktProgressService(
-            traktApi = mockk<TraktApi>(relaxed = true),
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = TraktIntegrationProvider(
+                runtime = passThroughTestRuntime(),
+                traktApi = mockk<TraktApi>(relaxed = true),
+                traktAuthService = traktAuthService
+            ),
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
             metaRepository = mockk<MetaRepository>(relaxed = true)
         )

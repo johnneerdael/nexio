@@ -1,13 +1,8 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.metadata.MetadataApiKeyResolver
-import com.nexio.tv.core.metadata.MetadataProviderCredential
-import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
-import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbMediaResult
-import com.nexio.tv.data.remote.api.TmdbPagedMediaResponse
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
@@ -20,117 +15,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import retrofit2.Response
-import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
-
-@Singleton
-class RetrofitTmdbDiscoveryClient @Inject constructor(
-    private val tmdbApi: TmdbApi,
-    private val metadataApiKeyResolver: MetadataApiKeyResolver,
-    private val tmdbService: TmdbService
-) : TmdbDiscoveryClient {
-    override suspend fun credential(): MetadataProviderCredential {
-        return metadataApiKeyResolver.tmdbCredential()
-    }
-
-    override suspend fun searchMovies(
-        query: String,
-        preferences: TmdbCatalogPreferences
-    ): List<TmdbMediaResult> {
-        val credential = credential()
-        if (credential.missing) return emptyList()
-        return tmdbApi.searchMovies(
-            apiKey = credential.apiKey,
-            query = query,
-            includeAdult = preferences.includeAdult
-        ).mediaResults()
-    }
-
-    override suspend fun searchTv(
-        query: String,
-        preferences: TmdbCatalogPreferences
-    ): List<TmdbMediaResult> {
-        val credential = credential()
-        if (credential.missing) return emptyList()
-        return tmdbApi.searchTv(
-            apiKey = credential.apiKey,
-            query = query,
-            includeAdult = preferences.includeAdult
-        ).mediaResults()
-    }
-
-    override suspend fun fetchCatalog(
-        catalogId: String,
-        preferences: TmdbCatalogPreferences
-    ): List<TmdbMediaResult> {
-        val credential = credential()
-        if (credential.missing) return emptyList()
-        val apiKey = credential.apiKey
-        val now = LocalDate.now()
-        val today = now.toString()
-        val currentYear = now.year
-        val response = when (catalogId) {
-            TmdbCatalogIds.TRENDING_MOVIES -> tmdbApi.getTrendingMovies(apiKey = apiKey)
-            TmdbCatalogIds.TRENDING_SERIES -> tmdbApi.getTrendingTv(apiKey = apiKey)
-            TmdbCatalogIds.LATEST_RELEASES_MOVIES -> tmdbApi.discoverMovies(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "release_date.desc",
-                releaseDateLte = today,
-                withReleaseType = if (preferences.hideUnreleasedDigital) "4" else null
-            )
-            TmdbCatalogIds.LATEST_RELEASES_SERIES -> tmdbApi.discoverTv(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "first_air_date.desc",
-                firstAirDateLte = today
-            )
-            TmdbCatalogIds.POPULAR_MOVIES -> tmdbApi.getPopularMovies(apiKey = apiKey)
-            TmdbCatalogIds.POPULAR_SERIES -> tmdbApi.getPopularTv(apiKey = apiKey)
-            TmdbCatalogIds.YEAR_MOVIES -> tmdbApi.discoverMovies(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "popularity.desc",
-                primaryReleaseYear = currentYear
-            )
-            TmdbCatalogIds.YEAR_SERIES -> tmdbApi.discoverTv(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "popularity.desc",
-                firstAirDateYear = currentYear
-            )
-            TmdbCatalogIds.LANGUAGE_MOVIES -> tmdbApi.discoverMovies(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "popularity.desc",
-                withOriginalLanguage = "en"
-            )
-            TmdbCatalogIds.LANGUAGE_SERIES -> tmdbApi.discoverTv(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "popularity.desc",
-                withOriginalLanguage = "en"
-            )
-            else -> return emptyList()
-        }
-        return response.mediaResults()
-    }
-
-    override suspend fun imdbId(tmdbId: Int, contentType: ContentType): String? {
-        val mediaType = when (contentType) {
-            ContentType.SERIES, ContentType.TV -> "series"
-            else -> "movie"
-        }
-        return tmdbService.tmdbToImdb(tmdbId, mediaType)
-    }
-
-    private fun Response<TmdbPagedMediaResponse>.mediaResults(): List<TmdbMediaResult> {
-        if (!isSuccessful) return emptyList()
-        return body()?.results.orEmpty()
-    }
-}
 
 @Singleton
 class TmdbDiscoveryService @Inject constructor(
@@ -150,12 +37,10 @@ class TmdbDiscoveryService @Inject constructor(
         if (client.credential().missing) return@coroutineScope emptyList()
 
         val movieResults = async {
-            runCatching { client.searchMovies(trimmedQuery, preferences) }
-                .getOrDefault(emptyList())
+            runCatchingOrEmpty { client.searchMovies(trimmedQuery, preferences) }
         }
         val tvResults = async {
-            runCatching { client.searchTv(trimmedQuery, preferences) }
-                .getOrDefault(emptyList())
+            runCatchingOrEmpty { client.searchTv(trimmedQuery, preferences) }
         }
         val items = mapResults(movieResults.await(), ContentType.MOVIE) +
             mapResults(tvResults.await(), ContentType.SERIES)
@@ -245,8 +130,7 @@ class TmdbDiscoveryService @Inject constructor(
     ): CatalogRow? {
         val title = tmdbCatalogTitle(catalogId) ?: return null
         val contentType = catalogContentType(catalogId) ?: return null
-        val results = runCatching { client.fetchCatalog(catalogId, preferences) }
-            .getOrDefault(emptyList())
+        val results = runCatchingOrEmpty { client.fetchCatalog(catalogId, preferences) }
         val items = mapResults(results, contentType)
         return CatalogRow(
             addonId = ADDON_ID,
@@ -259,6 +143,14 @@ class TmdbDiscoveryService @Inject constructor(
             hasMore = false,
             supportsSkip = false
         )
+    }
+
+    private suspend fun runCatchingOrEmpty(block: suspend () -> List<TmdbMediaResult>): List<TmdbMediaResult> = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        emptyList()
     }
 
     private suspend fun mapResults(

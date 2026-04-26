@@ -25,7 +25,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.KitsuAuthDataStore
-import com.nexio.tv.data.repository.KitsuAuthService
+import com.nexio.tv.data.repository.KitsuSettingsAuthGateway
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -44,7 +44,7 @@ data class KitsuSettingsUiState(
 
 @HiltViewModel
 class KitsuSettingsViewModel @Inject constructor(
-    private val authService: KitsuAuthService,
+    private val authService: KitsuSettingsAuthGateway,
     authDataStore: KitsuAuthDataStore
 ) : ViewModel() {
     val uiState: StateFlow<KitsuSettingsUiState> = authDataStore.state

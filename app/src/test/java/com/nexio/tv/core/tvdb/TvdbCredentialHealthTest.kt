@@ -1,6 +1,7 @@
 package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbMergeAlias
 import com.nexio.tv.data.local.TvdbMergeAliasStore
@@ -105,7 +106,8 @@ class TvdbCredentialHealthTest {
             advancedMetadataMapper = mockk(relaxed = true),
             mergeAliasStore = mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null },
             credentialHealth = credentialHealth,
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            integrationRuntime = passThroughTestRuntime()
         )
 
         val router = TvMetadataRouter(
@@ -254,7 +256,8 @@ class TvdbCredentialHealthTest {
             advancedMetadataMapper = mockk(relaxed = true),
             mergeAliasStore = mergeAliasStore,
             credentialHealth = credentialHealth,
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            integrationRuntime = passThroughTestRuntime()
         )
 
         // Request for the OLD duplicate ID (999)

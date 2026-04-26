@@ -5,11 +5,8 @@ import com.nexio.tv.core.metadata.MetadataApiKeyResolver
 import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderConfig
 import com.nexio.tv.data.local.TvdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TvdbApi
-import com.nexio.tv.data.remote.api.TvdbLoginRequest
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -50,7 +47,7 @@ sealed class TvdbAuthResult(open val status: TvdbValidationStatus) {
 
 @Singleton
 class TvdbAuthService(
-    private val tvdbApi: TvdbApi,
+    private val loginGateway: TvdbLoginGateway,
     private val settingsDataStore: TvdbSettingsDataStore?,
     private val tokenStore: TvdbTokenStore,
     private val nowMillis: () -> Long,
@@ -60,12 +57,12 @@ class TvdbAuthService(
 
     @Inject
     constructor(
-        tvdbApi: TvdbApi,
         settingsDataStore: TvdbSettingsDataStore,
         tokenStore: TvdbTokenStore,
-        metadataApiKeyResolver: MetadataApiKeyResolver
+        metadataApiKeyResolver: MetadataApiKeyResolver,
+        loginGateway: TvdbLoginGateway
     ) : this(
-        tvdbApi = tvdbApi,
+        loginGateway = loginGateway,
         settingsDataStore = settingsDataStore,
         tokenStore = tokenStore,
         nowMillis = { System.currentTimeMillis() },
@@ -73,11 +70,11 @@ class TvdbAuthService(
     )
 
     constructor(
-        tvdbApi: TvdbApi,
+        loginGateway: TvdbLoginGateway,
         tokenStore: TvdbTokenStore,
         nowMillis: () -> Long = { System.currentTimeMillis() }
     ) : this(
-        tvdbApi = tvdbApi,
+        loginGateway = loginGateway,
         settingsDataStore = null,
         tokenStore = tokenStore,
         nowMillis = nowMillis
@@ -233,43 +230,7 @@ class TvdbAuthService(
         if (apiKey.isBlank()) {
             return TvdbAuthResult.InvalidCredentials("TVDB API key is required")
         }
-
-        return try {
-            val response = tvdbApi.login(
-                TvdbLoginRequest(
-                    apikey = apiKey,
-                    pin = pin.takeIf { it.isNotBlank() }
-                )
-            )
-            if (response.isSuccessful) {
-                val token = response.body()?.data?.token.orEmpty()
-                if (token.isNotBlank()) {
-                    return TvdbAuthResult.Valid(
-                        authorizationHeader = "Bearer $token",
-                        expiresAtEpochMillis = nowMillis() + TVDB_TOKEN_TTL_MS
-                    )
-                }
-                val reason = "TVDB auth response did not include credentials"
-                Log.w(TAG, "TVDB /login failed status=${response.code()} reason=missing-auth-data")
-                return TvdbAuthResult.AuthUnavailable(reason)
-            }
-
-            if (response.code() == 401) {
-                val reason = "Invalid TVDB credentials"
-                Log.w(TAG, "TVDB /login failed status=${response.code()} reason=http-${response.code()}")
-                return TvdbAuthResult.InvalidCredentials(reason)
-            }
-
-            val reason = "TVDB login failed with HTTP ${response.code()}"
-            Log.w(TAG, "TVDB /login failed status=${response.code()} reason=http-${response.code()}")
-            TvdbAuthResult.AuthUnavailable(reason)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            val reason = "TVDB login failed: ${error.javaClass.simpleName}"
-            Log.w(TAG, "TVDB /login failed status=exception reason=${error.javaClass.simpleName}")
-            TvdbAuthResult.AuthUnavailable(reason)
-        }
+        return loginGateway.requestToken(apiKey = apiKey, pin = pin, nowMillis = nowMillis)
     }
 
     private fun credentialFingerprint(apiKey: String, pin: String): String {

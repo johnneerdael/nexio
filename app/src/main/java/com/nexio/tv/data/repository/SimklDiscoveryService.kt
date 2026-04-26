@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.integration.simkl.SimklIntegrationProvider
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
@@ -32,11 +33,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 
 data class SimklDiscoverySnapshot(
@@ -120,7 +117,7 @@ private data class SimklCatalogSource(
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class SimklDiscoveryService @Inject constructor(
-    @Named("simkl") private val okHttpClient: OkHttpClient,
+    private val simklIntegrationProvider: SimklIntegrationProvider,
     private val metaRepository: MetaRepository,
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
@@ -285,19 +282,7 @@ class SimklDiscoveryService @Inject constructor(
     }
 
     private suspend fun executeGet(url: String): String? = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(url.toHttpUrlOrNull() ?: return@withContext null)
-            .get()
-            .build()
-        runCatching {
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                response.body?.string()
-            }
-        }.getOrElse {
-            Log.w("SimklDiscovery", "Request failed: $url (${it.message})")
-            null
-        }
+        simklIntegrationProvider.fetchDiscoveryBody(url)
     }
 
     private suspend fun mapDiscoveryItem(dto: JsonObject, kind: String): MetaPreview? {

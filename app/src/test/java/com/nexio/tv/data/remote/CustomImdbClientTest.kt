@@ -1,18 +1,20 @@
 package com.nexio.tv.data.remote
 
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.imdb.CustomImdbPayload
+import com.nexio.tv.data.integration.imdb.CustomImdbRatingsIntegrationProvider
 import com.squareup.moshi.Moshi
-import java.io.IOException
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
-import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.RequestBody
-import okhttp3.Response
-import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CustomImdbClientTest {
@@ -26,23 +28,19 @@ class CustomImdbClientTest {
     }
 
     @Test
-    fun `fetchEpisodeRatings calls single title ratings endpoint with episodes query and maps wrapper payload`() = runTest {
-        var capturedPath = ""
-        var capturedEpisodesQuery: String? = null
-        var capturedMethod = ""
-        var capturedRequestBody: String? = null
-        var capturedApiKey = ""
+    fun `fetchEpisodeRatings delegates request construction to provider and maps wrapper payload`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val requestSlot = slot<okhttp3.Request>()
+        val baseUrlSlot = slot<String>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com/custom",
             apiKey = "secret-key"
-        ) { chain ->
-            capturedPath = chain.request().url.encodedPath
-            capturedEpisodesQuery = chain.request().url.queryParameter("episodes")
-            capturedMethod = chain.request().method
-            capturedRequestBody = chain.request().body?.readUtf8()
-            capturedApiKey = chain.request().header("X-API-Key").orEmpty()
-            jsonResponse(
-                chain,
+        )
+        coEvery {
+            provider.execute(capture(baseUrlSlot), capture(requestSlot))
+        } returns IntegrationCallResult.Success(
+            CustomImdbPayload(
                 """
                 {
                   "requestTconst": "tt27444205",
@@ -77,15 +75,16 @@ class CustomImdbClientTest {
                 }
                 """.trimIndent()
             )
-        }
+        )
 
         val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
-        assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
-        assertEquals("true", capturedEpisodesQuery)
-        assertEquals("GET", capturedMethod)
-        assertNull(capturedRequestBody)
-        assertEquals("secret-key", capturedApiKey)
+        assertEquals("https://ratings.example.com/custom", baseUrlSlot.captured)
+        assertEquals("/custom/v1/ratings/tt27444205", requestSlot.captured.url.encodedPath)
+        assertEquals("true", requestSlot.captured.url.queryParameter("episodes"))
+        assertEquals("GET", requestSlot.captured.method)
+        assertNull(requestSlot.captured.body)
+        assertEquals("secret-key", requestSlot.captured.header("X-API-Key"))
         assertEquals(
             mapOf(
                 (1 to 1) to 8.3,
@@ -93,22 +92,20 @@ class CustomImdbClientTest {
             ),
             result
         )
+        coVerify(exactly = 1) { provider.execute(any(), any()) }
     }
 
     @Test
     fun `fetchTitleRatings posts bulk identifiers and maps ratings`() = runTest {
-        var capturedPath = ""
-        var capturedMethod = ""
-        var capturedRequestBody: String? = null
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val requestSlot = slot<okhttp3.Request>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com/custom",
             apiKey = "secret-key"
-        ) { chain ->
-            capturedPath = chain.request().url.encodedPath
-            capturedMethod = chain.request().method
-            capturedRequestBody = chain.request().body?.readUtf8()
-            jsonResponse(
-                chain,
+        )
+        coEvery { provider.execute(any(), capture(requestSlot)) } returns IntegrationCallResult.Success(
+            CustomImdbPayload(
                 """
                 {
                   "results": [
@@ -120,17 +117,17 @@ class CustomImdbClientTest {
                 }
                 """.trimIndent()
             )
-        }
+        )
 
         val result = client.fetchTitleRatings(
             identifiers = listOf("Hello, world!", "tt32459853", "tt0944947")
         )
 
-        assertEquals("/custom/v1/ratings/bulk", capturedPath)
-        assertEquals("POST", capturedMethod)
+        assertEquals("/custom/v1/ratings/bulk", requestSlot.captured.url.encodedPath)
+        assertEquals("POST", requestSlot.captured.method)
         assertEquals(
             """{"identifiers":["Hello, world!","tt32459853","tt0944947"]}""",
-            capturedRequestBody
+            requestSlot.captured.body?.readUtf8()
         )
         assertEquals(
             mapOf(
@@ -143,14 +140,15 @@ class CustomImdbClientTest {
 
     @Test
     fun `fetchEpisodeRatings reuses version path when base url already ends in v1`() = runTest {
-        var capturedPath = ""
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val requestSlot = slot<okhttp3.Request>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com/custom/v1/",
             apiKey = "secret-key"
-        ) { chain ->
-            capturedPath = chain.request().url.encodedPath
-            jsonResponse(
-                chain,
+        )
+        coEvery { provider.execute(any(), capture(requestSlot)) } returns IntegrationCallResult.Success(
+            CustomImdbPayload(
                 """
                 {
                   "requestTconst": "tt27444205",
@@ -168,39 +166,31 @@ class CustomImdbClientTest {
                 }
                 """.trimIndent()
             )
-        }
+        )
 
         val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
-        assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
+        assertEquals("/custom/v1/ratings/tt27444205", requestSlot.captured.url.encodedPath)
         assertEquals(mapOf((1 to 1) to 8.3), result)
     }
 
     @Test
     fun `fetchEpisodeRatings retries once after rate limit and falls back to one second delay`() = runTest {
-        var attempts = 0
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
         val delays = mutableListOf<Long>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com",
             apiKey = "secret-key"
-        ) { chain ->
-            attempts += 1
-            when (attempts) {
-                1 -> jsonResponse(
-                    chain,
-                    """
-                    {
-                      "error": {
-                        "code": "rate_limited",
-                        "message": "rate limit exceeded"
-                      }
-                    }
-                    """.trimIndent(),
-                    code = 429
-                )
-
-                else -> jsonResponse(
-                    chain,
+        ).also { imdbClient ->
+            imdbClient.delayMs = { delayMillis ->
+                delays += delayMillis
+            }
+        }
+        coEvery { provider.execute(any(), any()) } returnsMany listOf(
+            IntegrationCallResult.HttpError(statusCode = 429, retryAfterMs = 1_000L),
+            IntegrationCallResult.Success(
+                CustomImdbPayload(
                     """
                     {
                       "requestTconst": "tt27444205",
@@ -218,46 +208,33 @@ class CustomImdbClientTest {
                     }
                     """.trimIndent()
                 )
-            }
-        }.also { imdbClient ->
-            imdbClient.delayMs = { delayMillis ->
-                delays += delayMillis
-            }
-        }
+            )
+        )
 
         val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
-        assertEquals(2, attempts)
+        coVerify(exactly = 2) { provider.execute(any(), any()) }
         assertEquals(listOf(1_000L), delays)
         assertEquals(mapOf((1 to 1) to 8.3), result)
     }
 
     @Test
     fun `fetchEpisodeRatings retries once after rate limit using retry after header`() = runTest {
-        var attempts = 0
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
         val delays = mutableListOf<Long>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com",
             apiKey = "secret-key"
-        ) { chain ->
-            attempts += 1
-            when (attempts) {
-                1 -> jsonResponse(
-                    chain,
-                    """
-                    {
-                      "error": {
-                        "code": "rate_limited",
-                        "message": "rate limit exceeded"
-                      }
-                    }
-                    """.trimIndent(),
-                    code = 429,
-                    headers = mapOf("Retry-After" to "2")
-                )
-
-                else -> jsonResponse(
-                    chain,
+        ).also { imdbClient ->
+            imdbClient.delayMs = { delayMillis ->
+                delays += delayMillis
+            }
+        }
+        coEvery { provider.execute(any(), any()) } returnsMany listOf(
+            IntegrationCallResult.HttpError(statusCode = 429, retryAfterMs = 2_000L),
+            IntegrationCallResult.Success(
+                CustomImdbPayload(
                     """
                     {
                       "requestTconst": "tt27444205",
@@ -266,80 +243,156 @@ class CustomImdbClientTest {
                     }
                     """.trimIndent()
                 )
-            }
-        }.also { imdbClient ->
-            imdbClient.delayMs = { delayMillis ->
-                delays += delayMillis
-            }
-        }
+            )
+        )
 
         val result = client.fetchEpisodeRatings(tconst = "tt27444205")
 
-        assertEquals(2, attempts)
+        coVerify(exactly = 2) { provider.execute(any(), any()) }
         assertEquals(listOf(2_000L), delays)
         assertEquals(emptyMap<Pair<Int, Int>, Double>(), result)
     }
 
     @Test
     fun `fetchEpisodeRatings returns empty map when remote call fails`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com",
             apiKey = "secret-key"
-        ) { throw IOException("boom") }
+        )
+        coEvery { provider.execute(any(), any()) } returns IntegrationCallResult.NetworkError(Exception("boom"))
 
         assertEquals(emptyMap<Pair<Int, Int>, Double>(), client.fetchEpisodeRatings("tt27444205"))
     }
 
     @Test
-    fun `fetchEpisodeRatings returns empty map when api key is blank`() = runTest {
+    fun `fetchEpisodeRatings returns empty map when provider returns missing`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
         val client = buildClient(
+            provider = provider,
             baseUrl = "https://ratings.example.com",
-            apiKey = ""
-        ) { chain -> jsonResponse(chain, "{}") }
+            apiKey = "secret-key"
+        )
+        coEvery { provider.execute(any(), any()) } returns IntegrationCallResult.Missing
 
         assertEquals(emptyMap<Pair<Int, Int>, Double>(), client.fetchEpisodeRatings("tt27444205"))
     }
 
+    @Test
+    fun `fetchEpisodeRatings and fetchTitleRatings return empty maps for malformed payloads`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val client = buildClient(
+            provider = provider,
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key"
+        )
+        coEvery { provider.execute(any(), any()) } returnsMany listOf(
+            IntegrationCallResult.Success(
+                CustomImdbPayload(
+                    """
+                    {
+                      "requestTconst": "tt27444205",
+                      "episodes": [
+                    """.trimIndent()
+                )
+            ),
+            IntegrationCallResult.Success(
+                CustomImdbPayload(
+                    """
+                    {
+                      "results": [
+                        { "tconst": "tt32459853", "averageRating": 7.8 }
+                    """.trimIndent()
+                )
+            )
+        )
+
+        assertEquals(emptyMap<Pair<Int, Int>, Double>(), client.fetchEpisodeRatings("tt27444205"))
+        assertEquals(emptyMap<String, Double>(), client.fetchTitleRatings(listOf("tt32459853")))
+        coVerify(exactly = 2) { provider.execute(any(), any()) }
+    }
+
+    @Test
+    fun `fetchTitleRatings returns empty map when provider returns missing`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val client = buildClient(
+            provider = provider,
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key"
+        )
+        coEvery { provider.execute(any(), any()) } returns IntegrationCallResult.Missing
+
+        assertEquals(emptyMap<String, Double>(), client.fetchTitleRatings(listOf("tt32459853")))
+    }
+
+    @Test
+    fun `fetchEpisodeRatings returns empty map when api key is blank`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>(relaxed = true)
+        val client = buildClient(
+            provider = provider,
+            baseUrl = "https://ratings.example.com",
+            apiKey = ""
+        )
+
+        assertEquals(emptyMap<Pair<Int, Int>, Double>(), client.fetchEpisodeRatings("tt27444205"))
+        coVerify(exactly = 0) { provider.execute(any(), any()) }
+    }
+
+    @Test
+    fun `validate delegates through provider and preserves success and failure mapping`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val requestSlot = slot<okhttp3.Request>()
+        val baseUrlSlot = slot<String>()
+        val client = buildClient(
+            provider = provider,
+            baseUrl = "https://unused.example.com",
+            apiKey = "unused-key"
+        )
+        coEvery { provider.execute(capture(baseUrlSlot), capture(requestSlot)) } returnsMany listOf(
+            IntegrationCallResult.Success(CustomImdbPayload("""{"ok":true}""")),
+            IntegrationCallResult.HttpError(statusCode = 503)
+        )
+
+        val success = client.validate(" https://ratings.example.com/custom/ ", " secret-key ")
+        val failure = client.validate(" https://ratings.example.com/custom/ ", " secret-key ")
+
+        assertTrue(success)
+        assertEquals(false, failure)
+        assertEquals("https://ratings.example.com/custom", baseUrlSlot.captured)
+        assertEquals("/custom/v1/meta/stats", requestSlot.captured.url.encodedPath)
+        assertEquals("GET", requestSlot.captured.method)
+        assertNull(requestSlot.captured.body)
+        assertEquals("secret-key", requestSlot.captured.header("X-API-Key"))
+        coVerify(exactly = 2) { provider.execute(any(), any()) }
+    }
+
+    @Test
+    fun `validate returns false when provider returns missing`() = runTest {
+        val provider = mockk<CustomImdbRatingsIntegrationProvider>()
+        val client = buildClient(
+            provider = provider,
+            baseUrl = "https://unused.example.com",
+            apiKey = "unused-key"
+        )
+        coEvery { provider.execute(any(), any()) } returns IntegrationCallResult.Missing
+
+        assertEquals(false, client.validate(" https://ratings.example.com/custom/ ", " secret-key "))
+        coVerify(exactly = 1) { provider.execute(any(), any()) }
+    }
+
     private fun buildClient(
+        provider: CustomImdbRatingsIntegrationProvider,
         baseUrl: String,
-        apiKey: String,
-        handler: (Interceptor.Chain) -> Response
+        apiKey: String
     ): OkHttpCustomImdbClient {
         return OkHttpCustomImdbClient(
-            okHttpClient = okHttpClient(handler),
+            integrationProvider = provider,
             moshi = Moshi.Builder().build()
         ).also { client ->
             client.baseUrlProvider = { baseUrl }
             client.apiKeyProvider = { apiKey }
         }
-    }
-
-    private fun okHttpClient(
-        handler: (Interceptor.Chain) -> Response
-    ): OkHttpClient {
-        return OkHttpClient.Builder()
-            .addInterceptor(handler)
-            .build()
-    }
-
-    private fun jsonResponse(
-        chain: Interceptor.Chain,
-        body: String,
-        code: Int = 200,
-        headers: Map<String, String> = emptyMap()
-    ): Response {
-        val builder = Response.Builder()
-            .request(chain.request())
-            .protocol(Protocol.HTTP_1_1)
-            .code(code)
-            .message("OK")
-            .body(body.toResponseBody("application/json".toMediaType()))
-
-        headers.forEach { (name, value) ->
-            builder.addHeader(name, value)
-        }
-
-        return builder.build()
     }
 }
 

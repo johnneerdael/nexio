@@ -3,13 +3,9 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.domain.model.SubtitleTranslationDefaults
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
-private const val ANTHROPIC_VERSION = "2023-06-01"
 private const val OPENAI_NATIVE_BASE_URL = "https://api.openai.com/v1"
 private const val DASHSCOPE_GENERATION_PATH = "/services/aigc/text-generation/generation"
 
@@ -220,34 +216,6 @@ internal fun buildDashScopeGenerationRequest(
         .put("model", settings.model)
         .put("input", JSONObject().put("messages", messages))
         .put("parameters", parameters)
-}
-
-internal fun openAiRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
-    return Request.Builder()
-        .url(endpoint)
-        .header("Authorization", "Bearer ${apiKey.trim()}")
-        .header("Content-Type", "application/json")
-        .post(body.toString().toRequestBody("application/json".toMediaType()))
-        .build()
-}
-
-internal fun anthropicRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
-    return Request.Builder()
-        .url(endpoint)
-        .header("x-api-key", apiKey.trim())
-        .header("anthropic-version", ANTHROPIC_VERSION)
-        .header("Content-Type", "application/json")
-        .post(body.toString().toRequestBody("application/json".toMediaType()))
-        .build()
-}
-
-internal fun dashScopeRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
-    return Request.Builder()
-        .url(endpoint)
-        .header("Authorization", "Bearer ${apiKey.trim()}")
-        .header("Content-Type", "application/json")
-        .post(body.toString().toRequestBody("application/json".toMediaType()))
-        .build()
 }
 
 internal fun parseOpenAiResponseText(raw: String): String? {

@@ -28,30 +28,27 @@ class TraktWriteSurfaceStructureTest {
         assertEquals(
             mapOf(
                 "addHistory" to setOf(
-                    "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
-                    "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
+                    "com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"
                 ),
                 "removeHistory" to setOf(
-                    "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
-                    "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
+                    "com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"
                 ),
                 "deletePlayback" to setOf(
-                    "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
-                    "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
+                    "com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"
                 ),
-                "addToWatchlist" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "removeFromWatchlist" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "addUserListItems" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "removeUserListItems" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "createUserList" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "updateUserList" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "deleteUserList" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "reorderUserLists" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
-                "hideRecommendation" to setOf("com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt"),
-                "checkin" to setOf("com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt"),
-                "scrobbleStart" to setOf("com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt"),
-                "scrobblePause" to setOf("com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt"),
-                "scrobbleStop" to setOf("com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt"),
+                "addToWatchlist" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "removeFromWatchlist" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "addUserListItems" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "removeUserListItems" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "createUserList" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "updateUserList" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "deleteUserList" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "reorderUserLists" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "hideRecommendation" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "checkin" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "scrobbleStart" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "scrobblePause" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
+                "scrobbleStop" to setOf("com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt"),
             ),
             findings,
         )
@@ -61,16 +58,7 @@ class TraktWriteSurfaceStructureTest {
     fun trackedTraktWriteHelpersStayInsideDedicatedMutationServices() {
         val callSites = findCallSites(Regex("""\btraktAuthService\.executeAuthorizedWriteRequest\b"""))
 
-        assertEquals(
-            setOf(
-                "com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt",
-                "com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt",
-                "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
-                "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt",
-                "com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt",
-            ),
-            callSites,
-        )
+        assertEquals(emptySet<String>(), callSites)
     }
 
     private fun findCallSites(pattern: Regex): Set<String> {

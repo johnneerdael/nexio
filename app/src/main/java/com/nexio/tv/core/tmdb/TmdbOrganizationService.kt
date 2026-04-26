@@ -1,10 +1,6 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
-import com.nexio.tv.core.metadata.MetadataApiKeyResolver
-import com.nexio.tv.core.metadata.MetadataProviderConfig
-import com.nexio.tv.core.metadata.MetadataProviderCredential
-import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbDiscoverResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaCompanyKind
@@ -12,9 +8,10 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.OrganizationDiscoverType
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbOrganizationDetail
+import com.nexio.tv.data.integration.tmdb.DefaultTmdbOrganizationProvider
+import com.nexio.tv.data.integration.tmdb.TmdbOrganizationProvider
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,29 +20,13 @@ private const val TAG = "TmdbOrganizationSvc"
 
 @Singleton
 class TmdbOrganizationService(
-    private val tmdbApi: TmdbApi,
-    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential
+    private val tmdbOrganizationProvider: TmdbOrganizationProvider
 ) {
     @Inject
     constructor(
-        tmdbApi: TmdbApi,
-        metadataApiKeyResolver: MetadataApiKeyResolver
+        defaultTmdbOrganizationProvider: DefaultTmdbOrganizationProvider
     ) : this(
-        tmdbApi = tmdbApi,
-        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() }
-    )
-
-    constructor(
-        tmdbApi: TmdbApi,
-        apiKeyFlow: Flow<String>
-    ) : this(
-        tmdbApi = tmdbApi,
-        tmdbCredentialProvider = {
-            MetadataProviderConfig.resolveCredential(
-                customApiKey = apiKeyFlow.first(),
-                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
-            )
-        }
+        tmdbOrganizationProvider = defaultTmdbOrganizationProvider
     )
 
     suspend fun fetchOrganizationDetail(
@@ -55,18 +36,17 @@ class TmdbOrganizationService(
         language: String? = "en-US",
         maxItems: Int = 20
     ): TmdbOrganizationDetail? = withContext(Dispatchers.IO) {
-        val apiKey = requireApiKey() ?: return@withContext null
         val normalizedLanguage = language?.trim()?.takeIf { it.isNotBlank() } ?: "en-US"
 
         try {
             when (kind) {
                 MetaCompanyKind.COMPANY -> {
-                    val detail = tmdbApi.getCompanyDetails(entityId, apiKey).body() ?: return@withContext null
+                    val detail = tmdbOrganizationProvider.getCompanyDetails(entityId) ?: return@withContext null
                     val discover = when (discoverType) {
                         OrganizationDiscoverType.MOVIE_COMPANY ->
-                            tmdbApi.discoverMoviesByCompany(apiKey, normalizedLanguage, entityId.toString()).body()
+                            tmdbOrganizationProvider.discoverMoviesByCompany(entityId, normalizedLanguage)
                         OrganizationDiscoverType.TV_COMPANY ->
-                            tmdbApi.discoverTvByCompany(apiKey, normalizedLanguage, entityId.toString()).body()
+                            tmdbOrganizationProvider.discoverTvByCompany(entityId, normalizedLanguage)
                         OrganizationDiscoverType.TV_NETWORK -> return@withContext null
                     }
                     TmdbOrganizationDetail(
@@ -93,12 +73,8 @@ class TmdbOrganizationService(
                 }
 
                 MetaCompanyKind.NETWORK -> {
-                    val detail = tmdbApi.getNetworkDetails(entityId, apiKey).body() ?: return@withContext null
-                    val discover = tmdbApi.discoverTvByNetwork(
-                        apiKey = apiKey,
-                        language = normalizedLanguage,
-                        networkId = entityId
-                    ).body()
+                    val detail = tmdbOrganizationProvider.getNetworkDetails(entityId) ?: return@withContext null
+                    val discover = tmdbOrganizationProvider.discoverTvByNetwork(entityId, normalizedLanguage)
                     TmdbOrganizationDetail(
                         tmdbId = detail.id,
                         kind = kind,
@@ -116,19 +92,12 @@ class TmdbOrganizationService(
                     )
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch organization detail: ${e.message}", e)
             null
         }
-    }
-
-    private suspend fun requireApiKey(): String? {
-        val credential = tmdbCredentialProvider()
-        if (credential.missing) {
-            Log.w(TAG, "TMDB API key is missing; organization lookup skipped")
-            return null
-        }
-        return credential.apiKey
     }
 
     private fun buildImageUrl(path: String?, size: String): String? {

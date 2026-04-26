@@ -1,13 +1,33 @@
 package com.nexio.tv.data.repository.servicewrap
 
 import com.nexio.tv.domain.model.Stream
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DebridAvailabilityResolverTest {
+    private val resolverSource =
+        File("app/src/main/java/com/nexio/tv/data/repository/servicewrap/DebridAvailabilityResolver.kt")
+
+    @Test
+    fun `resolver avoids direct auth service and unused service seam injections`() {
+        val source = resolverSource.readText()
+
+        assertTrue(source.contains("private val realDebridAuthDataStore: RealDebridAuthDataStore"))
+        assertTrue(source.contains("realDebridAuthDataStore.isAuthenticated.first()"))
+        assertFalse(source.contains("RealDebridAuthService"))
+        assertFalse(source.contains("realDebridAuthService"))
+        assertFalse(source.contains("PremiumizeService"))
+        assertFalse(source.contains("premiumizeService"))
+        assertFalse(source.contains("TorBoxService"))
+        assertFalse(source.contains("torBoxService"))
+        assertFalse(source.contains("EasyDebridService"))
+        assertFalse(source.contains("easyDebridService"))
+    }
 
     @Test
     fun `extractRealDebridVariants matches hash keys case-insensitively`() {

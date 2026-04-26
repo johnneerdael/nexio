@@ -15,6 +15,7 @@ internal fun HomeViewModel.observePlaybackWorkGate() {
     viewModelScope.launch {
         playbackIdleGateState.snapshot
             .collectLatest { snapshot ->
+                integrationPlaybackGate.setPlaybackActive(snapshot.hasActiveSession)
                 if (!shouldRunHomeBackgroundWork(snapshot)) {
                     cancelNonPlaybackHomeWorkForPlayback()
                 } else {

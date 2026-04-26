@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local.integration
 
 import com.nexio.tv.core.integration.IntegrationCachePolicy
+import com.nexio.tv.core.integration.IntegrationCacheOwnership
 import com.nexio.tv.core.integration.IntegrationCacheStore
 import com.nexio.tv.core.integration.IntegrationSpec
 import javax.inject.Inject
@@ -16,7 +17,7 @@ class LocalIntegrationCacheStore @Inject constructor(
     override suspend fun <T> readFresh(spec: IntegrationSpec<T>): T? {
         if (spec.cachePolicy !is IntegrationCachePolicy.CacheFirst) return null
 
-        val entry = cacheDao.getCacheEntry(spec.cacheKey) ?: return null
+        val entry = cacheDao.getCacheEntry(spec.requiredCacheKey) ?: return null
         if (entry.expiresAtEpochMs < nowMsProvider()) return null
 
         val file = blobStore.fileFor(entry.blobPath)
@@ -28,7 +29,7 @@ class LocalIntegrationCacheStore @Inject constructor(
     override suspend fun <T> readStale(spec: IntegrationSpec<T>): T? {
         if (spec.cachePolicy !is IntegrationCachePolicy.CacheFirst) return null
 
-        val entry = cacheDao.getCacheEntry(spec.cacheKey) ?: return null
+        val entry = cacheDao.getCacheEntry(spec.requiredCacheKey) ?: return null
         if (entry.staleUntilEpochMs < nowMsProvider()) return null
 
         val file = blobStore.fileFor(entry.blobPath)
@@ -42,13 +43,18 @@ class LocalIntegrationCacheStore @Inject constructor(
         val now = nowMsProvider()
         val freshUntil = now + policy.ttlMs
         val staleUntil = freshUntil + policy.staleAfterExpiryMs
-        val blobPath = spec.cacheKey.replace(':', '/') + ".bin"
+        val cacheKey = spec.requiredCacheKey
+        val blobPath = cacheKey.replace(':', '/') + ".bin"
         val file = blobStore.fileFor(blobPath)
+        val ownerToken = when (val ownership = spec.ownership) {
+            IntegrationCacheOwnership.None -> null
+            is IntegrationCacheOwnership.Media -> ownership.mediaKey
+        }
 
         file.writeBytes(spec.codec.encode(value))
         cacheDao.upsertCacheEntry(
             IntegrationCacheEntity(
-                cacheKey = spec.cacheKey,
+                cacheKey = cacheKey,
                 provider = spec.provider.name,
                 scopeKey = spec.scope.storageKey,
                 blobPath = blobPath,
@@ -56,8 +62,16 @@ class LocalIntegrationCacheStore @Inject constructor(
                 expiresAtEpochMs = freshUntil,
                 staleUntilEpochMs = staleUntil,
                 updatedAtEpochMs = now,
-                ownerToken = null
+                ownerToken = ownerToken
             )
         )
+    }
+
+    override suspend fun deleteOwnedMedia(mediaKey: String): Int {
+        val ownedEntries = cacheDao.findByMediaKey(mediaKey)
+        ownedEntries.forEach { entry ->
+            blobStore.delete(entry.blobPath)
+        }
+        return cacheDao.deleteByMediaKey(mediaKey)
     }
 }

@@ -9,11 +9,15 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -169,6 +173,46 @@ class TmdbDiscoveryServiceTest {
     }
 
     @Test
+    fun `search propagates cancellation from child`() = runTest {
+        val service = FakeTmdbDiscoveryClient(
+            movieSearch = listOf(mediaResult(id = 999, title = "Unknown Movie")),
+            searchDelayMillis = 10_000L
+        ).createService()
+        var cancelled = false
+
+        try {
+            withTimeout(50) { service.search("matrix", TmdbCatalogPreferences()) }
+            fail("Expected CancellationException")
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+        assertTrue(cancelled)
+    }
+
+    @Test
+    fun `refreshCatalogs propagates cancellation from catalog fetch`() = runTest {
+        val service = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 603, title = "The Matrix"))
+            ),
+            catalogDelayMillis = 10_000L
+        ).createService()
+        val preferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+        var cancelled = false
+
+        try {
+            withTimeout(50) { service.refreshCatalogs(preferences, force = true) }
+            fail("Expected CancellationException")
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+        assertTrue(cancelled)
+    }
+
+    @Test
     fun `observeSnapshot emits refreshed catalog snapshot after refreshCatalogs`() = runTest {
         val service = FakeTmdbDiscoveryClient(
             catalogResults = mapOf(
@@ -314,7 +358,9 @@ class TmdbDiscoveryServiceTest {
         private val movieSearch: List<TmdbMediaResult> = emptyList(),
         private val tvSearch: List<TmdbMediaResult> = emptyList(),
         private val catalogResults: Map<String, List<TmdbMediaResult>> = emptyMap(),
-        private val imdbIds: Map<String, String> = emptyMap()
+        private val imdbIds: Map<String, String> = emptyMap(),
+        private val searchDelayMillis: Long = 0L,
+        private val catalogDelayMillis: Long = 0L
     ) : TmdbDiscoveryClient {
         val requestedCatalogIds = mutableListOf<String>()
 
@@ -323,18 +369,31 @@ class TmdbDiscoveryServiceTest {
         override suspend fun searchMovies(
             query: String,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = movieSearch
+        ): List<TmdbMediaResult> {
+            if (searchDelayMillis > 0) {
+                delay(searchDelayMillis)
+            }
+            return movieSearch
+        }
 
         override suspend fun searchTv(
             query: String,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = tvSearch
+        ): List<TmdbMediaResult> {
+            if (searchDelayMillis > 0) {
+                delay(searchDelayMillis)
+            }
+            return tvSearch
+        }
 
         override suspend fun fetchCatalog(
             catalogId: String,
             preferences: TmdbCatalogPreferences
         ): List<TmdbMediaResult> {
             requestedCatalogIds += catalogId
+            if (catalogDelayMillis > 0) {
+                delay(catalogDelayMillis)
+            }
             return catalogResults[catalogId].orEmpty()
         }
 

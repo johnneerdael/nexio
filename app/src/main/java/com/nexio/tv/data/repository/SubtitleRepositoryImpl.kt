@@ -1,12 +1,10 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
-import com.nexio.tv.core.sync.buildAddonRequestUrl
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
-import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.network.safeApiCall
-import com.nexio.tv.data.local.AddonPreferences
-import com.nexio.tv.data.remote.api.AddonApi
+import com.nexio.tv.core.sync.buildAddonRequestUrl
+import com.nexio.tv.data.integration.addon.AddonSubtitleIntegrationProvider
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.domain.repository.SubtitleRepository
@@ -17,10 +15,11 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 
 class SubtitleRepositoryImpl @Inject constructor(
-    private val api: AddonApi,
+    private val addonSubtitleIntegrationProvider: AddonSubtitleIntegrationProvider,
     private val addonRepository: AddonRepositoryImpl
 ) : SubtitleRepository {
 
@@ -38,13 +37,20 @@ class SubtitleRepositoryImpl @Inject constructor(
         filename: String?
     ): List<Subtitle> = withContext(Dispatchers.IO) {
         val requestType = canonicalSubtitleType(type)
+        val requestId = if (requestType == "series" && videoId != null) {
+            // For series, filter against the same id format sent to the subtitle route.
+            videoId
+        } else {
+            id
+        }
         val startedAtMs = System.currentTimeMillis()
-        Log.d(TAG, "Fetching subtitles for type=$requestType, id=$id, videoId=$videoId")
+        Log.d(TAG, "Fetching subtitles for type=$requestType, id=$requestId, videoId=$videoId")
         
         // Get installed addons
         val addons = try {
             addonRepository.getInstalledAddons().first()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Failed to get installed addons", e)
             return@withContext emptyList()
         }
@@ -54,7 +60,7 @@ class SubtitleRepositoryImpl @Inject constructor(
         // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
             addon.resources.any { resource ->
-                isSubtitleResource(resource.name) && supportsType(resource, requestType, id)
+                isSubtitleResource(resource.name) && supportsType(resource, requestType, requestId)
             }
         }
         
@@ -147,9 +153,9 @@ class SubtitleRepositoryImpl @Inject constructor(
         Log.d(TAG, "Fetching subtitles from ${addon.name}: ${sanitizeUrlForLogs(subtitleUrl)}")
         
         return try {
-            when (val result = safeApiCall { api.getSubtitles(subtitleUrl) }) {
-                is NetworkResult.Success -> {
-                    val subtitles = result.data.subtitles?.mapNotNull { dto ->
+            when (val result = addonSubtitleIntegrationProvider.getSubtitles(addon, subtitleUrl)) {
+                is IntegrationCallResult.Success -> {
+                    val subtitles = result.value.subtitles?.mapNotNull { dto ->
                         Subtitle(
                             id = dto.id ?: "${dto.lang}-${dto.url.hashCode()}",
                             url = dto.url,
@@ -162,13 +168,21 @@ class SubtitleRepositoryImpl @Inject constructor(
                     Log.d(TAG, "Got ${subtitles.size} subtitles from ${addon.name}")
                     subtitles
                 }
-                is NetworkResult.Error -> {
-                    Log.e(TAG, "Failed to fetch subtitles from ${addon.name}: ${result.message}")
+                is IntegrationCallResult.HttpError -> {
+                    Log.e(
+                        TAG,
+                        "Failed to fetch subtitles from ${addon.name}: http=${result.statusCode} reason=${result.reason}"
+                    )
                     emptyList()
                 }
-                NetworkResult.Loading -> emptyList()
+                is IntegrationCallResult.NetworkError -> {
+                    Log.e(TAG, "Failed to fetch subtitles from ${addon.name}", result.throwable)
+                    emptyList()
+                }
+                IntegrationCallResult.Missing -> emptyList()
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Exception fetching subtitles from ${addon.name}", e)
             emptyList()
         }

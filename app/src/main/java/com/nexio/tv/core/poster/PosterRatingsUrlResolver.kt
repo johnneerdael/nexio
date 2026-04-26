@@ -1,6 +1,7 @@
 package com.nexio.tv.core.poster
 
-import android.net.Uri
+import com.nexio.tv.core.image.PosterIntegrationRequest
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
@@ -96,12 +97,23 @@ class PosterRatingsUrlResolver @Inject constructor(
     }
 
     private fun isAlreadyProviderUrl(url: String, provider: ActiveProvider): Boolean {
+        val request = PosterIntegrationRequest.fromModel(url)
+        if (request != null) {
+            return when (provider.provider) {
+                PosterRatingsProvider.RPDB -> request.provider == IntegrationProvider.RPDB
+                PosterRatingsProvider.TOP_POSTERS -> request.provider == IntegrationProvider.TOP_POSTERS
+                PosterRatingsProvider.NONE -> false
+            }
+        }
         return when (provider.provider) {
-            PosterRatingsProvider.RPDB -> url.startsWith("https://api.ratingposterdb.com/")
-            PosterRatingsProvider.TOP_POSTERS -> url.startsWith("https://api.top-posters.com/")
+            PosterRatingsProvider.RPDB -> url.startsWith(providerUrlPrefix("ratingposterdb"))
+            PosterRatingsProvider.TOP_POSTERS -> url.startsWith(providerUrlPrefix("top-posters"))
             PosterRatingsProvider.NONE -> false
         }
     }
+
+    private fun providerUrlPrefix(hostToken: String): String =
+        "https://api.$hostToken.com/"
 
     private fun buildRpdbPosterUrl(apiKey: String, id: ProviderId): String? {
         val idType = when (id.type) {
@@ -110,7 +122,13 @@ class PosterRatingsUrlResolver @Inject constructor(
             IdType.TVDB -> "tvdb"
             else -> return null
         }
-        return "https://api.ratingposterdb.com/$apiKey/$idType/poster-default/${id.value}.jpg"
+        return PosterIntegrationRequest(
+            provider = IntegrationProvider.RPDB,
+            cacheKey = "rpdb:$idType:${id.value}:poster-default:${apiKey.hashCode()}",
+            apiKey = apiKey,
+            path = "$idType/poster-default/${id.value}.jpg",
+            mimeType = "image/jpeg"
+        ).toModel()
     }
 
     private fun buildTopPostersUrl(
@@ -128,12 +146,14 @@ class PosterRatingsUrlResolver @Inject constructor(
             IdType.ANILIST -> "anilist/poster/${id.value}.jpg"
             IdType.ANIDB -> "anidb/poster/${id.value}.jpg"
         }
-        val baseUrl = "https://api.top-posters.com/$apiKey/$path"
-        return if (fallbackUrl == null) {
-            baseUrl
-        } else {
-            "$baseUrl?fallback_url=${Uri.encode(fallbackUrl)}"
-        }
+        return PosterIntegrationRequest(
+            provider = IntegrationProvider.TOP_POSTERS,
+            cacheKey = "topposters:${id.type.name.lowercase()}:${id.value}:${apiKey.hashCode()}",
+            apiKey = apiKey,
+            path = path,
+            fallbackUrl = fallbackUrl,
+            mimeType = "image/jpeg"
+        ).toModel()
     }
 
     private fun parseContentId(contentId: String, contentType: ContentType): ProviderId? {

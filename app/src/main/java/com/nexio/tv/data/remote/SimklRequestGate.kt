@@ -14,7 +14,7 @@ import javax.inject.Singleton
  * Enforces a minimum of [MIN_INTERVAL_MS] between any two Simkl HTTP requests,
  * using [Mutex] + [delay] instead of Thread.sleep. Mirrors [TraktRequestGate].
  *
- * All Simkl API traffic flows through [SimklAuthService.executeAuthorizedRequest],
+ * All Simkl API traffic flows through [SimklAuthService.executeAuthOwnerRequest],
  * which acquires this gate before dispatching each request.
  */
 @Singleton

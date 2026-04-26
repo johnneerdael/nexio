@@ -2,8 +2,8 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.TraktAuthDataStore
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
@@ -31,7 +31,7 @@ class TraktAuthServiceTest {
 
     @Test
     fun `refresh token 400 clears auth state`() = runTest {
-        val traktApi = mockk<TraktApi>()
+        val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
         val profileManager = testProfileManager()
         val traktAuthDataStore = TraktAuthDataStore(
             factory = profileDataStoreFactoryForTest(),
@@ -47,7 +47,7 @@ class TraktAuthServiceTest {
             )
         )
         coEvery {
-            traktApi.refreshToken(any())
+            traktIntegrationProvider.refreshToken(any(), any())
         } returns Response.error(
             400,
             "{}".toResponseBody("application/json".toMediaType())
@@ -55,7 +55,7 @@ class TraktAuthServiceTest {
 
         val service = spyk(
             TraktAuthService(
-                traktApi = traktApi,
+                traktIntegrationProvider = lazyProvider(traktIntegrationProvider),
                 traktAuthDataStore = traktAuthDataStore,
                 requestGate = com.nexio.tv.data.remote.TraktRequestGate(),
                 profileManager = profileManager,
@@ -73,7 +73,7 @@ class TraktAuthServiceTest {
 
     @Test
     fun `refresh token 400 clears only routed secondary profile auth state`() = runTest {
-        val traktApi = mockk<TraktApi>()
+        val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
         val activeProfileId = MutableStateFlow(2)
         val profileManager = testProfileManager(activeProfileId)
         val traktAuthDataStore = TraktAuthDataStore(
@@ -97,7 +97,7 @@ class TraktAuthServiceTest {
         traktAuthDataStore.saveToken(profileOneToken, profileId = 1)
         traktAuthDataStore.saveToken(profileTwoToken, profileId = 2)
         coEvery {
-            traktApi.refreshToken(any())
+            traktIntegrationProvider.refreshToken(any(), any())
         } returns Response.error(
             400,
             "{}".toResponseBody("application/json".toMediaType())
@@ -105,7 +105,7 @@ class TraktAuthServiceTest {
 
         val service = spyk(
             TraktAuthService(
-                traktApi = traktApi,
+                traktIntegrationProvider = lazyProvider(traktIntegrationProvider),
                 traktAuthDataStore = traktAuthDataStore,
                 requestGate = com.nexio.tv.data.remote.TraktRequestGate(),
                 profileManager = profileManager,
@@ -124,7 +124,7 @@ class TraktAuthServiceTest {
 
     @Test
     fun `poll token saves token and user to same captured profile after profile switch`() = runTest {
-        val traktApi = mockk<TraktApi>()
+        val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
         val activeProfileId = MutableStateFlow(2)
         val profileManager = testProfileManager(activeProfileId)
         val traktAuthDataStore = TraktAuthDataStore(
@@ -142,7 +142,7 @@ class TraktAuthServiceTest {
             profileId = 2
         )
         coEvery {
-            traktApi.requestDeviceToken(any())
+            traktIntegrationProvider.requestDeviceToken(any(), any())
         } answers {
             activeProfileId.value = 3
             Response.success(
@@ -156,7 +156,7 @@ class TraktAuthServiceTest {
             )
         }
         coEvery {
-            traktApi.getUserSettings(any())
+            traktIntegrationProvider.getUserSettings(any())
         } returns Response.success(
             TraktUserSettingsResponseDto(
                 user = TraktUserDto(
@@ -168,7 +168,7 @@ class TraktAuthServiceTest {
 
         val service = spyk(
             TraktAuthService(
-                traktApi = traktApi,
+                traktIntegrationProvider = lazyProvider(traktIntegrationProvider),
                 traktAuthDataStore = traktAuthDataStore,
                 requestGate = com.nexio.tv.data.remote.TraktRequestGate(),
                 profileManager = profileManager,
@@ -183,4 +183,11 @@ class TraktAuthServiceTest {
         assertEquals("profile-two-user", traktAuthDataStore.stateForProfile(2).first().username)
         assertNull(traktAuthDataStore.stateForProfile(3).first().username)
     }
+
+    private fun lazyProvider(
+        traktIntegrationProvider: TraktIntegrationProvider
+    ): dagger.Lazy<TraktIntegrationProvider> =
+        object : dagger.Lazy<TraktIntegrationProvider> {
+            override fun get(): TraktIntegrationProvider = traktIntegrationProvider
+        }
 }

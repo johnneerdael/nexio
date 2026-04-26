@@ -22,6 +22,7 @@ import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
 import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
+import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.SyncedFormatterTemplateSettings
@@ -65,19 +66,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.LinkedHashMap
 import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 private const val TAG = "StreamScreenViewModel"
 private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
 private const val DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT = 3
-private const val AUTOPLAY_PREFLIGHT_TIMEOUT_MS = 1_500
 private const val AUTOPLAY_MIN_CANDIDATE_POOL = 5
 private const val AUTOPLAY_MIN_QUALITY_SCORE = 10
 private const val AUTOPLAY_EARLY_FINISH_FALLBACK_MS = 15_000L
@@ -96,6 +94,7 @@ class StreamScreenViewModel @Inject constructor(
     private val benchmarkAwareStreamScorer: BenchmarkAwareStreamScorer,
     private val shadowAutoPlayDecisionLogger: ShadowAutoPlayDecisionLogger,
     private val shadowAutoplayCollectionUploader: com.nexio.tv.data.repository.benchmark.ShadowAutoplayCollectionUploader,
+    private val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -1124,7 +1123,7 @@ class StreamScreenViewModel @Inject constructor(
             eligibleStreams = eligibleStreams,
             maxCandidates = DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT,
             isPlayable = { item ->
-                val playable = AutoplayPlaybackUrlPreflight.isPlayable(item.stream.getStreamUrl())
+                val playable = playbackPreflightIntegrationProvider.isPlayable(item.stream.getStreamUrl())
                 if (!playable) {
                     Log.i(
                         TAG,
@@ -1520,45 +1519,6 @@ private fun StreamCardModel.hasBlockedDeterministicAutoplayFilename(): Boolean {
     ).any { filename ->
         filename?.contains(DETERMINISTIC_AUTOPLAY_BLOCKED_RELEASE_MARKER, ignoreCase = true) == true
     }
-}
-
-private object AutoplayPlaybackUrlPreflight {
-    suspend fun isPlayable(url: String?): Boolean {
-        val trimmed = url?.trim()?.takeIf { it.isNotBlank() } ?: return false
-        if (!isStremThruUrl(trimmed)) return true
-        return withContext(Dispatchers.IO) {
-            runCatching { !redirectsToDownloadFailedAsset(trimmed) }
-                .getOrElse { true }
-        }
-    }
-
-    private fun isStremThruUrl(url: String): Boolean {
-        return runCatching {
-            URL(url).host.orEmpty().lowercase(Locale.US).contains("stremthru")
-        }.getOrDefault(false)
-    }
-
-    private fun redirectsToDownloadFailedAsset(url: String): Boolean {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects = false
-            requestMethod = "HEAD"
-            connectTimeout = AUTOPLAY_PREFLIGHT_TIMEOUT_MS
-            readTimeout = AUTOPLAY_PREFLIGHT_TIMEOUT_MS
-        }
-        return try {
-            val code = connection.responseCode
-            if (code !in 300..399) return false
-            isStremThruDownloadFailedRedirectLocation(connection.getHeaderField("Location"))
-        } finally {
-            connection.disconnect()
-        }
-    }
-}
-
-internal fun isStremThruDownloadFailedRedirectLocation(location: String?): Boolean {
-    return location
-        ?.lowercase(Locale.US)
-        ?.contains("/static/download_failed.mp4") == true
 }
 
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {

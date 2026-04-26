@@ -6,12 +6,11 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.data.local.AddonPreferences
+import com.nexio.tv.data.integration.addon.AddonManifestIntegrationProvider
 import com.nexio.tv.data.mapper.toDomain
-import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.repository.AddonRepository
@@ -38,7 +37,7 @@ import javax.inject.Inject
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AddonRepositoryImpl @Inject constructor(
-    private val api: AddonApi,
+    private val addonManifestIntegrationProvider: AddonManifestIntegrationProvider,
     private val preferences: AddonPreferences,
     private val addonSyncService: AddonSyncService,
     private val authManager: AuthManager,
@@ -189,7 +188,7 @@ class AddonRepositoryImpl @Inject constructor(
         val cleanBaseUrl = canonicalizeUrl(baseUrl)
         val manifestUrl = buildAddonRequestUrl(cleanBaseUrl, "manifest.json")
 
-        return when (val result = safeApiCall { api.getManifest(manifestUrl) }) {
+        return when (val result = addonManifestIntegrationProvider.getManifest(cleanBaseUrl, manifestUrl)) {
             is NetworkResult.Success -> {
                 val addon = result.data.toDomain(cleanBaseUrl).copy(parserPreset = parserPreset)
                 manifestCache[cleanBaseUrl] = addon

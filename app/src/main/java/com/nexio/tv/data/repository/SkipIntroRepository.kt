@@ -2,14 +2,13 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.integration.skip.AniSkipIntegrationProvider
+import com.nexio.tv.data.integration.skip.AnimeSkipIntegrationProvider
+import com.nexio.tv.data.integration.skip.ArmIntegrationProvider
+import com.nexio.tv.data.integration.skip.IntroDbIntegrationProvider
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettings
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
-import com.nexio.tv.data.remote.api.AniSkipApi
-import com.nexio.tv.data.remote.api.AnimeSkipApi
-import com.nexio.tv.data.remote.api.AnimeSkipRequest
-import com.nexio.tv.data.remote.api.ArmApi
-import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.TheIntroDbMediaResponse
 import com.nexio.tv.data.remote.api.TheIntroDbSegmentTimestamp
 import java.util.concurrent.ConcurrentHashMap
@@ -97,10 +96,10 @@ internal object TheIntroDbSegmentMapper {
 
 @Singleton
 class SkipIntroRepository @Inject constructor(
-    private val introDbApi: IntroDbApi,
-    private val aniSkipApi: AniSkipApi,
-    private val animeSkipApi: AnimeSkipApi,
-    private val armApi: ArmApi,
+    private val introDbProvider: IntroDbIntegrationProvider,
+    private val aniSkipProvider: AniSkipIntegrationProvider,
+    private val animeSkipProvider: AnimeSkipIntegrationProvider,
+    private val armProvider: ArmIntegrationProvider,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore
 ) {
@@ -154,8 +153,7 @@ class SkipIntroRepository @Inject constructor(
         if (aniSkipResult.isNotEmpty()) return aniSkipResult.also { cache[cacheKey] = it }
 
         val directAnilistId = try {
-            armApi.resolveMalToAnilist(malId = malId)
-                .takeIf { it.isSuccessful }?.body()?.anilist?.toString()
+            armProvider.resolveMalToAnilist(malId = malId)
         } catch (e: Exception) { null }
 
         if (directAnilistId != null) {
@@ -164,8 +162,7 @@ class SkipIntroRepository @Inject constructor(
         }
 
         val imdbId = try {
-            armApi.resolveMalToImdb(malId = malId)
-                .takeIf { it.isSuccessful }?.body()?.imdb
+            armProvider.resolveMalToImdb(malId = malId)
         } catch (e: Exception) { null }
 
         if (imdbId != null) {
@@ -184,8 +181,7 @@ class SkipIntroRepository @Inject constructor(
         cache[cacheKey]?.let { return it }
 
         val malId = try {
-            armApi.resolveKitsuToMal(kitsuId = kitsuId)
-                .takeIf { it.isSuccessful }?.body()?.myanimelist?.toString()
+            armProvider.resolveKitsuToMal(kitsuId = kitsuId)
         } catch (e: Exception) { null }
 
         if (malId != null) {
@@ -195,8 +191,7 @@ class SkipIntroRepository @Inject constructor(
 
         // AnimeSkip: try direct AniList ID first (season-specific, no season filter needed)
         val directAnilistId = try {
-            armApi.resolveKitsuToAnilist(kitsuId = kitsuId)
-                .takeIf { it.isSuccessful }?.body()?.anilist?.toString()
+            armProvider.resolveKitsuToAnilist(kitsuId = kitsuId)
         } catch (e: Exception) { null }
 
         if (directAnilistId != null) {
@@ -206,8 +201,7 @@ class SkipIntroRepository @Inject constructor(
 
         // Fallback: Kitsu -> IMDB -> first AniList ID (season 1 show)
         val imdbId = try {
-            armApi.resolveKitsuToImdb(kitsuId = kitsuId)
-                .takeIf { it.isSuccessful }?.body()?.imdb
+            armProvider.resolveKitsuToImdb(kitsuId = kitsuId)
         } catch (e: Exception) { null }
 
         if (imdbId != null) {
@@ -230,24 +224,19 @@ class SkipIntroRepository @Inject constructor(
         if (imdbId == null && tmdbId == null) return emptyList()
 
         return try {
-            val response = introDbApi.getMedia(
+            introDbProvider.getIntervals(
+                contentId = contentId,
                 tmdbId = tmdbId,
                 imdbId = imdbId,
                 season = season,
                 episode = episode,
-                authorization = null
-            )
-            if (response.isSuccessful && response.body() != null) {
-                TheIntroDbSegmentMapper.map(
-                    response = response.body()!!,
-                    preferences = TheIntroDbSegmentPreferences(
-                        showIntroButton = settings.showIntroButton,
-                        showRecapButton = settings.showRecapButton,
-                        showCreditsButton = settings.showCreditsButton,
-                        showPreviewButton = settings.showPreviewButton
-                    )
+                preferences = TheIntroDbSegmentPreferences(
+                    showIntroButton = settings.showIntroButton,
+                    showRecapButton = settings.showRecapButton,
+                    showCreditsButton = settings.showCreditsButton,
+                    showPreviewButton = settings.showPreviewButton
                 )
-            } else emptyList()
+            )
         } catch (e: Exception) {
             Log.d("SkipIntro", "TheIntroDB: no data for $contentId S${season}E${episode}")
             emptyList()
@@ -256,18 +245,7 @@ class SkipIntroRepository @Inject constructor(
 
     private suspend fun fetchFromAniSkip(malId: String, episode: Int): List<SkipInterval> {
         return try {
-            val types = listOf("op", "ed", "recap", "mixed-op", "mixed-ed")
-            val response = aniSkipApi.getSkipTimes(malId, episode, types)
-            if (response.isSuccessful && response.body()?.found == true) {
-                response.body()!!.results?.map { result ->
-                    SkipInterval(
-                        startTime = result.interval.startTime,
-                        endTime = result.interval.endTime,
-                        type = result.skipType,
-                        provider = "aniskip"
-                    )
-                } ?: emptyList()
-            } else emptyList()
+            aniSkipProvider.getSkipIntervals(malId, episode)
         } catch (e: Exception) {
             Log.d("SkipIntro", "AniSkip: no data for MAL $malId ep $episode")
             emptyList()
@@ -285,15 +263,7 @@ class SkipIntroRepository @Inject constructor(
             if (showIds.isEmpty()) return emptyList()
 
             for (showId in showIds) {
-                val episodesResponse = animeSkipApi.query(
-                    clientId = clientId,
-                    body = AnimeSkipRequest(
-                        query = "{ findEpisodesByShowId(showId: \"$showId\") { season number timestamps { at type { name } } } }"
-                    )
-                )
-                if (!episodesResponse.isSuccessful) continue
-
-                val episodes = episodesResponse.body()?.data?.findEpisodesByShowId ?: continue
+                val episodes = animeSkipProvider.queryEpisodes(showId, clientId)
                 val targetEpisode = episodes.firstOrNull { ep ->
                     ep.number?.toIntOrNull() == episode &&
                         (season == null || ep.season?.toIntOrNull() == season)
@@ -324,12 +294,7 @@ class SkipIntroRepository @Inject constructor(
             return if (cached == NO_ID) emptyList() else listOf(cached)
         }
         val showIds = try {
-            animeSkipApi.query(
-                clientId = clientId,
-                body = AnimeSkipRequest(
-                    query = "{ findShowsByExternalId(service: ANILIST, serviceId: \"$anilistId\") { id } }"
-                )
-            ).body()?.data?.findShowsByExternalId?.map { it.id } ?: emptyList()
+            animeSkipProvider.resolveShowIds(anilistId, clientId)
         } catch (e: Exception) { emptyList() }
         // cache only if single result; multi-show case skip cache to avoid complexity
         if (showIds.size == 1) animeSkipShowIdCache[anilistId] = showIds[0]
@@ -339,21 +304,14 @@ class SkipIntroRepository @Inject constructor(
 
     private suspend fun resolveAllAnilistIdsFromImdb(imdbId: String): List<String> {
         return try {
-            armApi.resolveImdbToAnilist(imdbId)
-                .takeIf { it.isSuccessful }
-                ?.body()?.mapNotNull { it.anilist?.toString() } ?: emptyList()
+            armProvider.resolveImdbToAnilist(imdbId)
         } catch (e: Exception) { emptyList() }
     }
 
     private suspend fun resolveMalId(imdbId: String): String? {
         malIdCache[imdbId]?.let { cached -> return cached.takeIf { it != NO_ID } }
         val malId = try {
-            armApi.resolveImdbToMal(imdbId)
-                .takeIf { it.isSuccessful }
-                ?.body()
-                ?.firstOrNull()
-                ?.myanimelist
-                ?.toString()
+            armProvider.resolveImdbToMal(imdbId)
         } catch (e: Exception) { null }
         malIdCache[imdbId] = malId ?: NO_ID
         return malId

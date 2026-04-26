@@ -1,11 +1,12 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TvdbMergeAliasStore
 import com.nexio.tv.data.remote.api.TvdbAirsDays
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbArtworkRecord
 import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbRemoteId
@@ -26,8 +27,7 @@ private const val DEFAULT_SEASON_TYPE = "default"
 
 @Singleton
 class TvdbMetadataService @Inject constructor(
-    private val tvdbApi: TvdbApi,
-    private val authService: TvdbAuthService,
+    private val provider: TvdbIntegrationProvider,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val seasonOrderMapper: TvdbSeasonOrderMapper,
@@ -43,17 +43,69 @@ class TvdbMetadataService @Inject constructor(
         val normalizedLanguage = normalizeLanguage(language)
         val activeProvider = posterRatingsUrlResolver.getActiveProvider()
         val providerToken = posterProviderCacheToken(activeProvider)
+        val resolvedId = resolveSeriesAlias(identity.tvdbId)
+        val load: suspend () -> IntegrationLoadResult<TvMetadataEnrichment> = {
+                fetchSeriesEnrichmentForRuntimeLoad(
+                    identity = identity.copy(tvdbId = resolvedId),
+                    language = language
+                )
+        }
+        provider.readCachedSeriesEnrichment(
+            identity = identity,
+            resolvedId = resolvedId,
+            normalizedLanguage = normalizedLanguage,
+            providerToken = providerToken,
+            load = load
+        )
+            ?: readSeriesLegacyDiskCache(
+                resolvedId = resolvedId,
+                originalId = identity.tvdbId,
+                normalizedLanguage = normalizedLanguage,
+                providerToken = providerToken,
+                diagnosticMessage = null
+            )
+            ?: provider.fetchSeriesEnrichment(
+                identity = identity,
+                resolvedId = resolvedId,
+                normalizedLanguage = normalizedLanguage,
+                providerToken = providerToken,
+                load = load
+            )
+            ?: readSeriesLegacyDiskCache(
+                resolvedId = resolvedId,
+                originalId = identity.tvdbId,
+                normalizedLanguage = normalizedLanguage,
+                providerToken = providerToken,
+                diagnosticMessage = "Serving stale cached enrichment after runtime refresh failure"
+            )
+    }
+
+    private suspend fun fetchSeriesEnrichmentDirect(
+        identity: TvdbSeriesIdentity,
+        language: String? = null,
+        allowLegacyDiskFallback: Boolean = true,
+        withinRuntimeLoad: Boolean = false,
+        runtimeLoadFailure: ((IntegrationLoadResult<TvMetadataEnrichment>) -> Unit)? = null
+    ): TvMetadataEnrichment? = withContext(Dispatchers.IO) {
+        val normalizedLanguage = normalizeLanguage(language)
+        val activeProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerToken = posterProviderCacheToken(activeProvider)
 
         // D-02: Resolve merge alias before cache lookup or API fetch
         val resolvedId = resolveSeriesAlias(identity.tvdbId)
 
         // Read TVDB disk cache first (last-known-good path for D-07)
-        val cached = metadataDiskCacheStore.readTvdbEnrichment(
-            seriesId = resolvedId,
-            recordKind = SERIES_EXTENDED_RECORD_KIND,
-            languageTag = normalizedLanguage,
-            providerToken = providerToken
-        )
+        val cached = if (allowLegacyDiskFallback) {
+            readSeriesLegacyDiskCache(
+                resolvedId = resolvedId,
+                originalId = identity.tvdbId,
+                normalizedLanguage = normalizedLanguage,
+                providerToken = providerToken,
+                diagnosticMessage = null
+            )
+        } else {
+            null
+        }
 
         // D-08: Check credential health before network call
         if (!credentialHealth.canCallTvdb()) {
@@ -72,57 +124,47 @@ class TvdbMetadataService @Inject constructor(
         // If cache hit, return immediately
         if (cached != null) return@withContext cached
 
-        val authorization = authService.bearerToken() ?: return@withContext null
-
         val record = runCatching {
-            tvdbApi.getSeriesExtended(
-                authorization = authorization,
-                id = resolvedId,
-                meta = null,
-                short = false
-            )
+            if (withinRuntimeLoad) {
+                when (val result = provider.fetchSeriesExtendedWithinRuntimeLoad(tvdbId = resolvedId)) {
+                    is IntegrationLoadResult.Success -> result.value
+                    is IntegrationLoadResult.HttpError -> {
+                        runtimeLoadFailure?.invoke(result)
+                        null
+                    }
+                    is IntegrationLoadResult.NetworkError -> {
+                        runtimeLoadFailure?.invoke(result)
+                        null
+                    }
+                }
+            } else {
+                provider.fetchSeriesExtended(tvdbId = resolvedId)
+            }
         }.onFailure { error ->
             Log.w(TAG, "TVDB series metadata request failed reason=${error.javaClass.simpleName}")
             // D-07: On network failure, try to serve cached data from original ID
-            if (resolvedId != identity.tvdbId) {
-                val originalCached = metadataDiskCacheStore.readTvdbEnrichment(
-                    seriesId = identity.tvdbId,
-                    recordKind = SERIES_EXTENDED_RECORD_KIND,
-                    languageTag = normalizedLanguage,
-                    providerToken = providerToken
-                )
-                if (originalCached != null) {
-                    recordDiagnostic(
-                        TvdbReliabilityReason.STALE_CACHE_SERVED,
-                        "tvdb_metadata_service",
-                        tvdbId = identity.tvdbId,
-                        message = "Serving cached enrichment from original ID during outage"
-                    )
-                    return@withContext originalCached
-                }
+            if (allowLegacyDiskFallback && resolvedId != identity.tvdbId) {
+                readSeriesLegacyDiskCache(
+                    resolvedId = identity.tvdbId,
+                    originalId = identity.tvdbId,
+                    normalizedLanguage = normalizedLanguage,
+                    providerToken = providerToken,
+                    diagnosticMessage = "Serving cached enrichment from original ID during outage"
+                )?.let { return@withContext it }
             }
         }.getOrNull()
-            ?.takeIf { response -> response.isSuccessful }
-            ?.body()
-            ?.data
 
         if (record == null) {
             // D-07: Serve any cached data on network failure before returning null
             // Re-check with resolved ID (may have been populated between first check and now)
-            val staleCached = metadataDiskCacheStore.readTvdbEnrichment(
-                seriesId = resolvedId,
-                recordKind = SERIES_EXTENDED_RECORD_KIND,
-                languageTag = normalizedLanguage,
-                providerToken = providerToken
-            )
-            if (staleCached != null) {
-                recordDiagnostic(
-                    TvdbReliabilityReason.STALE_CACHE_SERVED,
-                    "tvdb_metadata_service",
-                    tvdbId = resolvedId,
-                    message = "Serving stale cached enrichment after network failure"
-                )
-                return@withContext staleCached
+            if (allowLegacyDiskFallback) {
+                readSeriesLegacyDiskCache(
+                    resolvedId = resolvedId,
+                    originalId = identity.tvdbId,
+                    normalizedLanguage = normalizedLanguage,
+                    providerToken = providerToken,
+                    diagnosticMessage = "Serving stale cached enrichment after network failure"
+                )?.let { return@withContext it }
             }
             return@withContext null
         }
@@ -153,9 +195,10 @@ class TvdbMetadataService @Inject constructor(
             advancedMetadata = advancedMetadata
         ) ?: return@withContext null
         val translatedOverview = fetchSeriesTranslationOverview(
-            authorization = authorization,
             seriesId = resolvedId,
-            language = normalizedLanguage
+            language = normalizedLanguage,
+            withinRuntimeLoad = withinRuntimeLoad,
+            runtimeLoadFailure = runtimeLoadFailure
         )
         val enrichment = baseEnrichment.copy(
             description = translatedOverview ?: baseEnrichment.description
@@ -168,6 +211,67 @@ class TvdbMetadataService @Inject constructor(
             enrichment = enrichment
         )
         enrichment
+    }
+
+    private suspend fun fetchSeriesEnrichmentForRuntimeLoad(
+        identity: TvdbSeriesIdentity,
+        language: String? = null
+    ): IntegrationLoadResult<TvMetadataEnrichment> {
+        var failure: IntegrationLoadResult<TvMetadataEnrichment>? = null
+        val enrichment = fetchSeriesEnrichmentDirect(
+            identity = identity,
+            language = language,
+            allowLegacyDiskFallback = false,
+            withinRuntimeLoad = true,
+            runtimeLoadFailure = { failure = it }
+        )
+        return failure
+            ?: enrichment?.let { IntegrationLoadResult.Success(it) }
+            ?: IntegrationLoadResult.HttpError(404, reason = "tvdb_series_missing")
+    }
+
+    private suspend fun readSeriesLegacyDiskCache(
+        resolvedId: Int,
+        originalId: Int,
+        normalizedLanguage: String,
+        providerToken: String,
+        diagnosticMessage: String?
+    ): TvMetadataEnrichment? {
+        val resolvedCached = metadataDiskCacheStore.readTvdbEnrichment(
+            seriesId = resolvedId,
+            recordKind = SERIES_EXTENDED_RECORD_KIND,
+            languageTag = normalizedLanguage,
+            providerToken = providerToken
+        )
+        if (resolvedCached != null) {
+            if (diagnosticMessage != null) {
+                recordDiagnostic(
+                    TvdbReliabilityReason.STALE_CACHE_SERVED,
+                    "tvdb_metadata_service",
+                    tvdbId = resolvedId,
+                    message = diagnosticMessage
+                )
+            }
+            return resolvedCached
+        }
+
+        if (originalId == resolvedId) return null
+
+        val originalCached = metadataDiskCacheStore.readTvdbEnrichment(
+            seriesId = originalId,
+            recordKind = SERIES_EXTENDED_RECORD_KIND,
+            languageTag = normalizedLanguage,
+            providerToken = providerToken
+        )
+        if (originalCached != null && diagnosticMessage != null) {
+            recordDiagnostic(
+                TvdbReliabilityReason.STALE_CACHE_SERVED,
+                "tvdb_metadata_service",
+                tvdbId = originalId,
+                message = diagnosticMessage
+            )
+        }
+        return originalCached
     }
 
     suspend fun fetchEpisodeEnrichment(
@@ -235,11 +339,9 @@ class TvdbMetadataService @Inject constructor(
             return@withContext cached.map { metadata -> metadata.toSeasonEpisode() }
         }
 
-        val authorization = authService.bearerToken() ?: return@withContext emptyList()
-        val response = runCatching {
-            tvdbApi.getSeriesEpisodes(
-                authorization = authorization,
-                id = identity.tvdbId,
+        val data = runCatching {
+            provider.fetchSeriesEpisodes(
+                tvdbId = identity.tvdbId,
                 seasonType = DEFAULT_SEASON_TYPE,
                 page = 0,
                 season = seasonNumber
@@ -248,10 +350,7 @@ class TvdbMetadataService @Inject constructor(
             Log.w(TAG, "TVDB season metadata request failed reason=${error.javaClass.simpleName}")
         }.getOrNull()
 
-        if (response == null || !response.isSuccessful) {
-            if (response != null) {
-                Log.w(TAG, "TVDB season metadata request failed status=${response.code()}")
-            }
+        if (data == null) {
             // D-07: Serve stale cached episodes on network failure
             val staleCached = metadataDiskCacheStore.readTvdbSeasonEpisodes(
                 seriesId = identity.tvdbId,
@@ -271,15 +370,13 @@ class TvdbMetadataService @Inject constructor(
             return@withContext emptyList()
         }
 
-        val records = response.body()?.data?.episodes.orEmpty()
+        val records = data.episodes.orEmpty()
         val translatedOverviewsById = fetchTranslatedSeasonEpisodeOverviews(
-            authorization = authorization,
             seriesId = identity.tvdbId,
             seasonNumber = seasonNumber,
             language = normalizedLanguage
         )
         val perEpisodeTranslatedOverviewsById = fetchPerEpisodeTranslationOverviews(
-            authorization = authorization,
             episodeIds = records.mapNotNull { record -> record.id }
                 .filterNot { episodeId -> episodeId in translatedOverviewsById },
             language = normalizedLanguage
@@ -307,23 +404,39 @@ class TvdbMetadataService @Inject constructor(
     }
 
     private suspend fun fetchSeriesTranslationOverview(
-        authorization: String,
         seriesId: Int,
-        language: String
+        language: String,
+        withinRuntimeLoad: Boolean = false,
+        runtimeLoadFailure: ((IntegrationLoadResult<TvMetadataEnrichment>) -> Unit)? = null
     ): String? {
         if (language == "eng") return null
         return runCatching {
-            tvdbApi.getSeriesTranslation(
-                authorization = authorization,
-                id = seriesId,
-                language = language
-            )
+            if (withinRuntimeLoad) {
+                when (val result = provider.fetchSeriesTranslationWithinRuntimeLoad(
+                    tvdbId = seriesId,
+                    language = language
+                )) {
+                    is IntegrationLoadResult.Success -> result.value
+                    is IntegrationLoadResult.HttpError -> {
+                        if (result.statusCode == 429 || result.statusCode >= 500) {
+                            runtimeLoadFailure?.invoke(result)
+                        }
+                        null
+                    }
+                    is IntegrationLoadResult.NetworkError -> {
+                        runtimeLoadFailure?.invoke(result)
+                        null
+                    }
+                }
+            } else {
+                provider.fetchSeriesTranslation(
+                    tvdbId = seriesId,
+                    language = language
+                )
+            }
         }.onFailure { error ->
             Log.w(TAG, "TVDB series translation request failed reason=${error.javaClass.simpleName}")
         }.getOrNull()
-            ?.takeIf { response -> response.isSuccessful }
-            ?.body()
-            ?.data
             .overviewText()
     }
 
@@ -392,16 +505,14 @@ class TvdbMetadataService @Inject constructor(
     }
 
     private suspend fun fetchTranslatedSeasonEpisodeOverviews(
-        authorization: String,
         seriesId: Int,
         seasonNumber: Int,
         language: String
     ): Map<Int, String> {
         if (language == "eng") return emptyMap()
         return runCatching {
-            tvdbApi.getSeriesEpisodesTranslated(
-                authorization = authorization,
-                id = seriesId,
+            provider.fetchSeriesEpisodesTranslated(
+                tvdbId = seriesId,
                 seasonType = DEFAULT_SEASON_TYPE,
                 language = language,
                 page = 0,
@@ -410,9 +521,6 @@ class TvdbMetadataService @Inject constructor(
         }.onFailure { error ->
             Log.w(TAG, "TVDB translated season episodes request failed reason=${error.javaClass.simpleName}")
         }.getOrNull()
-            ?.takeIf { response -> response.isSuccessful }
-            ?.body()
-            ?.data
             ?.episodes
             .orEmpty()
             .mapNotNull { record ->
@@ -424,7 +532,6 @@ class TvdbMetadataService @Inject constructor(
     }
 
     private suspend fun fetchPerEpisodeTranslationOverviews(
-        authorization: String,
         episodeIds: List<Int>,
         language: String
     ): Map<Int, String> {
@@ -432,17 +539,13 @@ class TvdbMetadataService @Inject constructor(
         val translated = linkedMapOf<Int, String>()
         episodeIds.distinct().forEach { episodeId ->
             val overview = runCatching {
-                tvdbApi.getEpisodeTranslation(
-                    authorization = authorization,
-                    id = episodeId,
+                provider.fetchEpisodeTranslation(
+                    episodeId = episodeId,
                     language = language
                 )
             }.onFailure { error ->
                 Log.w(TAG, "TVDB episode translation request failed reason=${error.javaClass.simpleName}")
             }.getOrNull()
-                ?.takeIf { response -> response.isSuccessful }
-                ?.body()
-                ?.data
                 .overviewText()
             if (overview != null) {
                 translated[episodeId] = overview

@@ -1,15 +1,17 @@
 package com.nexio.tv.core.tmdb
 
 import android.content.Context
+import com.nexio.tv.core.integration.IntegrationCacheOwnershipFactory
+import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.integration.tmdb.DefaultTmdbExternalIdLookupProvider
+import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbCreditsResponse
 import com.nexio.tv.data.remote.api.TmdbDetailsResponse
-import com.nexio.tv.data.remote.api.TmdbExternalIdsResponse
-import com.nexio.tv.data.remote.api.TmdbFindResponse
-import com.nexio.tv.data.remote.api.TmdbFindResult
 import com.nexio.tv.data.remote.api.TmdbGenre
 import com.nexio.tv.data.remote.api.TmdbImagesResponse
 import com.nexio.tv.data.remote.api.TmdbMovieReleaseDateCountry
@@ -26,11 +28,15 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.fail
 import org.junit.Test
 import retrofit2.Response
 
@@ -138,54 +144,48 @@ class TmdbMetadataPerformanceTest {
 
     @Test
     fun `imdbToTmdb joins duplicate concurrent lookups`() = runTest {
-        val tmdbApi = mockk<TmdbApi>()
-        val settingsDataStore = mockk<TmdbSettingsDataStore>()
-        val response = CompletableDeferred<Response<TmdbFindResponse>>()
-        every { settingsDataStore.settings } returns flowOf(tmdbSettings())
+        val externalIdLookupProvider = mockk<DefaultTmdbExternalIdLookupProvider>()
+        val lookupStarted = CompletableDeferred<Unit>()
+        val response = CompletableDeferred<Int?>()
         coEvery {
-            tmdbApi.findByExternalId("tt0137523", "tmdb-key", "imdb_id")
+            externalIdLookupProvider.findTmdbIdByImdbId("tt0137523", "movie")
         } coAnswers {
+            lookupStarted.complete(Unit)
             response.await()
         }
 
-        val service = TmdbService(tmdbApi, settingsDataStore)
+        val service = TmdbService(externalIdLookupProvider)
         val first = async { service.imdbToTmdb("tt0137523", "movie") }
         val second = async { service.imdbToTmdb("tt0137523", "movie") }
+        lookupStarted.await()
+        yield()
 
-        response.complete(
-            Response.success(
-                TmdbFindResponse(
-                    movieResults = listOf(TmdbFindResult(id = 550, title = "Fight Club"))
-                )
-            )
-        )
+        response.complete(550)
 
         assertEquals(550, first.await())
         assertEquals(550, second.await())
         coVerify(exactly = 1) {
-            tmdbApi.findByExternalId("tt0137523", "tmdb-key", "imdb_id")
+            externalIdLookupProvider.findTmdbIdByImdbId("tt0137523", "movie")
         }
     }
 
     @Test
     fun `tmdbToImdb caches movie and tv ids separately when numeric id matches`() = runTest {
-        val tmdbApi = mockk<TmdbApi>()
-        val settingsDataStore = mockk<TmdbSettingsDataStore>()
-        every { settingsDataStore.settings } returns flowOf(tmdbSettings())
+        val externalIdLookupProvider = mockk<DefaultTmdbExternalIdLookupProvider>()
         coEvery {
-            tmdbApi.getMovieExternalIds(1, "tmdb-key")
-        } returns Response.success(TmdbExternalIdsResponse(id = 1, imdbId = "tt0000001"))
+            externalIdLookupProvider.findImdbIdByTmdbId(1, "movie")
+        } returns "tt0000001"
         coEvery {
-            tmdbApi.getTvExternalIds(1, "tmdb-key")
-        } returns Response.success(TmdbExternalIdsResponse(id = 1, imdbId = "tt9999999"))
+            externalIdLookupProvider.findImdbIdByTmdbId(1, "tv")
+        } returns "tt9999999"
 
-        val service = TmdbService(tmdbApi, settingsDataStore)
+        val service = TmdbService(externalIdLookupProvider)
 
         assertEquals("tt0000001", service.tmdbToImdb(1, "movie"))
         assertEquals("tt9999999", service.tmdbToImdb(1, "series"))
 
-        coVerify(exactly = 1) { tmdbApi.getMovieExternalIds(1, "tmdb-key") }
-        coVerify(exactly = 1) { tmdbApi.getTvExternalIds(1, "tmdb-key") }
+        coVerify(exactly = 1) { externalIdLookupProvider.findImdbIdByTmdbId(1, "movie") }
+        coVerify(exactly = 1) { externalIdLookupProvider.findImdbIdByTmdbId(1, "tv") }
     }
 
     @Test
@@ -214,16 +214,56 @@ class TmdbMetadataPerformanceTest {
         coVerify(exactly = 1) { tmdbApi.getTvSeasonDetails(100, 3, "tmdb-key", "en-US") }
     }
 
+    @Test
+    fun `fetchEpisodeEnrichment cancels joined in-flight waiters when owner is cancelled`() = runTest {
+        val tmdbApi = mockk<TmdbApi>()
+        val service = buildMetadataService(tmdbApi)
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseRequest = CompletableDeferred<Unit>()
+
+        coEvery {
+            tmdbApi.getTvSeasonDetails(100, 1, "tmdb-key", "en-US")
+        } coAnswers {
+            requestStarted.complete(Unit)
+            releaseRequest.await()
+            Response.success(TmdbSeasonResponse(episodes = listOf(tmdbEpisode(1, "Pilot"))))
+        }
+
+        val owner = async {
+            service.fetchEpisodeEnrichment("100", listOf(1), "en-US")
+        }
+        requestStarted.await()
+
+        val joinedWaiter = async {
+            service.fetchEpisodeEnrichment("100", listOf(1), "en-US")
+        }
+        yield()
+
+        owner.cancel()
+
+        try {
+            owner.await()
+            fail("Expected owner cancellation")
+        } catch (_: CancellationException) {
+        }
+
+        try {
+            withTimeout(1_000) { joinedWaiter.await() }
+            fail("Expected joined waiter cancellation")
+        } catch (_: CancellationException) {
+        }
+
+        coVerify(exactly = 1) { tmdbApi.getTvSeasonDetails(100, 1, "tmdb-key", "en-US") }
+    }
+
     private fun buildMetadataService(
         tmdbApi: TmdbApi,
         activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
     ): TmdbMetadataService {
         val context = mockk<Context>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
-        val settingsDataStore = mockk<TmdbSettingsDataStore>()
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>()
 
-        every { settingsDataStore.settings } returns flowOf(tmdbSettings())
         every {
             metadataDiskCacheStore.readTmdbEnrichment(any(), any(), any())
         } returns null
@@ -242,19 +282,28 @@ class TmdbMetadataPerformanceTest {
             } returns "provider-poster"
         }
 
+        val runtime = passThroughTestRuntime()
+        val credentialProvider = suspend {
+            com.nexio.tv.core.metadata.MetadataProviderCredential(
+                apiKey = "tmdb-key",
+                source = MetadataCredentialSource.CUSTOM
+            )
+        }
         return TmdbMetadataService(
             appContext = context,
             tmdbApi = tmdbApi,
             posterRatingsUrlResolver = posterRatingsUrlResolver,
-            tmdbSettingsDataStore = settingsDataStore,
-            metadataDiskCacheStore = metadataDiskCacheStore
+            tmdbCredentialProvider = credentialProvider,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            integrationRuntime = runtime,
+            ownershipFactory = IntegrationCacheOwnershipFactory(RailMediaIdentityResolver()),
+            tmdbIntegrationProvider = TmdbIntegrationProvider(
+                runtime = runtime,
+                tmdbApi = tmdbApi,
+                tmdbCredentialProvider = credentialProvider
+            )
         )
     }
-
-    private fun tmdbSettings(): TmdbSettings = TmdbSettings(
-        enabled = true,
-        apiKey = "tmdb-key"
-    )
 
     private fun tmdbEpisode(episodeNumber: Int, name: String): TmdbEpisode = TmdbEpisode(
         id = episodeNumber,

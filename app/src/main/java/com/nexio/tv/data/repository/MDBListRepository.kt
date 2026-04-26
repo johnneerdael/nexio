@@ -1,12 +1,9 @@
 package com.nexio.tv.data.repository
 
-import android.util.Log
+import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.MDBListSettingsDataStore
-import com.nexio.tv.data.remote.api.MDBListApi
-import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingItemDto
-import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.MDBListRatingsResult
 import com.nexio.tv.domain.model.MDBListSettings
 import com.nexio.tv.domain.model.Meta
@@ -37,7 +34,7 @@ internal const val EPISODE_RATINGS_RETRY_TTL_MS = 30L * 60L * 1000L
 
 @Singleton
 class MDBListRepository @Inject constructor(
-    private val api: MDBListApi,
+    private val integrationProvider: MDBListIntegrationProvider,
     private val settingsDataStore: MDBListSettingsDataStore,
     private val tmdbService: TmdbService
 ) {
@@ -61,7 +58,6 @@ class MDBListRepository @Inject constructor(
         METACRITIC("metacritic")
     }
 
-    private val tag = "MDBListRepository"
     private val cacheTtlMs = 30L * 60L * 1000L
     private val cache = ConcurrentHashMap<String, CacheEntry>()
     private val inFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<MDBListRatingsResult?>>()
@@ -120,11 +116,11 @@ class MDBListRepository @Inject constructor(
         val deferred = inFlightMutex.withLock {
             inFlight[cacheKey] ?: scope.async {
                 try {
-                    fetchRatings(
+                    integrationProvider.fetchRatings(
                         imdbId = imdbId,
                         mediaType = mediaType,
                         apiKey = apiKey,
-                        providers = providers
+                        providers = providers.map { it.apiValue }
                     ).also { result ->
                         cache[cacheKey] = CacheEntry(
                             result = result,
@@ -212,76 +208,6 @@ class MDBListRepository @Inject constructor(
         }
     }
 
-    private suspend fun fetchRatings(
-        imdbId: String,
-        mediaType: String,
-        apiKey: String,
-        providers: List<ProviderType>
-    ): MDBListRatingsResult? {
-        val semaphore = Semaphore(4)
-        val requestBody = MDBListRatingRequestDto(
-            ids = listOf(imdbId),
-            provider = "imdb"
-        )
-
-        val results = providers.map { provider ->
-            scope.async {
-                semaphore.withPermit {
-                    fetchProviderRating(
-                        mediaType = mediaType,
-                        provider = provider,
-                        apiKey = apiKey,
-                        requestBody = requestBody
-                    )
-                }
-            }
-        }.awaitAll().toMap()
-
-        val ratings = MDBListRatings(
-            trakt = results[ProviderType.TRAKT],
-            imdb = results[ProviderType.IMDB],
-            tmdb = results[ProviderType.TMDB],
-            letterboxd = results[ProviderType.LETTERBOXD],
-            tomatoes = results[ProviderType.TOMATOES],
-            audience = results[ProviderType.AUDIENCE],
-            metacritic = results[ProviderType.METACRITIC]
-        )
-
-        if (ratings.isEmpty()) return null
-
-        return MDBListRatingsResult(
-            ratings = ratings,
-            hasImdbRating = ratings.imdb != null
-        )
-    }
-
-    private suspend fun fetchProviderRating(
-        mediaType: String,
-        provider: ProviderType,
-        apiKey: String,
-        requestBody: MDBListRatingRequestDto
-    ): Pair<ProviderType, Double?> {
-        return try {
-            val response = api.getRating(
-                mediaType = mediaType,
-                ratingType = provider.apiValue,
-                apiKey = apiKey,
-                body = requestBody
-            )
-
-            if (!response.isSuccessful) {
-                Log.w(tag, "Failed ${provider.apiValue} (${response.code()})")
-                return provider to null
-            }
-
-            val rating = response.body()?.ratings?.firstOrNull()?.rating
-            provider to rating
-        } catch (e: Exception) {
-            Log.w(tag, "Error fetching ${provider.apiValue}", e)
-            provider to null
-        }
-    }
-
     private suspend fun getEpisodeRatingsForSeason(
         cacheNamespace: String,
         season: Int,
@@ -301,7 +227,9 @@ class MDBListRepository @Inject constructor(
         val deferred = episodeRatingsInFlightMutex.withLock {
             episodeRatingsInFlight[cacheKey] ?: scope.async {
                 try {
-                    fetchEpisodeRatingsForSeason(
+                    integrationProvider.fetchEpisodeRatingsForSeason(
+                        cacheNamespace = cacheNamespace,
+                        season = season,
                         apiKey = apiKey,
                         episodeTmdbIds = episodeTmdbIds
                     ).also { result ->
@@ -325,36 +253,6 @@ class MDBListRepository @Inject constructor(
         }
 
         return deferred.await()
-    }
-
-    private suspend fun fetchEpisodeRatingsForSeason(
-        apiKey: String,
-        episodeTmdbIds: Map<Pair<Int, Int>, Int>
-    ): Map<Pair<Int, Int>, Double> {
-        return try {
-            val response = api.getRating(
-                mediaType = "show",
-                ratingType = "imdb",
-                apiKey = apiKey,
-                body = MDBListRatingRequestDto(
-                    ids = episodeTmdbIds.values.distinct(),
-                    provider = "tmdb"
-                )
-            )
-
-            if (!response.isSuccessful) {
-                Log.w(tag, "Failed episode imdb ratings (${response.code()})")
-                return emptyMap()
-            }
-
-            mapEpisodeRatings(
-                ratingItems = response.body()?.ratings.orEmpty(),
-                episodeIdsByKey = episodeTmdbIds
-            )
-        } catch (e: Exception) {
-            Log.w(tag, "Error fetching episode imdb ratings", e)
-            emptyMap()
-        }
     }
 
     private fun enabledProviders(settings: MDBListSettings): List<ProviderType> = buildList {

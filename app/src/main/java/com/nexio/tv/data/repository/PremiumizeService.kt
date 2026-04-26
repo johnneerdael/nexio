@@ -1,7 +1,8 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.debrid.PremiumizeIntegrationProvider
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
-import com.nexio.tv.data.remote.api.PremiumizeApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,7 @@ data class PremiumizeAccountState(
 
 @Singleton
 class PremiumizeService @Inject constructor(
-    private val premiumizeApi: PremiumizeApi,
+    private val premiumizeIntegrationProvider: PremiumizeIntegrationProvider,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore
 ) {
     private val _accountState = MutableStateFlow(PremiumizeAccountState())
@@ -37,27 +38,32 @@ class PremiumizeService @Inject constructor(
             return Result.success(cleared)
         }
 
-        val response = runCatching { premiumizeApi.getAccountInfo(apiKey) }
-            .getOrElse { error ->
-                return Result.failure(
-                    IllegalStateException(error.message ?: "Failed to contact Premiumize")
-                )
+        return when (val result = premiumizeIntegrationProvider.fetchAccountInfo(apiKey)) {
+            is IntegrationCallResult.Success -> {
+                val body = result.value
+                if (!body.status.equals("success", ignoreCase = true)) {
+                    Result.failure(IllegalStateException("Invalid Premiumize API key"))
+                } else {
+                    premiumizeSettingsDataStore.setApiKey(apiKey)
+                    val state = PremiumizeAccountState(
+                        apiKey = apiKey,
+                        customerId = body.customerId,
+                        premiumUntil = body.premiumUntil,
+                        isConnected = true
+                    )
+                    _accountState.value = state
+                    Result.success(state)
+                }
             }
 
-        val body = response.body()
-        if (!response.isSuccessful || body?.status?.equals("success", ignoreCase = true) != true) {
-            return Result.failure(IllegalStateException("Invalid Premiumize API key"))
-        }
+            is IntegrationCallResult.NetworkError -> Result.failure(
+                IllegalStateException(
+                    result.throwable.message ?: "Failed to contact Premiumize"
+                )
+            )
 
-        premiumizeSettingsDataStore.setApiKey(apiKey)
-        val state = PremiumizeAccountState(
-            apiKey = apiKey,
-            customerId = body.customerId,
-            premiumUntil = body.premiumUntil,
-            isConnected = true
-        )
-        _accountState.value = state
-        return Result.success(state)
+            else -> Result.failure(IllegalStateException("Invalid Premiumize API key"))
+        }
     }
 
     suspend fun refreshAccountState() {
@@ -67,13 +73,14 @@ class PremiumizeService @Inject constructor(
             return
         }
 
-        val response = runCatching { premiumizeApi.getAccountInfo(apiKey) }.getOrNull()
-        val body = response?.body()
-        if (response?.isSuccessful == true && body?.status?.equals("success", ignoreCase = true) == true) {
+        val result = premiumizeIntegrationProvider.fetchAccountInfo(apiKey)
+        if (result is IntegrationCallResult.Success &&
+            result.value.status.equals("success", ignoreCase = true)
+        ) {
             _accountState.value = PremiumizeAccountState(
                 apiKey = apiKey,
-                customerId = body.customerId,
-                premiumUntil = body.premiumUntil,
+                customerId = result.value.customerId,
+                premiumUntil = result.value.premiumUntil,
                 isConnected = true
             )
             return

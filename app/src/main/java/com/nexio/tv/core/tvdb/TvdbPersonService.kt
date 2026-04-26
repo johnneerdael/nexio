@@ -1,7 +1,7 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
-import com.nexio.tv.data.remote.api.TvdbApi
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.remote.api.TvdbCharacterRecord
 import com.nexio.tv.data.remote.api.TvdbPersonExtendedRecord
 import com.nexio.tv.domain.model.ContentType
@@ -14,27 +14,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TvdbPersonService"
+private const val UNKNOWN_TMDB_ID = 0
 
 @Singleton
 class TvdbPersonService @Inject constructor(
-    private val tvdbApi: TvdbApi,
-    private val authService: TvdbAuthService
+    private val provider: TvdbIntegrationProvider
 ) {
     suspend fun fetchPersonDetail(
         peopleId: Int,
         preferredLanguage: String? = "eng"
     ): PersonDetail? = withContext(Dispatchers.IO) {
         if (peopleId <= 0) return@withContext null
-        val authorization = authService.bearerToken() ?: return@withContext null
 
-        val record = runCatching {
-            tvdbApi.getPersonExtended(authorization, peopleId)
-        }.onFailure { error ->
-            Log.w(TAG, "TVDB person lookup failed reason=${error.javaClass.simpleName}")
-        }.getOrNull()
-            ?.takeIf { it.isSuccessful }
-            ?.body()
-            ?.data
+        val record = provider.fetchPersonExtended(peopleId)
             ?: return@withContext null
 
         record.toPersonDetail(preferredLanguage)
@@ -54,7 +46,7 @@ class TvdbPersonService @Inject constructor(
         val movieCredits = characters.orEmpty().mapNotNull { it.toMoviePreview() }.distinctBy { it.id }
 
         return PersonDetail(
-            tmdbId = id,
+            tmdbId = UNKNOWN_TMDB_ID,
             name = name,
             biography = biography,
             birthday = birth?.trim()?.takeIf { it.isNotBlank() },

@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
@@ -160,7 +162,7 @@ class MDBListDiscoveryServiceTest {
         every { debugSettings.diskFirstHomeStartupEnabled } returns flowOf(false)
 
         return MDBListDiscoveryService(
-            mdbListApi = api,
+            mdbListIntegrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
             mdbListSettingsDataStore = dataStore,
             posterRatingsUrlResolver = posterResolver,
             snapshotStore = snapshotStore,

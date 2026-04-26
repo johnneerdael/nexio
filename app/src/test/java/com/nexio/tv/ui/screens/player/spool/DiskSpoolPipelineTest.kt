@@ -9,6 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import com.nexio.tv.data.integration.playback.transport.OkHttpDiskSpoolHttpTransport
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -51,9 +52,9 @@ class DiskSpoolPipelineTest {
             waitTimeoutMs = 2_000L
         )
         val writer = DiskSpoolWriter(
-            OkHttpClient.Builder()
+            OkHttpDiskSpoolHttpTransport(OkHttpClient.Builder()
                 .readTimeout(1, TimeUnit.SECONDS)
-                .build(),
+                .build()),
             chunkBytes = 32 * 1024,
             ioBufferBytes = 8 * 1024
         )
@@ -131,7 +132,7 @@ class DiskSpoolPipelineTest {
         val writerThread = Thread {
             try {
                 DiskSpoolWriter(
-                    okHttpClient = OkHttpClient(),
+                    transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                     chunkBytes = 64 * 1024,
                     ioBufferBytes = 8 * 1024,
                     startupPriorityBytes = 64 * 1024L
@@ -203,7 +204,7 @@ class DiskSpoolPipelineTest {
         val writerThread = Thread {
             try {
                 DiskSpoolWriter(
-                    okHttpClient = OkHttpClient(),
+                    transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                     chunkBytes = 64 * 1024,
                     ioBufferBytes = 8 * 1024,
                     startupPriorityBytes = 64 * 1024L,

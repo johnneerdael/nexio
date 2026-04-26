@@ -11,6 +11,36 @@ import com.nexio.tv.data.local.integration.IntegrationProviderBackoffDao
 import com.nexio.tv.data.local.integration.IntegrationProviderBackoffEntity
 import com.nexio.tv.data.local.integration.LocalIntegrationCacheStore
 import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
+
+data class ByteArrayRuntimeFixture(
+    val runtime: DefaultIntegrationRuntime,
+    val cacheStore: ByteArrayIntegrationCacheStore,
+    val backoffManager: IntegrationBackoffManager,
+    val auditSink: RecordingIntegrationAuditSink
+)
+
+class ByteArrayIntegrationCacheStore : IntegrationCacheStore {
+    private val blobs = ConcurrentHashMap<String, ByteArray>()
+
+    override suspend fun <T> readFresh(spec: IntegrationSpec<T>): T? {
+        val bytes = blobs[spec.requiredCacheKey] ?: return null
+        return spec.codec.decode(bytes)
+    }
+
+    override suspend fun <T> readStale(spec: IntegrationSpec<T>): T? {
+        val bytes = blobs[spec.requiredCacheKey] ?: return null
+        return spec.codec.decode(bytes)
+    }
+
+    override suspend fun <T> write(spec: IntegrationSpec<T>, value: T) {
+        blobs[spec.requiredCacheKey] = spec.codec.encode(value)
+    }
+
+    override suspend fun deleteOwnedMedia(mediaKey: String): Int = 0
+
+    fun contains(cacheKey: String): Boolean = blobs.containsKey(cacheKey)
+}
 
 data class RealRuntimeFixture(
     val runtime: DefaultIntegrationRuntime,
@@ -20,7 +50,8 @@ data class RealRuntimeFixture(
     val cacheDao: IntegrationCacheDao,
     val blobStore: IntegrationBlobStore,
     val cacheStore: LocalIntegrationCacheStore,
-    val requestGate: ProviderRequestGate
+    val requestGate: ProviderRequestGate,
+    val auditSink: RecordingIntegrationAuditSink
 ) {
     suspend fun <T> seedCache(
         cacheKey: String,
@@ -48,6 +79,14 @@ data class RealRuntimeFixture(
     }
 }
 
+class RecordingIntegrationAuditSink : IntegrationAuditSink {
+    val events = mutableListOf<IntegrationAuditEvent>()
+
+    override fun record(event: IntegrationAuditEvent) {
+        events += event
+    }
+}
+
 class RecordingIntegrationRuntime<T>(
     private val successValue: T? = null,
     private val nextResult: IntegrationFetchResult<T>? = null,
@@ -63,7 +102,7 @@ class RecordingIntegrationRuntime<T>(
         spec: IntegrationSpec<R>,
         options: IntegrationFetchOptions
     ): IntegrationFetchResult<R> {
-        keys += spec.cacheKey
+        spec.cacheKey?.let(keys::add)
         specs += spec
         @Suppress("UNCHECKED_CAST")
         return nextResult as? IntegrationFetchResult<R>
@@ -97,6 +136,42 @@ fun inMemoryIntegrationCacheDatabase(): IntegrationCacheDatabase {
 fun tempIntegrationBlobStore(): IntegrationBlobStore =
     IntegrationBlobStore(Files.createTempDirectory("integration-cache-test").toFile())
 
+fun passThroughTestRuntime(): IntegrationRuntime =
+    object : IntegrationRuntime {
+        override suspend fun <T> get(
+            spec: IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> =
+            when (val result = spec.load()) {
+                is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(result.value)
+                is IntegrationLoadResult.HttpError -> IntegrationFetchResult.Missing
+                is IntegrationLoadResult.NetworkError -> IntegrationFetchResult.Missing
+            }
+
+        override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+            spec.call()
+
+        override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
+            spec.open()
+    }
+
+fun byteArrayRuntimeFixture(): ByteArrayRuntimeFixture {
+    val registry = defaultIntegrationPolicyRegistry()
+    val cacheStore = ByteArrayIntegrationCacheStore()
+    val backoffManager = IntegrationBackoffManager(InMemoryIntegrationProviderBackoffDao())
+    val auditSink = RecordingIntegrationAuditSink()
+    val runtime = DefaultIntegrationRuntime(
+        cacheStore = cacheStore,
+        requestGate = ProviderRequestGate(registry),
+        backoffManager = backoffManager,
+        singleFlight = IntegrationSingleFlight(),
+        playbackGate = IntegrationPlaybackGate(),
+        registry = registry,
+        auditSink = auditSink
+    )
+    return ByteArrayRuntimeFixture(runtime, cacheStore, backoffManager, auditSink)
+}
+
 fun realRuntimeFixture(): RealRuntimeFixture {
     val database = inMemoryIntegrationCacheDatabase()
     val cacheDao = database.cacheDao()
@@ -107,13 +182,15 @@ fun realRuntimeFixture(): RealRuntimeFixture {
     val requestGate = ProviderRequestGate(registry)
     val backoffManager = IntegrationBackoffManager(backoffDao)
     val playbackGate = IntegrationPlaybackGate()
+    val auditSink = RecordingIntegrationAuditSink()
     val runtime = DefaultIntegrationRuntime(
         cacheStore = cacheStore,
         requestGate = requestGate,
         backoffManager = backoffManager,
         singleFlight = IntegrationSingleFlight(),
         playbackGate = playbackGate,
-        registry = registry
+        registry = registry,
+        auditSink = auditSink
     )
     return RealRuntimeFixture(
         runtime = runtime,
@@ -123,7 +200,8 @@ fun realRuntimeFixture(): RealRuntimeFixture {
         cacheDao = cacheDao,
         blobStore = blobStore,
         cacheStore = cacheStore,
-        requestGate = requestGate
+        requestGate = requestGate,
+        auditSink = auditSink
     )
 }
 

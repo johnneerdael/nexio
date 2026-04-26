@@ -2,7 +2,6 @@ package com.nexio.tv.core.tvdb
 
 import android.content.Context
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbArtworkStatusRecord
 import com.nexio.tv.data.remote.api.TvdbArtworkTypeRecord
 import com.nexio.tv.data.remote.api.TvdbCompanyTypeRecord
@@ -10,10 +9,10 @@ import com.nexio.tv.data.remote.api.TvdbContentRatingRecord
 import com.nexio.tv.data.remote.api.TvdbEntityTypeRecord
 import com.nexio.tv.data.remote.api.TvdbGenreReferenceRecord
 import com.nexio.tv.data.remote.api.TvdbLanguageRecord
-import com.nexio.tv.data.remote.api.TvdbReferenceResponse
 import com.nexio.tv.data.remote.api.TvdbSeasonTypeReferenceRecord
 import com.nexio.tv.data.remote.api.TvdbSeriesStatusRecord
 import com.nexio.tv.data.remote.api.TvdbSourceTypeRecord
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.Runs
 import io.mockk.coEvery
@@ -27,13 +26,12 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
 
 class TvdbReferenceDataServiceTest {
 
-    private val api = mockk<TvdbApi>()
+    private val provider = mockk<TvdbIntegrationProvider>()
     private val diagnosticsRecorder = mockk<TvdbDiagnosticsRecorder>()
-    private val authService = mockk<TvdbAuthService>()
     private val prefs = InMemorySharedPreferences()
     private val context = mockk<Context> {
         every { getSharedPreferences("metadata_disk_cache_v1", Context.MODE_PRIVATE) } returns prefs
@@ -41,64 +39,42 @@ class TvdbReferenceDataServiceTest {
     private val cacheStore = MetadataDiskCacheStore(context)
 
     private fun buildService() = TvdbReferenceDataService(
-        api = api,
+        provider = provider,
         cacheStore = cacheStore,
         diagnosticsRecorder = diagnosticsRecorder,
-        authService = authService
     )
 
     private fun stubAllReferenceEndpoints() {
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery { diagnosticsRecorder.record(any()) } just Runs
-        coEvery { api.getArtworkTypes(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbArtworkTypeRecord(id = 1, name = "Banner")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.ARTWORK_TYPES) } returns listOf(
+            TvdbArtworkTypeRecord(id = 1, name = "Banner")
         )
-        coEvery { api.getArtworkStatuses(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbArtworkStatusRecord(id = 1, name = "Active")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.ARTWORK_STATUSES) } returns listOf(
+            TvdbArtworkStatusRecord(id = 1, name = "Active")
         )
-        coEvery { api.getGenres(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbGenreReferenceRecord(id = 1, name = "Drama", slug = "drama")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } returns listOf(
+            TvdbGenreReferenceRecord(id = 1, name = "Drama", slug = "drama")
         )
-        coEvery { api.getLanguages(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbLanguageRecord(id = "eng", name = "English", nativeName = "English", shortCode = "en")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.LANGUAGES) } returns listOf(
+            TvdbLanguageRecord(id = "eng", name = "English", nativeName = "English", shortCode = "en")
         )
-        coEvery { api.getSeriesStatuses(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbSeriesStatusRecord(id = 1, name = "Continuing", recordType = "series")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.SERIES_STATUSES) } returns listOf(
+            TvdbSeriesStatusRecord(id = 1, name = "Continuing", recordType = "series")
         )
-        coEvery { api.getContentRatings(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbContentRatingRecord(id = 1, name = "TV-14", country = "usa")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.CONTENT_RATINGS) } returns listOf(
+            TvdbContentRatingRecord(id = 1, name = "TV-14", country = "usa")
         )
-        coEvery { api.getSeasonTypes(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbSeasonTypeReferenceRecord(id = 1, name = "Aired Order", type = "default")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.SEASON_TYPES) } returns listOf(
+            TvdbSeasonTypeReferenceRecord(id = 1, name = "Aired Order", type = "default")
         )
-        coEvery { api.getSourceTypes(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbSourceTypeRecord(id = 1, name = "IMDB", slug = "imdb")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.SOURCE_TYPES) } returns listOf(
+            TvdbSourceTypeRecord(id = 1, name = "IMDB", slug = "imdb")
         )
-        coEvery { api.getEntityTypes(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbEntityTypeRecord(id = 1, name = "Series")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.ENTITY_TYPES) } returns listOf(
+            TvdbEntityTypeRecord(id = 1, name = "Series")
         )
-        coEvery { api.getCompanyTypes(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbCompanyTypeRecord(companyTypeId = 1, companyTypeName = "Network")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.COMPANY_TYPES) } returns listOf(
+            TvdbCompanyTypeRecord(companyTypeId = 1, companyTypeName = "Network")
         )
     }
 
@@ -111,16 +87,16 @@ class TvdbReferenceDataServiceTest {
 
         assertTrue(result.success)
         assertEquals(TvdbReferenceKind.entries.size, result.succeededKinds.size)
-        coVerify { api.getArtworkTypes(any()) }
-        coVerify { api.getArtworkStatuses(any()) }
-        coVerify { api.getGenres(any()) }
-        coVerify { api.getLanguages(any()) }
-        coVerify { api.getSeriesStatuses(any()) }
-        coVerify { api.getContentRatings(any()) }
-        coVerify { api.getSeasonTypes(any()) }
-        coVerify { api.getSourceTypes(any()) }
-        coVerify { api.getEntityTypes(any()) }
-        coVerify { api.getCompanyTypes(any()) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.ARTWORK_TYPES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.ARTWORK_STATUSES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.LANGUAGES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.SERIES_STATUSES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.CONTENT_RATINGS) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.SEASON_TYPES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.SOURCE_TYPES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.ENTITY_TYPES) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.COMPANY_TYPES) }
     }
 
     @Test
@@ -130,8 +106,7 @@ class TvdbReferenceDataServiceTest {
 
         service.refresh(TvdbReferenceKind.ENTITY_TYPES)
 
-        // Verify getEntityTypes was called (which maps to @GET("entities"))
-        coVerify { api.getEntityTypes(any()) }
+        coVerify { provider.fetchReferenceRecords(TvdbReferenceKind.ENTITY_TYPES) }
     }
 
     @Test
@@ -143,7 +118,7 @@ class TvdbReferenceDataServiceTest {
         service.warmCoreReferences()
 
         // Now make genres endpoint fail
-        coEvery { api.getGenres(any()) } throws RuntimeException("Network error")
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } throws RuntimeException("Network error")
 
         val result = service.refresh(TvdbReferenceKind.GENRES)
 
@@ -167,7 +142,7 @@ class TvdbReferenceDataServiceTest {
         val result = service.refreshForUpdateEntityType("genres")
 
         assertNotNull(result)
-        coVerify(exactly = 2) { api.getGenres(any()) } // once for warm, once for refresh
+        coVerify(exactly = 2) { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } // once for warm, once for refresh
     }
 
     @Test
@@ -207,15 +182,12 @@ class TvdbReferenceDataServiceTest {
 
     @Test
     fun `malformed reference payload is rejected before cache write`() = runTest {
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery { diagnosticsRecorder.record(any()) } just Runs
         // Return records with blank/invalid names
-        coEvery { api.getGenres(any()) } returns Response.success(
-            TvdbReferenceResponse(status = "success", data = listOf(
-                TvdbGenreReferenceRecord(id = 1, name = ""),
-                TvdbGenreReferenceRecord(id = null, name = "Valid Name"),
-                TvdbGenreReferenceRecord(id = 2, name = "   ")
-            ))
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } returns listOf(
+            TvdbGenreReferenceRecord(id = 1, name = ""),
+            TvdbGenreReferenceRecord(id = null, name = "Valid Name"),
+            TvdbGenreReferenceRecord(id = 2, name = "   ")
         )
 
         val service = buildService()
@@ -224,4 +196,44 @@ class TvdbReferenceDataServiceTest {
         // All records had invalid id or blank name, so validation should fail
         assertTrue(!result.success || result.staleFallback)
     }
+
+    @Test
+    fun `refresh preserves coroutine cancellation`() = runTest {
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } throws CancellationException("cancelled")
+
+        val service = buildService()
+        val result = runCatching { service.refresh(TvdbReferenceKind.GENRES) }
+
+        assertTrue(result.exceptionOrNull() is CancellationException)
+    }
+
+    @Test
+    fun `unknown reference record type is rejected`() = runTest {
+        coEvery { diagnosticsRecorder.record(any()) } just Runs
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } returns listOf(UnknownReferenceRecord())
+
+        val service = buildService()
+        val result = service.refresh(TvdbReferenceKind.GENRES)
+
+        assertTrue(!result.success && result.itemCount == 0 && !result.staleFallback)
+    }
+
+    @Test
+    fun `mixed reference payload fails closed and does not write partial data`() = runTest {
+        coEvery { diagnosticsRecorder.record(any()) } just Runs
+        coEvery { provider.fetchReferenceRecords(TvdbReferenceKind.GENRES) } returns listOf(
+            TvdbGenreReferenceRecord(id = 1, name = "Drama", slug = "drama"),
+            TvdbGenreReferenceRecord(id = null, name = "Invalid Id"),
+            UnknownReferenceRecord(),
+            TvdbGenreReferenceRecord(id = 3, name = "Comedy", slug = "comedy")
+        )
+
+        val service = buildService()
+        val result = service.refresh(TvdbReferenceKind.GENRES)
+
+        assertTrue(!result.success && !result.staleFallback && result.itemCount == 0)
+        assertTrue(cacheStore.readTvdbReference<Any>(TvdbReferenceKind.GENRES.cacheKey)?.isEmpty() ?: true)
+    }
 }
+
+private data class UnknownReferenceRecord(val value: String = "unknown")

@@ -3,7 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.trakt.TraktScrobbleMutationAdapter
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
-import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,9 +47,9 @@ sealed interface TraktScrobbleItem {
 
 @Singleton
 class TraktScrobbleService @Inject constructor(
-    private val traktAuthService: TraktAuthService,
+    private val traktAuthService: TraktRepositoryAuthGateway,
     private val watchingNowStateController: TraktWatchingNowStateController,
-    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator
+    private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator
 ) {
     internal sealed interface MutationResult {
         data object Success : MutationResult

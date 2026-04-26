@@ -1,11 +1,12 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbCompanyTypeRecord
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Canonical TVDB reference data kinds that map to stable TVDB reference endpoints.
@@ -74,10 +75,9 @@ data class TvdbReferenceRefreshResult(
  */
 @Singleton
 class TvdbReferenceDataService @Inject constructor(
-    private val api: TvdbApi,
+    private val provider: TvdbIntegrationProvider,
     private val cacheStore: MetadataDiskCacheStore,
-    private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
-    private val authService: TvdbAuthService
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
 ) {
     companion object {
         private const val TAG = "TvdbRefDataService"
@@ -138,20 +138,15 @@ class TvdbReferenceDataService @Inject constructor(
      * write the payload and returns stale cache when available (T-10-03-01).
      */
     suspend fun refresh(kind: TvdbReferenceKind): TvdbReferenceRefreshResult {
-        val bearerToken = authService.bearerToken()
-        if (bearerToken == null) {
-            return handleRefreshFailure(kind, "No bearer token available")
-        }
-
         return try {
-            val records = fetchRecords(kind, bearerToken)
+            val records = fetchRecords(kind)
             if (records == null) {
                 return handleRefreshFailure(kind, "API returned error or null body")
             }
 
             val validated = validateRecords(kind, records)
-            if (validated.isEmpty()) {
-                return handleRefreshFailure(kind, "All records failed validation")
+            if (validated.size != records.size) {
+                return handleRefreshFailure(kind, "Payload validation failed")
             }
 
             cacheStore.writeTvdbReference(kind.cacheKey, validated)
@@ -170,6 +165,8 @@ class TvdbReferenceDataService @Inject constructor(
                 kind = kind,
                 itemCount = validated.size
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             handleRefreshFailure(kind, e.message ?: "Unknown error")
         }
@@ -187,48 +184,18 @@ class TvdbReferenceDataService @Inject constructor(
         return refresh(kind)
     }
 
-    private suspend fun fetchRecords(kind: TvdbReferenceKind, bearerToken: String): List<Any>? {
+    private suspend fun fetchRecords(kind: TvdbReferenceKind): List<Any>? {
         return when (kind) {
-            TvdbReferenceKind.ARTWORK_TYPES -> {
-                val response = api.getArtworkTypes(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.ARTWORK_STATUSES -> {
-                val response = api.getArtworkStatuses(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.GENRES -> {
-                val response = api.getGenres(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.LANGUAGES -> {
-                val response = api.getLanguages(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.SERIES_STATUSES -> {
-                val response = api.getSeriesStatuses(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.CONTENT_RATINGS -> {
-                val response = api.getContentRatings(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.SEASON_TYPES -> {
-                val response = api.getSeasonTypes(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.SOURCE_TYPES -> {
-                val response = api.getSourceTypes(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.ENTITY_TYPES -> {
-                val response = api.getEntityTypes(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
-            TvdbReferenceKind.COMPANY_TYPES -> {
-                val response = api.getCompanyTypes(bearerToken)
-                if (response.isSuccessful) response.body()?.data else null
-            }
+            TvdbReferenceKind.ARTWORK_TYPES,
+            TvdbReferenceKind.ARTWORK_STATUSES,
+            TvdbReferenceKind.GENRES,
+            TvdbReferenceKind.LANGUAGES,
+            TvdbReferenceKind.SERIES_STATUSES,
+            TvdbReferenceKind.CONTENT_RATINGS,
+            TvdbReferenceKind.SEASON_TYPES,
+            TvdbReferenceKind.SOURCE_TYPES,
+            TvdbReferenceKind.ENTITY_TYPES,
+            TvdbReferenceKind.COMPANY_TYPES -> provider.fetchReferenceRecords(kind)
         }
     }
 
@@ -259,7 +226,7 @@ class TvdbReferenceDataService @Inject constructor(
                     record.id != null && record.id > 0 && !record.name.isNullOrBlank()
                 is TvdbCompanyTypeRecord ->
                     record.companyTypeId != null && record.companyTypeId > 0 && !record.companyTypeName.isNullOrBlank()
-                else -> true
+                else -> false
             }
         }
     }

@@ -484,12 +484,12 @@ class ProfileSettingsScopeContractTest {
         assertTrue(traktSource.contains("fun currentAuthSession(): TrackingAuthSession"))
         assertTrue(traktSource.contains("getCurrentAuthState(session: TrackingAuthSession)"))
         assertTrue(traktSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
-        assertTrue(traktSource.contains("executeAuthorizedRequest("))
+        assertTrue(traktSource.contains("executeAuthOwnerRequest("))
         assertTrue(traktSource.contains("session: TrackingAuthSession"))
         assertTrue(simklSource.contains("private fun currentAuthSession(): TrackingAuthSession"))
         assertTrue(simklSource.contains("getCurrentAuthState(session: TrackingAuthSession)"))
         assertTrue(simklSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
-        assertTrue(simklSource.contains("executeAuthorizedRequest("))
+        assertTrue(simklSource.contains("executeAuthOwnerRequest("))
         assertTrue(simklSource.contains("session: TrackingAuthSession"))
     }
 
@@ -805,7 +805,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(simklLibraryAdapterSource.contains("profileId = profileId"))
 
         assertTrue(simklRemoteSource.contains("session: TrackingAuthSession? = null"))
-        assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthorizedRequest(session, call)"))
+        assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthOwnerRequest(session, call)"))
         assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthorizedWriteRequest(session, call)"))
     }
 

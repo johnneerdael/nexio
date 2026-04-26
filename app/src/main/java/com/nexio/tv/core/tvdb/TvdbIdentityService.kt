@@ -1,8 +1,8 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbIdentityCacheStore
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbRemoteId as ApiTvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbSearchResult
 import com.nexio.tv.data.remote.api.TvdbSeriesBaseRecord
@@ -12,14 +12,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TvdbIdentity"
 
 @Singleton
 class TvdbIdentityService @Inject constructor(
-    private val tvdbApi: TvdbApi,
-    private val authService: TvdbAuthService,
+    private val provider: TvdbIntegrationProvider,
     private val identityCacheStore: TvdbIdentityCacheStore? = null
 ) {
     private val inFlightLookups = ConcurrentHashMap<String, CompletableDeferred<TvdbSeriesIdentity?>>()
@@ -29,12 +29,7 @@ class TvdbIdentityService @Inject constructor(
 
         identityCacheStore?.read(TvdbRemoteIdSource.TVDB, tvdbId.toString())?.let { return@withContext it }
 
-        val authorization = authService.bearerToken() ?: run {
-            Log.w(TAG, "TVDB identity lookup failed reason=auth_unavailable")
-            return@withContext null
-        }
-
-        fetchSeriesIdentity(authorization = authorization, tvdbId = tvdbId)?.also { identity ->
+        fetchSeriesIdentity(tvdbId = tvdbId)?.also { identity ->
             identityCacheStore?.write(TvdbRemoteIdSource.TVDB, tvdbId.toString(), identity)
         }
     }
@@ -58,20 +53,17 @@ class TvdbIdentityService @Inject constructor(
         }
 
         try {
-            val authorization = authService.bearerToken() ?: run {
-                Log.w(TAG, "TVDB identity lookup failed reason=auth_unavailable")
-                deferred.complete(null)
-                return@withContext null
-            }
-
-            val identity = searchRemoteId(authorization, normalizedValue)
-                ?: searchSeriesRemoteIdFallback(authorization, normalizedValue)
+            val identity = searchRemoteId(normalizedValue)
+                ?: searchSeriesRemoteIdFallback(normalizedValue)
 
             if (identity != null) {
                 identityCacheStore?.write(source, normalizedValue, identity)
             }
             deferred.complete(identity)
             identity
+        } catch (error: CancellationException) {
+            deferred.completeExceptionally(error)
+            throw error
         } catch (error: Exception) {
             Log.w(TAG, "TVDB identity lookup failed reason=${error.javaClass.simpleName} message=${error.message}")
             deferred.complete(null)
@@ -81,17 +73,8 @@ class TvdbIdentityService @Inject constructor(
         }
     }
 
-    private suspend fun searchRemoteId(
-        authorization: String,
-        remoteId: String
-    ): TvdbSeriesIdentity? {
-        val response = tvdbApi.searchByRemoteId(authorization, remoteId)
-        if (!response.isSuccessful) {
-            Log.w(TAG, "TVDB remote ID lookup failed status=${response.code()} reason=http-${response.code()}")
-            return null
-        }
-
-        val series = response.body()
+    private suspend fun searchRemoteId(remoteId: String): TvdbSeriesIdentity? {
+        val series = provider.searchByRemoteId(remoteId)
             ?.data
             .orEmpty()
             .firstOrNull { result -> result.series != null }
@@ -99,25 +82,12 @@ class TvdbIdentityService @Inject constructor(
             ?: return null
 
         return series.id?.let { tvdbId ->
-            fetchSeriesIdentity(authorization = authorization, tvdbId = tvdbId, baseRecord = series)
+            fetchSeriesIdentity(tvdbId = tvdbId, baseRecord = series)
         }
     }
 
-    private suspend fun searchSeriesRemoteIdFallback(
-        authorization: String,
-        remoteId: String
-    ): TvdbSeriesIdentity? {
-        val response = tvdbApi.search(
-            authorization = authorization,
-            remoteId = remoteId,
-            type = "series"
-        )
-        if (!response.isSuccessful) {
-            Log.w(TAG, "TVDB search fallback failed status=${response.code()} reason=http-${response.code()}")
-            return null
-        }
-
-        return response.body()
+    private suspend fun searchSeriesRemoteIdFallback(remoteId: String): TvdbSeriesIdentity? {
+        return provider.searchSeries(remoteId)
             ?.data
             .orEmpty()
             .firstNotNullOfOrNull { result ->
@@ -126,24 +96,13 @@ class TvdbIdentityService @Inject constructor(
     }
 
     private suspend fun fetchSeriesIdentity(
-        authorization: String,
         tvdbId: Int,
         baseRecord: TvdbSeriesBaseRecord? = null
     ): TvdbSeriesIdentity? {
-        val extendedResponse = tvdbApi.getSeriesExtended(authorization, tvdbId)
-        if (extendedResponse.isSuccessful) {
-            extendedResponse.body()?.data?.toSeriesIdentity()?.let { return it }
-        } else {
-            Log.w(TAG, "TVDB series extended lookup failed status=${extendedResponse.code()} reason=http-${extendedResponse.code()}")
-        }
+        provider.fetchSeriesExtended(tvdbId)?.toSeriesIdentity()?.let { return it }
 
         val base = baseRecord ?: run {
-            val baseResponse = tvdbApi.getSeriesBase(authorization, tvdbId)
-            if (!baseResponse.isSuccessful) {
-                Log.w(TAG, "TVDB series base lookup failed status=${baseResponse.code()} reason=http-${baseResponse.code()}")
-                return null
-            }
-            baseResponse.body()?.data
+            provider.fetchSeriesBase(tvdbId) ?: return null
         }
 
         return base?.toSeriesIdentity()

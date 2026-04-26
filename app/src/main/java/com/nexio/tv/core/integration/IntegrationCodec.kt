@@ -46,3 +46,11 @@ object FileCodec : IntegrationCodec<File> {
 
     override fun decode(bytes: ByteArray): File = File(bytes.toString(Charsets.UTF_8))
 }
+
+object ByteArrayIntegrationCodec : IntegrationCodec<ByteArray> {
+    override val mimeType: String = "application/octet-stream"
+
+    override fun encode(value: ByteArray): ByteArray = value
+
+    override fun decode(bytes: ByteArray): ByteArray = bytes
+}

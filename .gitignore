@@ -13,6 +13,10 @@ nexio-web/
 .DS_Store
 /build
 **/build/
+!buildSrc/
+!buildSrc/build.gradle.kts
+!buildSrc/src/
+!buildSrc/src/**
 /captures
 .externalNativeBuild
 .cxx

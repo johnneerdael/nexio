@@ -6,6 +6,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import com.nexio.tv.data.integration.playback.transport.OkHttpDiskSpoolHttpTransport
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -43,7 +44,7 @@ class DiskSpoolWriterTest {
         server.start()
 
         try {
-            val writer = DiskSpoolWriter(OkHttpClient())
+            val writer = DiskSpoolWriter(OkHttpDiskSpoolHttpTransport(OkHttpClient()))
 
             val metadata = writer.probe(server.url("/movie.bin").toString())
 
@@ -93,7 +94,7 @@ class DiskSpoolWriterTest {
 
         try {
             val writer = DiskSpoolWriter(
-                OkHttpClient(),
+                OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 requestHeaders = mapOf(
                     "Authorization" to "Bearer token",
                     "X-Playback-Token" to "custom-token",
@@ -151,7 +152,7 @@ class DiskSpoolWriterTest {
 
         try {
             val writer = DiskSpoolWriter(
-                OkHttpClient(),
+                OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 chunkBytes = 64 * 1024,
                 ioBufferBytes = 16 * 1024
             )
@@ -203,7 +204,7 @@ class DiskSpoolWriterTest {
         try {
             assertEquals(-1, session.read(192 * 1024L, ByteArray(8), 0, 8))
             val writer = DiskSpoolWriter(
-                OkHttpClient(),
+                OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 chunkBytes = 32 * 1024,
                 ioBufferBytes = 8 * 1024
             )
@@ -241,7 +242,7 @@ class DiskSpoolWriterTest {
 
         try {
             val writer = DiskSpoolWriter(
-                OkHttpClient(),
+                OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 chunkBytes = 32 * 1024,
                 ioBufferBytes = 8 * 1024
             )
@@ -289,7 +290,7 @@ class DiskSpoolWriterTest {
 
         try {
             DiskSpoolWriter(
-                okHttpClient = OkHttpClient(),
+                transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 chunkBytes = 32 * 1024,
                 ioBufferBytes = 4 * 1024,
                 startupPriorityBytes = 0L,
@@ -338,7 +339,7 @@ class DiskSpoolWriterTest {
         val writerThread = Thread {
             try {
                 DiskSpoolWriter(
-                    okHttpClient = OkHttpClient(),
+                    transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                     chunkBytes = 64 * 1024,
                     ioBufferBytes = 8 * 1024,
                     startupPriorityBytes = 64 * 1024L,
@@ -429,7 +430,7 @@ class DiskSpoolWriterTest {
         val writerThread = Thread {
             try {
                 DiskSpoolWriter(
-                    okHttpClient = OkHttpClient(),
+                    transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                     chunkBytes = 64 * 1024,
                     ioBufferBytes = 8 * 1024,
                     startupPriorityBytes = 0L,
@@ -508,7 +509,7 @@ class DiskSpoolWriterTest {
         val writerThread = Thread {
             try {
                 DiskSpoolWriter(
-                    okHttpClient = OkHttpClient(),
+                    transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                     chunkBytes = 64 * 1024,
                     ioBufferBytes = 8 * 1024,
                     startupPriorityBytes = 64 * 1024L,
@@ -578,7 +579,7 @@ class DiskSpoolWriterTest {
 
         try {
             val writer = DiskSpoolWriter(
-                OkHttpClient(),
+                OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 chunkBytes = 64 * 1024,
                 ioBufferBytes = 8 * 1024
             )
@@ -604,7 +605,7 @@ class DiskSpoolWriterTest {
         val source = Buffer().write(ByteArray(32 * 1024) { (it % 251).toByte() })
         val session = ScriptedSessionBridge(priorityToInject = secondPriority)
         val writer = DiskSpoolWriter(
-            OkHttpClient(),
+            OkHttpDiskSpoolHttpTransport(OkHttpClient()),
             chunkBytes = 32 * 1024,
             ioBufferBytes = 8 * 1024
         )
@@ -659,7 +660,7 @@ class DiskSpoolWriterTest {
         )
         val failure = AtomicReference<Throwable?>(null)
         val writer = DiskSpoolWriter(
-            OkHttpClient(),
+            OkHttpDiskSpoolHttpTransport(OkHttpClient()),
             chunkBytes = 32 * 1024,
             ioBufferBytes = 8 * 1024
         )
@@ -714,7 +715,7 @@ class DiskSpoolWriterTest {
             waitTimeoutMs = 10L
         )
         val failure = AtomicReference<Throwable?>(null)
-        val writer = DiskSpoolWriter(OkHttpClient())
+        val writer = DiskSpoolWriter(OkHttpDiskSpoolHttpTransport(OkHttpClient()))
         val writerThread = Thread {
             try {
                 writer.downloadUntil(
@@ -776,7 +777,7 @@ class DiskSpoolWriterTest {
         )
         val failure = AtomicReference<Throwable?>(null)
         val writer = DiskSpoolWriter(
-            OkHttpClient(),
+            OkHttpDiskSpoolHttpTransport(OkHttpClient()),
             chunkBytes = contentLength,
             ioBufferBytes = 8 * 1024
         )
@@ -830,7 +831,7 @@ class DiskSpoolWriterTest {
         try {
             session.close()
 
-            DiskSpoolWriter(OkHttpClient()).downloadUntil(
+            DiskSpoolWriter(OkHttpDiskSpoolHttpTransport(OkHttpClient())).downloadUntil(
                 url = server.url("/movie.bin").toString(),
                 session = session,
                 targetFrontierBytes = 64 * 1024L
@@ -879,7 +880,7 @@ class DiskSpoolWriterTest {
 
         try {
             DiskSpoolWriter(
-                okHttpClient = OkHttpClient(),
+                transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
                 chunkBytes = 32 * 1024,
                 ioBufferBytes = 4 * 1024,
                 parallelConnections = 3,

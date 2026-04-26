@@ -1,0 +1,2011 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Fanart.tv API",
+    "version": 3.2,
+    "description": "# Fanart.tv API Documentation\n\nThe Fanart.tv API provides access to a vast collection of high-quality images for movies, TV shows, and music artists.\n\n**Website**: [https://fanart.tv](https://fanart.tv)  \n**Support**: Join our [Discord community](https://discord.gg/r9VufRk) for help and discussions\n\n## Quick Start\n\n1. [Get your API key](https://fanart.tv/get-an-api-key/)\n2. Make requests to `https://webservice.fanart.tv/{version}/{resource}/{id}?api_key=YOUR_KEY`\n3. Choose the API version that fits your needs (we recommend v3.2)\n\n## API Versions\n\nThe API supports three versions with different response formats:\n\n- **v3** (Legacy): Basic image fields without timestamps or dimensions\n- **v3.1**: Adds timestamp (`added`) field to all images\n- **v3.2** (Current): Adds dimensions (`width`, `height`) and total image count\n\n### Key Differences Between Versions\n\n| Feature | v3 | v3.1 | v3.2 |\n|---------|:--:|:----:|:----:|\n| Basic fields (id, url, lang, likes) | ✅ | ✅ | ✅ |\n| Type-specific fields (disc, season, etc.) | ✅ | ✅ | ✅ |\n| Timestamp (`added`) | ❌ | ✅ | ✅ |\n| Dimensions (`width`, `height`) | ❌ | ❌ | ✅ |\n| Total count (`image_count`) | ❌ | ❌ | ✅ |\n\n### Music API Structure Difference\n\n**IMPORTANT**: The music API has a fundamental structural difference between versions:\n\n**v3 & v3.1** - Albums as Object/Map:\n```json\n{\n  \"albums\": {\n    \"album-id-1\": { \"cdart\": [...] },\n    \"album-id-2\": { \"cdart\": [...] }\n  }\n}\n```\n\n**v3.2** - Albums as Array:\n```json\n{\n  \"albums\": [\n    { \"release_group_id\": \"album-id-1\", \"cdart\": [...] },\n    { \"release_group_id\": \"album-id-2\", \"cdart\": [...] }\n  ]\n}\n```\n\n## Authentication\n\nAll endpoints require an API key. There are two types of keys that can be sent either as **query parameters** or **HTTP headers**:\n\n### Project API Keys (Project Tier)\n- **Required in most cases** - Applications should always send a project key\n- For applications and projects (e.g., Plex, Emby, Kodi) that integrate the API\n- **Query parameter**: `?api_key=YOUR_KEY`\n- **HTTP header**: `api-key: YOUR_KEY`\n- Get your project key at: https://fanart.tv/get-an-api-key/ (Project API Keys section)\n- 7-day delay for access to new images\n\n### Personal API Keys (Personal Tier)\n- **Optional** - Can be sent alongside a project key, or used alone\n- For end users who want better access to the API (shorter delay for new images)\n- **Query parameter**: `?client_key=YOUR_KEY` (takes priority over `api_key` when both are sent)\n- **HTTP header**: `client-key: YOUR_KEY` (takes priority over `api-key` when both are sent)\n- Get your personal key at: https://fanart.tv/get-an-api-key/ (Personal API Keys section)\n- 2-day delay for access to new images (can be upgraded to VIP for immediate access)\n\n**Important for Project Developers**: When a personal API key is provided, it **bypasses any rate limits** applied to the project key and provides better access to newly added images. We strongly recommend that projects allow users to optionally enter their personal API key. This gives users control over their API access and improves their experience with faster access to new content. Direct users to [get their personal key](https://fanart.tv/get-an-api-key/) in your application's settings.\n\n### Authentication Methods\n\n**Typical Usage: Project Key Only**\n```\n# Query parameter\nhttps://webservice.fanart.tv/v3.2/movies/550?api_key=YOUR_PROJECT_KEY\n\n# HTTP header\ncurl -H \"api-key: YOUR_PROJECT_KEY\" https://webservice.fanart.tv/v3.2/movies/550\n```\n\n**Enhanced Usage: Project Key + Personal Key**\n```\n# Query parameters (personal key takes priority for tier access)\nhttps://webservice.fanart.tv/v3.2/movies/550?api_key=YOUR_PROJECT_KEY&client_key=YOUR_PERSONAL_KEY\n\n# HTTP headers (personal key takes priority for tier access)\ncurl -H \"api-key: YOUR_PROJECT_KEY\" -H \"client-key: YOUR_PERSONAL_KEY\" https://webservice.fanart.tv/v3.2/movies/550\n```\n\n**Alternative: Personal Key Only**\n```\n# Query parameter\nhttps://webservice.fanart.tv/v3.2/movies/550?client_key=YOUR_PERSONAL_KEY\n\n# HTTP header\ncurl -H \"client-key: YOUR_PERSONAL_KEY\" https://webservice.fanart.tv/v3.2/movies/550\n```\n\n**Note**: When both keys are provided, the personal key determines the access tier (2-day delay instead of 7-day). When both query parameter and header are present for the same key type, the query parameter takes priority.\n\n## Access Tiers\n\nDifferent subscription tiers have different access to newly added images:\n\n- **VIP**: Immediate access to all images (requires [VIP membership](https://fanart.tv/vip/))\n- **Personal**: 2-day delay for new images (free with client_key - Personal API Key)\n- **Project**: 7-day delay for new images (free with api_key - Project API Key)\n\nAll tiers have unlimited image access (no quantity restrictions).\n\n**Upgrade to VIP** to get immediate access to newly added images! Visit [fanart.tv/vip](https://fanart.tv/vip/) for more information.\n\n## Rate Limits\n\nThe API is designed for high performance and **rate limiting is very rarely applied**. Most API keys have unlimited access with no rate restrictions.\n\nHowever, in rare cases where rate limits are configured for specific keys, the API will return HTTP 429 responses. Clients should be prepared to handle these responses gracefully:\n\n- **HTTP Status**: `429 Too Many Requests`\n- **Retry-After Header**: Indicates how many seconds to wait before retrying\n- **X-RateLimit-* Headers**: Provide limit details and remaining quota\n\n**Best Practice**: Implement exponential backoff when receiving 429 responses, respecting the `Retry-After` header value.\n\nThe rate limiting uses a token bucket algorithm with exponential backoff penalties for repeated violations. If you encounter unexpected rate limiting, please contact support via [Discord](https://discord.gg/r9VufRk).\n\n## Base URL\n\n```\nhttps://webservice.fanart.tv\n```\n",
+    "contact": {
+      "name": "Fanart.tv Discord",
+      "url": "https://discord.gg/r9VufRk"
+    },
+    "license": {
+      "name": "Creative Commons Attribution 3.0",
+      "url": "https://creativecommons.org/licenses/by/3.0/"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://webservice.fanart.tv",
+      "description": "Production server"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Movies",
+      "description": "Movie fanart images"
+    },
+    {
+      "name": "TV Shows",
+      "description": "TV show fanart images"
+    },
+    {
+      "name": "Music",
+      "description": "Music artist and album images"
+    },
+    {
+      "name": "Latest",
+      "description": "Recently added images"
+    }
+  ],
+  "paths": {
+    "/{version}/movies/{id}": {
+      "get": {
+        "tags": [
+          "Movies"
+        ],
+        "summary": "Get movie images",
+        "description": "Retrieve all available fanart images for a specific movie.\n\nThe movie can be identified by either:\n- **TMDB ID** (The Movie Database ID) - Recommended\n- **IMDB ID** (starting with 'tt') - Will be mapped to TMDB ID\n\nReturns different response formats based on the API version requested.\n",
+        "operationId": "getMovie",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL (Query Parameter)",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/movies/550?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "curl",
+            "label": "cURL (Header)",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/movies/550\" \\\n  -H \"api-key: YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch - Query)",
+            "source": "const apiKey = 'YOUR_API_KEY';\nconst movieId = '550';\n\nfetch(`https://webservice.fanart.tv/v3.2/movies/${movieId}?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch - Header)",
+            "source": "const apiKey = 'YOUR_API_KEY';\nconst movieId = '550';\n\nfetch(`https://webservice.fanart.tv/v3.2/movies/${movieId}`, {\n  headers: {\n    'api-key': apiKey\n  }\n})\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "Node.js (Axios)",
+            "source": "const axios = require('axios');\n\nconst apiKey = 'YOUR_API_KEY';\nconst movieId = '550';\n\naxios.get(`https://webservice.fanart.tv/v3.2/movies/${movieId}`, {\n  params: { api_key: apiKey }\n})\n.then(response => console.log(response.data))\n.catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "php",
+            "label": "PHP",
+            "source": "<?php\n$apiKey = 'YOUR_API_KEY';\n$movieId = '550';\n\n$url = \"https://webservice.fanart.tv/v3.2/movies/{$movieId}?api_key={$apiKey}\";\n$response = file_get_contents($url);\n$data = json_decode($response, true);\n\nprint_r($data);\n?>\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\nmovie_id = '550'\n\nurl = f'https://webservice.fanart.tv/v3.2/movies/{movie_id}'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          },
+          {
+            "lang": "go",
+            "label": "Go",
+            "source": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"io\"\n    \"net/http\"\n)\n\nfunc main() {\n    apiKey := \"YOUR_API_KEY\"\n    movieID := \"550\"\n    \n    url := fmt.Sprintf(\"https://webservice.fanart.tv/v3.2/movies/%s?api_key=%s\", movieID, apiKey)\n    \n    resp, err := http.Get(url)\n    if err != nil {\n        panic(err)\n    }\n    defer resp.Body.Close()\n    \n    body, _ := io.ReadAll(resp.Body)\n    \n    var data map[string]interface{}\n    json.Unmarshal(body, &data)\n    \n    fmt.Println(data)\n}\n"
+          },
+          {
+            "lang": "ruby",
+            "label": "Ruby",
+            "source": "require 'net/http'\nrequire 'json'\n\napi_key = 'YOUR_API_KEY'\nmovie_id = '550'\n\nuri = URI(\"https://webservice.fanart.tv/v3.2/movies/#{movie_id}?api_key=#{api_key}\")\nresponse = Net::HTTP.get(uri)\ndata = JSON.parse(response)\n\nputs data\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Movie identifier (TMDB ID or IMDB ID with 'tt' prefix)",
+            "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "tmdbId": {
+                "value": "550",
+                "summary": "TMDB ID (Fight Club)"
+              },
+              "imdbId": {
+                "value": "tt0137523",
+                "summary": "IMDB ID (Fight Club)"
+              }
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with movie images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MovieResponseV32"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MovieResponseV31"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MovieResponseV3"
+                    }
+                  ]
+                },
+                "examples": {
+                  "v32": {
+                    "summary": "v3.2 Response (Current - with dimensions and timestamp)",
+                    "value": {
+                      "name": "Fight Club",
+                      "tmdb_id": "550",
+                      "imdb_id": "tt0137523",
+                      "image_count": 2,
+                      "hdmovielogo": [
+                        {
+                          "id": "1",
+                          "url": "https://assets.fanart.tv/fanart/movies/550/hdmovielogo/fight-club-52751b914903b.png",
+                          "lang": "en",
+                          "likes": "15",
+                          "added": "2013-11-03 15:43:45",
+                          "width": "800",
+                          "height": "310"
+                        }
+                      ],
+                      "moviebackground": [
+                        {
+                          "id": "2",
+                          "url": "https://assets.fanart.tv/fanart/movies/550/moviebackground/fight-club-4fa1c551a3e87.jpg",
+                          "lang": "en",
+                          "likes": "8",
+                          "added": "2012-05-04 09:38:25",
+                          "width": "1920",
+                          "height": "1080"
+                        }
+                      ]
+                    }
+                  },
+                  "v3": {
+                    "summary": "v3 Response (Legacy - basic fields only)",
+                    "value": {
+                      "name": "Fight Club",
+                      "tmdb_id": "550",
+                      "imdb_id": "tt0137523",
+                      "hdmovielogo": [
+                        {
+                          "id": "1",
+                          "url": "https://assets.fanart.tv/fanart/movies/550/hdmovielogo/fight-club-52751b914903b.png",
+                          "lang": "en",
+                          "likes": "15"
+                        }
+                      ],
+                      "moviebackground": [
+                        {
+                          "id": "2",
+                          "url": "https://assets.fanart.tv/fanart/movies/550/moviebackground/fight-club-4fa1c551a3e87.jpg",
+                          "lang": "en",
+                          "likes": "8"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/tv/{id}": {
+      "get": {
+        "tags": [
+          "TV Shows"
+        ],
+        "summary": "Get TV show images",
+        "description": "Retrieve all available fanart images for a specific TV show.\n\nThe TV show is identified by its **TheTVDB ID**.\n\nReturns different response formats based on the API version requested.\n",
+        "operationId": "getTVShow",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/tv/81189?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\nconst tvShowId = '81189';\n\nfetch(`https://webservice.fanart.tv/v3.2/tv/${tvShowId}?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "Node.js (Axios)",
+            "source": "const axios = require('axios');\n\nconst apiKey = 'YOUR_API_KEY';\nconst tvShowId = '81189';\n\naxios.get(`https://webservice.fanart.tv/v3.2/tv/${tvShowId}`, {\n  params: { api_key: apiKey }\n})\n.then(response => console.log(response.data))\n.catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "php",
+            "label": "PHP",
+            "source": "<?php\n$apiKey = 'YOUR_API_KEY';\n$tvShowId = '81189';\n\n$url = \"https://webservice.fanart.tv/v3.2/tv/{$tvShowId}?api_key={$apiKey}\";\n$response = file_get_contents($url);\n$data = json_decode($response, true);\n\nprint_r($data);\n?>\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\ntv_show_id = '81189'\n\nurl = f'https://webservice.fanart.tv/v3.2/tv/{tv_show_id}'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          },
+          {
+            "lang": "go",
+            "label": "Go",
+            "source": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"io\"\n    \"net/http\"\n)\n\nfunc main() {\n    apiKey := \"YOUR_API_KEY\"\n    tvShowID := \"81189\"\n    \n    url := fmt.Sprintf(\"https://webservice.fanart.tv/v3.2/tv/%s?api_key=%s\", tvShowID, apiKey)\n    \n    resp, err := http.Get(url)\n    if err != nil {\n        panic(err)\n    }\n    defer resp.Body.Close()\n    \n    body, _ := io.ReadAll(resp.Body)\n    \n    var data map[string]interface{}\n    json.Unmarshal(body, &data)\n    \n    fmt.Println(data)\n}\n"
+          },
+          {
+            "lang": "ruby",
+            "label": "Ruby",
+            "source": "require 'net/http'\nrequire 'json'\n\napi_key = 'YOUR_API_KEY'\ntv_show_id = '81189'\n\nuri = URI(\"https://webservice.fanart.tv/v3.2/tv/#{tv_show_id}?api_key=#{api_key}\")\nresponse = Net::HTTP.get(uri)\ndata = JSON.parse(response)\n\nputs data\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "TheTVDB ID",
+            "schema": {
+              "type": "string"
+            },
+            "example": "121361"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with TV show images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TVResponseV32"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TVResponseV31"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TVResponseV3"
+                    }
+                  ]
+                },
+                "examples": {
+                  "v32": {
+                    "summary": "v3.2 Response (Current)",
+                    "value": {
+                      "name": "Breaking Bad",
+                      "thetvdb_id": "81189",
+                      "image_count": 3,
+                      "hdtvlogo": [
+                        {
+                          "id": "1",
+                          "url": "https://assets.fanart.tv/fanart/tv/81189/hdtvlogo/breaking-bad-51639a5f2b79d.png",
+                          "lang": "en",
+                          "likes": "45",
+                          "added": "2013-04-09 10:58:07",
+                          "width": "800",
+                          "height": "310"
+                        }
+                      ],
+                      "showbackground": [
+                        {
+                          "id": "2",
+                          "url": "https://assets.fanart.tv/fanart/tv/81189/showbackground/breaking-bad-4fa1c54e30c5d.jpg",
+                          "lang": "00",
+                          "likes": "23",
+                          "added": "2012-05-03 14:29:34",
+                          "width": "1920",
+                          "height": "1080"
+                        }
+                      ],
+                      "seasonposter": [
+                        {
+                          "id": "3",
+                          "url": "https://assets.fanart.tv/fanart/tv/81189/seasonposter/breaking-bad-529135b3ebf19.jpg",
+                          "lang": "en",
+                          "likes": "12",
+                          "season": "5",
+                          "added": "2013-11-24 11:45:23",
+                          "width": "1000",
+                          "height": "1426"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/music/{id}": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get music artist images",
+        "description": "Retrieve all available fanart images for a specific music artist, including album artwork.\n\nThe artist is identified by their **MusicBrainz ID (MBID)**.\n\n**Important**: The album structure differs between API versions:\n- v3 & v3.1: Albums returned as an object/map keyed by release group ID\n- v3.2: Albums returned as an array with explicit `release_group_id` field\n",
+        "operationId": "getMusicArtist",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/music/f4a31f0a-51dd-4fa7-986d-3095c40c5ed9?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\nconst artistId = 'f4a31f0a-51dd-4fa7-986d-3095c40c5ed9';\n\nfetch(`https://webservice.fanart.tv/v3.2/music/${artistId}?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "Node.js (Axios)",
+            "source": "const axios = require('axios');\n\nconst apiKey = 'YOUR_API_KEY';\nconst artistId = 'f4a31f0a-51dd-4fa7-986d-3095c40c5ed9';\n\naxios.get(`https://webservice.fanart.tv/v3.2/music/${artistId}`, {\n  params: { api_key: apiKey }\n})\n.then(response => console.log(response.data))\n.catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "php",
+            "label": "PHP",
+            "source": "<?php\n$apiKey = 'YOUR_API_KEY';\n$artistId = 'f4a31f0a-51dd-4fa7-986d-3095c40c5ed9';\n\n$url = \"https://webservice.fanart.tv/v3.2/music/{$artistId}?api_key={$apiKey}\";\n$response = file_get_contents($url);\n$data = json_decode($response, true);\n\nprint_r($data);\n?>\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\nartist_id = 'f4a31f0a-51dd-4fa7-986d-3095c40c5ed9'\n\nurl = f'https://webservice.fanart.tv/v3.2/music/{artist_id}'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          },
+          {
+            "lang": "go",
+            "label": "Go",
+            "source": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"io\"\n    \"net/http\"\n)\n\nfunc main() {\n    apiKey := \"YOUR_API_KEY\"\n    artistID := \"f4a31f0a-51dd-4fa7-986d-3095c40c5ed9\"\n    \n    url := fmt.Sprintf(\"https://webservice.fanart.tv/v3.2/music/%s?api_key=%s\", artistID, apiKey)\n    \n    resp, err := http.Get(url)\n    if err != nil {\n        panic(err)\n    }\n    defer resp.Body.Close()\n    \n    body, _ := io.ReadAll(resp.Body)\n    \n    var data map[string]interface{}\n    json.Unmarshal(body, &data)\n    \n    fmt.Println(data)\n}\n"
+          },
+          {
+            "lang": "ruby",
+            "label": "Ruby",
+            "source": "require 'net/http'\nrequire 'json'\n\napi_key = 'YOUR_API_KEY'\nartist_id = 'f4a31f0a-51dd-4fa7-986d-3095c40c5ed9'\n\nuri = URI(\"https://webservice.fanart.tv/v3.2/music/#{artist_id}?api_key=#{api_key}\")\nresponse = Net::HTTP.get(uri)\ndata = JSON.parse(response)\n\nputs data\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "MusicBrainz Artist ID (MBID)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with artist images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MusicResponseV32"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MusicResponseV31"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MusicResponseV3"
+                    }
+                  ]
+                },
+                "examples": {
+                  "v32": {
+                    "summary": "v3.2 Response (Current - Albums as Array)",
+                    "value": {
+                      "name": "Nirvana",
+                      "mbid_id": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9",
+                      "image_count": 2,
+                      "albums": [
+                        {
+                          "release_group_id": "1b022e01-4da6-387b-8658-8678046e4cef",
+                          "cdart": [
+                            {
+                              "id": "1",
+                              "url": "https://assets.fanart.tv/fanart/music/f4a31f0a-51dd-4fa7-986d-3095c40c5ed9/cdart/nevermind-4e8a893e-5167b.png",
+                              "lang": "en",
+                              "likes": "20",
+                              "disc": "1",
+                              "size": "1000",
+                              "added": "2013-10-15 09:23:14",
+                              "width": "1000",
+                              "height": "1000"
+                            }
+                          ]
+                        }
+                      ],
+                      "hdmusiclogo": [
+                        {
+                          "id": "2",
+                          "url": "https://assets.fanart.tv/fanart/music/f4a31f0a-51dd-4fa7-986d-3095c40c5ed9/hdmusiclogo/nirvana-52e5f5c6aa6e4.png",
+                          "lang": "en",
+                          "likes": "35",
+                          "added": "2014-01-27 13:45:26",
+                          "width": "800",
+                          "height": "310"
+                        }
+                      ]
+                    }
+                  },
+                  "v3": {
+                    "summary": "v3 Response (Legacy - Albums as Object)",
+                    "value": {
+                      "name": "Nirvana",
+                      "mbid_id": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9",
+                      "albums": {
+                        "1b022e01-4da6-387b-8658-8678046e4cef": {
+                          "cdart": [
+                            {
+                              "id": "1",
+                              "url": "https://assets.fanart.tv/fanart/music/f4a31f0a-51dd-4fa7-986d-3095c40c5ed9/cdart/nevermind-4e8a893e-5167b.png",
+                              "lang": "en",
+                              "likes": "20",
+                              "disc": "1",
+                              "size": "1000"
+                            }
+                          ]
+                        }
+                      },
+                      "hdmusiclogo": [
+                        {
+                          "id": "2",
+                          "url": "https://assets.fanart.tv/fanart/music/f4a31f0a-51dd-4fa7-986d-3095c40c5ed9/hdmusiclogo/nirvana-52e5f5c6aa6e4.png",
+                          "lang": "en",
+                          "likes": "35"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/music/albums/{id}": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get album images",
+        "description": "Retrieve fanart images for a specific album.\n\n**Important**: This endpoint returns the parent artist data with only the requested album included.\nThe response structure matches the artist endpoint but filtered to a single album.\n\nThe album is identified by its **MusicBrainz Release Group ID**.\n",
+        "operationId": "getMusicAlbum",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/music/albums/1b022e01-4da6-387b-8658-8678046e4cef?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\nconst albumId = '1b022e01-4da6-387b-8658-8678046e4cef';\n\nfetch(`https://webservice.fanart.tv/v3.2/music/albums/${albumId}?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\nalbum_id = '1b022e01-4da6-387b-8658-8678046e4cef'\n\nurl = f'https://webservice.fanart.tv/v3.2/music/albums/{album_id}'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "MusicBrainz Release Group ID (Album MBID)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "1b022e01-4da6-387b-8658-8678046e4cef"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with album images (returns artist structure with single album)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MusicResponseV32"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MusicResponseV31"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MusicResponseV3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/music/labels/{id}": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get music label images",
+        "description": "Retrieve fanart images for a specific music label.\n\nThe label is identified by its **MusicBrainz Label ID**.\n",
+        "operationId": "getMusicLabel",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/music/labels/e832b688-546b-45e3-83e5-9f8db5dcde1d?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\nconst labelId = 'e832b688-546b-45e3-83e5-9f8db5dcde1d';\n\nfetch(`https://webservice.fanart.tv/v3.2/music/labels/${labelId}?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\nlabel_id = 'e832b688-546b-45e3-83e5-9f8db5dcde1d'\n\nurl = f'https://webservice.fanart.tv/v3.2/music/labels/{label_id}'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "MusicBrainz Label ID",
+            "schema": {
+              "type": "string"
+            },
+            "example": "e832b688-546b-45e3-83e5-9f8db5dcde1d"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with label images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelResponse"
+                },
+                "example": {
+                  "name": "Atlantic Records",
+                  "id": "e832b688-546b-45e3-83e5-9f8db5dcde1d",
+                  "musiclabel": [
+                    {
+                      "id": "1",
+                      "url": "https://assets.fanart.tv/fanart/music/labels/atlantic-records.png",
+                      "lang": "en",
+                      "likes": "10",
+                      "colour": "colour"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/movies/latest": {
+      "get": {
+        "tags": [
+          "Latest"
+        ],
+        "summary": "Get recently added movie images",
+        "description": "Retrieve a list of movies with recently added images.\n\nBy default, returns movies updated in the last 2 days. Use the `date` parameter to specify a custom timeframe.\n\nThe response is a 90-day pre-generated file filtered based on your parameters.\n",
+        "operationId": "getLatestMovies",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/movies/latest?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\n\nfetch(`https://webservice.fanart.tv/v3.2/movies/latest?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "Node.js (Axios)",
+            "source": "const axios = require('axios');\n\nconst apiKey = 'YOUR_API_KEY';\n\naxios.get('https://webservice.fanart.tv/v3.2/movies/latest', {\n  params: { api_key: apiKey }\n})\n.then(response => console.log(response.data))\n.catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "php",
+            "label": "PHP",
+            "source": "<?php\n$apiKey = 'YOUR_API_KEY';\n\n$url = \"https://webservice.fanart.tv/v3.2/movies/latest?api_key={$apiKey}\";\n$response = file_get_contents($url);\n$data = json_decode($response, true);\n\nprint_r($data);\n?>\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\n\nurl = 'https://webservice.fanart.tv/v3.2/movies/latest'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          },
+          {
+            "lang": "go",
+            "label": "Go",
+            "source": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"io\"\n    \"net/http\"\n)\n\nfunc main() {\n    apiKey := \"YOUR_API_KEY\"\n    \n    url := fmt.Sprintf(\"https://webservice.fanart.tv/v3.2/movies/latest?api_key=%s\", apiKey)\n    \n    resp, err := http.Get(url)\n    if err != nil {\n        panic(err)\n    }\n    defer resp.Body.Close()\n    \n    body, _ := io.ReadAll(resp.Body)\n    \n    var data []map[string]interface{}\n    json.Unmarshal(body, &data)\n    \n    fmt.Println(data)\n}\n"
+          },
+          {
+            "lang": "ruby",
+            "label": "Ruby",
+            "source": "require 'net/http'\nrequire 'json'\n\napi_key = 'YOUR_API_KEY'\n\nuri = URI(\"https://webservice.fanart.tv/v3.2/movies/latest?api_key=#{api_key}\")\nresponse = Net::HTTP.get(uri)\ndata = JSON.parse(response)\n\nputs data\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Unix timestamp to filter results (returns items updated after this date)",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1699920000
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with latest movies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LatestMovieItem"
+                  }
+                },
+                "example": [
+                  {
+                    "tmdb_id": "550",
+                    "imdb_id": "tt0137523",
+                    "name": "Fight Club",
+                    "new_images": "3",
+                    "total_images": "47"
+                  },
+                  {
+                    "tmdb_id": "680",
+                    "imdb_id": "tt0110912",
+                    "name": "Pulp Fiction",
+                    "new_images": "2",
+                    "total_images": "35"
+                  }
+                ]
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/tv/latest": {
+      "get": {
+        "tags": [
+          "Latest"
+        ],
+        "summary": "Get recently added TV show images",
+        "description": "Retrieve a list of TV shows with recently added images.\n\nBy default, returns TV shows updated in the last 2 days. Use the `date` parameter to specify a custom timeframe.\n",
+        "operationId": "getLatestTV",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/tv/latest?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\n\nfetch(`https://webservice.fanart.tv/v3.2/tv/latest?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\n\nurl = 'https://webservice.fanart.tv/v3.2/tv/latest'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Unix timestamp to filter results (returns items updated after this date)",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1699920000
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with latest TV shows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LatestTVItem"
+                  }
+                },
+                "example": [
+                  {
+                    "id": "81189",
+                    "name": "Breaking Bad",
+                    "new_images": "5",
+                    "total_images": "89"
+                  },
+                  {
+                    "id": "121361",
+                    "name": "Game of Thrones",
+                    "new_images": "4",
+                    "total_images": "156"
+                  }
+                ]
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    },
+    "/{version}/music/latest": {
+      "get": {
+        "tags": [
+          "Latest"
+        ],
+        "summary": "Get recently added music artist images",
+        "description": "Retrieve a list of music artists with recently added images.\n\nBy default, returns artists updated in the last 2 days. Use the `date` parameter to specify a custom timeframe.\n",
+        "operationId": "getLatestMusic",
+        "x-codeSamples": [
+          {
+            "lang": "curl",
+            "label": "cURL",
+            "source": "curl \"https://webservice.fanart.tv/v3.2/music/latest?api_key=YOUR_API_KEY\"\n"
+          },
+          {
+            "lang": "javascript",
+            "label": "JavaScript (Fetch)",
+            "source": "const apiKey = 'YOUR_API_KEY';\n\nfetch(`https://webservice.fanart.tv/v3.2/music/latest?api_key=${apiKey}`)\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error('Error:', error));\n"
+          },
+          {
+            "lang": "python",
+            "label": "Python (Requests)",
+            "source": "import requests\n\napi_key = 'YOUR_API_KEY'\n\nurl = 'https://webservice.fanart.tv/v3.2/music/latest'\nparams = {'api_key': api_key}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nprint(data)\n"
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/ApiKey"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Unix timestamp to filter results (returns items updated after this date)",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1699920000
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with latest music artists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LatestMusicItem"
+                  }
+                },
+                "example": [
+                  {
+                    "id": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9",
+                    "name": "Nirvana",
+                    "new_images": "2",
+                    "total_images": "28"
+                  },
+                  {
+                    "id": "65f4f0c5-ef9e-490c-aee3-909e7ae6b2ab",
+                    "name": "Metallica",
+                    "new_images": "3",
+                    "total_images": "67"
+                  }
+                ]
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "api_key",
+        "description": "**Project API Key** (Project Tier - 7 day delay)\n\nFor applications and projects that integrate the API.\n\nCan be sent as either:\n- Query parameter: `?api_key=YOUR_KEY`\n- HTTP header: `api-key: YOUR_KEY`\n\nGet your key at: https://fanart.tv/get-an-api-key/ (Project API Keys section)\n"
+      },
+      "ClientKeyAuth": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "client_key",
+        "description": "**Personal API Key** (Personal Tier - 2 day delay)\n\nFor end users accessing the API directly.\n\nCan be sent as either:\n- Query parameter: `?client_key=YOUR_KEY` (takes priority over api_key)\n- HTTP header: `client-key: YOUR_KEY` (takes priority over api-key)\n\nGet your key at: https://fanart.tv/get-an-api-key/ (Personal API Keys section)\n\nUpgrade to VIP for immediate access to new images!\n"
+      }
+    },
+    "parameters": {
+      "ApiVersion": {
+        "name": "version",
+        "in": "path",
+        "required": true,
+        "description": "API version",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "v3",
+            "v3.1",
+            "v3.2"
+          ],
+          "default": "v3.2"
+        },
+        "example": "v3.2"
+      },
+      "ApiKey": {
+        "name": "api_key",
+        "in": "query",
+        "required": true,
+        "description": "Your API key",
+        "schema": {
+          "type": "string"
+        },
+        "example": "YOUR_API_KEY_HERE"
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "API key is missing or invalid",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "example": "API key required"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimitError": {
+        "description": "Rate limit exceeded (very rare - most keys have unlimited access)\n\nThis response is only returned when a specific rate limit has been configured for an API key. \nMost users will never encounter this. If you receive this response, wait for the duration \nspecified in the `Retry-After` header before making another request.\n",
+        "headers": {
+          "Retry-After": {
+            "description": "Number of seconds to wait before retrying",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 2
+          },
+          "X-RateLimit-Limit": {
+            "description": "Your configured rate limit (requests per second)",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 10
+          },
+          "X-RateLimit-Remaining": {
+            "description": "Number of requests remaining (will be 0 when rate limited)",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 0
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "example": "Rate limit exceeded"
+                }
+              }
+            },
+            "example": {
+              "error": "Rate limit exceeded. Wait 2 seconds (violation 1)"
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Resource not found\n\n**Version-specific behavior:**\n- **v3**: Returns HTTP 200 with empty object `{}` (legacy behavior for backwards compatibility)\n- **v3.1 & v3.2**: Returns HTTP 404 with error message\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "description": "v3.2 response - HTTP 404 with error message",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Movie not found"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "description": "v3.1 response - HTTP 404 with error message",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Movie not found"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "description": "v3 response - HTTP 200 with empty object",
+                  "example": {}
+                }
+              ]
+            },
+            "examples": {
+              "v32": {
+                "summary": "v3.2 - Returns 404 with error",
+                "value": {
+                  "error": "Movie not found"
+                }
+              },
+              "v31": {
+                "summary": "v3.1 - Returns 404 with error",
+                "value": {
+                  "error": "Movie not found"
+                }
+              },
+              "v3": {
+                "summary": "v3 - Returns 200 with empty object",
+                "value": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ImageV3": {
+        "type": "object",
+        "description": "Basic image object (v3)",
+        "required": [
+          "id",
+          "url",
+          "lang",
+          "likes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique image ID",
+            "example": "123456"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Full URL to the image",
+            "example": "https://assets.fanart.tv/fanart/movies/550/hdmovielogo/fight-club.png"
+          },
+          "lang": {
+            "type": "string",
+            "description": "Language code (ISO 639-1 or '00' for language-neutral)",
+            "example": "en"
+          },
+          "likes": {
+            "type": "string",
+            "description": "Number of likes the image has received",
+            "example": "42"
+          },
+          "disc": {
+            "type": "string",
+            "description": "Disc number (for moviedisc and cdart only)",
+            "example": "1"
+          },
+          "disc_type": {
+            "type": "string",
+            "description": "Disc type (for moviedisc only - 'bluray', 'dvd', '3d')",
+            "example": "bluray"
+          },
+          "size": {
+            "type": "string",
+            "description": "Size indicator for cdart ('450' or '1000')",
+            "example": "1000"
+          },
+          "season": {
+            "type": "string",
+            "description": "Season number (for season-specific images)",
+            "example": "5"
+          }
+        }
+      },
+      "ImageV31": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ImageV3"
+          },
+          {
+            "type": "object",
+            "description": "Image with timestamp (v3.1)",
+            "properties": {
+              "added": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp when image was added",
+                "example": "2019-08-16 22:52:46"
+              }
+            }
+          }
+        ]
+      },
+      "ImageV32": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ImageV31"
+          },
+          {
+            "type": "object",
+            "description": "Image with dimensions (v3.2)",
+            "properties": {
+              "width": {
+                "type": "string",
+                "description": "Image width in pixels",
+                "example": "1920"
+              },
+              "height": {
+                "type": "string",
+                "description": "Image height in pixels",
+                "example": "1080"
+              }
+            }
+          }
+        ]
+      },
+      "MovieResponseV3": {
+        "type": "object",
+        "description": "Movie response (v3)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Fight Club"
+          },
+          "tmdb_id": {
+            "type": "string",
+            "example": "550"
+          },
+          "imdb_id": {
+            "type": "string",
+            "example": "tt0137523"
+          },
+          "hdmovieclearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "moviethumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "moviebanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "moviedisc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "movieposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "hdmovielogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "movielogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "moviebackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          }
+        }
+      },
+      "MovieResponseV31": {
+        "type": "object",
+        "description": "Movie response with timestamps (v3.1)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Fight Club"
+          },
+          "tmdb_id": {
+            "type": "string",
+            "example": "550"
+          },
+          "imdb_id": {
+            "type": "string",
+            "example": "tt0137523"
+          },
+          "hdmovieclearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "moviethumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "moviebanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "moviedisc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "movieposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "hdmovielogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "movielogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "moviebackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          }
+        }
+      },
+      "MovieResponseV32": {
+        "type": "object",
+        "description": "Movie response with dimensions and count (v3.2)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Fight Club"
+          },
+          "tmdb_id": {
+            "type": "string",
+            "example": "550"
+          },
+          "imdb_id": {
+            "type": "string",
+            "example": "tt0137523"
+          },
+          "image_count": {
+            "type": "integer",
+            "description": "Total number of images for this movie",
+            "example": 47
+          },
+          "hdmovieclearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "moviethumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "moviebanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "moviedisc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "movieposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "hdmovielogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "movielogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "moviebackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          }
+        }
+      },
+      "TVResponseV3": {
+        "type": "object",
+        "description": "TV show response (v3)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Breaking Bad"
+          },
+          "thetvdb_id": {
+            "type": "string",
+            "example": "81189"
+          },
+          "hdtvlogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "seasonposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "tvposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "characterart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "clearlogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "seasonthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "showbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "hdclearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "clearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "tvthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "tvbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "seasonbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          }
+        }
+      },
+      "TVResponseV31": {
+        "type": "object",
+        "description": "TV show response with timestamps (v3.1)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Breaking Bad"
+          },
+          "thetvdb_id": {
+            "type": "string",
+            "example": "81189"
+          },
+          "hdtvlogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "seasonposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "tvposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "characterart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "clearlogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "seasonthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "showbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "hdclearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "clearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "tvthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "tvbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "seasonbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          }
+        }
+      },
+      "TVResponseV32": {
+        "type": "object",
+        "description": "TV show response with dimensions and count (v3.2)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Breaking Bad"
+          },
+          "thetvdb_id": {
+            "type": "string",
+            "example": "81189"
+          },
+          "image_count": {
+            "type": "integer",
+            "description": "Total number of images for this TV show",
+            "example": 89
+          },
+          "hdtvlogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "seasonposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "tvposter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "characterart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "clearlogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "seasonthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "showbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "hdclearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "clearart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "tvthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "tvbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "seasonbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          }
+        }
+      },
+      "MusicAlbumV3": {
+        "type": "object",
+        "description": "Album images (v3) - used in object/map structure",
+        "properties": {
+          "cdart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "albumcover": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          }
+        }
+      },
+      "MusicAlbumV31": {
+        "type": "object",
+        "description": "Album images (v3.1) - used in object/map structure",
+        "properties": {
+          "cdart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "albumcover": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          }
+        }
+      },
+      "MusicAlbumV32": {
+        "type": "object",
+        "description": "Album images (v3.2) - used in array structure with explicit ID",
+        "required": [
+          "release_group_id"
+        ],
+        "properties": {
+          "release_group_id": {
+            "type": "string",
+            "description": "MusicBrainz Release Group ID",
+            "example": "1b022e01-4da6-387b-8658-8678046e4cef"
+          },
+          "cdart": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "albumcover": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          }
+        }
+      },
+      "MusicResponseV3": {
+        "type": "object",
+        "description": "Music artist response with albums as object (v3)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Nirvana"
+          },
+          "mbid_id": {
+            "type": "string",
+            "example": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9"
+          },
+          "albums": {
+            "type": "object",
+            "description": "Albums as object/map keyed by release group ID",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MusicAlbumV3"
+            }
+          },
+          "artistbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "artist4kbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "artistthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "hdmusiclogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "musiclogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          },
+          "musicbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV3"
+            }
+          }
+        }
+      },
+      "MusicResponseV31": {
+        "type": "object",
+        "description": "Music artist response with albums as object (v3.1)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Nirvana"
+          },
+          "mbid_id": {
+            "type": "string",
+            "example": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9"
+          },
+          "albums": {
+            "type": "object",
+            "description": "Albums as object/map keyed by release group ID",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MusicAlbumV31"
+            }
+          },
+          "artistbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "artist4kbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "artistthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "hdmusiclogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "musiclogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          },
+          "musicbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV31"
+            }
+          }
+        }
+      },
+      "MusicResponseV32": {
+        "type": "object",
+        "description": "Music artist response with albums as array (v3.2)",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Nirvana"
+          },
+          "mbid_id": {
+            "type": "string",
+            "example": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9"
+          },
+          "image_count": {
+            "type": "integer",
+            "description": "Total number of images for this artist",
+            "example": 28
+          },
+          "albums": {
+            "type": "array",
+            "description": "Albums as array with explicit release_group_id",
+            "items": {
+              "$ref": "#/components/schemas/MusicAlbumV32"
+            }
+          },
+          "artistbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "artist4kbackground": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "artistthumb": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "hdmusiclogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "musiclogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          },
+          "musicbanner": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          }
+        }
+      },
+      "LabelResponse": {
+        "type": "object",
+        "description": "Music label response",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Atlantic Records"
+          },
+          "id": {
+            "type": "string",
+            "example": "e832b688-546b-45e3-83e5-9f8db5dcde1d"
+          },
+          "colour": {
+            "type": "string",
+            "description": "Label color variant",
+            "example": "colour"
+          },
+          "musiclabel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageV32"
+            }
+          }
+        }
+      },
+      "LatestMovieItem": {
+        "type": "object",
+        "description": "Movie with recently added images",
+        "properties": {
+          "tmdb_id": {
+            "type": "string",
+            "example": "550"
+          },
+          "imdb_id": {
+            "type": "string",
+            "example": "tt0137523"
+          },
+          "name": {
+            "type": "string",
+            "example": "Fight Club"
+          },
+          "new_images": {
+            "type": "string",
+            "description": "Number of newly added images",
+            "example": "3"
+          },
+          "total_images": {
+            "type": "string",
+            "description": "Total number of images for this movie",
+            "example": "47"
+          }
+        }
+      },
+      "LatestTVItem": {
+        "type": "object",
+        "description": "TV show with recently added images",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "TheTVDB ID",
+            "example": "81189"
+          },
+          "name": {
+            "type": "string",
+            "example": "Breaking Bad"
+          },
+          "new_images": {
+            "type": "string",
+            "description": "Number of newly added images",
+            "example": "5"
+          },
+          "total_images": {
+            "type": "string",
+            "description": "Total number of images for this TV show",
+            "example": "89"
+          }
+        }
+      },
+      "LatestMusicItem": {
+        "type": "object",
+        "description": "Music artist with recently added images",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "MusicBrainz Artist ID",
+            "example": "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9"
+          },
+          "name": {
+            "type": "string",
+            "example": "Nirvana"
+          },
+          "new_images": {
+            "type": "string",
+            "description": "Number of newly added images",
+            "example": "2"
+          },
+          "total_images": {
+            "type": "string",
+            "description": "Total number of images for this artist",
+            "example": "28"
+          }
+        }
+      }
+    }
+  }
+}

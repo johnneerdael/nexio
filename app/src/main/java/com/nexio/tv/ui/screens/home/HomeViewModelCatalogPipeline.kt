@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.util.Log
+import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
@@ -1272,21 +1273,9 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
     if (activeCatalogItemKeys.isEmpty() && activeContinueWatchingItemKeys.isEmpty()) {
         logStartupPerf("metadata_cleanup_skipped", "reason=active_items_empty")
     } else {
-        metadataDiskCacheStore.replaceHomeFeedReferences(
-            feedKey = "home_catalog_snapshot",
-            itemKeys = activeCatalogItemKeys
-        )
-        metadataDiskCacheStore.replaceHomeFeedReferences(
-            feedKey = "continue_watching",
-            itemKeys = activeContinueWatchingItemKeys
-        )
-        val removedCleanupUrls = metadataDiskCacheStore.removeHomeUnreferencedMetaEntries(
-            maxEntries = 800
-        )
-        homeCatalogRefreshCoordinator.evictCachedImageUrls(removedCleanupUrls)
         logStartupPerf(
             "metadata_cleanup_end",
-            "active_items=${activeCatalogItemKeys.size + activeContinueWatchingItemKeys.size} removed_image_urls=${removedCleanupUrls.size}"
+            "active_items=${activeCatalogItemKeys.size + activeContinueWatchingItemKeys.size} ownership=rail_store"
         )
     }
     Log.d(
@@ -1905,6 +1894,10 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             homeSnapshotPersistGeneration += 1
             hasPersistedCatalogSnapshot = false
             restoredCatalogSnapshotActive = false
+            integrationOwnershipService.syncRails(
+                RailKeyFactory.homeCatalogNamespace(profileManager.activeProfileId.value),
+                emptyList()
+            )
             homeCatalogSnapshotStore.clear(profileId = profileManager.activeProfileId.value)
             truncatedRowCache.clear()
             hasRenderedFirstCatalog = false
@@ -1944,6 +1937,10 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             lastCatalogComputationSignature = null
             lastCatalogOrderDiagnosticsSignature = null
             restoredCatalogSnapshotActive = false
+            integrationOwnershipService.syncRails(
+                RailKeyFactory.homeCatalogNamespace(profileManager.activeProfileId.value),
+                emptyList()
+            )
             homeCatalogSnapshotStore.clear(profileId = profileManager.activeProfileId.value)
             trailerPreviewLoadingIds.clear()
             trailerPreviewNegativeCache.clear()
@@ -2948,6 +2945,14 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         if (!isCurrentHomeProfileGeneration(profileGeneration)) return@launch
         val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
         val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
+        integrationOwnershipService.syncRails(
+            RailKeyFactory.homeCatalogNamespace(profileId),
+            homeCatalogSnapshotStore.buildRailMemberships(
+                snapshot = latestSnapshot,
+                posterProviderToken = posterToken,
+                profileId = profileId
+            )
+        )
         homeCatalogSnapshotStore.write(latestSnapshot, posterToken, profileId = profileId)
         val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId) ?: latestSnapshot
         Log.d(
@@ -2957,17 +2962,6 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
                 "readbackRows=${persistedSnapshot.catalogRows.size} readbackFullRows=${persistedSnapshot.fullCatalogRows.size} " +
                 "readbackHero=${persistedSnapshot.heroItems.size} readbackOrderedKeys=${persistedSnapshot.orderedGroupKeys.size}"
         )
-        val referencedItemKeys = latestSnapshot.fullCatalogRows
-            .asSequence()
-            .flatMap { row -> row.items.asSequence() }
-            .map { item -> "${item.apiType}:${item.id}" }
-            .toSet()
-        metadataDiskCacheStore.replaceHomeFeedReferences(
-            feedKey = "home_catalog_snapshot",
-            itemKeys = referencedItemKeys
-        )
-        val removedImageUrls = metadataDiskCacheStore.removeHomeUnreferencedMetaEntries(maxEntries = 800)
-        homeCatalogRefreshCoordinator.evictCachedImageUrls(removedImageUrls)
         withContext(Dispatchers.Main.immediate) {
             if (!isCurrentHomeProfileGeneration(profileGeneration)) return@withContext
             if (homeSnapshotPersistGeneration == persistGeneration) {

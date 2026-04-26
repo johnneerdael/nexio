@@ -20,6 +20,8 @@ class IntegrationStreamRuntimeTest {
         val result = fixture.runtime.open(
             IntegrationStreamSpec(
                 provider = IntegrationProvider.REAL_DEBRID,
+                apiShapeId = DebridApiShapes.REAL_DEBRID_TORRENT_INFO,
+                operationKey = "test:stream:success",
                 workClass = IntegrationWorkClass.PLAYBACK_CRITICAL,
                 open = {
                     opens.incrementAndGet()
@@ -43,6 +45,8 @@ class IntegrationStreamRuntimeTest {
         val result = fixture.runtime.open(
             IntegrationStreamSpec(
                 provider = IntegrationProvider.REAL_DEBRID,
+                apiShapeId = DebridApiShapes.REAL_DEBRID_TORRENT_INFO,
+                operationKey = "test:stream:playback-blocked",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 open = {
                     opens.incrementAndGet()
@@ -71,6 +75,8 @@ class IntegrationStreamRuntimeTest {
         val result = fixture.runtime.open(
             IntegrationStreamSpec(
                 provider = IntegrationProvider.REAL_DEBRID,
+                apiShapeId = DebridApiShapes.REAL_DEBRID_TORRENT_INFO,
+                operationKey = "test:stream:backoff-blocked",
                 workClass = IntegrationWorkClass.PLAYBACK_CRITICAL,
                 open = {
                     opens.incrementAndGet()

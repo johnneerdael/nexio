@@ -7,10 +7,11 @@ import com.nexio.tv.core.tvdb.TvdbTrailerCandidate
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
 import com.nexio.tv.core.tvdb.TvdbTrailerUsability
+import com.nexio.tv.data.integration.trailer.TrailerBackendProvider
+import com.nexio.tv.data.integration.trailer.TrailerTmdbProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
-import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -194,7 +195,6 @@ class TrailerServiceTvdbTest {
     // --- TrailerService TVDB integration tests (updated in Task 2) ---
 
     private fun createTrailerService(
-        trailerApi: TrailerApi = mockk(relaxed = true),
         tmdbApi: TmdbApi = mockk(relaxed = true),
         inAppYouTubeExtractor: InAppYouTubeExtractor = mockk(relaxed = true),
         tmdbSettingsDataStore: TmdbSettingsDataStore = mockk<TmdbSettingsDataStore>().also {
@@ -207,12 +207,14 @@ class TrailerServiceTvdbTest {
         tvdbTrailerResolver: TvdbTrailerResolver? = null
     ): TrailerService {
         return TrailerService(
-            trailerApi = trailerApi,
-            tmdbApi = tmdbApi,
+            trailerBackendProvider = mockk<TrailerBackendProvider>(relaxed = true),
             inAppYouTubeExtractor = inAppYouTubeExtractor,
-            tmdbSettingsDataStore = tmdbSettingsDataStore,
-            metadataDiskCacheStore = metadataDiskCacheStore,
             tmdbMetadataService = tmdbMetadataService,
+            trailerTmdbProvider = TrailerTmdbProvider(
+                tmdbIntegrationProvider = mockk(relaxed = true),
+                metadataDiskCacheStore = metadataDiskCacheStore,
+                tmdbSettingsDataStore = tmdbSettingsDataStore
+            ),
             addonRepository = addonRepository,
             streamRepository = streamRepository,
             clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC),

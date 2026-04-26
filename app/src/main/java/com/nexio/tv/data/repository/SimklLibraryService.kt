@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklLibrarySnapshotStore
@@ -10,7 +12,7 @@ import com.nexio.tv.data.remote.dto.simkl.SimklHistoryRemoveRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklIdsDto
 import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
 import com.nexio.tv.data.repository.simkl.SimklLibraryMutationAdapter
-import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -43,10 +45,11 @@ import javax.inject.Singleton
 class SimklLibraryService @Inject constructor(
     private val remote: SimklTrackingRemoteDataSource,
     private val simklAuthDataStore: SimklAuthDataStore,
-    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
+    private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
     private val snapshotStore: SimklLibrarySnapshotStore,
     private val metaRepository: MetaRepository,
-    private val profileManager: ProfileManager? = null
+    private val profileManager: ProfileManager? = null,
+    private val ownershipService: IntegrationOwnershipService? = null
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
@@ -806,38 +809,40 @@ class SimklLibraryService @Inject constructor(
         lastAutoRefreshMs = 0L
     }
 
-    private fun persistSnapshot(
+    private suspend fun persistSnapshot(
         snapshot: Snapshot,
         metadata: Map<String, LibraryMetadata>,
         profileId: Int = activeProfileId(),
         timestamps: ActivityTimestamps = currentActivityTimestamps()
     ) {
-        snapshotStore.write(
-            SimklLibrarySnapshotStore.Snapshot(
-                listTabs = snapshot.listTabs,
-                entriesByList = snapshot.entriesByList,
-                metadataByContentKey = metadata.mapValues { (_, value) ->
-                    SimklLibrarySnapshotStore.PersistedLibraryMetadata(
-                        name = value.name,
-                        poster = value.poster,
-                        background = value.background,
-                        logo = value.logo,
-                        description = value.description,
-                        releaseInfo = value.releaseInfo,
-                        imdbRating = value.imdbRating,
-                        genres = value.genres
-                    )
-                },
-                updatedAtMs = snapshot.updatedAtMs,
-                lastTvShowsAllAt = timestamps.lastTvShowsAllAt,
-                lastMoviesAllAt = timestamps.lastMoviesAllAt,
-                lastAnimeAllAt = timestamps.lastAnimeAllAt,
-                lastTvShowsRemovedFromListAt = timestamps.lastTvShowsRemovedFromListAt,
-                lastMoviesRemovedFromListAt = timestamps.lastMoviesRemovedFromListAt,
-                lastAnimeRemovedFromListAt = timestamps.lastAnimeRemovedFromListAt
-            ),
-            profileId
+        val persisted = SimklLibrarySnapshotStore.Snapshot(
+            listTabs = snapshot.listTabs,
+            entriesByList = snapshot.entriesByList,
+            metadataByContentKey = metadata.mapValues { (_, value) ->
+                SimklLibrarySnapshotStore.PersistedLibraryMetadata(
+                    name = value.name,
+                    poster = value.poster,
+                    background = value.background,
+                    logo = value.logo,
+                    description = value.description,
+                    releaseInfo = value.releaseInfo,
+                    imdbRating = value.imdbRating,
+                    genres = value.genres
+                )
+            },
+            updatedAtMs = snapshot.updatedAtMs,
+            lastTvShowsAllAt = timestamps.lastTvShowsAllAt,
+            lastMoviesAllAt = timestamps.lastMoviesAllAt,
+            lastAnimeAllAt = timestamps.lastAnimeAllAt,
+            lastTvShowsRemovedFromListAt = timestamps.lastTvShowsRemovedFromListAt,
+            lastMoviesRemovedFromListAt = timestamps.lastMoviesRemovedFromListAt,
+            lastAnimeRemovedFromListAt = timestamps.lastAnimeRemovedFromListAt
         )
+        ownershipService?.syncRails(
+            RailKeyFactory.simklLibraryNamespace(profileId),
+            snapshotStore.buildRailMemberships(persisted, profileId)
+        )
+        snapshotStore.write(persisted, profileId)
     }
 
     private fun currentActivityTimestamps(): ActivityTimestamps {

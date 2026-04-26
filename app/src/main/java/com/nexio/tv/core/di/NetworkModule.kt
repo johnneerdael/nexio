@@ -5,23 +5,32 @@ import android.util.Log
 import com.nexio.tv.core.metadata.MetadataProviderConfig
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
+import com.nexio.tv.core.integration.IntegrationHostClassifier
+import com.nexio.tv.core.integration.IntegrationNetworkPermitInterceptor
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
 import com.nexio.tv.data.remote.api.ArmApi
+import com.nexio.tv.data.integration.imdb.transport.ImdbSearchRestTransport
+import com.nexio.tv.data.integration.imdb.transport.ImdbSearchWebSocketTransport
+import com.nexio.tv.data.integration.imdb.transport.OkHttpImdbSearchRestTransport
+import com.nexio.tv.data.integration.imdb.transport.OkHttpImdbSearchWebSocketTransport
+import com.nexio.tv.data.integration.debrid.transport.DirectDiscardBenchmarkTransport
+import com.nexio.tv.data.integration.youtube.transport.OkHttpYouTubeTrailerTransport
+import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransport
 import com.nexio.tv.data.remote.CustomImdbClient
 import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.OkHttpImdbSearchService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransport
-import com.nexio.tv.data.repository.benchmark.DirectDiscardBenchmarkTransport
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.KitsuApi
 import com.nexio.tv.data.remote.api.KitsuAuthApi
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.OkHttpCustomImdbClient
+import com.nexio.tv.data.integration.imdb.CustomImdbRatingsIntegrationProvider
 import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
@@ -32,6 +41,7 @@ import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TorBoxApi
 import com.nexio.tv.data.remote.api.TvdbApi
+import com.nexio.tv.core.network.IPv4FirstDns
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -95,6 +105,12 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(
+            IntegrationNetworkPermitInterceptor(
+                hostClassifier = IntegrationHostClassifier.default(),
+                mode = IntegrationNetworkPermitInterceptor.Mode.AUDIT_ONLY
+            )
+        )
         .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -584,10 +600,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideCustomImdbClient(
-        okHttpClient: OkHttpClient,
+        integrationProvider: CustomImdbRatingsIntegrationProvider,
         moshi: Moshi
     ): CustomImdbClient = OkHttpCustomImdbClient(
-        okHttpClient = okHttpClient,
+        integrationProvider = integrationProvider,
         moshi = moshi
     )
 
@@ -687,9 +703,61 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideImdbSearchService(
+    fun provideImdbSearchRestTransport(
         okHttpClient: OkHttpClient,
+    ): ImdbSearchRestTransport = OkHttpImdbSearchRestTransport(okHttpClient = okHttpClient)
+
+    @Provides
+    @Singleton
+    fun provideImdbSearchWebSocketTransport(
+        okHttpClient: OkHttpClient
+    ): ImdbSearchWebSocketTransport = OkHttpImdbSearchWebSocketTransport(okHttpClient = okHttpClient)
+
+    @Provides
+    @Singleton
+    @Named("youtubeTrailer.main")
+    fun provideYouTubeTrailerMainOkHttpClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .dns(IPv4FirstDns())
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+
+    @Provides
+    @Singleton
+    @Named("youtubeTrailer.probe")
+    fun provideYouTubeTrailerProbeOkHttpClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .dns(IPv4FirstDns())
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(2, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideYouTubeTrailerTransport(
+        @Named("youtubeTrailer.main") mainClient: OkHttpClient,
+        @Named("youtubeTrailer.probe") probeClient: OkHttpClient
+    ): YouTubeTrailerTransport = OkHttpYouTubeTrailerTransport(
+        mainClient = mainClient,
+        probeClient = probeClient
+    )
+
+    @Provides
+    @Singleton
+    fun provideImdbSearchService(
+        imdbSearchRestTransport: ImdbSearchRestTransport,
+        imdbSearchWebSocketTransport: ImdbSearchWebSocketTransport,
         moshi: Moshi
-    ): ImdbSearchService = OkHttpImdbSearchService(okHttpClient = okHttpClient, moshi = moshi)
+    ): ImdbSearchService = OkHttpImdbSearchService(
+        imdbSearchRestTransport = imdbSearchRestTransport,
+        imdbSearchWebSocketTransport = imdbSearchWebSocketTransport,
+        moshi = moshi
+    )
 
 }

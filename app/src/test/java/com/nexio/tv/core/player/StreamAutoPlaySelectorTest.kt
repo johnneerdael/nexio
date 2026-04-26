@@ -7,11 +7,12 @@ import com.nexio.tv.domain.model.StreamBehaviorHints
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import kotlinx.coroutines.test.runTest
 
 class StreamAutoPlaySelectorTest {
 
     @Test
-    fun `bingeGroup-first selects matching stream before first stream mode`() {
+    fun `bingeGroup-first selects matching stream before first stream mode`() = runTest {
         val first = stream(
             addonName = "AddonA",
             url = "https://example.com/first.m3u8",
@@ -39,7 +40,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `falls back to normal mode when no bingeGroup match exists`() {
+    fun `falls back to normal mode when no bingeGroup match exists`() = runTest {
         val first = stream(
             addonName = "AddonA",
             url = "https://example.com/first.m3u8",
@@ -67,7 +68,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `bingeGroup-first respects installed addon source filter`() {
+    fun `bingeGroup-first respects installed addon source filter`() = runTest {
         val filteredOutAddonMatch = stream(
             addonName = "AddonFilteredOut",
             url = "https://example.com/addon-match.m3u8",
@@ -93,7 +94,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `regex mode still works when bingeGroup missing or no match`() {
+    fun `regex mode still works when bingeGroup missing or no match`() = runTest {
         val nonMatch = stream(
             addonName = "AddonA",
             url = "https://example.com/a.m3u8",
@@ -119,7 +120,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `blank preferredBingeGroup behaves as disabled`() {
+    fun `blank preferredBingeGroup behaves as disabled`() = runTest {
         val first = stream(
             addonName = "AddonA",
             url = "https://example.com/first.m3u8",
@@ -145,7 +146,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `bingeGroup matching ignores case and surrounding whitespace`() {
+    fun `bingeGroup matching ignores case and surrounding whitespace`() = runTest {
         val preferred = stream(
             addonName = "AddonA",
             url = "https://example.com/preferred.m3u8",
@@ -171,7 +172,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `fallback bingeGroup matches equivalent parsed releases when addon omits bingeGroup`() {
+    fun `fallback bingeGroup matches equivalent parsed releases when addon omits bingeGroup`() = runTest {
         val current = stream(
             addonName = "AddonA",
             url = "https://example.com/current.m3u8",
@@ -202,7 +203,7 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `manual mode remains manual even with matching bingeGroup`() {
+    fun `manual mode remains manual even with matching bingeGroup`() = runTest {
         val matched = stream(
             addonName = "AddonA",
             url = "https://example.com/match.m3u8",
@@ -220,6 +221,32 @@ class StreamAutoPlaySelectorTest {
         )
 
         assertNull(selected)
+    }
+
+    @Test
+    fun `regex mode uses caller supplied probe for url viability`() = runTest {
+        val rejected = stream(
+            addonName = "AddonA",
+            url = "https://example.com/rejected.m3u8",
+            name = "2160p Remux"
+        )
+        val accepted = stream(
+            addonName = "AddonB",
+            url = "https://example.com/accepted.m3u8",
+            name = "2160p Remux"
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(rejected, accepted),
+            mode = StreamAutoPlayMode.REGEX_MATCH,
+            regexPattern = "2160p|Remux",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AddonA", "AddonB"),
+            selectedAddons = emptySet(),
+            probeUrlWorks = { url -> url.contains("accepted") }
+        )
+
+        assertEquals(accepted, selected)
     }
 
     private fun stream(

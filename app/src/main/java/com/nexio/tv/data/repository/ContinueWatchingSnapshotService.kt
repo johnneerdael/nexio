@@ -1,6 +1,14 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.integration.ActiveRailTracker
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.integration.RailMembership
+import com.nexio.tv.data.local.integration.MediaIdentityEntity
+import com.nexio.tv.data.local.integration.RailCacheEntity
+import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
@@ -83,7 +91,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val snapshotStore: ContinueWatchingSnapshotStore,
     private val airScheduler: ContinueWatchingAirScheduler = NoopContinueWatchingAirScheduler,
-    private val profileManager: ProfileManager? = null
+    private val profileManager: ProfileManager? = null,
+    private val ownershipService: IntegrationOwnershipService? = null,
+    private val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
+    private val identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver()
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
@@ -161,7 +172,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         val empty = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
                         rawSnapshotState.value = empty
                         snapshotState.value = empty
-                        metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
+                        ownershipService?.removeRail(RailKeyFactory.continueWatching(profileId))
                         lastRefreshRequestMs = 0L
                         cancelReemitScheduling()
                         hasSeenAuthenticatedSession = false
@@ -495,8 +506,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     fun invalidateLocalizedMetadata() {
         trackingProgressService.invalidateLocalizedMetadata()
-        snapshotStore.clear(activeProfileId())
-        metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
+        val profileId = activeProfileId()
+        snapshotStore.clear(profileId)
+        scope.launch { ownershipService?.removeRail(RailKeyFactory.continueWatching(profileId)) }
         cancelReemitScheduling()
         scope.launch {
             rawSnapshotState.update { owned ->
@@ -761,17 +773,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             snapshot = normalized,
             fallbackMetadata = rawSnapshotState.value.snapshot.displayMetadataByItemKey
         )
-        val referencedItemKeys = buildSet {
-            hydrated.resumeItems.forEach { progress ->
-                add(homeDisplayItemKey(progress.contentType, progress.contentId))
-            }
-            hydrated.nextUpItems.forEach { entry ->
-                add(homeDisplayItemKey(entry.contentType, entry.contentId))
-            }
-            hydrated.traktUpNextItems.forEach { entry ->
-                add(homeDisplayItemKey(entry.contentType, entry.contentId))
-            }
-        }
+        syncContinueWatchingRail(hydrated, profileId)
         snapshotStore.write(hydrated, profileId = profileId)
         if (!isActiveProfile(profileId)) {
             Log.d("ContinueWatching", "Skipping stale continue watching publish for profile=$profileId")
@@ -779,13 +781,69 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = hydrated)
         rawSnapshotState.value = owned
-        metadataDiskCacheStore.replaceHomeFeedReferences(
-            feedKey = "continue_watching",
-            itemKeys = referencedItemKeys
-        )
-        metadataDiskCacheStore.removeHomeUnreferencedMetaEntries()
+        activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
         lastRefreshRequestMs = hydrated.updatedAtMs
         return true
+    }
+
+    private suspend fun syncContinueWatchingRail(
+        snapshot: ContinueWatchingSnapshot,
+        profileId: Int
+    ) {
+        val ownership = ownershipService ?: return
+        val now = System.currentTimeMillis()
+        val railKey = RailKeyFactory.continueWatching(profileId)
+        val resolvedItems = linkedMapOf<String, com.nexio.tv.core.integration.ResolvedRailMediaIdentity>()
+        snapshot.resumeItems.forEach { progress ->
+            val display = snapshot.displayMetadataByItemKey[
+                homeDisplayItemKey(progress.contentType, progress.contentId)
+            ]
+            val resolved = identityResolver.fromWatchProgress(
+                progress = progress,
+                title = display?.title ?: progress.name,
+                year = parseYear(display?.releaseInfo),
+                updatedAtEpochMs = now
+            )
+            resolvedItems.putIfAbsent(resolved.mediaIdentity.mediaKey, resolved)
+        }
+        (snapshot.nextUpItems + snapshot.traktUpNextItems).forEach { entry ->
+            val display = snapshot.displayMetadataByItemKey[
+                homeDisplayItemKey(entry.contentType, entry.contentId)
+            ]
+            val resolved = identityResolver.fromRawContent(
+                mediaType = entry.contentType,
+                rawId = entry.contentId,
+                title = display?.title ?: entry.name,
+                year = parseYear(display?.releaseInfo),
+                traktId = entry.traktShowId?.toString(),
+                updatedAtEpochMs = now
+            )
+            resolvedItems.putIfAbsent(resolved.mediaIdentity.mediaKey, resolved)
+        }
+        ownership.upsertRailMembership(
+            RailMembership(
+                rail = RailCacheEntity(
+                    railKey = railKey,
+                    provider = "LOCAL",
+                    kind = "CONTINUE_WATCHING",
+                    paramsHash = "profile:$profileId",
+                    fetchedAtEpochMs = now,
+                    expiresAtEpochMs = now + minRefreshIntervalMs,
+                    staleUntilEpochMs = now + REFRESH_FAILURE_RETRY_MS
+                ),
+                items = resolvedItems.values.mapIndexed { index, resolved ->
+                    RailItemEntity(
+                        key = "$railKey#${resolved.mediaIdentity.mediaKey}",
+                        railKey = railKey,
+                        mediaKey = resolved.mediaIdentity.mediaKey,
+                        position = index,
+                        updatedAtEpochMs = now
+                    )
+                },
+                mediaIdentities = resolvedItems.values.map { it.mediaIdentity },
+                externalIds = resolvedItems.values.flatMap { it.externalIds }
+            )
+        )
     }
 
     private suspend fun updateSnapshot(
@@ -799,6 +857,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    private fun parseYear(value: String?): Int? =
+        Regex("(\\d{4})").find(value.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     private fun activeProfileIdFlow(): Flow<Int> = profileManager?.activeProfileId ?: flowOf(1)
 

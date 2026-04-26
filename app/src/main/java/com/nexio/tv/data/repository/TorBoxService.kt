@@ -1,7 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
-import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.debrid.TorBoxIntegrationProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,7 @@ data class TorBoxAccountState(
 
 @Singleton
 class TorBoxService @Inject constructor(
-    private val torBoxApi: TorBoxApi,
+    private val torBoxIntegrationProvider: TorBoxIntegrationProvider,
     private val torBoxSettingsDataStore: TorBoxSettingsDataStore
 ) {
     private val _accountState = MutableStateFlow(TorBoxAccountState())
@@ -37,30 +38,64 @@ class TorBoxService @Inject constructor(
             return Result.success(cleared)
         }
 
-        val response = runCatching {
-            torBoxApi.getCurrentUser(authorization = "Bearer $apiKey")
-        }.getOrElse { error ->
-            return Result.failure(
-                IllegalStateException(error.message ?: "Failed to contact TorBox")
-            )
-        }
+        return when (val result = torBoxIntegrationProvider.fetchAccountInfo(apiKey)) {
+            is IntegrationCallResult.Success -> {
+                val body = result.value
+                if (body?.success != true) {
+                    val errorMessage = "Invalid TorBox API key"
+                    _accountState.value = TorBoxAccountState(
+                        apiKey = apiKey,
+                        isConnected = false,
+                        errorMessage = errorMessage
+                    )
+                    Result.failure(IllegalStateException(errorMessage))
+                } else {
+                    torBoxSettingsDataStore.setApiKey(apiKey)
+                    val state = TorBoxAccountState(
+                        apiKey = apiKey,
+                        email = body.data?.email,
+                        plan = body.data?.plan,
+                        isConnected = true
+                    )
+                    _accountState.value = state
+                    Result.success(state)
+                }
+            }
 
-        val body = response.body()
-        if (!response.isSuccessful || body?.success == false) {
-            return Result.failure(
-                IllegalStateException(body?.detail ?: body?.error ?: "Invalid TorBox API key")
+            is IntegrationCallResult.NetworkError -> Result.failure(
+                run {
+                    val errorMessage = result.throwable.message ?: "Failed to contact TorBox"
+                    _accountState.value = TorBoxAccountState(
+                        apiKey = apiKey,
+                        isConnected = false,
+                        errorMessage = errorMessage
+                    )
+                    IllegalStateException(errorMessage)
+                }
             )
-        }
 
-        torBoxSettingsDataStore.setApiKey(apiKey)
-        val state = TorBoxAccountState(
-            apiKey = apiKey,
-            email = body?.data?.email,
-            plan = body?.data?.plan,
-            isConnected = true
-        )
-        _accountState.value = state
-        return Result.success(state)
+            is IntegrationCallResult.HttpError -> Result.failure(
+                run {
+                    val errorMessage = result.reason ?: "Invalid TorBox API key"
+                    _accountState.value = TorBoxAccountState(
+                        apiKey = apiKey,
+                        isConnected = false,
+                        errorMessage = errorMessage
+                    )
+                    IllegalStateException(errorMessage)
+                }
+            )
+
+            else -> {
+                val errorMessage = "Invalid TorBox API key"
+                _accountState.value = TorBoxAccountState(
+                    apiKey = apiKey,
+                    isConnected = false,
+                    errorMessage = errorMessage
+                )
+                Result.failure(IllegalStateException(errorMessage))
+            }
+        }
     }
 
     suspend fun refreshAccountState() {
@@ -70,15 +105,12 @@ class TorBoxService @Inject constructor(
             return
         }
 
-        val response = runCatching {
-            torBoxApi.getCurrentUser(authorization = "Bearer $apiKey")
-        }.getOrNull()
-        val body = response?.body()
-        if (response?.isSuccessful == true && body?.success != false) {
+        val result = torBoxIntegrationProvider.fetchAccountInfo(apiKey)
+        if (result is IntegrationCallResult.Success && result.value?.success == true) {
             _accountState.value = TorBoxAccountState(
                 apiKey = apiKey,
-                email = body?.data?.email,
-                plan = body?.data?.plan,
+                email = result.value?.data?.email,
+                plan = result.value?.data?.plan,
                 isConnected = true
             )
             return
@@ -87,7 +119,10 @@ class TorBoxService @Inject constructor(
         _accountState.value = TorBoxAccountState(
             apiKey = apiKey,
             isConnected = false,
-            errorMessage = body?.detail ?: body?.error ?: "TorBox authentication failed"
+            errorMessage = when (result) {
+                is IntegrationCallResult.HttpError -> result.reason ?: "TorBox authentication failed"
+                else -> "TorBox authentication failed"
+            }
         )
     }
 }

@@ -40,7 +40,7 @@ class TraktMutationRoutingAuditTest {
     private fun findTrackedMutationCallSites(): List<MutationCallSite> {
         val regex = Regex("""traktApi\.(\w+)\(""")
         return repositoryDir
-            .resolve("app/src/main/java/com/nexio/tv/data/repository")
+            .resolve("app/src/main/java/com/nexio/tv/data/integration/trakt")
             .walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file ->
@@ -68,7 +68,7 @@ class TraktMutationRoutingAuditTest {
         private val repositoryDir: File = sequenceOf(File("."), File(".."))
             .map { it.absoluteFile.normalize() }
             .firstOrNull { candidate ->
-                candidate.resolve("app/src/main/java/com/nexio/tv/data/repository").isDirectory
+	                candidate.resolve("app/src/main/java/com/nexio/tv/data/integration/trakt").isDirectory
             }
             ?: error("Unable to resolve repository root for Trakt mutation routing audit")
 
@@ -92,25 +92,22 @@ class TraktMutationRoutingAuditTest {
         )
 
         private val expectedCallSiteCounts = sortedMapOf(
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:addToWatchlist" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:addUserListItems" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:createUserList" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:deleteUserList" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:removeFromWatchlist" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:removeUserListItems" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:reorderUserLists" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:updateUserList" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt:addHistory" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:addHistory" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt:deletePlayback" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:deletePlayback" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt:removeHistory" to 2,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:removeHistory" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:checkin" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobblePause" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobbleStart" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobbleStop" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt:hideRecommendation" to 1
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:addHistory" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:addToWatchlist" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:addUserListItems" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:checkin" to 1,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:createUserList" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:deletePlayback" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:deleteUserList" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:hideRecommendation" to 1,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:removeFromWatchlist" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:removeHistory" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:removeUserListItems" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:reorderUserLists" to 2,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:scrobblePause" to 1,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:scrobbleStart" to 1,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:scrobbleStop" to 1,
+            "app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt:updateUserList" to 2
         )
     }
 }

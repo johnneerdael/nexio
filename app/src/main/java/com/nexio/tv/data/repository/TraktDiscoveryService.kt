@@ -5,12 +5,12 @@ import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.trakt.TraktDiscoveryMutationAdapter
 import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
@@ -127,8 +127,8 @@ private fun TraktDiscoverySnapshot.hasConfiguredDiscoveryContent(
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class TraktDiscoveryService @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
+    private val traktAuthService: TraktRepositoryAuthGateway,
+    private val traktIntegrationProvider: TraktIntegrationProvider,
     private val metaRepository: MetaRepository,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
@@ -391,7 +391,10 @@ class TraktDiscoveryService @Inject constructor(
     suspend fun dismissRecommendation(ref: TraktRecommendationRef) = withContext(Dispatchers.IO) {
         runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
-                TraktDiscoveryMutationAdapter.buildDismissRecommendationEnvelope(ref)
+                TraktDiscoveryMutationAdapter.buildDismissRecommendationEnvelope(
+                    ref = ref,
+                    profileId = traktIntegrationProvider.currentTraktProfileId()
+                )
             )
         }.onFailure { error ->
             Log.w("TraktDiscoveryService", "Failed to enqueue recommendation dismissal: ${error.message}")
@@ -440,117 +443,64 @@ class TraktDiscoveryService @Inject constructor(
     }
 
     private suspend fun fetchRecommendations(type: String): List<Pair<MetaPreview, TraktRecommendationRef>> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getRecommendations(
-                authorization = authHeader,
-                type = type,
-                limit = maxItemsPerRail
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchRecommendations(
+            type = type,
+            limit = maxItemsPerRail
+        ).orEmpty()
             .mapNotNull { dto -> mapRecommendationItem(dto) }
             .take(maxItemsPerRail)
     }
 
     private suspend fun fetchCalendarShows(days: Int): List<MetaPreview> {
         val startDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getMyShowsCalendar(
-                authorization = authHeader,
-                startDate = startDate,
-                days = days
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchCalendarShows(
+            startDate = startDate,
+            days = days
+        ).orEmpty()
             .mapNotNull { dto -> mapCalendarEpisodeItem(dto) }
             .take(maxItemsPerRail)
     }
 
     private suspend fun fetchTrendingMovies(): List<MetaPreview> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getTrendingMovies(
-                authorization = authHeader,
-                limit = maxItemsPerRail
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchTrendingMovies(limit = maxItemsPerRail).orEmpty()
             .mapNotNull { it.movie }
             .mapNotNull { movie -> mapMovieDto(movie) }
             .take(maxItemsPerRail)
     }
 
     private suspend fun fetchTrendingShows(): List<MetaPreview> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getTrendingShows(
-                authorization = authHeader,
-                limit = maxItemsPerRail
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchTrendingShows(limit = maxItemsPerRail).orEmpty()
             .mapNotNull { it.show }
             .mapNotNull { show -> mapShowDto(show) }
             .take(maxItemsPerRail)
     }
 
     private suspend fun fetchPopularMovies(): List<MetaPreview> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getPopularMovies(
-                authorization = authHeader,
-                limit = maxItemsPerRail
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchPopularMovies(limit = maxItemsPerRail).orEmpty()
             .mapNotNull { movie -> mapMovieDto(movie) }
             .take(maxItemsPerRail)
     }
 
     private suspend fun fetchPopularShows(): List<MetaPreview> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getPopularShows(
-                authorization = authHeader,
-                limit = maxItemsPerRail
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchPopularShows(limit = maxItemsPerRail).orEmpty()
             .mapNotNull { show -> mapShowDto(show) }
             .take(maxItemsPerRail)
     }
 
     private suspend fun fetchPopularLists(): List<TraktPopularListOption> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getPopularLists(
-                authorization = authHeader,
-                page = 1,
-                limit = 30
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchPopularLists(
+            page = 1,
+            limit = 30
+        ).orEmpty()
             .mapNotNull { dto -> mapPopularListOption(dto) }
     }
 
     private suspend fun fetchPersonalListOptions(): List<TraktPopularListOption> {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getUserLists(
-                authorization = authHeader,
-                id = ME_PATH
-            )
-        } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-
         val authState = traktAuthService.getCurrentAuthState()
         val ownerKey = authState.userSlug?.takeIf { it.isNotBlank() }
             ?: authState.username?.takeIf { it.isNotBlank() }
             ?: ME_PATH
-        return response.body().orEmpty()
+        return traktIntegrationProvider.fetchUserLists(ME_PATH).orEmpty()
             .filter { it.type.equals("personal", ignoreCase = true) }
             .mapNotNull { dto -> mapPersonalListOption(dto, ownerKey) }
     }
@@ -590,39 +540,27 @@ class TraktDiscoveryService @Inject constructor(
         option: TraktPopularListOption,
         selectedKey: String = option.key
     ): List<TraktCustomListCatalog> {
-        val movieItems = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getUserListItems(
-                authorization = authHeader,
-                id = option.userId,
-                listId = option.listId,
-                type = "movies"
-            )
-        }?.takeIf { it.isSuccessful }?.body().orEmpty()
+        val movieItems = traktIntegrationProvider.fetchUserListItems(
+            id = option.userId,
+            listId = option.listId,
+            type = "movies"
+        ).orEmpty()
 
-        val showItems = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getUserListItems(
-                authorization = authHeader,
-                id = option.userId,
-                listId = option.listId,
-                type = "shows"
-            )
-        }?.takeIf { it.isSuccessful }?.body().orEmpty()
-        val seasonItems = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getUserListItems(
-                authorization = authHeader,
-                id = option.userId,
-                listId = option.listId,
-                type = "seasons"
-            )
-        }?.takeIf { it.isSuccessful }?.body().orEmpty()
-        val episodeItems = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getUserListItems(
-                authorization = authHeader,
-                id = option.userId,
-                listId = option.listId,
-                type = "episodes"
-            )
-        }?.takeIf { it.isSuccessful }?.body().orEmpty()
+        val showItems = traktIntegrationProvider.fetchUserListItems(
+            id = option.userId,
+            listId = option.listId,
+            type = "shows"
+        ).orEmpty()
+        val seasonItems = traktIntegrationProvider.fetchUserListItems(
+            id = option.userId,
+            listId = option.listId,
+            type = "seasons"
+        ).orEmpty()
+        val episodeItems = traktIntegrationProvider.fetchUserListItems(
+            id = option.userId,
+            listId = option.listId,
+            type = "episodes"
+        ).orEmpty()
 
         val movies = movieItems.mapNotNull { mapListMovieItem(it) }.take(maxItemsPerRail)
         val shows = (showItems + seasonItems + episodeItems)

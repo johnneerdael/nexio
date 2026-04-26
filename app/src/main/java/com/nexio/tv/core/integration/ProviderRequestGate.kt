@@ -1,27 +1,32 @@
 package com.nexio.tv.core.integration
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
 
 @Singleton
 class ProviderRequestGate @Inject constructor(
     private val registry: IntegrationPolicyRegistry
 ) {
-    private val mutexes = ConcurrentHashMap<IntegrationProvider, Mutex>()
+    private val semaphores = ConcurrentHashMap<IntegrationProvider, Semaphore>()
+    private val acquireCounter = AtomicInteger(0)
 
-    internal var acquireCount: Int = 0
-        private set
+    internal val acquireCount: Int
+        get() = acquireCounter.get()
 
     suspend fun <T> withPermit(provider: IntegrationProvider, block: suspend () -> T): T {
-        acquireCount += 1
         val policy = registry.policyFor(provider)
-        return if (policy.maxConcurrentNetworkStarts == 1) {
-            mutexes.getOrPut(provider) { Mutex() }.withLock { block() }
-        } else {
+        val permits = policy.maxConcurrentNetworkStarts.coerceAtLeast(1)
+        val semaphore = semaphores.getOrPut(provider) { Semaphore(permits = permits) }
+
+        acquireCounter.incrementAndGet()
+        semaphore.acquire()
+        return try {
             block()
+        } finally {
+            semaphore.release()
         }
     }
 }

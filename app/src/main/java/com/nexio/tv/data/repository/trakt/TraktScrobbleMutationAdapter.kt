@@ -3,15 +3,14 @@ package com.nexio.tv.data.repository.trakt
 import android.util.Log
 import com.google.gson.JsonObject
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.PlayerSettingsDataStore
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCheckinRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TrackingAuthSession
@@ -33,8 +32,7 @@ import javax.inject.Singleton
 
 @Singleton
 class TraktScrobbleMutationAdapter @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
+    private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktProgressService: TraktProgressService,
     private val watchingNowStateController: TraktWatchingNowStateController,
     private val playerSettingsDataStore: PlayerSettingsDataStore
@@ -83,9 +81,10 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 body = requestBody
             )
         }
-        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.checkin(authHeader, requestBody)
-        } ?: run {
+        val response = traktIntegrationProvider.checkin(
+            session = session,
+            body = requestBody
+        ) ?: run {
             if (logApi) logTraktScrobbleNoResponse("POST /checkin", envelope)
             return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
         }
@@ -115,13 +114,11 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 body = requestBody
             )
         }
-        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            when (action) {
-                "start" -> traktApi.scrobbleStart(authHeader, requestBody)
-                "pause" -> traktApi.scrobblePause(authHeader, requestBody)
-                else -> traktApi.scrobbleStop(authHeader, requestBody)
-            }
-        } ?: run {
+        val response = traktIntegrationProvider.scrobble(
+            session = session,
+            action = action,
+            body = requestBody
+        ) ?: run {
             if (logApi) logTraktScrobbleNoResponse(endpoint, envelope)
             return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
         }

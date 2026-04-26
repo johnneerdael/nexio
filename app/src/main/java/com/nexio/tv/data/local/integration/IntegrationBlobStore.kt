@@ -19,4 +19,25 @@ class IntegrationBlobStore internal constructor(
         root.mkdirs()
         parentFile?.mkdirs()
     }
+
+    fun delete(path: String) {
+        val file = File(root, path)
+        if (file.exists()) {
+            file.delete()
+        }
+        pruneEmptyParents(file.parentFile)
+    }
+
+    private fun pruneEmptyParents(start: File?) {
+        var current = start
+        while (current != null && current != root && current.exists() && current.isDirectory) {
+            val children = current.list()
+            if (children.isNullOrEmpty()) {
+                current.delete()
+                current = current.parentFile
+            } else {
+                return
+            }
+        }
+    }
 }

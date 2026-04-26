@@ -4,6 +4,7 @@ import android.util.Log
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
 import com.nexio.tv.data.local.CachedStreamLink
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerPreference
@@ -66,6 +67,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.Locale
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StreamScreenViewModelDeterministicAutoplayTest {
@@ -223,6 +225,57 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             clearViewModel(viewModel)
             advanceUntilIdle()
         }
+    }
+
+    @Test
+    fun `deterministic autoplay selection invokes playback preflight and skips rejected winner`() = runTest(dispatcher) {
+        val primary = scenarioCard(
+            streamKey = "primary",
+            providerId = "RD",
+            filename = "Primary.2160p.REMUX.mkv"
+        )
+        val secondary = scenarioCard(
+            streamKey = "secondary",
+            providerId = "PM",
+            filename = "Secondary.2160p.REMUX.mkv"
+        )
+        val tertiary = scenarioCard(
+            streamKey = "tertiary",
+            providerId = "RD",
+            filename = "Tertiary.2160p.REMUX.mkv"
+        )
+        val playbackPreflightIntegrationProvider = mockk<PlaybackPreflightIntegrationProvider>()
+        val event = autoplayDecisionEvent(
+            winners = listOf(
+                remuxWinner("primary", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Primary.2160p.REMUX.mkv"),
+                remuxWinner("secondary", DebridBenchmarkProvider.PREMIUMIZE, 55.0, "Secondary.2160p.REMUX.mkv"),
+                remuxWinner("tertiary", DebridBenchmarkProvider.REAL_DEBRID, 50.0, "Tertiary.2160p.REMUX.mkv")
+            ),
+            selected = remuxWinner(
+                "primary",
+                DebridBenchmarkProvider.REAL_DEBRID,
+                60.0,
+                "Primary.2160p.REMUX.mkv"
+            )
+        )
+
+        coEvery { playbackPreflightIntegrationProvider.isPlayable(primary.stream.getStreamUrl()) } returns false
+        coEvery { playbackPreflightIntegrationProvider.isPlayable(secondary.stream.getStreamUrl()) } returns true
+        coEvery { playbackPreflightIntegrationProvider.isPlayable(tertiary.stream.getStreamUrl()) } returns true
+
+        val selected = selectDeterministicAutoplayCandidate(
+            event = event,
+            eligibleStreams = listOf(primary, secondary, tertiary),
+            maxCandidates = 3,
+            isPlayable = { item ->
+                playbackPreflightIntegrationProvider.isPlayable(item.stream.getStreamUrl())
+            }
+        )
+
+        assertEquals("secondary", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
+        coVerify(exactly = 1) { playbackPreflightIntegrationProvider.isPlayable(primary.stream.getStreamUrl()) }
+        coVerify(exactly = 1) { playbackPreflightIntegrationProvider.isPlayable(secondary.stream.getStreamUrl()) }
+        coVerify(exactly = 0) { playbackPreflightIntegrationProvider.isPlayable(tertiary.stream.getStreamUrl()) }
     }
 
     @Test
@@ -618,13 +671,13 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     fun `stremthru preflight detects static download failed redirect location`() {
         assertEquals(
             true,
-            isStremThruDownloadFailedRedirectLocation(
+            testIsStremThruDownloadFailedRedirectLocation(
                 "https://stremthrufortheweebs.midnightignite.me/v0/store/_/static/download_failed.mp4"
             )
         )
         assertEquals(
             false,
-            isStremThruDownloadFailedRedirectLocation("https://45-4.download.real-debrid.com/d/example.mkv")
+            testIsStremThruDownloadFailedRedirectLocation("https://45-4.download.real-debrid.com/d/example.mkv")
         )
     }
 
@@ -632,6 +685,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         streamFlow: kotlinx.coroutines.flow.Flow<NetworkResult<List<AddonStreams>>>,
         cachedLink: CachedStreamLink? = null,
         shadowLogger: ShadowAutoPlayDecisionLogger = mockk(relaxed = true),
+        playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider = mockk(),
         playerSettings: PlayerSettings = PlayerSettings(
             playerPreference = PlayerPreference.INTERNAL,
             streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
@@ -654,6 +708,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         } returns flowOf(playerSettings)
         coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns cachedLink
         coEvery { streamLinkCacheDataStore.invalidate(any()) } just runs
+        coEvery { playbackPreflightIntegrationProvider.isPlayable(any()) } returns true
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { debugSettingsDataStore.dolbyVisionDiagnosticsEnabled } returns flowOf(false)
         coEvery { deviceCapabilityRepository.snapshotForAutoplay() } returns null
@@ -683,6 +738,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             benchmarkAwareStreamScorer = BenchmarkAwareStreamScorer(),
             shadowAutoPlayDecisionLogger = shadowLogger,
             shadowAutoplayCollectionUploader = shadowCollectionUploader,
+            playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
             savedStateHandle = SavedStateHandle(
                 mapOf(
                     "videoId" to "tt0167261",
@@ -862,4 +918,10 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         method.isAccessible = true
         method.invoke(viewModel)
     }
+}
+
+private fun testIsStremThruDownloadFailedRedirectLocation(location: String?): Boolean {
+    return location
+        ?.lowercase(Locale.US)
+        ?.contains("/static/download_failed.mp4") == true
 }

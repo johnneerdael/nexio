@@ -2,46 +2,94 @@ package com.nexio.tv.data.repository.benchmark
 
 import android.os.Build
 import com.google.gson.JsonParser
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.collector.ShadowAutoplayUploadIntegrationProvider
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import io.mockk.coEvery
+import io.mockk.slot
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
-import okhttp3.OkHttpClient
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.cancellation.CancellationException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CollectorUploadersTest {
 
     @Test
-    fun `shadow autoplay uploader includes android id in client envelope`() = runTest {
-        val server = MockWebServer()
-        server.start()
-        server.enqueue(MockResponse().setResponseCode(200))
+    fun `shadow autoplay uploader delegates to integration provider with preserved envelope`() = runTest {
+        val provider = mockk<ShadowAutoplayUploadIntegrationProvider>(relaxed = true)
         val uploader = ShadowAutoplayCollectionUploader(
             playerSettingsDataStore = playerSettingsDataStore(
                 PlayerSettings(shadowAutoplayDataCollectionEnabled = true)
             ),
-            okHttpClient = OkHttpClient(),
+            uploadIntegrationProvider = provider,
             logger = mockk<ShadowAutoPlayDecisionLogger>().also {
                 every { it.encode(any()) } returns """{"event_version":1,"event_type":"shadow_autoplay_decision"}"""
             },
-            baseUrlProvider = { server.url("/").toString().trimEnd('/') },
+            baseUrlProvider = { "https://example.com/api" },
+            tokenProvider = { "write-token" },
+            clientInfoProvider = { clientInfoJson("shadow-android-id") }
+        )
+        val envelopeSlot = slot<String>()
+        coEvery {
+            provider.uploadEvent(
+                baseUrl = any(),
+                token = "write-token",
+                envelopeJson = capture(envelopeSlot)
+            )
+        } returns IntegrationCallResult.Success(Unit)
+
+        uploader.submitIfEnabled(mockk(relaxed = true))
+
+        val envelope = JsonParser.parseString(envelopeSlot.captured).asJsonObject
+        val client = envelope.getAsJsonObject("client")
+        val payload = envelope.getAsJsonObject("payload")
+        assertTrue(envelope.has("sentAtMs"))
+        assertEquals("0.38", client.get("appVersion").asString)
+        assertEquals("debug", client.get("buildType").asString)
+        assertEquals(Build.MODEL ?: "test-device", client.get("deviceModel").asString)
+        assertEquals(Build.VERSION.SDK_INT, client.get("sdkInt").asInt)
+        assertEquals("shadow-android-id", client.get("androidId").asString)
+        assertEquals(1, payload.get("event_version").asInt)
+        assertEquals("shadow_autoplay_decision", payload.get("event_type").asString)
+        coVerify(exactly = 1) { provider.uploadEvent("https://example.com/api", "write-token", any()) }
+    }
+
+    @Test
+    fun `shadow autoplay uploader rethrows cancellation exception from provider`() = runTest {
+        val provider = mockk<ShadowAutoplayUploadIntegrationProvider>()
+        coEvery {
+            provider.uploadEvent(any(), any(), any())
+        } throws CancellationException("cancelled")
+
+        val uploader = ShadowAutoplayCollectionUploader(
+            playerSettingsDataStore = playerSettingsDataStore(
+                PlayerSettings(shadowAutoplayDataCollectionEnabled = true)
+            ),
+            uploadIntegrationProvider = provider,
+            logger = mockk<ShadowAutoPlayDecisionLogger>().also {
+                every { it.encode(any()) } returns "{}"
+            },
+            baseUrlProvider = { "https://example.com/api" },
             tokenProvider = { "write-token" },
             clientInfoProvider = { clientInfoJson("shadow-android-id") }
         )
 
-        uploader.submitIfEnabled(mockk(relaxed = true))
+        try {
+            uploader.submitIfEnabled(mockk(relaxed = true))
+            throw AssertionError("Expected CancellationException")
+        } catch (error: CancellationException) {
+            // expected
+        }
 
-        val request = server.takeRequest()
-        val envelope = JsonParser.parseString(request.body.readUtf8()).asJsonObject
-        assertEquals("shadow-android-id", envelope.getAsJsonObject("client").get("androidId").asString)
-        server.shutdown()
+        coVerify(exactly = 1) { provider.uploadEvent("https://example.com/api", "write-token", any()) }
     }
 
     private fun playerSettingsDataStore(settings: PlayerSettings): PlayerSettingsDataStore {

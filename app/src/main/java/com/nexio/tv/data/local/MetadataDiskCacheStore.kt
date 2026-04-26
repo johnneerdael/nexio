@@ -47,7 +47,6 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TVDB_REF_PREFIX = "tvdb_ref::"
         private const val TVDB_REFERENCE_PREFIX = "tvdb_ref::"
         private const val TVDB_REFERENCE_SCHEMA_VERSION = 1
-        private const val HOME_REF_PREFIX = "home_ref::"
         private const val META_CACHE_SCHEMA_VERSION = 4
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_CACHE_SCHEMA_VERSION = 2
@@ -415,44 +414,6 @@ class MetadataDiskCacheStore @Inject constructor(
         }.onFailure { error ->
             Log.w(TAG, "Failed to read current metadata for item", error)
         }.getOrNull()
-    }
-
-    fun replaceHomeFeedReferences(feedKey: String, itemKeys: Set<String>) {
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val payload = JsonObject().apply {
-                add("items", gson.toJsonTree(itemKeys.toList().sorted()))
-                addProperty("updatedAtMs", System.currentTimeMillis())
-            }
-            prefs.edit().putString("$HOME_REF_PREFIX$feedKey", gson.toJson(payload)).apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to update home feed references for $feedKey", error)
-        }
-    }
-
-    fun readHomeReferencedItemKeys(): Set<String> {
-        return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) -> key.startsWith(HOME_REF_PREFIX) }
-                .flatMap { (_, value) ->
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java)
-                    val type = object : TypeToken<List<String>>() {}.type
-                    val items = gson.fromJson<List<String>>(root?.get("items"), type).orEmpty()
-                    items.asSequence()
-                }
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .toSet()
-        }.getOrDefault(emptySet())
-    }
-
-    fun removeHomeUnreferencedMetaEntries(maxEntries: Int = 400): List<String> {
-        // Home references only describe the active profile. Do not prune shared
-        // language-keyed metadata or language-independent artwork from them.
-        return emptyList()
     }
 
     /**

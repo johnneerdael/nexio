@@ -10,12 +10,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.nexio.tv.data.integration.playback.transport.OkHttpCometProxyHttpTransport
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.util.LinkedHashMap
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 /**
  * Resolves Comet addon `/playback/` proxy URLs to the underlying debrid CDN URL
@@ -58,16 +56,6 @@ object CometProxyUrlResolver {
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val clientHolder: Lazy<OkHttpClient> = lazy {
-        OkHttpClient.Builder()
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .connectTimeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            .readTimeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            .callTimeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            .build()
-    }
 
     private val lock = Any()
     private val cache = object : LinkedHashMap<String, CacheEntry>(MAX_CACHE_ENTRIES, 0.75f, true) {
@@ -236,28 +224,9 @@ object CometProxyUrlResolver {
         }
     }
 
+    private val cometHttpTransport: OkHttpCometProxyHttpTransport = OkHttpCometProxyHttpTransport()
     private val defaultTransport: Transport = Transport { url, headers ->
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .get()
-            .header("Range", "bytes=0-0")
-        headers?.forEach { (key, value) ->
-            if (!key.equals("Range", ignoreCase = true)) {
-                requestBuilder.header(key, value)
-            }
-        }
-        clientHolder.value.newCall(requestBuilder.build()).execute().use { response ->
-            val location = response.header("Location")
-            when {
-                response.code in 300..399 && !location.isNullOrBlank() -> location
-                response.code in 200..299 -> {
-                    // Proxy-bytes mode: the URL is effectively its own CDN. Cache
-                    // identity so we don't re-probe.
-                    url
-                }
-                else -> null
-            }
-        }
+        cometHttpTransport.execute(url, headers)
     }
 
     private fun currentTimeMs(): Long {

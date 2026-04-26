@@ -1,6 +1,16 @@
 package com.nexio.tv.data.repository
 
 import android.content.Context
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.core.integration.IntegrationCallSpec
+import com.nexio.tv.core.integration.IntegrationFetchOptions
+import com.nexio.tv.core.integration.IntegrationFetchResult
+import com.nexio.tv.core.integration.IntegrationRuntime
+import com.nexio.tv.core.integration.IntegrationStreamSpec
+import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
+import com.nexio.tv.data.integration.subtitles.SubtitleTranslationIntegrationProvider
+import com.nexio.tv.data.integration.subtitles.transport.SubtitleSourceDownloadTransport
+import com.nexio.tv.data.integration.subtitles.transport.SubtitleTranslationTransport
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.Subtitle
@@ -145,7 +155,8 @@ class SubtitleTranslationServiceProviderTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateCueTexts(
@@ -203,7 +214,8 @@ class SubtitleTranslationServiceProviderTest {
             )
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateCueTexts(
@@ -264,7 +276,8 @@ class SubtitleTranslationServiceProviderTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateCueTexts(
@@ -320,7 +333,8 @@ class SubtitleTranslationServiceProviderTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateCueTexts(
@@ -358,7 +372,8 @@ class SubtitleTranslationServiceProviderTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateCueTexts(
@@ -413,7 +428,8 @@ class SubtitleTranslationServiceProviderTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
             val unit = AssSsaProtectedTranslationUnit.fromTokens(
                 id = "evt_1",
@@ -500,7 +516,8 @@ class SubtitleTranslationServiceProviderTest {
             every { context.cacheDir } returns cacheDir
             val service = SubtitleTranslationService(
                 context = context,
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateSubtitle(
@@ -595,7 +612,8 @@ class SubtitleTranslationServiceProviderTest {
             every { context.cacheDir } returns cacheDir
             val service = SubtitleTranslationService(
                 context = context,
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateSubtitle(
@@ -653,7 +671,8 @@ class SubtitleTranslationServiceProviderTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
 
             val result = service.translateCueTexts(
@@ -678,5 +697,42 @@ class SubtitleTranslationServiceProviderTest {
         } finally {
             server.shutdown()
         }
+    }
+
+    private fun subtitleTranslationIntegrationProvider(httpClient: OkHttpClient): SubtitleTranslationIntegrationProvider {
+        val runtime = object : IntegrationRuntime {
+            override suspend fun <T> get(
+                spec: com.nexio.tv.core.integration.IntegrationSpec<T>,
+                options: IntegrationFetchOptions
+            ): IntegrationFetchResult<T> = IntegrationFetchResult.Missing
+
+            override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+                spec.call()
+
+            override suspend fun <T> open(spec: IntegrationStreamSpec<T>) = null
+        }
+
+        return SubtitleTranslationIntegrationProvider(runtime, SubtitleTranslationTransport(httpClient))
+    }
+
+    private fun subtitleSourceDownloadIntegrationProvider(
+        httpClient: OkHttpClient
+    ): SubtitleSourceDownloadIntegrationProvider {
+        val runtime = object : IntegrationRuntime {
+            override suspend fun <T> get(
+                spec: com.nexio.tv.core.integration.IntegrationSpec<T>,
+                options: IntegrationFetchOptions
+            ): IntegrationFetchResult<T> = IntegrationFetchResult.Missing
+
+            override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+                spec.call()
+
+            override suspend fun <T> open(spec: IntegrationStreamSpec<T>) = null
+        }
+
+        return SubtitleSourceDownloadIntegrationProvider(
+            runtime,
+            SubtitleSourceDownloadTransport(httpClient)
+        )
     }
 }

@@ -2,15 +2,12 @@ package com.nexio.tv.data.trailer
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
-import com.nexio.tv.core.metadata.MetadataApiKeyResolver
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
-import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.integration.trailer.TrailerBackendProvider
+import com.nexio.tv.data.integration.trailer.TrailerTmdbProvider
 import com.nexio.tv.data.remote.api.TmdbVideoResult
-import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.repository.AddonRepository
@@ -22,6 +19,7 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -39,7 +37,6 @@ private fun trailerWarnLog(message: String) {
 
 private const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
-private const val TMDB_TRAILER_CACHE_PROVIDER = "trailer"
 private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 
@@ -55,41 +52,32 @@ private data class CachedTrailerPlaybackSource(
 
 @Singleton
 class TrailerService(
-    private val trailerApi: TrailerApi,
-    private val tmdbApi: TmdbApi,
+    private val trailerBackendProvider: TrailerBackendProvider,
     private val inAppYouTubeExtractor: InAppYouTubeExtractor,
-    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val trailerTmdbProvider: TrailerTmdbProvider,
     private val addonRepository: AddonRepository,
     private val streamRepository: StreamRepository,
     private val clock: Clock,
-    private val metadataApiKeyResolver: MetadataApiKeyResolver? = null,
     private val tvdbTrailerResolver: TvdbTrailerResolver? = null
 ) {
     @Inject
     constructor(
-        trailerApi: TrailerApi,
-        tmdbApi: TmdbApi,
+        trailerBackendProvider: TrailerBackendProvider,
         inAppYouTubeExtractor: InAppYouTubeExtractor,
-        tmdbSettingsDataStore: TmdbSettingsDataStore,
-        metadataDiskCacheStore: MetadataDiskCacheStore,
         tmdbMetadataService: TmdbMetadataService,
+        trailerTmdbProvider: TrailerTmdbProvider,
         addonRepository: AddonRepository,
         streamRepository: StreamRepository,
-        metadataApiKeyResolver: MetadataApiKeyResolver,
         tvdbTrailerResolver: TvdbTrailerResolver
     ) : this(
-        trailerApi = trailerApi,
-        tmdbApi = tmdbApi,
+        trailerBackendProvider = trailerBackendProvider,
         inAppYouTubeExtractor = inAppYouTubeExtractor,
-        tmdbSettingsDataStore = tmdbSettingsDataStore,
-        metadataDiskCacheStore = metadataDiskCacheStore,
         tmdbMetadataService = tmdbMetadataService,
+        trailerTmdbProvider = trailerTmdbProvider,
         addonRepository = addonRepository,
         streamRepository = streamRepository,
         clock = Clock.systemUTC(),
-        metadataApiKeyResolver = metadataApiKeyResolver,
         tvdbTrailerResolver = tvdbTrailerResolver
     )
 
@@ -130,24 +118,27 @@ class TrailerService(
         fallbackYtIds: List<String> = emptyList()
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
-        val tmdbApiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+        val tmdbApiKey = trailerTmdbProvider.getTmdbApiKey().orEmpty()
 
         // For TV shows with no explicit season, auto-detect the latest aired season before building
         // the cache key so the key encodes the actual season. When a new season airs the detected
         // number changes, the key changes, and the cache misses correctly.
         val effectiveSeasonNumber: Int? = if (
-            seasonNumber == null &&
-            !tmdbId.isNullOrBlank() &&
-            normalizeTmdbMediaType(type) == "tv"
-        ) {
-            val numericId = tmdbId.toIntOrNull()
-            if (numericId != null && tmdbApiKey.isNotBlank()) {
-                resolveLatestAiredSeasonNumber(numericId, tmdbApiKey).also { detected ->
-                    if (detected != null) {
-                        Log.d(TAG, "Auto-detected latest aired season=$detected for tmdbId=$tmdbId")
+                seasonNumber == null &&
+                !tmdbId.isNullOrBlank() &&
+                normalizeTmdbMediaType(type) == "tv"
+            ) {
+                val numericId = tmdbId.toIntOrNull()
+                if (numericId != null && tmdbApiKey.isNotBlank()) {
+                    resolveLatestAiredSeasonNumber(
+                        tmdbId = numericId,
+                        apiKey = tmdbApiKey
+                    ).also { detected ->
+                        if (detected != null) {
+                            Log.d(TAG, "Auto-detected latest aired season=$detected for tmdbId=$tmdbId")
+                        }
                     }
-                }
-            } else null
+                } else null
         } else {
             seasonNumber
         }
@@ -244,11 +235,16 @@ class TrailerService(
         val normalizedSeason = seasonNumber?.takeIf { it >= 0 } ?: return@withContext SeasonMediaAvailability()
         val numericTmdbId = tmdbId?.toIntOrNull()
         val mediaType = normalizeTmdbMediaType(type)
-        val apiKey = requireTmdbApiKey()
+        val apiKey = trailerTmdbProvider.getTmdbApiKey()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
 
         val seasonTmdbVideos = if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
-            fetchTmdbSeasonVideos(numericTmdbId, normalizedSeason, tmdbLanguage, apiKey)
+            trailerTmdbProvider.fetchSeasonVideos(
+                tmdbId = numericTmdbId,
+                seasonNumber = normalizedSeason,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            )
         } else {
             emptyList()
         }
@@ -302,10 +298,14 @@ class TrailerService(
 
             // TMDB TV videos as last resort
             val numericTmdbId = tmdbId?.toIntOrNull()
-            val apiKey = requireTmdbApiKey()
+            val apiKey = trailerTmdbProvider.getTmdbApiKey()
             val tmdbLanguage = getPreferredTmdbTrailerLanguage()
             if (numericTmdbId != null && apiKey != null) {
-                val tmdbTvVideos = fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+                val tmdbTvVideos = trailerTmdbProvider.fetchTvVideos(
+                    tmdbId = numericTmdbId,
+                    preferredLanguage = tmdbLanguage,
+                    apiKey = apiKey
+                )
                 if (rankTmdbVideoCandidates(tmdbTvVideos).isNotEmpty()) {
                     trailerDebugLog("getTitleMediaAvailability resolved via tmdb tv fallback tmdbId=$numericTmdbId")
                     return@withContext true
@@ -318,12 +318,16 @@ class TrailerService(
 
         // Movie/other: existing order (TMDB first)
         val numericTmdbId = tmdbId?.toIntOrNull()
-        val apiKey = requireTmdbApiKey()
+        val apiKey = trailerTmdbProvider.getTmdbApiKey()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
 
         val tmdbTitleVideos = when {
             numericTmdbId == null || apiKey == null -> emptyList()
-            mediaType == "movie" -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey)
+            mediaType == "movie" -> trailerTmdbProvider.fetchMovieVideos(
+                tmdbId = numericTmdbId,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            )
             else -> emptyList()
         }
         if (rankTmdbVideoCandidates(tmdbTitleVideos).isNotEmpty()) {
@@ -580,11 +584,16 @@ class TrailerService(
         val normalizedSeason = seasonNumber?.takeIf { it >= 0 } ?: return@withContext null
         val numericTmdbId = tmdbId?.toIntOrNull()
         val mediaType = normalizeTmdbMediaType(type)
-        val apiKey = requireTmdbApiKey()
+        val apiKey = trailerTmdbProvider.getTmdbApiKey()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
 
         if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
-            val seasonResults = fetchTmdbSeasonVideos(numericTmdbId, normalizedSeason, tmdbLanguage, apiKey)
+            val seasonResults = trailerTmdbProvider.fetchSeasonVideos(
+                tmdbId = numericTmdbId,
+                seasonNumber = normalizedSeason,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            )
             for (candidate in rankTmdbVideoCandidates(seasonResults)) {
                 val key = candidate.key?.trim().orEmpty()
                 if (key.isBlank()) continue
@@ -629,16 +638,25 @@ class TrailerService(
         val numericTmdbId = tmdbId?.toIntOrNull() ?: return@withContext null
         val mediaType = normalizeTmdbMediaType(type)
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
-        val apiKey = requireTmdbApiKey() ?: return@withContext null
+        val apiKey = trailerTmdbProvider.getTmdbApiKey() ?: return@withContext null
 
         val tmdbResults = when (mediaType) {
-            "movie" -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey)
+            "movie" -> trailerTmdbProvider.fetchMovieVideos(
+                tmdbId = numericTmdbId,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            )
             "tv" -> {
                 val seasonResults = seasonNumber
                     ?.takeIf { it >= 0 }
                     ?.let { season ->
                         Log.d(TAG, "Trying TMDB season videos for tmdbId=$numericTmdbId season=$season")
-                        fetchTmdbSeasonVideos(numericTmdbId, season, tmdbLanguage, apiKey)
+                        trailerTmdbProvider.fetchSeasonVideos(
+                            tmdbId = numericTmdbId,
+                            seasonNumber = season,
+                            preferredLanguage = tmdbLanguage,
+                            apiKey = apiKey
+                        )
                     }
                     .orEmpty()
                 val rankedSeasonResults = rankTmdbVideoCandidates(seasonResults)
@@ -651,11 +669,22 @@ class TrailerService(
                     } else if (seasonNumber != null) {
                         Log.d(TAG, "No TMDB season trailer found for tmdbId=$numericTmdbId season=$seasonNumber, falling back to series videos")
                     }
-                    fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+                    trailerTmdbProvider.fetchTvVideos(
+                        tmdbId = numericTmdbId,
+                        preferredLanguage = tmdbLanguage,
+                        apiKey = apiKey
+                    )
                 }
             }
-            else -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey) +
-                fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+            else -> trailerTmdbProvider.fetchMovieVideos(
+                tmdbId = numericTmdbId,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            ) + trailerTmdbProvider.fetchTvVideos(
+                tmdbId = numericTmdbId,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            )
         }
 
         for (candidate in rankTmdbVideoCandidates(tmdbResults)) {
@@ -714,10 +743,15 @@ class TrailerService(
         val normalizedSeason = seasonNumber?.takeIf { it >= 0 } ?: return@withContext null
         val mediaType = normalizeTmdbMediaType(type)
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
-        val apiKey = requireTmdbApiKey()
+        val apiKey = trailerTmdbProvider.getTmdbApiKey()
 
         val tmdbRecapResults = if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
-            fetchTmdbSeasonVideos(numericTmdbId, normalizedSeason, tmdbLanguage, apiKey)
+            trailerTmdbProvider.fetchSeasonVideos(
+                tmdbId = numericTmdbId,
+                seasonNumber = normalizedSeason,
+                preferredLanguage = tmdbLanguage,
+                apiKey = apiKey
+            )
         } else {
             emptyList()
         }
@@ -826,50 +860,31 @@ class TrailerService(
         }
         trailerDebugLog("resolveYouTubeTrailer native miss url=$youtubeUrl")
 
-        if (BuildConfig.TRAILER_API_URL.isNotBlank()) {
-            val backendUrl = runCatching {
-                trailerApi.getTrailer(
-                    youtubeUrl = youtubeUrl,
-                    title = title,
-                    year = year
-                )
-            }.getOrNull()
-                ?.takeIf { it.isSuccessful }
-                ?.body()
-                ?.url
-                ?.takeIf(::isValidUrl)
+        val backendSource = runCatching {
+            trailerBackendProvider.resolveYouTubePlaybackSource(
+                youtubeUrl = youtubeUrl,
+                title = title,
+                year = year
+            )
+        }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            null
+        }
 
-            if (backendUrl != null) {
+        if (backendSource != null) {
                 trailerDebugLog("resolveYouTubeTrailer backend success url=$youtubeUrl")
                 Log.d(TAG, "Resolved $youtubeUrl via trailer backend bridge")
-                val playbackSource = TrailerPlaybackSource(videoUrl = backendUrl)
                 if (!youtubeKey.isNullOrBlank()) {
                     youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                        playbackSource = playbackSource,
+                        playbackSource = backendSource,
                         cachedAt = Instant.now(clock)
                     )
                 }
-                return@withContext TrailerResolutionResult.Playback(playbackSource)
-            }
-            trailerDebugLog("resolveYouTubeTrailer backend miss url=$youtubeUrl")
+                return@withContext TrailerResolutionResult.Playback(backendSource)
         }
+        trailerDebugLog("resolveYouTubeTrailer backend miss url=$youtubeUrl")
 
         null
-    }
-
-    private suspend fun fetchTmdbMovieVideos(
-        tmdbId: Int,
-        preferredLanguage: String,
-        apiKey: String
-    ): List<TmdbVideoResult> {
-        val localized = fetchTmdbMovieVideosOnce(tmdbId, preferredLanguage, apiKey)
-        if (preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
-            return localized
-        }
-        if (rankTmdbVideoCandidates(localized).isNotEmpty()) {
-            return localized
-        }
-        return fetchTmdbMovieVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
     }
 
     private suspend fun resolveLatestAiredSeasonNumber(
@@ -877,194 +892,15 @@ class TrailerService(
         apiKey: String
     ): Int? {
         tvLatestAiredSeasonCache[tmdbId]?.let { cached -> return if (cached >= 0) cached else null }
-        val result = try {
-            val seasons = tmdbApi.getTvDetails(tvId = tmdbId, apiKey = apiKey)
-                .body()?.seasons.orEmpty()
-            val today = java.time.LocalDate.now(clock.zone)
-            seasons
-                .filter { season ->
-                    val num = season.seasonNumber ?: return@filter false
-                    if (num <= 0) return@filter false
-                    val count = season.episodeCount ?: return@filter false
-                    if (count <= 0) return@filter false
-                    val airDate = season.airDate?.takeIf { it.isNotBlank() } ?: return@filter false
-                    runCatching { java.time.LocalDate.parse(airDate) <= today }.getOrElse { false }
-                }
-                .maxByOrNull { it.seasonNumber!! }
-                ?.seasonNumber
-        } catch (_: Exception) {
-            null
-        }
+        val result = trailerTmdbProvider.resolveLatestAiredSeasonNumber(tmdbId, apiKey, clock)
         tvLatestAiredSeasonCache[tmdbId] = result ?: -1
         return result
-    }
-
-    private suspend fun fetchTmdbTvVideos(
-        tmdbId: Int,
-        preferredLanguage: String,
-        apiKey: String
-    ): List<TmdbVideoResult> {
-        val localized = fetchTmdbTvVideosOnce(tmdbId, preferredLanguage, apiKey)
-        if (preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
-            return localized
-        }
-        if (rankTmdbVideoCandidates(localized).isNotEmpty()) {
-            return localized
-        }
-        return fetchTmdbTvVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
-    }
-
-    private suspend fun fetchTmdbSeasonVideos(
-        tmdbId: Int,
-        seasonNumber: Int,
-        preferredLanguage: String,
-        apiKey: String
-    ): List<TmdbVideoResult> {
-        val localized = fetchTmdbSeasonVideosOnce(tmdbId, seasonNumber, preferredLanguage, apiKey)
-        if (localized.isNotEmpty() || preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
-            return localized
-        }
-        return fetchTmdbSeasonVideosOnce(tmdbId, seasonNumber, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
-    }
-
-    private suspend fun fetchTmdbMovieVideosOnce(
-        tmdbId: Int,
-        language: String,
-        apiKey: String
-    ): List<TmdbVideoResult> {
-        metadataDiskCacheStore.readTmdbTitleVideos(
-            tmdbId = tmdbId,
-            mediaType = "movie",
-            languageTag = language,
-            providerToken = TMDB_TRAILER_CACHE_PROVIDER
-        )?.let {
-            trailerDebugLog("TMDB movie videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
-            return it
-        }
-
-        return try {
-            val response = tmdbApi.getMovieVideos(
-                movieId = tmdbId,
-                apiKey = apiKey,
-                language = language
-            )
-            if (!response.isSuccessful) {
-                trailerDebugLog("TMDB movie videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
-                emptyList()
-            } else {
-                val results = filterCacheableTmdbTrailerVideos(response.body()?.results.orEmpty())
-                trailerDebugLog("TMDB movie videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
-                metadataDiskCacheStore.writeTmdbTitleVideos(
-                    tmdbId = tmdbId,
-                    mediaType = "movie",
-                    languageTag = language,
-                    providerToken = TMDB_TRAILER_CACHE_PROVIDER,
-                    videos = results
-                )
-                results
-            }
-        } catch (error: Exception) {
-            trailerWarnLog("TMDB movie videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
-            emptyList()
-        }
-    }
-
-    private suspend fun fetchTmdbTvVideosOnce(
-        tmdbId: Int,
-        language: String,
-        apiKey: String
-    ): List<TmdbVideoResult> {
-        metadataDiskCacheStore.readTmdbTitleVideos(
-            tmdbId = tmdbId,
-            mediaType = "tv",
-            languageTag = language,
-            providerToken = TMDB_TRAILER_CACHE_PROVIDER
-        )?.let {
-            trailerDebugLog("TMDB tv videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
-            return it
-        }
-
-        return try {
-            val response = tmdbApi.getTvVideos(
-                tvId = tmdbId,
-                apiKey = apiKey,
-                language = language
-            )
-            if (!response.isSuccessful) {
-                trailerDebugLog("TMDB tv videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
-                emptyList()
-            } else {
-                val results = filterCacheableTmdbTrailerVideos(response.body()?.results.orEmpty())
-                trailerDebugLog("TMDB tv videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
-                metadataDiskCacheStore.writeTmdbTitleVideos(
-                    tmdbId = tmdbId,
-                    mediaType = "tv",
-                    languageTag = language,
-                    providerToken = TMDB_TRAILER_CACHE_PROVIDER,
-                    videos = results
-                )
-                results
-            }
-        } catch (error: Exception) {
-            trailerWarnLog("TMDB tv videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
-            emptyList()
-        }
-    }
-
-    private suspend fun fetchTmdbSeasonVideosOnce(
-        tmdbId: Int,
-        seasonNumber: Int,
-        language: String,
-        apiKey: String
-    ): List<TmdbVideoResult> {
-        metadataDiskCacheStore.readTmdbSeasonVideos(
-            tmdbId = tmdbId,
-            seasonNumber = seasonNumber,
-            languageTag = language,
-            providerToken = TMDB_TRAILER_CACHE_PROVIDER
-        )?.let { return it }
-
-        return try {
-            val response = tmdbApi.getTvSeasonVideos(
-                tvId = tmdbId,
-                seasonNumber = seasonNumber,
-                apiKey = apiKey,
-                language = language
-            )
-            if (!response.isSuccessful) {
-                emptyList()
-            } else {
-                val results = filterCacheableTmdbTrailerVideos(response.body()?.results.orEmpty())
-                metadataDiskCacheStore.writeTmdbSeasonVideos(
-                    tmdbId = tmdbId,
-                    seasonNumber = seasonNumber,
-                    languageTag = language,
-                    providerToken = TMDB_TRAILER_CACHE_PROVIDER,
-                    videos = results
-                )
-                results
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
     }
 
     private fun getPreferredTmdbTrailerLanguage(): String {
         return normalizeTmdbTrailerLanguage(
             runCatching { tmdbMetadataService.currentTmdbLanguageTag() }.getOrNull()
         )
-    }
-
-    private suspend fun requireTmdbApiKey(): String? {
-        metadataApiKeyResolver?.tmdbCredential()?.let { credential ->
-            if (credential.missing) {
-                trailerDebugLog("TMDB trailer lookup skipped: api_key_missing")
-                return null
-            }
-            return credential.apiKey
-        }
-        val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
-        return apiKey.takeIf { it.isNotBlank() }
     }
 
     private fun getValidCachedYoutubeSource(youtubeKey: String): CachedTrailerPlaybackSource? {
@@ -1234,10 +1070,6 @@ internal fun isRecapStream(stream: Stream): Boolean {
         .joinToString(" ")
         .lowercase()
     return "recap" in combinedText
-}
-
-private fun isValidUrl(url: String?): Boolean {
-    return !url.isNullOrBlank() && (url.startsWith("http://") || url.startsWith("https://"))
 }
 
 private fun hasInternalStreailerCandidate(candidate: StreailerTrailerCandidate?): Boolean {

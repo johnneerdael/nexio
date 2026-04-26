@@ -2,18 +2,18 @@ package com.nexio.tv.data.remote
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.imdb.CustomImdbPayload
+import com.nexio.tv.data.integration.imdb.CustomImdbRatingsIntegrationProvider
+import com.nexio.tv.data.integration.imdb.transport.CustomImdbRatingsRequests
+import com.squareup.moshi.JsonDataException
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,18 +22,6 @@ private const val CUSTOM_IMDB_CLIENT_TAG = "CustomImdbClient"
 
 fun normalizeCustomImdbBaseUrl(rawBaseUrl: String): String {
     return rawBaseUrl.trim().trimEnd('/')
-}
-
-private fun buildCustomImdbUrl(baseUrl: String, pathAfterVersion: String): String {
-    val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
-    val normalizedPath = pathAfterVersion.trimStart('/')
-    val hasVersionPath = normalizedBaseUrl.lowercase().endsWith("/v1")
-
-    return if (hasVersionPath) {
-        "$normalizedBaseUrl/$normalizedPath"
-    } else {
-        "$normalizedBaseUrl/v1/$normalizedPath"
-    }
 }
 
 interface CustomImdbClient {
@@ -46,7 +34,7 @@ interface CustomImdbClient {
 
 @Singleton
 class OkHttpCustomImdbClient @Inject constructor(
-    private val okHttpClient: OkHttpClient,
+    private val integrationProvider: CustomImdbRatingsIntegrationProvider,
     moshi: Moshi
 ) : CustomImdbClient {
     private val ratingWithEpisodesAdapter = moshi.adapter(RatingWithEpisodes::class.java)
@@ -62,23 +50,25 @@ class OkHttpCustomImdbClient @Inject constructor(
         val trimmedApiKey = apiKey.trim()
         if (normalizedBaseUrl.isBlank() || trimmedApiKey.isBlank()) return false
 
-        val request = Request.Builder()
-            .url(buildCustomImdbUrl(normalizedBaseUrl, "meta/stats"))
-            .header("X-API-Key", trimmedApiKey)
-            .get()
-            .build()
+        val request = CustomImdbRatingsRequests.validateStats(
+            baseUrl = normalizedBaseUrl,
+            apiKey = trimmedApiKey
+        )
 
         return executeWithRateLimitRetry(
+            baseUrl = normalizedBaseUrl,
             request = request,
-            onFailure = { false }
-        ) { response ->
-            if (!response.isSuccessful) {
+            onHttpError = { error ->
                 Log.w(
                     CUSTOM_IMDB_CLIENT_TAG,
-                    "Custom IMDb validation failed with HTTP ${response.code} for $normalizedBaseUrl"
+                    "Custom IMDb validation failed with HTTP ${error.statusCode} for $normalizedBaseUrl"
                 )
-            }
-            response.isSuccessful
+                false
+            },
+            onNetworkError = { false },
+            onMissing = { false }
+        ) { response ->
+            true
         }
     }
 
@@ -88,31 +78,27 @@ class OkHttpCustomImdbClient @Inject constructor(
         val normalizedTconst = tconst.trim()
         if (baseUrl.isBlank() || apiKey.isBlank() || normalizedTconst.isBlank()) return emptyMap()
 
-        val endpoint = buildCustomImdbUrl(baseUrl, "ratings/$normalizedTconst")
-            .toHttpUrl()
-            .newBuilder()
-            .addQueryParameter("episodes", "true")
-            .build()
-        val request = Request.Builder()
-            .url(endpoint)
-            .header("X-API-Key", apiKey)
-            .get()
-            .build()
+        val request = CustomImdbRatingsRequests.episodeRatings(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            tconst = normalizedTconst
+        )
 
         return executeWithRateLimitRetry(
+            baseUrl = baseUrl,
             request = request,
-            onFailure = { emptyMap() }
-        ) { response ->
-            if (!response.isSuccessful) {
+            onHttpError = { error ->
                 Log.w(
                     CUSTOM_IMDB_CLIENT_TAG,
-                    "Custom IMDb ratings request failed with HTTP ${response.code} for $normalizedTconst"
+                    "Custom IMDb ratings request failed with HTTP ${error.statusCode} for $normalizedTconst"
                 )
-                return@executeWithRateLimitRetry emptyMap()
-            }
-
-            val payload = response.body?.string().orEmpty()
-            val parsed = ratingWithEpisodesAdapter.fromJson(payload) ?: return@executeWithRateLimitRetry emptyMap()
+                emptyMap()
+            },
+            onNetworkError = { emptyMap() },
+            onMissing = { emptyMap() }
+        ) { response ->
+            val parsed = response.body.parseOrNull(ratingWithEpisodesAdapter)
+                ?: return@executeWithRateLimitRetry emptyMap()
             parsed.episodes.mapNotNull { episode ->
                 val seasonNumber = episode.seasonNumber ?: return@mapNotNull null
                 val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
@@ -131,29 +117,29 @@ class OkHttpCustomImdbClient @Inject constructor(
             .distinct()
         if (baseUrl.isBlank() || apiKey.isBlank() || normalizedIdentifiers.isEmpty()) return emptyMap()
 
-        val body = bulkRatingsRequestAdapter
+        val bodyJson = bulkRatingsRequestAdapter
             .toJson(BulkRatingsRequest(normalizedIdentifiers))
-            .toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url(buildCustomImdbUrl(baseUrl, "ratings/bulk"))
-            .header("X-API-Key", apiKey)
-            .post(body)
-            .build()
+        val request = CustomImdbRatingsRequests.bulkTitleRatings(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            bodyJson = bodyJson
+        )
 
         return executeWithRateLimitRetry(
+            baseUrl = baseUrl,
             request = request,
-            onFailure = { emptyMap() }
-        ) { response ->
-            if (!response.isSuccessful) {
+            onHttpError = { error ->
                 Log.w(
                     CUSTOM_IMDB_CLIENT_TAG,
-                    "Custom IMDb bulk ratings request failed with HTTP ${response.code}"
+                    "Custom IMDb bulk ratings request failed with HTTP ${error.statusCode}"
                 )
-                return@executeWithRateLimitRetry emptyMap()
-            }
-
-            val payload = response.body?.string().orEmpty()
-            val parsed = bulkRatingsResponseAdapter.fromJson(payload) ?: return@executeWithRateLimitRetry emptyMap()
+                emptyMap()
+            },
+            onNetworkError = { emptyMap() },
+            onMissing = { emptyMap() }
+        ) { response ->
+            val parsed = response.body.parseOrNull(bulkRatingsResponseAdapter)
+                ?: return@executeWithRateLimitRetry emptyMap()
             parsed.results.mapNotNull { rating ->
                 val tconst = rating.tconst.trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val value = rating.averageRating?.takeIf { it > 0.0 } ?: return@mapNotNull null
@@ -163,32 +149,30 @@ class OkHttpCustomImdbClient @Inject constructor(
     }
 
     private suspend fun <T> executeWithRateLimitRetry(
+        baseUrl: String,
         request: Request,
-        onFailure: (IOException) -> T,
-        onResponse: (Response) -> T
+        onHttpError: (IntegrationCallResult.HttpError) -> T,
+        onNetworkError: (IntegrationCallResult.NetworkError) -> T,
+        onMissing: () -> T,
+        onResponse: (CustomImdbPayload) -> T
     ): T {
         return withContext(Dispatchers.IO) {
             var hasRetriedRateLimit = false
 
             while (true) {
-                try {
-                    var retryDelayMs: Long? = null
-
-                    okHttpClient.newCall(request).execute().use { response ->
-                        if (response.code == 429 && !hasRetriedRateLimit) {
-                            retryDelayMs = parseRetryAfterDelayMs(response.header("Retry-After"))
-                        } else {
-                            return@withContext onResponse(response)
+                when (val result = integrationProvider.execute(baseUrl = baseUrl, request = request)) {
+                    is IntegrationCallResult.Success -> return@withContext onResponse(result.value)
+                    is IntegrationCallResult.HttpError -> {
+                        if (result.statusCode == 429 && !hasRetriedRateLimit) {
+                            val retryDelayMs = result.retryAfterMs ?: 1_000L
+                            hasRetriedRateLimit = true
+                            delayMs(retryDelayMs)
+                            continue
                         }
+                        return@withContext onHttpError(result)
                     }
-
-                    if (retryDelayMs != null) {
-                        hasRetriedRateLimit = true
-                        delayMs(retryDelayMs)
-                        continue
-                    }
-                } catch (error: IOException) {
-                    return@withContext onFailure(error)
+                    is IntegrationCallResult.NetworkError -> return@withContext onNetworkError(result)
+                    IntegrationCallResult.Missing -> return@withContext onMissing()
                 }
             }
 
@@ -203,6 +187,16 @@ class OkHttpCustomImdbClient @Inject constructor(
         } else {
             1_000L
         }
+    }
+}
+
+private fun <T> String.parseOrNull(adapter: com.squareup.moshi.JsonAdapter<T>): T? {
+    return try {
+        adapter.fromJson(this)
+    } catch (_: IOException) {
+        null
+    } catch (_: JsonDataException) {
+        null
     }
 }
 

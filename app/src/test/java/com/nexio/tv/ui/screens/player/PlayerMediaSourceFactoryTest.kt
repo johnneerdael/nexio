@@ -6,6 +6,7 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.datasource.cache.CacheDataSource
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolDataSource
@@ -49,7 +50,7 @@ class PlayerMediaSourceFactoryTest {
         val logs = mutableListOf<String>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolDiagnosticsLoggerForTesting = { logs += it }
@@ -88,7 +89,7 @@ class PlayerMediaSourceFactoryTest {
     fun progressivePlayback_usesParallelRangeDatasourceWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             useParallelConnections = true
         }
@@ -105,7 +106,7 @@ class PlayerMediaSourceFactoryTest {
     fun progressivePlayback_usesPlainHttpDatasourceWhenParallelDisabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             useParallelConnections = false
         }
@@ -124,7 +125,7 @@ class PlayerMediaSourceFactoryTest {
         val writerScheduled = AtomicBoolean(false)
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
@@ -176,7 +177,7 @@ class PlayerMediaSourceFactoryTest {
 
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
@@ -214,7 +215,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
             spoolStorageProbeResult = passingProbeResult(context)
@@ -234,7 +235,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context).copy(
@@ -257,7 +258,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -282,7 +283,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -304,7 +305,7 @@ class PlayerMediaSourceFactoryTest {
         lateinit var factory: PlayerMediaSourceFactory
         factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -330,7 +331,7 @@ class PlayerMediaSourceFactoryTest {
         lateinit var factory: PlayerMediaSourceFactory
         factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -356,7 +357,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context).copy(
@@ -382,7 +383,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context).copy(
@@ -422,7 +423,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -448,7 +449,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -477,7 +478,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -502,7 +503,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = passingProbeResult(context)
@@ -544,7 +545,7 @@ class PlayerMediaSourceFactoryTest {
         activeSpool.writeText("spool")
         unrelatedFile.writeText("keep")
 
-        PlayerMediaSourceFactory(context, OkHttpClient()).cleanupDiskSpoolDirectoryForTesting()
+        PlayerMediaSourceFactory(context, PlaybackMediaSourceTransport(OkHttpClient())).cleanupDiskSpoolDirectoryForTesting()
 
         assertEquals(false, staleDiagnostic.exists())
         assertEquals(false, staleRandom.exists())
@@ -557,7 +558,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadUpstreamKind_reportsPrdsForParallelFactory() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             useParallelConnections = true
         }
@@ -574,7 +575,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadUpstreamKind_reportsSingleWhenDedicatedWarmAheadFactoryIsAbsent() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             useParallelConnections = true
         }
@@ -586,7 +587,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadUpstreamKind_reportsPrdsWhenDedicatedWarmAheadFactoryIsPresent() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             useParallelConnections = true
         }
@@ -623,7 +624,7 @@ class PlayerMediaSourceFactoryTest {
     fun progressivePlaybackStillUsesParallelRangeDatasourceWhenWarmAheadIsDisabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             useParallelConnections = true
             vodCacheWarmAheadEnabled = false
@@ -641,7 +642,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadRequestUrl_returnsNullWhenCurrentStreamChanged() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
         factory.setWarmAheadStateForTesting(
             streamUrl = "https://example.com/stream-b.mkv",
@@ -660,7 +661,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadRequestUrl_usesPlaybackUrlWhenResolvedUrlIsMissing() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
         factory.setWarmAheadStateForTesting(
             streamUrl = "https://example.com/stream-a.mkv",
@@ -679,7 +680,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadRequestUrl_ignoresResolvedUrlFromDifferentStream() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
         factory.setWarmAheadStateForTesting(
             streamUrl = "https://example.com/stream-b.mkv",
@@ -699,7 +700,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadStartCheckRechecksDisabledSetting() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
         factory.setWarmAheadStateForTesting(
             streamUrl = "https://example.com/stream-a.mkv",
@@ -717,7 +718,7 @@ class PlayerMediaSourceFactoryTest {
     fun benchmarkProgressiveFactory_usesParallelRangeDatasourceWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         val dataSourceFactory = factory.createBenchmarkProgressiveDataSourceFactory(
@@ -739,7 +740,7 @@ class PlayerMediaSourceFactoryTest {
     fun benchmarkProgressiveFactory_wrapsVodCacheWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = ApplicationProvider.getApplicationContext<Context>(),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         val dataSourceFactory = factory.createBenchmarkProgressiveDataSourceFactory(
@@ -761,7 +762,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfile_premiumizeUsesThreeBySixteen() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -774,7 +775,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfile_realDebridUsesTwoByEighteen() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -787,7 +788,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfiles_warmAheadDisabledKeepsRealDebridCurrentProfile() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -803,7 +804,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfiles_warmAheadEnabledSplitsRealDebridTwoAndOne() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -819,7 +820,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfiles_warmAheadDisabledKeepsPremiumizeCurrentProfile() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -835,7 +836,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfiles_warmAheadEnabledSplitsPremiumizeTwoAndOne() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -851,7 +852,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfiles_warmAheadEnabledSplitsFallbackTwoAndOne() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -867,7 +868,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadFactoryProfile_usesRealDebridWarmAheadProfileWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -883,7 +884,7 @@ class PlayerMediaSourceFactoryTest {
     fun warmAheadFactoryProfile_isNullWhenWarmAheadDisabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -899,7 +900,7 @@ class PlayerMediaSourceFactoryTest {
     fun parallelProviderProfile_unknownProviderUsesSafeDefault() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         assertEquals(
@@ -912,7 +913,7 @@ class PlayerMediaSourceFactoryTest {
     fun progressivePlayback_returnsProgressiveMediaSource() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         val mediaSource = factory.createMediaSource(
@@ -927,7 +928,7 @@ class PlayerMediaSourceFactoryTest {
     fun hlsPlayback_returnsHlsMediaSource() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         val mediaSource = factory.createMediaSource(
@@ -948,7 +949,7 @@ class PlayerMediaSourceFactoryTest {
     fun dashPlayback_returnsDashMediaSource() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         )
 
         val mediaSource = factory.createMediaSource(
@@ -964,7 +965,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             spoolStorageProbeResult = null
@@ -986,7 +987,7 @@ class PlayerMediaSourceFactoryTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             vodCacheSizeMode = VodCacheSizeMode.ON
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
@@ -1006,7 +1007,7 @@ class PlayerMediaSourceFactoryTest {
         val expectedSpoolDir = File(context.cacheDir.parentFile, "external-spool").also { it.mkdirs() }
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolStorageLocation = DiskSpoolStorageLocation.EXTERNAL
@@ -1033,7 +1034,7 @@ class PlayerMediaSourceFactoryTest {
         val capturedProfiles = mutableListOf<Pair<Int, Int>>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             useParallelConnections = true
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
@@ -1062,7 +1063,7 @@ class PlayerMediaSourceFactoryTest {
         val capturedStartupBuffers = mutableListOf<Int>()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(noNetworkOkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
@@ -1114,7 +1115,7 @@ class PlayerMediaSourceFactoryTest {
         server.start()
         val factory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = OkHttpClient()
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(OkHttpClient())
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE

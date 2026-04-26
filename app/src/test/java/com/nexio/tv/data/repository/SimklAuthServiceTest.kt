@@ -2,9 +2,9 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.data.integration.simkl.SimklAuthIntegrationProvider
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.remote.SimklRequestGate
-import com.nexio.tv.data.remote.api.SimklApi
 import com.nexio.tv.data.remote.dto.simkl.SimklAccountDto
 import com.nexio.tv.data.remote.dto.simkl.SimklPinResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklPinStatusResponseDto
@@ -27,7 +27,7 @@ import retrofit2.Response
 class SimklAuthServiceTest {
     @Test
     fun `poll pin saves token and user to same captured profile after profile switch`() = runTest {
-        val simklApi = mockk<SimklApi>()
+        val simklAuthIntegrationProvider = mockk<SimklAuthIntegrationProvider>()
         val activeProfileId = MutableStateFlow(2)
         val profileManager = testProfileManager(activeProfileId)
         val simklAuthDataStore = SimklAuthDataStore(
@@ -46,7 +46,7 @@ class SimklAuthServiceTest {
             profileId = 2
         )
         coEvery {
-            simklApi.getPinStatus("user")
+            simklAuthIntegrationProvider.getPinStatus("user")
         } answers {
             activeProfileId.value = 3
             Response.success(
@@ -57,7 +57,7 @@ class SimklAuthServiceTest {
             )
         }
         coEvery {
-            simklApi.getUserSettings(any())
+            simklAuthIntegrationProvider.getUserSettings(any())
         } returns Response.success(
             SimklUserSettingsResponseDto(
                 user = SimklUserDto(name = "profile-two-user"),
@@ -67,7 +67,7 @@ class SimklAuthServiceTest {
 
         val service = spyk(
             SimklAuthService(
-                simklApi = simklApi,
+                simklAuthIntegrationProvider = simklAuthIntegrationProvider,
                 simklAuthDataStore = simklAuthDataStore,
                 requestGate = SimklRequestGate(),
                 profileManager = profileManager,

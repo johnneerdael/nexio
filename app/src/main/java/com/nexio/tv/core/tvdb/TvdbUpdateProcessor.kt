@@ -1,11 +1,12 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbUpdateStateStore
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbEntityUpdate
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 
 /**
  * Result of a TVDB update processing run.
@@ -29,11 +30,10 @@ data class TvdbUpdateProcessResult(
  */
 @Singleton
 class TvdbUpdateProcessor @Inject constructor(
-    private val api: TvdbApi,
+    private val provider: TvdbIntegrationProvider,
     private val stateStore: TvdbUpdateStateStore,
     private val invalidator: TvdbCacheInvalidator,
-    private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
-    private val authService: TvdbAuthService
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
 ) {
     companion object {
         private const val TAG = "TvdbUpdateProcessor"
@@ -86,22 +86,6 @@ class TvdbUpdateProcessor @Inject constructor(
         diagnosticsRecorder.record(startDiagnostic)
         emitStructuredLog(startDiagnostic)
 
-        val bearerToken = authService.bearerToken()
-        if (bearerToken == null) {
-            val failDiagnostic = TvdbReliabilityDiagnostic(
-                reason = TvdbReliabilityReason.UPDATE_REFRESH_FAILED,
-                surface = "update_processor",
-                message = "No bearer token available for update refresh"
-            )
-            diagnosticsRecorder.record(failDiagnostic)
-            emitStructuredLog(failDiagnostic)
-            stateStore.recordStatus("failed", "No bearer token available")
-            return TvdbUpdateProcessResult(
-                success = false,
-                error = "No bearer token available"
-            )
-        }
-
         try {
             var processedCount = 0
             var skippedCount = 0
@@ -109,34 +93,34 @@ class TvdbUpdateProcessor @Inject constructor(
             var currentPage: Int? = null
 
             do {
-                val response = api.getUpdates(
-                    authorization = bearerToken,
+                val body = provider.fetchUpdates(
                     since = since,
-                    type = null,
                     page = currentPage
                 )
-
-                if (!response.isSuccessful) {
+                if (body == null) {
                     val failDiagnostic = TvdbReliabilityDiagnostic(
                         reason = TvdbReliabilityReason.UPDATE_REFRESH_FAILED,
                         surface = "update_processor",
-                        message = "API returned HTTP ${response.code()}"
+                        message = "API returned error or no body"
                     )
                     diagnosticsRecorder.record(failDiagnostic)
                     emitStructuredLog(failDiagnostic)
-                    stateStore.recordStatus("failed", "HTTP ${response.code()}")
+                    stateStore.recordStatus("failed", "TVDB updates unavailable")
                     return TvdbUpdateProcessResult(
                         success = false,
                         processedCount = processedCount,
                         skippedCount = skippedCount,
-                        error = "HTTP ${response.code()}"
+                        error = "TVDB updates unavailable"
                     )
                 }
-
-                val body = response.body() ?: break
                 val events = body.data
 
                 for (event in events) {
+                    val ts = event.timeStamp
+                    if (ts != null && (highWatermark == null || ts > highWatermark)) {
+                        highWatermark = ts
+                    }
+
                     if (!isValidEvent(event)) {
                         skippedCount++
                         // Record unknown update diagnostic for malformed event
@@ -171,20 +155,29 @@ class TvdbUpdateProcessor @Inject constructor(
                     }
 
                     processedCount++
-
-                    // Track high watermark from non-null timestamps
-                    val ts = event.timeStamp
-                    if (ts != null && (highWatermark == null || ts > highWatermark)) {
-                        highWatermark = ts
-                    }
                 }
 
                 // Check for next page
                 val nextPageUrl = body.links?.next
-                currentPage = if (!nextPageUrl.isNullOrBlank()) {
-                    extractPageNumber(nextPageUrl) ?: break
-                } else {
+                currentPage = if (nextPageUrl.isNullOrBlank()) {
                     null
+                } else {
+                    extractPageNumber(nextPageUrl) ?: run {
+                        val failDiagnostic = TvdbReliabilityDiagnostic(
+                            reason = TvdbReliabilityReason.UPDATE_REFRESH_FAILED,
+                            surface = "update_processor",
+                            message = "Malformed updates next-page URL: $nextPageUrl"
+                        )
+                        diagnosticsRecorder.record(failDiagnostic)
+                        emitStructuredLog(failDiagnostic)
+                        stateStore.recordStatus("failed", "Malformed updates next-page URL")
+                        return TvdbUpdateProcessResult(
+                            success = false,
+                            processedCount = processedCount,
+                            skippedCount = skippedCount,
+                            error = "Malformed updates next-page URL"
+                        )
+                    }
                 }
             } while (currentPage != null)
 
@@ -210,6 +203,10 @@ class TvdbUpdateProcessor @Inject constructor(
                 highWatermark = highWatermark
             )
         } catch (e: Exception) {
+            if (e is CancellationException) {
+                throw e
+            }
+
             val failDiagnostic = TvdbReliabilityDiagnostic(
                 reason = TvdbReliabilityReason.UPDATE_REFRESH_FAILED,
                 surface = "update_processor",
@@ -239,7 +236,7 @@ class TvdbUpdateProcessor @Inject constructor(
 
     /**
      * Extracts the page number from a pagination URL.
-     * Falls back to incrementing if URL parsing fails.
+     * Returns null when parsing fails.
      */
     private fun extractPageNumber(nextUrl: String): Int? {
         return runCatching {

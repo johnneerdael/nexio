@@ -2,6 +2,8 @@ package com.nexio.tv.data.trailer
 
 import android.util.Log
 import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.data.integration.trailer.TrailerBackendProvider
+import com.nexio.tv.data.integration.trailer.TrailerTmdbProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
@@ -9,7 +11,6 @@ import com.nexio.tv.data.remote.api.TmdbDetailsResponse
 import com.nexio.tv.data.remote.api.TmdbSeasonSummary
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.remote.api.TmdbVideosResponse
-import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -68,12 +69,14 @@ class TrailerServiceLatestSeasonTest {
         metadataDiskCacheStore: MetadataDiskCacheStore,
         tmdbMetadataService: TmdbMetadataService,
     ): TrailerService = TrailerService(
-        trailerApi = mockk(relaxed = true),
-        tmdbApi = tmdbApi,
+        trailerBackendProvider = mockk<TrailerBackendProvider>(relaxed = true),
         inAppYouTubeExtractor = inAppYouTubeExtractor,
-        tmdbSettingsDataStore = tmdbSettingsDataStore,
-        metadataDiskCacheStore = metadataDiskCacheStore,
         tmdbMetadataService = tmdbMetadataService,
+        trailerTmdbProvider = TrailerTmdbProvider(
+            tmdbIntegrationProvider = mockk(relaxed = true),
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbSettingsDataStore = tmdbSettingsDataStore
+        ),
         addonRepository = mockk(relaxed = true),
         streamRepository = mockk(relaxed = true),
         clock = fixedClock

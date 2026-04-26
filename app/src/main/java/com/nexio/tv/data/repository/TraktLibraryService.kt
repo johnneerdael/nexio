@@ -2,20 +2,22 @@ package com.nexio.tv.data.repository
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
-import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.normalizeContentId
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.data.repository.parseIsoToMillis
 import com.nexio.tv.data.repository.toTraktIds
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
@@ -56,14 +58,15 @@ import javax.inject.Singleton
 
 @Singleton
 class TraktLibraryService @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
-    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
+    private val traktIntegrationProvider: TraktIntegrationProvider,
+    private val traktAuthService: TraktRepositoryAuthGateway,
+    private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
     private val metaRepository: MetaRepository,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val snapshotStore: TraktLibrarySnapshotStore,
-    private val profileManager: ProfileManager? = null
+    private val profileManager: ProfileManager? = null,
+    private val ownershipService: IntegrationOwnershipService? = null
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
@@ -628,19 +631,15 @@ class TraktLibraryService @Inject constructor(
     }
 
     private suspend fun fetchWatchlistEntries(session: TrackingAuthSession): List<LibraryEntry> {
-        val moviesResponse = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
-            traktApi.getWatchlist(
-                authorization = authHeader,
-                type = "movies"
-            )
-        } ?: throw IllegalStateException("Failed to fetch watchlist movies")
+        val moviesResponse = traktIntegrationProvider.getWatchlist(
+            session = session,
+            type = "movies"
+        ) ?: throw IllegalStateException("Failed to fetch watchlist movies")
 
-        val showsResponse = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
-            traktApi.getWatchlist(
-                authorization = authHeader,
-                type = "shows"
-            )
-        } ?: throw IllegalStateException("Failed to fetch watchlist shows")
+        val showsResponse = traktIntegrationProvider.getWatchlist(
+            session = session,
+            type = "shows"
+        ) ?: throw IllegalStateException("Failed to fetch watchlist shows")
 
         if (!moviesResponse.isSuccessful || !showsResponse.isSuccessful) {
             throw IllegalStateException("Failed to fetch watchlist")
@@ -660,12 +659,10 @@ class TraktLibraryService @Inject constructor(
     )
 
     private suspend fun fetchPersonalLists(session: TrackingAuthSession): PersonalListFetchResult {
-        val response = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
-            traktApi.getUserLists(
-                authorization = authHeader,
-                id = ME_PATH
-            )
-        } ?: throw IllegalStateException("Failed to fetch personal lists")
+        val response = traktIntegrationProvider.getUserLists(
+            session = session,
+            id = ME_PATH
+        ) ?: throw IllegalStateException("Failed to fetch personal lists")
 
         if (!response.isSuccessful) {
             throw IllegalStateException("Failed to fetch personal lists (${response.code()})")
@@ -708,14 +705,12 @@ class TraktLibraryService @Inject constructor(
         type: String,
         listKey: String
     ): List<LibraryEntry> {
-        val response = traktAuthService.executeAuthorizedRequest(session) { authHeader ->
-            traktApi.getUserListItems(
-                authorization = authHeader,
-                id = ME_PATH,
-                listId = listIdPath,
-                type = type
-            )
-        } ?: throw IllegalStateException("Failed to fetch list items")
+        val response = traktIntegrationProvider.getUserListItems(
+            session = session,
+            id = ME_PATH,
+            listId = listIdPath,
+            type = type
+        ) ?: throw IllegalStateException("Failed to fetch list items")
 
         if (!response.isSuccessful) {
             throw IllegalStateException("Failed to fetch list items (${response.code()})")
@@ -1286,7 +1281,7 @@ class TraktLibraryService @Inject constructor(
         }
     }
 
-    private fun persistAndRestoreSnapshot(
+    private suspend fun persistAndRestoreSnapshot(
         snapshot: Snapshot,
         metadata: Map<String, LibraryMetadata>,
         profileId: Int = activeProfileId()
@@ -1316,12 +1311,22 @@ class TraktLibraryService @Inject constructor(
         )
         if (!hasCache(persisted)) {
             logDebug("persist aborted no cacheable content; clearing snapshot store")
+            runCatching {
+                ownershipService?.syncRails(
+                    RailKeyFactory.traktLibraryNamespace(profileId),
+                    emptyList()
+                )
+            }
             snapshotStore.clear(profileId)
             if (profileId == activeProfileId()) {
                 clearInMemorySnapshot()
             }
             return
         }
+        ownershipService?.syncRails(
+            RailKeyFactory.traktLibraryNamespace(profileId),
+            snapshotStore.buildRailMemberships(persisted, profileId)
+        )
         snapshotStore.write(persisted, profileId)
         val restored = snapshotStore.read(profileId)
         if (restored == null) {
@@ -1336,6 +1341,14 @@ class TraktLibraryService @Inject constructor(
         logDebug("clear cached state")
         clearInMemorySnapshot()
         refreshingState.value = false
+        ownershipService?.let { ownership ->
+            scope.launch {
+                ownership.syncRails(
+                    RailKeyFactory.traktLibraryNamespace(activeProfileId()),
+                    emptyList()
+                )
+            }
+        }
         snapshotStore.clear(activeProfileId())
     }
 

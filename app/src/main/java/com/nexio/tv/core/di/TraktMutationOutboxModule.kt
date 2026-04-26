@@ -1,7 +1,7 @@
 package com.nexio.tv.core.di
 
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
-import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxPolicy
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxStore
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxWorker
@@ -44,11 +44,11 @@ object TraktMutationOutboxModule {
 
     @Provides
     @Singleton
-    fun provideTraktMutationOutboxCoordinator(
+    fun provideProviderMutationOutboxCoordinator(
         worker: TraktMutationOutboxWorker,
         adapters: Set<@JvmSuppressWildcards TraktMutationAdapter>
-    ): TraktMutationOutboxCoordinator {
-        return TraktMutationOutboxCoordinator(
+    ): ProviderMutationOutboxCoordinator {
+        return ProviderMutationOutboxCoordinator(
             worker = worker,
             adapters = adapters
         )
