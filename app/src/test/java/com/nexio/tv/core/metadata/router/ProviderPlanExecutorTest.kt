@@ -260,11 +260,13 @@ class ProviderPlanExecutorTest {
             listOf(
                 TvdbApiShapes.SERIES_EXTENDED,
                 TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
-                TvdbApiShapes.SERIES_EPISODES_LANGUAGE
+                TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
+                TvdbApiShapes.EPISODE_TRANSLATION
             ),
             plan.apiShapeIds()
         )
         assertFalse(plan.step(TvdbApiShapes.SERIES_EPISODES_LANGUAGE).required)
+        assertFalse(plan.step(TvdbApiShapes.EPISODE_TRANSLATION).required)
         assertAllShapesCovered(plan)
     }
 
@@ -383,6 +385,44 @@ class ProviderPlanExecutorTest {
             }
 
             assertTrue(error.message!!.contains("Invalid mediaKind UNKNOWN for provider $provider"))
+        }
+    }
+
+    @Test
+    fun `SEASON depth requires season number for each provider`() {
+        listOf(
+            MetadataPrimaryProvider.TMDB to MetadataMediaKind.SERIES,
+            MetadataPrimaryProvider.TVDB to MetadataMediaKind.SERIES,
+            MetadataPrimaryProvider.KITSU to MetadataMediaKind.ANIME
+        ).forEach { (provider, mediaKind) ->
+            val error = assertThrows("provider=$provider", IllegalStateException::class.java) {
+                executor.buildPlan(
+                    route = route(
+                        provider = provider,
+                        mediaKind = mediaKind
+                    ),
+                    depth = MetadataDepth.SEASON
+                )
+            }
+
+            assertTrue(error.message!!.contains("SEASON provider plan requires seasonNumber"))
+        }
+    }
+
+    @Test
+    fun `plan executor rejects unsupported PREVIEW and PLAYER depths`() {
+        listOf(MetadataDepth.PREVIEW, MetadataDepth.PLAYER).forEach { depth ->
+            val error = assertThrows("depth=$depth", IllegalStateException::class.java) {
+                executor.buildPlan(
+                    route = route(
+                        provider = MetadataPrimaryProvider.TMDB,
+                        mediaKind = MetadataMediaKind.MOVIE
+                    ),
+                    depth = depth
+                )
+            }
+
+            assertTrue(error.message!!.contains("Unsupported provider plan depth $depth"))
         }
     }
 

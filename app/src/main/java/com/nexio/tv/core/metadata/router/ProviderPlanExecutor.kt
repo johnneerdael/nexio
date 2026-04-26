@@ -14,6 +14,12 @@ class ProviderPlanExecutor @Inject constructor() {
         check(!route.targetIdRequiresIdentityResolution) {
             "Provider plan requires identity resolution before execution for route ${route.parentId}"
         }
+        check(depth !in unsupportedDepths) {
+            "Unsupported provider plan depth $depth"
+        }
+        check(depth != MetadataDepth.SEASON || route.seasonNumber != null) {
+            "SEASON provider plan requires seasonNumber"
+        }
 
         val steps = when (route.provider) {
             MetadataPrimaryProvider.TMDB -> tmdbSteps(route, depth)
@@ -102,6 +108,12 @@ class ProviderPlanExecutor @Inject constructor() {
                     role = ProviderPlanRole.SEASON,
                     required = false
                 )
+                steps += step(
+                    apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
+                    provider = MetadataPrimaryProvider.TVDB,
+                    role = ProviderPlanRole.SEASON,
+                    required = false
+                )
             }
         }
 
@@ -162,6 +174,7 @@ class ProviderPlanExecutor @Inject constructor() {
             MetadataDepth.DETAIL_MEDIA,
             MetadataDepth.DETAIL_SECONDARY
         )
+        val unsupportedDepths = setOf(MetadataDepth.PREVIEW, MetadataDepth.PLAYER)
     }
 
     private fun step(
