@@ -106,9 +106,6 @@ val doviExtractorHookReady = parseBooleanProperty(
 val doviEnableRealLink = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "DOVI_ENABLE_REAL_LINK")
 )
-val skipKxKodiModule = parseBooleanProperty(
-    providers.gradleProperty("NEXIO_SKIP_KODI_MODULE").orNull
-)
 val doviStaticLibPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_STATIC_LIB")
 val doviIncludeDirPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_INCLUDE_DIR")
 val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_PREBUILT_ROOT")
@@ -747,13 +744,9 @@ dependencies {
     // Media3 core modules.
     if (useMedia3Source) {
         implementation(libs.media3.exoplayer)
-        if (!skipKxKodiModule) {
-            implementation("androidx.media3:media3-exoplayer-kodi-cpp-audiosink:${libs.versions.media3.get()}")
-        }
+        implementation("androidx.media3:media3-exoplayer-kodi-cpp-audiosink:${libs.versions.media3.get()}")
         implementation(libs.media3.ui)
-        if (!skipKxKodiModule) {
-            implementation("androidx.media3:media3-decoder-ffmpeg:${libs.versions.media3.get()}")
-        }
+        implementation("androidx.media3:media3-decoder-ffmpeg:${libs.versions.media3.get()}")
     }
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
