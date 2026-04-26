@@ -116,6 +116,7 @@ class MetadataAuditRunner private constructor(
                 continueWatchingSnapshot = null,
                 identityResolution = null,
                 productionCallerOwnership = emptyList(),
+                localization = null,
                 violations = emptyList(),
                 events = trace.events
             )
@@ -237,6 +238,7 @@ class MetadataAuditRunner private constructor(
             continueWatchingSnapshot = cwSnapshot,
             identityResolution = identityResolution,
             productionCallerOwnership = productionCallerOwnership,
+            localization = trace.events.mapNotNull { (it as? AuditEvent.Localization)?.event }.firstOrNull(),
             violations = trace.events.mapNotNull { (it as? AuditEvent.PolicyViolation)?.event },
             events = trace.events
         )
@@ -582,6 +584,15 @@ private class AuditMetadataProviderAdapter(
                 reason = cachePolicy.name
             )
         )
+        trace?.onLocalization(
+            localizationEvent(
+                route = route,
+                step = step,
+                cacheKey = "$cacheKey:policy:2",
+                decision = decision,
+                executedNetwork = networkExecuted
+            )
+        )
         scenario.premiumArtworkProvider?.let { artworkProvider ->
             val apiShapeId = when (artworkProvider) {
                 "TOP_POSTERS" -> "topposters.poster_template"
@@ -626,6 +637,72 @@ private class AuditMetadataProviderAdapter(
             )
         )
     }
+
+    private fun localizationEvent(
+        route: MetadataRoute,
+        step: ProviderPlanStep,
+        cacheKey: String,
+        decision: CacheDecision,
+        executedNetwork: Boolean
+    ): LocalizationEvent {
+        val requested = requestedLanguage(route)
+        val fallback = fallbackLanguage(route.provider)
+        return LocalizationEvent(
+            itemId = itemId,
+            provider = route.provider,
+            requestedLanguage = requested,
+            fallbackLanguage = fallback,
+            policyVersion = 2,
+            providerFallbackAllowedForMissingLocalizedFields = false,
+            payloads = listOf(
+                LocalizationPayloadReport(
+                    apiShapeId = step.apiShapeId,
+                    language = requested,
+                    cacheKey = cacheKey,
+                    cacheDecision = decision,
+                    executedNetwork = executedNetwork
+                )
+            ),
+            perEpisodeTranslationFallbacksAttempted = if (step.apiShapeId.contains("episode", ignoreCase = true)) 1 else 0,
+            maxPerEpisodeTranslationFallbacksAllowed = if (route.provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB) 8 else 0,
+            providerFallbackUsed = false
+        )
+    }
+
+    private fun requestedLanguage(route: MetadataRoute): String =
+        when (route.provider) {
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> tvdbLanguage(route.language)
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> tmdbLanguage(route.language)
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> kitsuLanguage(route.language)
+        }
+
+    private fun tvdbLanguage(language: String?): String {
+        val tag = language.orEmpty()
+        return when {
+            tag.isBlank() || tag.startsWith("en", ignoreCase = true) -> "eng"
+            tag.startsWith("nl", ignoreCase = true) -> "nld"
+            else -> tag.substringBefore('-').take(3)
+        }
+    }
+
+    private fun tmdbLanguage(language: String?): String {
+        val tag = language.orEmpty()
+        return when {
+            tag.isBlank() || tag.startsWith("en", ignoreCase = true) -> "en-US"
+            "-" in tag -> tag
+            else -> tag.lowercase()
+        }
+    }
+
+    private fun kitsuLanguage(language: String?): String =
+        language?.substringBefore('-')?.takeIf { it.isNotBlank() }?.lowercase() ?: "en"
+
+    private fun fallbackLanguage(provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider): String =
+        when (provider) {
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> "eng"
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> "en-US"
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> "en"
+        }
 }
 
 private data class MetadataAuditCachePolicy(

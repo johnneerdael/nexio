@@ -41,6 +41,7 @@ sealed interface AuditEvent {
     data class ContinueWatching(val event: ContinueWatchingSnapshotEvent) : AuditEvent
     data class IdentityResolution(val event: IdentityResolutionEvent) : AuditEvent
     data class ProductionCallerOwnership(val event: ProductionCallerOwnershipEvent) : AuditEvent
+    data class Localization(val event: LocalizationEvent) : AuditEvent
     data class PolicyViolation(val event: PolicyViolationEvent) : AuditEvent
 }
 
@@ -172,6 +173,27 @@ data class ProductionCallerOwnershipEvent(
     val legacyRouterUsedAfterFacade: Boolean
 )
 
+data class LocalizationEvent(
+    val itemId: String,
+    val provider: MetadataPrimaryProvider,
+    val requestedLanguage: String,
+    val fallbackLanguage: String,
+    val policyVersion: Int,
+    val providerFallbackAllowedForMissingLocalizedFields: Boolean,
+    val payloads: List<LocalizationPayloadReport>,
+    val perEpisodeTranslationFallbacksAttempted: Int,
+    val maxPerEpisodeTranslationFallbacksAllowed: Int,
+    val providerFallbackUsed: Boolean
+)
+
+data class LocalizationPayloadReport(
+    val apiShapeId: String,
+    val language: String,
+    val cacheKey: String,
+    val cacheDecision: CacheDecision?,
+    val executedNetwork: Boolean
+)
+
 data class MetadataExecutionReport(
     val schemaVersion: Int,
     val provenance: MetadataAuditProvenance,
@@ -209,6 +231,7 @@ data class ItemExecutionReport(
     val continueWatchingSnapshot: ContinueWatchingSnapshotEvent?,
     val identityResolution: IdentityResolutionEvent?,
     val productionCallerOwnership: List<ProductionCallerOwnershipEvent>,
+    val localization: LocalizationEvent?,
     val violations: List<PolicyViolationEvent>,
     val events: List<AuditEvent>
 )

@@ -71,4 +71,25 @@ object MetadataAuditAssertions {
             }
         }
     }
+
+    fun assertLocalizationFallbackStaysWithinProvider(report: MetadataExecutionReport) {
+        report.items.forEach { item ->
+            item.localization?.let { localization ->
+                check(!localization.providerFallbackUsed) {
+                    "Localization used provider fallback for missing localized fields on ${item.itemId}"
+                }
+                check(localization.fallbackLanguage.isNotBlank()) {
+                    "Localization fallback language missing on ${item.itemId}"
+                }
+                localization.payloads.forEach { payload ->
+                    check(payload.language.isNotBlank()) {
+                        "Localization payload language missing on ${item.itemId}: $payload"
+                    }
+                    check(payload.cacheKey.contains("policy:")) {
+                        "Localization payload cache key missing policy version on ${item.itemId}: ${payload.cacheKey}"
+                    }
+                }
+            }
+        }
+    }
 }

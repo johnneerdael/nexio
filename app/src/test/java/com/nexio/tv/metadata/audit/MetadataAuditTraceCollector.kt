@@ -12,6 +12,7 @@ interface MetadataAuditTraceCollector {
     fun onContinueWatchingSnapshot(event: ContinueWatchingSnapshotEvent)
     fun onIdentityResolution(event: IdentityResolutionEvent)
     fun onProductionCallerOwnership(event: ProductionCallerOwnershipEvent)
+    fun onLocalization(event: LocalizationEvent)
     fun onPolicyViolation(event: PolicyViolationEvent)
 }
 
@@ -61,6 +62,10 @@ class RecordingMetadataAuditTraceCollector : MetadataAuditTraceCollector {
 
     override fun onProductionCallerOwnership(event: ProductionCallerOwnershipEvent) {
         _events += AuditEvent.ProductionCallerOwnership(event)
+    }
+
+    override fun onLocalization(event: LocalizationEvent) {
+        _events += AuditEvent.Localization(event)
     }
 
     override fun onPolicyViolation(event: PolicyViolationEvent) {
