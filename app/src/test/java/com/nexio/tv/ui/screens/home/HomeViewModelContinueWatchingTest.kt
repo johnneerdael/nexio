@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -49,7 +50,7 @@ class HomeViewModelContinueWatchingTest {
         )
 
         val description = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 
@@ -90,7 +91,7 @@ class HomeViewModelContinueWatchingTest {
         )
 
         val description = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 
@@ -123,7 +124,7 @@ class HomeViewModelContinueWatchingTest {
         )
 
         val description = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 

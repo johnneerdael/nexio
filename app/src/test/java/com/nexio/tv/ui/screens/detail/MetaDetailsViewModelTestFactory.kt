@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.detail
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.anime.KitsuMetadataService
@@ -88,7 +89,7 @@ fun buildMetaDetailsViewModel(
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         tmdbService = tmdbService,
         tmdbMetadataService = tmdbMetadataService,
-        tvMetadataRouter = tvMetadataRouter,
+        metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
         kitsuMetadataService = kitsuMetadataService,
         profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),

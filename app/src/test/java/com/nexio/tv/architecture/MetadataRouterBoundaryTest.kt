@@ -11,12 +11,19 @@ class MetadataRouterBoundaryTest {
     @Test
     fun `production callers use metadata router facade instead of legacy tv metadata router`() {
         val offenders = productionRegexScan(
-            forbiddenPatterns = mapOf("TvMetadataRouter" to Regex("""\bTvMetadataRouter\b""")),
-            allowedPaths = productionAllowedPathSuffixes("/com/nexio/tv/core/tvdb/TvMetadataRouter.kt")
+            forbiddenPatterns = mapOf(
+                "TvMetadataRouter" to Regex("""\bTvMetadataRouter\b"""),
+                "ProviderMetadataRouter" to Regex("""\bProviderMetadataRouter\b""")
+            ),
+            allowedPaths = productionAllowedPathSuffixes(
+                "/com/nexio/tv/core/metadata/router/MetadataRouterFacade.kt",
+                "/com/nexio/tv/core/tvdb/ProviderMetadataRouter.kt",
+                "/com/nexio/tv/core/tvdb/TvMetadataRouter.kt"
+            )
         )
 
         if (offenders.isNotEmpty()) {
-            fail("Production callers must depend on MetadataRouterFacade, not TvMetadataRouter: $offenders")
+            fail("Production callers must depend on MetadataRouterFacade, not direct TV provider routers: $offenders")
         }
     }
 

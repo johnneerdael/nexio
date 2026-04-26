@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
@@ -205,7 +204,6 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         val localizedPreview = overlayProviderLocalizedMetadataForHome(
             item = item.toContinueWatchingProviderPreview(),
             fallbackContentId = item.providerFallbackContentId(),
-            tvMetadataRouter = tvMetadataRouter,
             metadataRouterFacade = metadataRouterFacadeOrNull()
                 ?: defaultMetadataRouterFacadeForManualConstruction(),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
@@ -214,7 +212,6 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             profileBoundary = profileBoundary
         )
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
             metadataRouterFacade = metadataRouterFacadeOrNull()
                 ?: defaultMetadataRouterFacadeForManualConstruction(),
             item = item,
@@ -309,7 +306,6 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
 }
 
 internal suspend fun localizedContinueWatchingEpisodeDescription(
-    tvMetadataRouter: ProviderMetadataRouter,
     metadataRouterFacade: com.nexio.tv.core.metadata.router.MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     item: ContinueWatchingItem,
     language: String? = null
@@ -318,25 +314,16 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
     val episode = item.episode() ?: return null
     if (!isSeriesType(item.contentType())) return null
 
-    try {
-        metadataRouterFacade.resolveRequest(
-            MetadataRequest(
-                contentId = item.contentId(),
-                contentType = ContentType.fromString(item.contentType()),
-                sourceContext = MetadataSourceContext(itemType = item.contentType()),
-                language = language,
-                seasonNumber = season,
-                depth = MetadataDepth.SEASON
-            )
-        )
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
-    }
-
-    return tvMetadataRouter.fetchEpisodeEnrichment(
-        TvMetadataRequest(
+    return metadataRouterFacade.fetchTvEpisodeEnrichment(
+        metadataRequest = MetadataRequest(
+            contentId = item.contentId(),
+            contentType = ContentType.fromString(item.contentType()),
+            sourceContext = MetadataSourceContext(itemType = item.contentType()),
+            language = language,
+            seasonNumber = season,
+            depth = MetadataDepth.SEASON
+        ),
+        tvRequest = TvMetadataRequest(
             contentId = item.contentId(),
             fallbackContentId = item.providerFallbackContentId(),
             contentType = ContentType.fromString(item.contentType()),

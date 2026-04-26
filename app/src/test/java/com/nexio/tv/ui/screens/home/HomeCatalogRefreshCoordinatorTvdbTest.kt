@@ -4,6 +4,7 @@ import android.content.Context
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
@@ -144,7 +145,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
             profileBoundary = profileBoundary,

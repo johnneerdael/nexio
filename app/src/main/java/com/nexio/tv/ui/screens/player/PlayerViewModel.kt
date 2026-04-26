@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -48,7 +47,6 @@ class PlayerViewModel @Inject constructor(
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     private val subtitleTranslationService: SubtitleTranslationService,
-    private val tvMetadataRouter: ProviderMetadataRouter,
     private val metadataRouterFacade: MetadataRouterFacade,
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val playbackActivityTracker: PlaybackActivityTracker,
@@ -72,7 +70,6 @@ class PlayerViewModel @Inject constructor(
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         subtitleTranslationService = subtitleTranslationService,
-        tvMetadataRouter = tvMetadataRouter,
         metadataRouterFacade = metadataRouterFacade,
         playbackIdleGateState = playbackIdleGateState,
         playbackActivityTracker = playbackActivityTracker,

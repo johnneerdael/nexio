@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
@@ -40,7 +41,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
-        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.profileBoundary } returns profileBoundary
@@ -85,7 +86,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
-        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.profileBoundary } returns profileBoundary
@@ -135,7 +136,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>()
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
-        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore

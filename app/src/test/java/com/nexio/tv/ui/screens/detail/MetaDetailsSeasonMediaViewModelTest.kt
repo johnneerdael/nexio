@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.detail
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -1058,7 +1059,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
             tmdbMetadataService = resolvedTmdbMetadataService,
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             kitsuMetadataService = mockk(relaxed = true),
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
