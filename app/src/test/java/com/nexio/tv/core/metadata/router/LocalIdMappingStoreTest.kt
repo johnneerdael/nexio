@@ -73,6 +73,27 @@ class LocalIdMappingStoreTest {
         }
     }
 
+    @Test
+    fun `mixed-case imdb lookup resolves durable normalized mapping`() = runTest {
+        withDatabase { db ->
+            val store = LocalIdMappingStore(db.mediaIdentityDao())
+            val canonical = imdbSource()
+
+            store.persist(
+                IdMapping(
+                    sourceId = canonical,
+                    provider = MetadataPrimaryProvider.KITSU,
+                    providerId = "7442",
+                    source = IdMappingSource.LOCAL,
+                    evidence = "seeded"
+                )
+            )
+
+            assertEquals("7442", store.lookupKitsu(ParsedMetadataId(AnimeIdScheme.IMDB, "TT0388629", "TT0388629"))?.providerId)
+            assertEquals("7442", store.lookupKitsu(ParsedMetadataId(AnimeIdScheme.IMDB, "TT0388629", "IMDb:TT0388629"))?.providerId)
+        }
+    }
+
     private suspend fun withDatabase(block: suspend (IntegrationCacheDatabase) -> Unit) {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val db = Room.inMemoryDatabaseBuilder(

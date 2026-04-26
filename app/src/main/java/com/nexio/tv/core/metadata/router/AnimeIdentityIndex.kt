@@ -12,7 +12,10 @@ data class AnimeIdentityMapping(
     val scheme: AnimeIdScheme,
     val value: String,
     val kitsuId: String
-)
+) {
+    fun normalizedLookup(): AnimeIdentityLookup =
+        AnimeIdentityLookup(scheme, normalizeMetadataIdValue(scheme, value))
+}
 
 data class AnimeIdentityLookup(
     val scheme: AnimeIdScheme,
@@ -35,28 +38,40 @@ object MetadataIdParser {
             lower.startsWith("imdb:") -> prefixed(AnimeIdScheme.IMDB, raw)
             lower.startsWith("tmdb:") -> prefixed(AnimeIdScheme.TMDB, raw)
             lower.startsWith("tvdb:") -> prefixed(AnimeIdScheme.TVDB, raw)
-            lower.startsWith("tt") -> ParsedMetadataId(AnimeIdScheme.IMDB, raw, raw)
+            lower.startsWith("tt") -> ParsedMetadataId(AnimeIdScheme.IMDB, normalizeMetadataIdValue(AnimeIdScheme.IMDB, raw), raw)
             else -> ParsedMetadataId(AnimeIdScheme.UNKNOWN, raw, raw)
         }
     }
 
     private fun prefixed(scheme: AnimeIdScheme, raw: String): ParsedMetadataId {
         val value = raw.substringAfter(":").substringBefore(":")
-        return ParsedMetadataId(scheme, value, raw)
+        return ParsedMetadataId(scheme, normalizeMetadataIdValue(scheme, value), raw)
     }
 }
+
+fun normalizeMetadataIdValue(scheme: AnimeIdScheme, value: String): String =
+    when (scheme) {
+        AnimeIdScheme.KITSU,
+        AnimeIdScheme.MAL,
+        AnimeIdScheme.ANILIST,
+        AnimeIdScheme.ANIDB,
+        AnimeIdScheme.IMDB,
+        AnimeIdScheme.TMDB,
+        AnimeIdScheme.TVDB -> value.trim().lowercase()
+        AnimeIdScheme.UNKNOWN -> value.trim()
+    }
 
 class InMemoryAnimeIdentityIndex(
     mappings: List<AnimeIdentityMapping> = emptyList()
 ) : AnimeIdentityIndex {
     val lookups: MutableList<AnimeIdentityLookup> = mutableListOf()
-    private val mappingByLookup = mappings.associateBy { AnimeIdentityLookup(it.scheme, it.value) }
+    private val mappingByLookup = mappings.associateBy { it.normalizedLookup() }
 
     override suspend fun resolveKitsuId(id: ParsedMetadataId): String? {
         require(id.scheme in supportedLookupSchemes) {
             "AnimeIdentityIndex cannot resolve provider-native or unknown id scheme: ${id.scheme}"
         }
-        val lookup = AnimeIdentityLookup(id.scheme, id.value)
+        val lookup = AnimeIdentityLookup(id.scheme, normalizeMetadataIdValue(id.scheme, id.value))
         lookups += lookup
         return mappingByLookup[lookup]?.kitsuId
     }
