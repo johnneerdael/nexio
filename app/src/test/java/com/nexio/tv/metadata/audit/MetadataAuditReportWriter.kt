@@ -26,6 +26,10 @@ class MetadataAuditReportWriter {
     private fun toJson(report: MetadataExecutionReport): String =
         buildString {
             appendLine("{")
+            appendLine("  \"schemaVersion\": ${report.schemaVersion},")
+            appendLine("  \"gitSha\": \"${report.provenance.gitSha}\",")
+            appendLine("  \"gitWorktree\": ${gitWorktreeJson(report.provenance.gitWorktree)},")
+            appendLine("  \"artifactRole\": \"SMOKE_DEBUG_ONLY\",")
             appendLine("  \"fixtureName\": \"${report.fixtureName}\",")
             appendLine("  \"scenario\": \"${report.scenario.name}\",")
             appendLine("  \"verdict\": \"${report.verdict}\",")
@@ -50,6 +54,10 @@ class MetadataAuditReportWriter {
     private fun toBundleJson(bundle: MetadataExecutionReportBundle): String =
         buildString {
             appendLine("{")
+            appendLine("  \"schemaVersion\": ${bundle.schemaVersion},")
+            appendLine("  \"gitSha\": \"${bundle.provenance.gitSha}\",")
+            appendLine("  \"gitWorktree\": ${gitWorktreeJson(bundle.provenance.gitWorktree)},")
+            appendLine("  \"artifactRole\": \"SIGN_OFF_AGGREGATE\",")
             appendLine("  \"verdict\": \"${bundle.verdict}\",")
             appendLine("  \"generatedAtEpochMs\": ${bundle.generatedAtEpochMs},")
             appendLine("  \"summary\": ${summaryJson(bundle.summaries, indent = "  ")},")
@@ -96,9 +104,14 @@ class MetadataAuditReportWriter {
         buildString {
             appendLine("# Metadata Execution Audit")
             appendLine()
+            appendLine("> Smoke/debug artifact only. Use `metadata-execution-report.md` for production sign-off.")
+            appendLine()
             appendLine("**Fixture:** `${report.fixtureName}`")
             appendLine("**Scenario:** `${report.scenario.name}`")
             appendLine("**Verdict:** `${report.verdict}`")
+            appendLine("**Schema version:** `${report.schemaVersion}`")
+            appendLine("**Git SHA:** `${report.provenance.gitSha}`")
+            appendLine("**Git worktree:** `${report.provenance.gitWorktree.state}` (${report.provenance.gitWorktree.dirtyFileCount} changed, ${report.provenance.gitWorktree.untrackedFileCount} untracked)")
             appendLine()
             appendLine("## Summary")
             appendLine("| Metric | Value |")
@@ -129,7 +142,8 @@ class MetadataAuditReportWriter {
                     appendLine("| Provider | `${route.provider}` |")
                     appendLine("| Media kind | `${route.mediaKind}` |")
                     appendLine("| Reason | `${route.reason}` |")
-                    appendLine("| Requires identity resolution | `${route.targetIdRequiresIdentityResolution}` |")
+                    appendLine("| Pre-resolution identity required | `${route.preResolutionTargetIdRequiresIdentityResolution}` |")
+                    appendLine("| Execution identity resolved | `${!route.targetIdRequiresIdentityResolution}` |")
                     appendLine()
                 }
 
@@ -173,6 +187,10 @@ class MetadataAuditReportWriter {
             appendLine()
             appendLine("**Verdict:** `${bundle.verdict}`")
             appendLine("**Generated:** `${bundle.generatedAtEpochMs}`")
+            appendLine("**Schema version:** `${bundle.schemaVersion}`")
+            appendLine("**Git SHA:** `${bundle.provenance.gitSha}`")
+            appendLine("**Git worktree:** `${bundle.provenance.gitWorktree.state}` (${bundle.provenance.gitWorktree.dirtyFileCount} changed, ${bundle.provenance.gitWorktree.untrackedFileCount} untracked)")
+            appendLine("**Artifact role:** `SIGN_OFF_AGGREGATE`")
             appendLine()
             appendSummary(bundle.summaries)
             bundle.reports.forEach { report ->
@@ -190,9 +208,9 @@ class MetadataAuditReportWriter {
                     appendLine()
                     item.routing?.let { route ->
                         appendLine("#### Routing")
-                        appendLine("| Provider | Media kind | Reason | Used inputs | Ignored inputs | Requires identity resolution |")
-                        appendLine("|---|---|---|---|---|---:|")
-                        appendLine("| `${route.provider}` | `${route.mediaKind}` | `${route.reason}` | `${route.usedInputs.joinToString()}` | `${route.ignoredInputs.joinToString()}` | `${route.targetIdRequiresIdentityResolution}` |")
+                        appendLine("| Provider | Media kind | Reason | Used inputs | Ignored inputs | Pre-resolution identity required | Execution identity resolved |")
+                        appendLine("|---|---|---|---|---|---:|---:|")
+                        appendLine("| `${route.provider}` | `${route.mediaKind}` | `${route.reason}` | `${route.usedInputs.joinToString()}` | `${route.ignoredInputs.joinToString()}` | `${route.preResolutionTargetIdRequiresIdentityResolution}` | `${!route.targetIdRequiresIdentityResolution}` |")
                         appendLine()
                     }
                     item.providerPlan?.let { plan ->
@@ -285,7 +303,7 @@ class MetadataAuditReportWriter {
 
     private fun routeJson(route: RouteEvent?, indent: String): String =
         route?.let {
-            """{"parentId":"${it.parentId}","provider":"${it.provider}","mediaKind":"${it.mediaKind}","reason":"${it.reason}","targetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"usedInputs":[${it.usedInputs.joinToString { input -> "\"$input\"" }}],"ignoredInputs":[${it.ignoredInputs.joinToString { input -> "\"$input\"" }}]}"""
+            """{"parentId":"${it.parentId}","provider":"${it.provider}","mediaKind":"${it.mediaKind}","reason":"${it.reason}","preResolutionTargetIdRequiresIdentityResolution":${it.preResolutionTargetIdRequiresIdentityResolution},"executionTargetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"executionIdentityResolved":${!it.targetIdRequiresIdentityResolution},"usedInputs":[${it.usedInputs.joinToString { input -> "\"$input\"" }}],"ignoredInputs":[${it.ignoredInputs.joinToString { input -> "\"$input\"" }}]}"""
         } ?: "null"
 
     private fun providerPlanJson(plan: ProviderPlanEvent?, indent: String): String =
@@ -322,4 +340,7 @@ class MetadataAuditReportWriter {
 
     private fun productionCallerOwnershipJson(event: ProductionCallerOwnershipEvent): String =
         """{"pathName":"${event.pathName}","entrypoint":"${event.entrypoint}","facadeOrRepositoryCalled":${event.facadeOrRepositoryCalled},"providerPlanRunnerExpected":${event.providerPlanRunnerExpected},"fieldResolverExpected":${event.fieldResolverExpected},"legacyRouterUsedAfterFacade":${event.legacyRouterUsedAfterFacade}}"""
+
+    private fun gitWorktreeJson(state: GitWorktreeState): String =
+        """{"state":"${state.state}","dirtyFileCount":${state.dirtyFileCount},"untrackedFileCount":${state.untrackedFileCount}}"""
 }

@@ -258,6 +258,8 @@ class MetadataExecutionAuditGoldenTest {
         val item = report.items.single()
 
         assertEquals(MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT, item.routing?.reason)
+        assertTrue(item.routing?.preResolutionTargetIdRequiresIdentityResolution == true)
+        assertFalse(item.routing?.targetIdRequiresIdentityResolution == true)
         assertEquals("tmdb:1399", item.identityResolution?.sourceId)
         assertEquals(MetadataPrimaryProvider.TVDB, item.identityResolution?.targetProvider)
         assertEquals("tvdb.remoteid.lookup", item.identityResolution?.apiShapeId)
@@ -318,14 +320,44 @@ class MetadataExecutionAuditGoldenTest {
 
         val json = File(outputDir, "metadata-execution-report.json").readText()
         val markdown = File(outputDir, "metadata-execution-report.md").readText()
+        assertTrue(json.contains("\"schemaVersion\""))
+        assertTrue(json.contains("\"gitSha\""))
+        assertTrue(json.contains("\"gitWorktree\""))
+        assertTrue(json.contains("\"artifactRole\": \"SIGN_OFF_AGGREGATE\""))
+        assertTrue(json.contains("preResolutionTargetIdRequiresIdentityResolution"))
+        assertTrue(json.contains("executionIdentityResolved"))
         assertTrue(json.contains("crunchyroll-imdb-anime-detail-core"))
         assertTrue(json.contains("field-ownership-conflict"))
         assertTrue(json.contains("identityResolution"))
         assertTrue(json.contains("productionCallerOwnership"))
         assertTrue(markdown.contains("Metadata Execution Audit Bundle"))
+        assertTrue(markdown.contains("Git SHA"))
+        assertTrue(markdown.contains("Artifact role"))
+        assertTrue(markdown.contains("Pre-resolution identity required"))
+        assertTrue(markdown.contains("Execution identity resolved"))
         assertTrue(markdown.contains("provider-native-conflict"))
         assertTrue(markdown.contains("Identity resolution"))
         assertTrue(markdown.contains("Production caller ownership"))
+    }
+
+    @Test
+    fun `single report writer marks artifacts as smoke only`() = runTest {
+        val report = MetadataAuditRunner.default().runCatalogFixture(
+            fixtureName = "netflix_movie_nfx.json",
+            fixtureJson = fixture("metadata/addons/netflix_movie_nfx.json"),
+            scenario = MetadataAuditScenario(
+                name = "netflix-movie-detail-core",
+                depth = MetadataDepth.DETAIL_CORE,
+                visibleItemIds = setOf("tt16431404")
+            )
+        )
+        val outputDir = File("build/reports/metadata-audit")
+
+        MetadataAuditReportWriter().writeJson(report, File(outputDir, "metadata-execution-single-report.json"))
+        MetadataAuditReportWriter().writeMarkdown(report, File(outputDir, "metadata-execution-single-report.md"))
+
+        assertTrue(File(outputDir, "metadata-execution-single-report.json").readText().contains("SMOKE_DEBUG_ONLY"))
+        assertTrue(File(outputDir, "metadata-execution-single-report.md").readText().contains("Smoke/debug artifact only"))
     }
 
     private fun fixture(path: String): String {

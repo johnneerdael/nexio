@@ -61,6 +61,7 @@ data class RouteEvent(
     val mediaKind: MetadataMediaKind,
     val reason: MetadataDecisionReason,
     val targetIds: Map<MetadataPrimaryProvider, String>,
+    val preResolutionTargetIdRequiresIdentityResolution: Boolean,
     val targetIdRequiresIdentityResolution: Boolean,
     val usedInputs: Set<String>,
     val ignoredInputs: Set<String>
@@ -172,6 +173,8 @@ data class ProductionCallerOwnershipEvent(
 )
 
 data class MetadataExecutionReport(
+    val schemaVersion: Int,
+    val provenance: MetadataAuditProvenance,
     val verdict: AuditVerdict,
     val scenario: MetadataAuditScenario,
     val fixtureName: String,
@@ -182,6 +185,8 @@ data class MetadataExecutionReport(
 )
 
 data class MetadataExecutionReportBundle(
+    val schemaVersion: Int,
+    val provenance: MetadataAuditProvenance,
     val verdict: AuditVerdict,
     val generatedAtEpochMs: Long,
     val reports: List<MetadataExecutionReport>,
@@ -219,6 +224,17 @@ data class AuditSummaries(
     val policyViolations: Int,
     val providersUsed: Map<String, Int>,
     val apiShapesUsed: Map<String, Int>
+)
+
+data class MetadataAuditProvenance(
+    val gitSha: String,
+    val gitWorktree: GitWorktreeState
+)
+
+data class GitWorktreeState(
+    val state: String,
+    val dirtyFileCount: Int,
+    val untrackedFileCount: Int
 )
 
 fun MetadataExecutionReport.allEvents(): List<AuditEvent> = items.flatMap { it.events }
