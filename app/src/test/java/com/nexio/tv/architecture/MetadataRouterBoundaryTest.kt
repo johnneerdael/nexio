@@ -21,11 +21,15 @@ class MetadataRouterBoundaryTest {
             allowedPaths = productionAllowedPathSuffixes(
                 "/com/nexio/tv/core/tvdb/ProviderMetadataRouter.kt",
                 "/com/nexio/tv/core/tvdb/TvMetadataRouter.kt",
+                "/com/nexio/tv/core/tvdb/TvdbMetadataService.kt",
                 "/com/nexio/tv/core/tmdb/TmdbMetadataService.kt",
                 "/com/nexio/tv/core/anime/KitsuMetadataService.kt",
+                "/com/nexio/tv/data/repository/EpisodeRatingsSelectionRepository.kt",
+                "/com/nexio/tv/data/trailer/TrailerService.kt",
                 "/com/nexio/tv/data/integration/metadata/TmdbMetadataProviderAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TvdbMetadataProviderAdapter.kt",
-                "/com/nexio/tv/data/integration/metadata/KitsuMetadataProviderAdapter.kt"
+                "/com/nexio/tv/data/integration/metadata/KitsuMetadataProviderAdapter.kt",
+                "/com/nexio/tv/data/integration/metadata/MetadataSecondaryRepository.kt"
             )
         )
 

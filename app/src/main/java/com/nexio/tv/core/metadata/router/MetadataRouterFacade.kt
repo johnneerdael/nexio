@@ -76,11 +76,31 @@ class MetadataRouterFacade @Inject constructor(
         metadataRequest: MetadataRequest,
         tvRequest: TvMetadataRequest
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
-        val result = resolveRequest(metadataRequest)
+        val baseRoute = router.route(
+            metadataRequest.copy(
+                depth = MetadataDepth.SEASON,
+                seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
+            )
+        )
+        val resolvedBaseRoute = identityResolver.resolve(baseRoute)
+        if (resolvedBaseRoute.targetIdRequiresIdentityResolution) {
+            throw MetadataRouteFailure.IdentityResolutionFailed(resolvedBaseRoute.parentId, resolvedBaseRoute.provider)
+        }
+        val episodeMetadata = tvRequest.seasonNumbers
+            .ifEmpty { listOfNotNull(metadataRequest.seasonNumber) }
+            .ifEmpty { listOf(1) }
+            .flatMap { seasonNumber ->
+                val seasonRoute = resolvedBaseRoute.copy(seasonNumber = seasonNumber)
+                val plan = providerPlanExecutor.buildPlan(seasonRoute, MetadataDepth.SEASON)
+                providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
+                    stepResult.episodeMetadata.entries
+                }
+            }
+            .associate { it.toPair() }
         return TvMetadataDecision(
-            provider = result.route?.provider.toTvProvider(),
+            provider = resolvedBaseRoute.provider.toTvProvider(),
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-            value = emptyMap(),
+            value = episodeMetadata,
             diagnostics = emptyList()
         )
     }
