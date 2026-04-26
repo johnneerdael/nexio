@@ -1,0 +1,17 @@
+- [x] Add request normalization and `parentIdOf()` behavior.
+- [x] Add `MetadataRouter` route result model with trace evidence.
+- [x] Add `IdMappingStore` and mapping source semantics.
+- [x] Add AnimeIdentityIndex / Fribb lookup for MAL, AniList, AniDB, and IMDb anime detection.
+- [x] Add tests for `kitsu:` direct routing, MAL/AniList/AniDB-to-Kitsu mapping, IMDb local/Fribb anime mapping, provider-native TMDB/TVDB direct routing, provider-native conflict tracing, forbidden catalog-label routing, item-type fallback, Disney mixed rows, and episode parent normalization.
+- [x] Add provider plan execution for TMDB, TVDB, Kitsu, and route-only playback depth.
+- [x] Add resolver orchestration by metadata depth.
+- [x] Add field ownership resolution so primary provider fields replace and secondary resolver fields supplement.
+- [x] Add router, provider metadata, resolved document, artwork decision, and image cache-key separation.
+- [x] Persist Continue Watching route context, click-time metadata, and routing version.
+- [x] Migrate detail, home, player, and Continue Watching callers to `MetadataRouterFacade` boundaries.
+- [x] Add architecture tests preventing direct production use of legacy metadata router boundaries.
+- [x] Run focused router unit tests.
+- [x] Run Continue Watching and migration tests.
+- [x] Run IntegrationRuntime audit and MetadataRouter readiness gate.
+- [x] Run OpenSpec validation.
+- [x] Run debug Kotlin compile smoke check.
