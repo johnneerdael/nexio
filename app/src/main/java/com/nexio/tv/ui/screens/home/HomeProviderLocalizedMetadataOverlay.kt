@@ -23,6 +23,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 internal suspend fun overlayProviderLocalizedMetadataForHome(
@@ -86,7 +87,7 @@ internal suspend fun MetadataRouterFacade.resolveHomeRequest(
     language: String? = null,
     seasonNumber: Int? = null
 ) {
-    runCatching {
+    try {
         resolveRequest(
             MetadataRequest(
                 contentId = item.id,
@@ -100,6 +101,10 @@ internal suspend fun MetadataRouterFacade.resolveHomeRequest(
                 depth = depth
             )
         )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
     }
 }
 

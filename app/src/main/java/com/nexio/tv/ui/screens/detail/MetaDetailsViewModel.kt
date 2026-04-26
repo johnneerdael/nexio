@@ -1836,7 +1836,7 @@ class MetaDetailsViewModel @Inject constructor(
         seasonNumber: Int? = null,
         depth: MetadataDepth
     ) {
-        runCatching {
+        try {
             metadataRouterFacade.resolveRequest(
                 MetadataRequest(
                     contentId = contentId,
@@ -1847,6 +1847,10 @@ class MetaDetailsViewModel @Inject constructor(
                     depth = depth
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
         }
     }
 

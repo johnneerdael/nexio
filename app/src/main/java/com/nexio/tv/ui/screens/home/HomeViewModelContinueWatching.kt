@@ -14,6 +14,7 @@ import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
+import kotlinx.coroutines.CancellationException
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
@@ -313,7 +314,7 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
     val episode = item.episode() ?: return null
     if (!isSeriesType(item.contentType())) return null
 
-    runCatching {
+    try {
         metadataRouterFacade.resolveRequest(
             MetadataRequest(
                 contentId = item.contentId(),
@@ -324,6 +325,10 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
                 depth = MetadataDepth.SEASON
             )
         )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
     }
 
     return tvMetadataRouter.fetchEpisodeEnrichment(
