@@ -39,24 +39,16 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     if (isSeriesType(contentType)) {
         val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
         if (season != null && episode != null) {
-            try {
-                metadataRouterFacadeOrNull()?.resolveRequest(
-                    MetadataRequest(
-                        contentId = contentId,
-                        contentType = parseContinueWatchingContentType(contentType),
-                        sourceContext = MetadataSourceContext(itemType = contentType),
-                        language = tvdbLanguage,
-                        seasonNumber = season,
-                        depth = MetadataDepth.SEASON
-                    )
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
-            }
-            val episodeRuntime = tvMetadataRouter.fetchEpisodeEnrichment(
-                TvMetadataRequest(
+            val episodeRuntime = metadataRouterFacade.fetchTvEpisodeEnrichment(
+                metadataRequest = MetadataRequest(
+                    contentId = contentId,
+                    contentType = parseContinueWatchingContentType(contentType),
+                    sourceContext = MetadataSourceContext(itemType = contentType),
+                    language = tvdbLanguage,
+                    seasonNumber = season,
+                    depth = MetadataDepth.SEASON
+                ),
+                tvRequest = TvMetadataRequest(
                     contentId = contentId,
                     fallbackContentId = item.videoId(),
                     contentType = parseContinueWatchingContentType(contentType),
@@ -66,23 +58,15 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
             ).value?.get(season to episode)?.runtimeMinutes
             if (episodeRuntime != null && episodeRuntime > 0) return episodeRuntime
         } else {
-            try {
-                metadataRouterFacadeOrNull()?.resolveRequest(
-                    MetadataRequest(
-                        contentId = contentId,
-                        contentType = parseContinueWatchingContentType(contentType),
-                        sourceContext = MetadataSourceContext(itemType = contentType),
-                        language = tvdbLanguage,
-                        depth = MetadataDepth.DETAIL_CORE
-                    )
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
-            }
-            val enrichment = tvMetadataRouter.fetchEnrichment(
-                TvMetadataRequest(
+            val enrichment = metadataRouterFacade.fetchTvEnrichment(
+                metadataRequest = MetadataRequest(
+                    contentId = contentId,
+                    contentType = parseContinueWatchingContentType(contentType),
+                    sourceContext = MetadataSourceContext(itemType = contentType),
+                    language = tvdbLanguage,
+                    depth = MetadataDepth.DETAIL_CORE
+                ),
+                tvRequest = TvMetadataRequest(
                     contentId = contentId,
                     fallbackContentId = item.videoId(),
                     contentType = parseContinueWatchingContentType(contentType),

@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
@@ -26,7 +27,7 @@ class TvdbContinueWatchingTimingEnricherTest {
     @Test
     fun `enrich adds exact tvdb availability to next up entry`() = runTest {
         val router = mockk<TvMetadataRouter>()
-        val enricher = TvdbContinueWatchingTimingEnricher(router, availabilityCalculator)
+        val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val entry = nextUpEntry()
         val expected = availabilityCalculator.computeAvailability(
             episodeAiredDate = "2026-04-15",
@@ -57,7 +58,7 @@ class TvdbContinueWatchingTimingEnricherTest {
     @Test
     fun `enrich preserves provider first aired while tvdb exact wins later`() = runTest {
         val router = mockk<TvMetadataRouter>()
-        val enricher = TvdbContinueWatchingTimingEnricher(router, availabilityCalculator)
+        val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val providerFirstAiredMs = 1_000L
         val entry = nextUpEntry(firstAired = "2026-04-14", firstAiredMs = providerFirstAiredMs)
 
@@ -75,7 +76,7 @@ class TvdbContinueWatchingTimingEnricherTest {
     @Test
     fun `enrich records date only diagnostic when airsTime is missing`() = runTest {
         val router = mockk<TvMetadataRouter>()
-        val enricher = TvdbContinueWatchingTimingEnricher(router, availabilityCalculator)
+        val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val entry = nextUpEntry(firstAired = "2026-04-15")
 
         coEvery { router.fetchEnrichment(any()) } returns seriesDecision(airsTime = null)
@@ -92,7 +93,7 @@ class TvdbContinueWatchingTimingEnricherTest {
     @Test
     fun `enrich leaves non series entries unchanged`() = runTest {
         val router = mockk<TvMetadataRouter>(relaxed = true)
-        val enricher = TvdbContinueWatchingTimingEnricher(router, availabilityCalculator)
+        val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val movie = nextUpEntry(contentType = "movie")
 
         val enriched = enricher.enrich(listOf(movie))

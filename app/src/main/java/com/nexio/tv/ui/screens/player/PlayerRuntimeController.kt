@@ -12,7 +12,6 @@ import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.stream.StreamFeatureFlags
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -64,7 +63,6 @@ class PlayerRuntimeController(
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     internal val subtitleTranslationService: SubtitleTranslationService,
-    internal val tvMetadataRouter: ProviderMetadataRouter,
     internal val metadataRouterFacade: MetadataRouterFacade,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val playbackActivityTracker: PlaybackActivityTracker,

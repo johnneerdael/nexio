@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -18,6 +20,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -722,8 +725,18 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
         language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     )
     if (item.type.isHomeTvContent() || AnimeStremioId.parse(item.id) != null) {
-        return tvMetadataRouter.fetchEnrichment(
-            TvMetadataRequest(
+        return metadataRouterFacade.fetchTvEnrichment(
+            metadataRequest = MetadataRequest(
+                contentId = item.id,
+                contentType = item.type,
+                sourceContext = MetadataSourceContext(
+                    itemType = item.apiType,
+                    addonMetadata = item.toHomeDisplayMetadata()
+                ),
+                language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
+                depth = MetadataDepth.DETAIL_CORE
+            ),
+            tvRequest = TvMetadataRequest(
                 contentId = item.id,
                 fallbackContentId = null,
                 contentType = item.type,
