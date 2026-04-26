@@ -75,6 +75,76 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TMDB series DETAIL_CORE uses route media kind for TV core shape`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.SERIES
+            ),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+
+        assertEquals(listOf(TmdbApiShapes.TV_CORE), plan.apiShapeIds())
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
+    fun `TMDB series DETAIL_MEDIA uses route media kind for TV core and videos`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.SERIES
+            ),
+            depth = MetadataDepth.DETAIL_MEDIA
+        )
+
+        assertEquals(
+            listOf(TmdbApiShapes.TV_CORE, TmdbApiShapes.TV_VIDEOS),
+            plan.apiShapeIds()
+        )
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
+    fun `TMDB series DETAIL_SECONDARY uses route media kind for TV secondary shapes`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.SERIES
+            ),
+            depth = MetadataDepth.DETAIL_SECONDARY
+        )
+
+        assertEquals(
+            listOf(
+                TmdbApiShapes.TV_CORE,
+                TmdbApiShapes.TV_VIDEOS,
+                TmdbApiShapes.TV_REVIEWS,
+                TmdbApiShapes.TV_RECOMMENDATIONS
+            ),
+            plan.apiShapeIds()
+        )
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
+    fun `TMDB series SEASON includes season episodes`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.SERIES
+            ),
+            depth = MetadataDepth.SEASON
+        )
+
+        assertEquals(
+            listOf(TmdbApiShapes.TV_CORE, TmdbApiShapes.SEASON_EPISODES),
+            plan.apiShapeIds()
+        )
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
     fun `TVDB DETAIL_CORE with non-default language includes optional series translation`() {
         val plan = executor.buildPlan(
             route = route(
@@ -143,6 +213,24 @@ class ProviderPlanExecutorTest {
 
         assertEquals(MetadataMediaKind.ANIME, plan.route.mediaKind)
         assertEquals(listOf(KitsuApiShapes.ANIME_CORE), plan.apiShapeIds())
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
+    fun `Kitsu SEASON includes anime episodes with season role`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.KITSU,
+                mediaKind = MetadataMediaKind.ANIME
+            ),
+            depth = MetadataDepth.SEASON
+        )
+
+        assertEquals(
+            listOf(KitsuApiShapes.ANIME_CORE, KitsuApiShapes.ANIME_EPISODES),
+            plan.apiShapeIds()
+        )
+        assertEquals(ProviderPlanRole.SEASON, plan.step(KitsuApiShapes.ANIME_EPISODES).role)
         assertAllShapesCovered(plan)
     }
 
