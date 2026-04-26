@@ -104,17 +104,11 @@ class ProviderPlanExecutor @Inject constructor() {
 
         if (depth == MetadataDepth.SEASON) {
             steps += step(
-                apiShapeId = TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
+                apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
                 provider = MetadataPrimaryProvider.TVDB,
                 role = ProviderPlanRole.SEASON
             )
             if (needsTranslation) {
-                steps += step(
-                    apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
-                    provider = MetadataPrimaryProvider.TVDB,
-                    role = ProviderPlanRole.SEASON,
-                    required = false
-                )
                 steps += step(
                     apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
                     provider = MetadataPrimaryProvider.TVDB,

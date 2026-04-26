@@ -22,7 +22,7 @@ class TmdbMetadataProviderAdapter @Inject constructor(
     override fun supports(step: ProviderPlanStep): Boolean = step.apiShapeId in tmdbShapes
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
-        val tmdbId = route.targetIds[MetadataPrimaryProvider.TMDB]?.toIntOrNull()
+        val tmdbId = MetadataProviderTargetIds.tmdbInt(route.targetIds[MetadataPrimaryProvider.TMDB])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val language = route.language.orEmpty()
         val seasonEpisodeMetadata = mutableMapOf<Pair<Int, Int>, TvEpisodeMetadata>()

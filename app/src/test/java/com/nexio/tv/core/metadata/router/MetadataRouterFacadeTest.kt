@@ -173,7 +173,7 @@ class MetadataRouterFacadeTest {
         assertEquals(TvProvider.TVDB, result.provider)
         assertEquals(listOf(1), result.value?.map { it.episodeNumber })
         assertEquals("2024-01-01", result.value?.single()?.airDate)
-        assertTrue(adapter.apiShapeIds.contains("tvdb.series.episodes.season_type"))
+        assertTrue(adapter.apiShapeIds.contains("tvdb.series.episodes.language"))
     }
 
     private fun facade(

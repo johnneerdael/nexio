@@ -17,9 +17,10 @@ class TvdbMetadataProviderAdapter @Inject constructor(
     override fun supports(step: ProviderPlanStep): Boolean = step.apiShapeId in tvdbShapes
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
-        val tvdbId = route.targetIds[MetadataPrimaryProvider.TVDB]?.toIntOrNull()
+        val tvdbId = MetadataProviderTargetIds.tvdbInt(route.targetIds[MetadataPrimaryProvider.TVDB])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val language = route.language.orEmpty()
+        val episodeMetadata = mutableMapOf<Pair<Int, Int>, com.nexio.tv.core.tvdb.TvEpisodeMetadata>()
         val candidate = when (step.apiShapeId) {
             TvdbApiShapes.SERIES_EXTENDED ->
                 integrationProvider.fetchSeriesExtended(tvdbId).toMetadataCandidate(this.provider)
@@ -30,13 +31,18 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                 emptyCandidate(this.provider)
             }
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE -> {
-                integrationProvider.fetchSeriesEpisodesTranslated(tvdbId, seasonType = "default", language = language, season = route.seasonNumber)
+                episodeMetadata += integrationProvider.fetchLocalizedSeasonEpisodeMetadata(
+                    tvdbId = tvdbId,
+                    seasonType = "default",
+                    requestedLanguage = language,
+                    season = route.seasonNumber
+                )
                 emptyCandidate(this.provider)
             }
             TvdbApiShapes.EPISODE_TRANSLATION -> emptyCandidate(this.provider)
             else -> emptyCandidate(this.provider)
         }
-        return ProviderStepResult(step = step, candidate = candidate)
+        return ProviderStepResult(step = step, candidate = candidate, episodeMetadata = episodeMetadata)
     }
 
     private companion object {
