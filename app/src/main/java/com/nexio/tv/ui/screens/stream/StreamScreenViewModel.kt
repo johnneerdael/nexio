@@ -1162,6 +1162,7 @@ class StreamScreenViewModel @Inject constructor(
             return null
         }
 
+        val resolveBudgetDeadlineMs = System.currentTimeMillis() + AUTOPLAY_RESOLVE_BUDGET_MS
         val selectedCandidate = selectDeterministicAutoplayCandidate(
             event = event,
             eligibleStreams = eligibleStreams,
@@ -1177,7 +1178,10 @@ class StreamScreenViewModel @Inject constructor(
                     )
                 }
                 playable
-            }
+            },
+            isResolveReady = resolveReadyPredicateWithDeadline(
+                deadlineEpochMs = resolveBudgetDeadlineMs
+            )
         ) ?: return null
 
         return buildStreamPlaybackInfo(
@@ -1515,7 +1519,8 @@ internal suspend fun selectDeterministicAutoplayCandidate(
     event: ShadowAutoPlayDecisionEvent,
     eligibleStreams: List<StreamCardModel>,
     maxCandidates: Int = DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT,
-    isPlayable: suspend (StreamCardModel) -> Boolean
+    isPlayable: suspend (StreamCardModel) -> Boolean,
+    isResolveReady: suspend (StreamCardModel) -> Boolean = { true }
 ): DeterministicAutoplayCandidateSelection? {
     val allowedCandidates = event.winners
         .mapNotNull { decision ->
@@ -1529,6 +1534,7 @@ internal suspend fun selectDeterministicAutoplayCandidate(
 
     for (candidate in candidates) {
         if (!isPlayable(candidate)) continue
+        if (!isResolveReady(candidate)) continue
         return DeterministicAutoplayCandidateSelection(
             selectedItem = candidate,
             fallbackCandidateItems = allowedCandidates
@@ -1536,6 +1542,65 @@ internal suspend fun selectDeterministicAutoplayCandidate(
     }
 
     return null
+}
+
+/**
+ * Default per-autoplay-decision wall-clock budget for waiting on the
+ * [CometProxyUrlResolver] verdict for the selected primary candidate. Keeps
+ * total user-perceived stall under ~4s before we move on to the next-best
+ * candidate. Less than the resolver's own 8s timeout — we'd rather skip a
+ * stuck candidate than wait for the resolver to give up and surface a
+ * fallback URL that the player will then hang on.
+ */
+internal const val AUTOPLAY_RESOLVE_BUDGET_MS = 4_000L
+
+/**
+ * Build an [isResolveReady] predicate suitable for [selectDeterministicAutoplayCandidate].
+ *
+ * The predicate uses a single shared [deadlineEpochMs] across the whole candidate
+ * iteration so the total wait is bounded — not N × per-candidate wait.
+ *
+ * Per-candidate decision rules:
+ * - `Redirected` / `NotEligible`: ready, return immediately.
+ * - `Placeholder` / `ResolveFailed`: not ready — skip, never wait.
+ * - `null` (still pending): poll every 50ms until one of the above lands or
+ *   the shared deadline elapses, whichever comes first. On deadline elapse
+ *   the candidate is reported not-ready and the iteration moves on.
+ */
+internal fun resolveReadyPredicateWithDeadline(
+    deadlineEpochMs: Long,
+    nowMs: () -> Long = { System.currentTimeMillis() },
+    pollSleepMs: Long = 50L
+): suspend (StreamCardModel) -> Boolean = predicate@{ candidate ->
+    val url = candidate.stream.getStreamUrl()
+        ?: return@predicate false
+    while (true) {
+        when (CometProxyUrlResolver.lastResolutionFor(url)) {
+            is com.nexio.tv.core.player.ProxyResolution.Redirected,
+            com.nexio.tv.core.player.ProxyResolution.NotEligible -> return@predicate true
+            com.nexio.tv.core.player.ProxyResolution.Placeholder,
+            com.nexio.tv.core.player.ProxyResolution.ResolveFailed -> {
+                Log.i(
+                    TAG,
+                    "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=${candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey} " +
+                        "reason=resolver_terminal_non_redirected"
+                )
+                return@predicate false
+            }
+            null -> {
+                if (nowMs() >= deadlineEpochMs) {
+                    Log.i(
+                        TAG,
+                        "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=${candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey} " +
+                            "reason=resolve_budget_exhausted"
+                    )
+                    return@predicate false
+                }
+                kotlinx.coroutines.delay(pollSleepMs)
+            }
+        }
+    }
+    @Suppress("UNREACHABLE_CODE") false
 }
 
 private fun StreamCardModel.matchesShadowStreamKey(streamKey: String?): Boolean {
