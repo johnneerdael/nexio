@@ -35,8 +35,20 @@ data class ParsedAddonSyncEntry(
 )
 
 fun normalizePublicAddonBaseUrl(rawUrl: String): String {
-    val parsed = parseAddonInstallUrl(rawUrl)
-    return parsed.publicBaseUrl
+    // Lightweight extraction: only the public origin (protocol + host + port).
+    // Crucially this MUST tolerate URLs that have already been canonicalized
+    // (no `/manifest.json` suffix), since `Addon.baseUrl` flows through
+    // `AddonRepositoryImpl.canonicalizeUrl` → `normalizeAddonInstallUrl`,
+    // which strips the manifest segment. Routing through
+    // `parseAddonInstallUrl` here would re-impose `splitAddonTransportUrl`'s
+    // strict `/manifest.json` invariant on those canonicalized URLs and
+    // throw IllegalArgumentException — which is exactly the install-time
+    // contract, not the lookup-time contract this helper serves.
+    val candidate = rawUrl.trim()
+        .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
+    require(candidate.isNotBlank()) { "Addon URL is required." }
+    val parsed = URL(candidate)
+    return "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}"
 }
 
 fun normalizeAddonInstallUrl(rawUrl: String): String {
