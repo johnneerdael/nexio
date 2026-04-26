@@ -1,0 +1,1432 @@
+tmdb.find.external_id:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/find/{external_id}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: Disabled
+  expectedQuery:
+    external_source: present
+
+tmdb.movie.core:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/movie/{movie_id}"
+  bulkShape: one-call multi-field enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+  expectedQuery:
+    append_to_response:
+      requiredAny:
+        - credits
+        - images
+        - release_dates
+        - external_ids
+  expectedOptionalAppend:
+    - videos
+    - recommendations
+    - reviews
+    - translations
+
+tmdb.tv.core:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/{tv_id}"
+  bulkShape: one-call multi-field enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+  expectedQuery:
+    append_to_response:
+      requiredAny:
+        - credits
+        - images
+        - content_ratings
+        - external_ids
+
+tmdb.season.episodes:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/{series_id}/season/{season_number}"
+  bulkShape: season batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.movie.videos:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/movie/{movie_id}/videos"
+  bulkShape: list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.tv.videos:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/{tv_id}/videos"
+  bulkShape: list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.season.videos:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/{series_id}/season/{season_number}/videos"
+  bulkShape: list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.movie.recommendations:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/movie/{movie_id}/recommendations"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.tv.recommendations:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/{tv_id}/recommendations"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.movie.reviews:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/movie/{movie_id}/reviews"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.tv.reviews:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/{tv_id}/reviews"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.collection:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/collection/{collection_id}"
+  bulkShape: collection
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.person.detail:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/person/{person_id}"
+  bulkShape: single-item enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.person.combined_credits:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/person/{person_id}/combined_credits"
+  bulkShape: list batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.company.detail:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/company/{company_id}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.network.detail:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/network/{network_id}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.discover.movie.by_company:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/discover/movie"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tmdb.discover.tv.by_company_or_network:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/discover/tv"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.login:
+  provider: TVDB
+  headerPolicy: json-body-no-auth-v1
+  method: POST
+  path: "/login"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tvdb.remoteid.lookup:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/search/remoteid/{remoteId}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.search:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/search"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.series.base:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/series/{id}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.series.extended:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/series/{id}/extended"
+  bulkShape: one-call multi-field enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.series.translation:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/series/{id}/translations/{language}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.series.episodes.season_type:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/series/{id}/episodes/{seasonType}"
+  bulkShape: season batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.series.episodes.language:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/series/{id}/episodes/{seasonType}/{language}"
+  bulkShape: season batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.episode.translation:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/episodes/{id}/translations/{language}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.updates:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/updates"
+  bulkShape: maintenance page
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+tvdb.reference.artwork_types:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/artwork/types"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.genres:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/genres"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.languages:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/languages"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.content_ratings:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/content/ratings"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.season_types:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/seasons/types"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.person.extended:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/people/{id}/extended"
+  bulkShape: one-call multi-field enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+kitsu.discovery.trending:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/trending/anime"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+kitsu.discovery.anime:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - BACKGROUND_HYDRATION
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+kitsu.anime.core:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime/{id}"
+  bulkShape: one-call multi-field enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+kitsu.anime.episodes:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime/{id}/episodes"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+  expectedQuery:
+    limit: present
+    offset: present
+
+kitsu.castings:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/castings"
+  bulkShape: list batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+  expectedQuery:
+    "filter[mediaId]": present
+    include:
+      contains:
+        - person
+        - character
+
+kitsu.anime_staff:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime/{id}/anime-staff"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+kitsu.anime_productions:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime/{id}/anime-productions"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+kitsu.media_relationships:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime/{id}/media-relationships"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+kitsu.search.text:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+mdblist.user:
+  provider: MDBLIST
+  headerPolicy: mdblist-api-key-v1
+  method: GET
+  path: "/user"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+mdblist.rating.batch:
+  provider: MDBLIST
+  headerPolicy: mdblist-api-key-v1
+  method: POST
+  path: "/rating/{mediaType}/{ratingType}"
+  bulkShape: batch ratings
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+mdblist.raw_url.list:
+  provider: MDBLIST
+  headerPolicy: mdblist-api-key-v1
+  method: GET
+  path: "{remoteUrl}"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+omdb.season.ratings:
+  provider: OMDB
+  headerPolicy: omdb-query-api-key-v1
+  method: GET
+  path: "/"
+  bulkShape: season batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+custom_imdb.title.bulk:
+  provider: CUSTOM_IMDB
+  headerPolicy: custom-imdb-json-v1
+  method: POST
+  path: "/v1/ratings/bulk"
+  bulkShape: batch ratings
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+custom_imdb.episode.series:
+  provider: CUSTOM_IMDB
+  headerPolicy: custom-imdb-json-v1
+  method: GET
+  path: "/v1/ratings/{tconst}"
+  bulkShape: season/episode ratings
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+trakt.movie.comments:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/movies/{id}/comments/{sort}"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.show.comments:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/shows/{id}/comments/{sort}"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+theintrodb.media:
+  provider: THEINTRODB
+  headerPolicy: introdb-json-optional-bearer-v1
+  method: GET
+  path: "/media"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+aniskip.skip_times:
+  provider: ANISKIP
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/skip-times/{malId}/{episode}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+animeskip.graphql:
+  provider: ANIMESKIP
+  headerPolicy: graphql-json-v1
+  method: POST
+  path: "/graphql"
+  bulkShape: list batch
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+arm.imdb_bridge:
+  provider: ARM
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/imdb"
+  bulkShape: bridge lookup
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+arm.ids_bridge:
+  provider: ARM
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/ids"
+  bulkShape: bridge lookup
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+rpdb.key_validation:
+  provider: RPDB
+  headerPolicy: rpdb-json-api-key-v1
+  method: GET
+  path: "/{apiKey}/isValid"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+topposters.key_validation:
+  provider: TOP_POSTERS
+  headerPolicy: topposters-image-path-key-v1
+  method: GET
+  path: "/auth/verify/{apiKey}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+rpdb.poster_template:
+  provider: RPDB
+  headerPolicy: rpdb-image-path-key-v1
+  method: GET
+  path: "{posterUrl}"
+  bulkShape: remote poster fetch
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+topposters.poster_template:
+  provider: TOP_POSTERS
+  headerPolicy: topposters-image-path-key-v1
+  method: GET
+  path: "{posterUrl}"
+  bulkShape: remote poster fetch
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+topposters.thumbnail:
+  provider: TOP_POSTERS
+  headerPolicy: topposters-thumbnail-v1
+  active: false
+  reviewStatus: documented-unused-template
+  method: GET
+  path: "/{api_key}/{id_type}/thumbnail/{media_id}/S{season}E{episode}.jpg"
+  bulkShape: thumbnail template
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+addon.manifest:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: GET
+  path: "{manifestUrl}"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+addon.catalog:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: GET
+  path: "{catalogUrl}"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+addon.meta:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: GET
+  path: "{metaUrl}"
+  bulkShape: single-item enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+addon.streams:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: GET
+  path: "{streamUrl}"
+  bulkShape: stream list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+addon.subtitles:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: GET
+  path: "{subtitleUrl}"
+  bulkShape: subtitle list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+github.latest_release:
+  provider: GITHUB
+  headerPolicy: github-json-v1
+  method: GET
+  path: "/repos/{owner}/{repo}/releases/latest"
+  bulkShape: single-item
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+github.asset_download:
+  provider: GITHUB
+  headerPolicy: github-json-v1
+  method: GET
+  path: "{assetUrl}"
+  bulkShape: stream download
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+subtitle.translation:
+  provider: SUBTITLE_TRANSLATION
+  headerPolicy: subtitle-provider-v1
+  method: ANY
+  path: "{requestUrl}"
+  bulkShape: single request
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+subtitle.source_download:
+  provider: SUBTITLE_SOURCE_DOWNLOAD
+  headerPolicy: subtitle-provider-v1
+  method: GET
+  path: "{url}"
+  bulkShape: remote subtitle fetch
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+playback.opensubtitles_hash:
+  provider: SUBTITLE_SOURCE_DOWNLOAD
+  headerPolicy: subtitle-provider-v1
+  method: GET
+  path: "{mediaUrl}"
+  bulkShape: range hash
+  allowedWorkClasses:
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: Disabled
+
+playback.preflight_head:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: HEAD
+  path: "{streamUrl}"
+  bulkShape: single probe
+  allowedWorkClasses:
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: Disabled
+
+playback.preflight_range:
+  provider: ADDON
+  headerPolicy: addon-json-v1
+  method: GET
+  path: "{streamUrl}"
+  bulkShape: range probe
+  allowedWorkClasses:
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: Disabled
+
+shadow_collector.autoplay_upload:
+  provider: SHADOW_COLLECTOR
+  headerPolicy: collector-json-v1
+  method: POST
+  path: "{baseUrl}/autoplay"
+  bulkShape: event upload
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+youtube_trailer.transport.execute:
+  provider: YOUTUBE_TRAILER
+  headerPolicy: youtube-html-v1
+  method: ANY
+  path: "{callUrl}"
+  bulkShape: single request
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+youtube_trailer.transport.probe:
+  provider: YOUTUBE_TRAILER
+  headerPolicy: youtube-html-v1
+  method: GET
+  path: "{url}"
+  bulkShape: single probe
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+animeskip.shows:
+  provider: ANIMESKIP
+  headerPolicy: graphql-json-v1
+  method: POST
+  path: "/graphql"
+  bulkShape: list batch
+  allowedWorkClasses:
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+animeskip.key_validation:
+  provider: ANIMESKIP
+  headerPolicy: graphql-json-v1
+  method: POST
+  path: "/graphql"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.search.movie:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/search/movie"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.search.tv:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/search/tv"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.trending.movie:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/trending/movie/day"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.trending.tv:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/trending/tv/day"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.popular.movie:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/movie/popular"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.popular.tv:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/tv/popular"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.discover.movie:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/discover/movie"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.discover.tv:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/discover/tv"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tmdb.key_validation:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/configuration"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+kitsu.advanced_detail:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "{advancedDetailBatch}"
+  bulkShape: one-call multi-field enrichment
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+mdblist.key_validation:
+  provider: MDBLIST
+  headerPolicy: mdblist-api-key-v1
+  method: GET
+  path: "/user"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+omdb.key_validation:
+  provider: OMDB
+  headerPolicy: omdb-query-api-key-v1
+  method: GET
+  path: "/"
+  bulkShape: auth
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+tvdb.reference.artwork_statuses:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/artwork/statuses"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.series_statuses:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/series/statuses"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.source_types:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/sources/types"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.entity_types:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/entities/types"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+tvdb.reference.company_types:
+  provider: TVDB
+  headerPolicy: tvdb-json-bearer-v1
+  method: GET
+  path: "/companies/types"
+  bulkShape: reference list
+  allowedWorkClasses:
+    - MAINTENANCE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+easy_debrid.lookup:
+  provider: EASY_DEBRID
+  headerPolicy: easy_debrid-json-token-v1
+  method: POST
+  path: "/link/lookup"
+  bulkShape: playback lookup
+  allowedWorkClasses:
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+easy_debrid.lookup_details:
+  provider: EASY_DEBRID
+  headerPolicy: easy_debrid-json-token-v1
+  method: POST
+  path: "/link/lookup/details"
+  bulkShape: playback lookup
+  allowedWorkClasses:
+    - PLAYBACK_RESOLUTION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+real_debrid.device_code:
+  provider: REAL_DEBRID
+  headerPolicy: real_debrid-oauth-v1
+  method: GET
+  path: "/oauth/v2/device/code"
+  bulkShape: auth bootstrap
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+real_debrid.device_credentials:
+  provider: REAL_DEBRID
+  headerPolicy: real_debrid-oauth-v1
+  method: GET
+  path: "/oauth/v2/device/credentials"
+  bulkShape: auth polling
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+real_debrid.token:
+  provider: REAL_DEBRID
+  headerPolicy: real_debrid-oauth-v1
+  method: POST
+  path: "/oauth/v2/token"
+  bulkShape: auth token exchange
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Mutation
+
+real_debrid.account:
+  provider: REAL_DEBRID
+  headerPolicy: real_debrid-json-token-v1
+  method: GET
+  path: "/rest/1.0/user"
+  bulkShape: account
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+real_debrid.revoke_token:
+  provider: REAL_DEBRID
+  headerPolicy: real_debrid-json-token-v1
+  method: GET
+  path: "/rest/1.0/disable_access_token"
+  bulkShape: auth mutation
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Mutation
+
+premiumize.list_all:
+  provider: PREMIUMIZE
+  headerPolicy: premiumize-json-token-v1
+  method: GET
+  path: "/folder/list"
+  bulkShape: account list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+simkl.last_activities:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: GET
+  path: "/sync/activities"
+  bulkShape: account state
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+simkl.discovery:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: GET
+  path: "{discoveryUrl}"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+simkl.pin.start:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: GET
+  path: "/oauth/pin"
+  bulkShape: auth bootstrap
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+simkl.pin.status:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: GET
+  path: "/oauth/pin/{user_code}"
+  bulkShape: auth polling
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+simkl.user_settings:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: POST
+  path: "/users/settings"
+  bulkShape: account state
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+simkl.playback:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: GET
+  path: "/sync/playback/{type}"
+  bulkShape: account list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+simkl.scrobble:
+  provider: SIMKL
+  headerPolicy: simkl-json-v1
+  method: POST
+  path: "/sync/scrobble"
+  bulkShape: mutation
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Mutation
+
+torbox.torrent_list:
+  provider: TORBOX
+  headerPolicy: torbox-json-token-v1
+  method: GET
+  path: "/torrents/mylist"
+  bulkShape: account list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+easy_debrid.account:
+  provider: EASY_DEBRID
+  headerPolicy: easy_debrid-json-token-v1
+  method: GET
+  path: "/user"
+  bulkShape: account
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+premiumize.account:
+  provider: PREMIUMIZE
+  headerPolicy: premiumize-json-token-v1
+  method: GET
+  path: "/account/info"
+  bulkShape: account
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+torbox.account:
+  provider: TORBOX
+  headerPolicy: torbox-json-token-v1
+  method: GET
+  path: "/user/me"
+  bulkShape: account
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+trakt.calendar.shows:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/calendars/my/shows/{start_date}/{days}"
+  bulkShape: dated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.trending.movies:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/movies/trending"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.trending.shows:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/shows/trending"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.popular.movies:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/movies/popular"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.popular.shows:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/shows/popular"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.recommended.shows:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/recommendations/shows"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.popular.lists:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/lists/popular"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.user.lists:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/users/{id}/lists"
+  bulkShape: list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.user.list_items:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/users/{id}/lists/{list_id}/items/{type}"
+  bulkShape: list
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.authorized_response:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: ANY
+  path: "{authorizedMutationOrRead}"
+  bulkShape: wrapper
+  allowedWorkClasses:
+    - USER_VISIBLE
+    - BACKGROUND_HYDRATION
+    - MUTATION_OUTBOX
+    - SCROBBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
+
+custom_imdb.transport.execute:
+  provider: CUSTOM_IMDB
+  headerPolicy: custom-imdb-json-v1
+  method: ANY
+  path: "{resolvedCustomImdbRoute}"
+  bulkShape: dynamic bridge
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnly
