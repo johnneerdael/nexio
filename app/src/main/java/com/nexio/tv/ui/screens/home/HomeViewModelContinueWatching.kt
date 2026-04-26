@@ -207,9 +207,6 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             fallbackContentId = item.providerFallbackContentId(),
             metadataRouterFacade = metadataRouterFacadeOrNull()
                 ?: defaultMetadataRouterFacadeForManualConstruction(),
-            tmdbSettingsDataStore = tmdbSettingsDataStore,
-            tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService,
             profileBoundary = profileBoundary
         )
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
