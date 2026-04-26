@@ -198,6 +198,28 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TVDB DETAIL_CORE with unknown non-English locale includes optional series translation`() {
+        listOf("it", "ja-JP").forEach { language ->
+            val plan = executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TVDB,
+                    mediaKind = MetadataMediaKind.SERIES,
+                    language = language
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+
+            assertEquals(
+                "language=$language",
+                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_TRANSLATION),
+                plan.apiShapeIds()
+            )
+            assertFalse("language=$language", plan.step(TvdbApiShapes.SERIES_TRANSLATION).required)
+            assertAllShapesCovered(plan)
+        }
+    }
+
+    @Test
     fun `TVDB SEASON includes season type and language episode shapes`() {
         val plan = executor.buildPlan(
             route = route(

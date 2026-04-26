@@ -3,7 +3,7 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -78,7 +78,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         )
 
-        if (depth == MetadataDepth.DETAIL_CORE && TvdbLanguageMapper.normalize(route.language) != "eng") {
+        if (depth == MetadataDepth.DETAIL_CORE && !isDefaultTvdbLanguage(route.language)) {
             steps += step(
                 apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
                 provider = MetadataPrimaryProvider.TVDB,
@@ -137,6 +137,17 @@ class ProviderPlanExecutor @Inject constructor() {
         check(route.mediaKind in allowed) {
             "Invalid mediaKind ${route.mediaKind} for provider ${route.provider}; expected ${allowed.joinToString()}"
         }
+    }
+
+    private fun isDefaultTvdbLanguage(language: String?): Boolean {
+        val normalized = language
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.replace('_', '-')
+            ?.lowercase(Locale.US)
+            ?: return true
+
+        return normalized in setOf("en", "eng", "en-us", "en-gb")
     }
 
     private fun step(
