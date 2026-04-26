@@ -10,7 +10,6 @@ import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.domain.model.mergeFallback
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
@@ -52,6 +51,7 @@ data class ContinueWatchingSnapshot(
     val nextUpItems: List<TrackingNextUpEntry> = emptyList(),
     val traktUpNextItems: List<TrackingNextUpEntry> = emptyList(),
     val displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap(),
+    val metadataSnapshotsByItemKey: Map<String, ContinueWatchingMetadataSnapshot> = emptyMap(),
     val updatedAtMs: Long = 0L,
     /** Entries excluded from rails because their air date has not yet passed. */
     val scheduledReemit: List<TrackingNextUpEntry> = emptyList()
@@ -727,6 +727,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             nextUpItems = mainFeedNextUpItems,
             traktUpNextItems = sanitizedTraktUpNextItems,
             displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
+            metadataSnapshotsByItemKey = snapshot.metadataSnapshotsByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs,
             scheduledReemit = snapshot.scheduledReemit
         )
@@ -938,8 +939,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 contentId = contentId,
                 snapshot = snapshot
             )
-            val merged = fetched?.mergeFallback(fallbackMetadata[itemKey]) ?: fallbackMetadata[itemKey]
-            if (merged != null) {
+            val merged = ContinueWatchingMetadataSnapshot.renderDisplayMetadata(
+                canonical = fetched,
+                clickTime = snapshot.metadataSnapshotsByItemKey[itemKey]?.clickTimeDisplayMetadata,
+                persistedFallback = fallbackMetadata[itemKey]
+            )
+            if (merged.hasRenderableDisplayMetadata()) {
                 hydratedMetadata[itemKey] = merged
             }
         }
@@ -1054,4 +1059,18 @@ class ContinueWatchingSnapshotService @Inject constructor(
             availabilityInstantMs = entry.tvdbAvailabilityInstantMs
         )
     }
+}
+
+private fun HomeDisplayMetadata.hasRenderableDisplayMetadata(): Boolean {
+    return title != null ||
+        logo != null ||
+        description != null ||
+        genres.isNotEmpty() ||
+        releaseInfo != null ||
+        runtime != null ||
+        imdbRating != null ||
+        tomatoesRating != null ||
+        poster != null ||
+        posterProviderTag != null ||
+        backdrop != null
 }
