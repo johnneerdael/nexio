@@ -20,6 +20,15 @@ class MetadataRouterFacade @Inject constructor(
     private val providerPlanRunner: ProviderPlanRunner,
     private val fieldResolver: FieldResolver
 ) {
+    suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
+        val routed = router.route(request)
+        val route = identityResolver.resolve(routed)
+        if (route.targetIdRequiresIdentityResolution) {
+            throw MetadataRouteFailure.IdentityResolutionFailed(route.parentId, route.provider)
+        }
+        return route
+    }
+
     suspend fun resolveRequest(request: MetadataRequest): MetadataResolutionResult {
         val resolverSchedule = resolverOrchestrator.schedule(request.depth)
         val initialDisplay = request.sourceContext.addonMetadata ?: HomeDisplayMetadata()
@@ -36,11 +45,7 @@ class MetadataRouterFacade @Inject constructor(
             )
         }
 
-        val routed = router.route(request)
-        val route = identityResolver.resolve(routed)
-        if (route.targetIdRequiresIdentityResolution) {
-            throw MetadataRouteFailure.IdentityResolutionFailed(route.parentId, route.provider)
-        }
+        val route = routeRequest(request)
         val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
         val runResult = providerPlanRunner.run(plan)
         val resolvedDocument = fieldResolver.resolve(

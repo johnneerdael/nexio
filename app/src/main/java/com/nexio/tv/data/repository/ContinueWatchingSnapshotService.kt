@@ -6,6 +6,10 @@ import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.data.local.integration.MediaIdentityEntity
 import com.nexio.tv.data.local.integration.RailCacheEntity
 import com.nexio.tv.data.local.integration.RailItemEntity
@@ -15,6 +19,7 @@ import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -94,7 +99,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val profileManager: ProfileManager? = null,
     private val ownershipService: IntegrationOwnershipService? = null,
     private val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
-    private val identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver()
+    private val identityResolver: RailMediaIdentityResolver = RailMediaIdentityResolver(),
+    private val metadataRouterFacade: MetadataRouterFacade? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
@@ -250,7 +256,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 }
                 return
             }
-            val normalized = sanitizeSnapshot(persisted)
+            val normalized = upgradeStaleRouteSnapshots(sanitizeSnapshot(persisted))
+            if (normalized.metadataSnapshotsByItemKey != persisted.metadataSnapshotsByItemKey) {
+                snapshotStore.write(normalized, profileId = profileId)
+            }
             val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
             rawSnapshotState.value = owned
             snapshotState.value = owned
@@ -760,6 +769,56 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
     }
 
+    internal suspend fun upgradeStaleRouteSnapshots(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
+        val facade = metadataRouterFacade ?: return snapshot
+        val contentTypesByItemKey = contentTypesByItemKey(snapshot)
+        val upgradedSnapshots = snapshot.metadataSnapshotsByItemKey.mapValues { (itemKey, metadataSnapshot) ->
+            if (!ContinueWatchingMetadataSnapshot.shouldReroute(metadataSnapshot.routingVersion)) {
+                return@mapValues metadataSnapshot
+            }
+            val itemType = contentTypesByItemKey[itemKey].orEmpty()
+            runCatching {
+                val route = facade.routeRequest(
+                    MetadataRequest(
+                        contentId = metadataSnapshot.parentId,
+                        contentType = ContentType.fromString(itemType),
+                        sourceContext = MetadataSourceContext(
+                            itemType = itemType,
+                            addonMetadata = metadataSnapshot.clickTimeDisplayMetadata
+                        ),
+                        depth = MetadataDepth.DETAIL_CORE
+                    )
+                )
+                ContinueWatchingMetadataSnapshot.fromRoute(
+                    route = route,
+                    clickTimeDisplayMetadata = metadataSnapshot.clickTimeDisplayMetadata
+                )
+            }.getOrElse {
+                metadataSnapshot
+            }
+        }
+
+        return if (upgradedSnapshots == snapshot.metadataSnapshotsByItemKey) {
+            snapshot
+        } else {
+            snapshot.copy(metadataSnapshotsByItemKey = upgradedSnapshots)
+        }
+    }
+
+    private fun contentTypesByItemKey(snapshot: ContinueWatchingSnapshot): Map<String, String> {
+        val itemTypes = linkedMapOf<String, String>()
+        snapshot.resumeItems.forEach { progress ->
+            itemTypes[homeDisplayItemKey(progress.contentType, progress.contentId)] = progress.contentType
+        }
+        snapshot.nextUpItems.forEach { entry ->
+            itemTypes[homeDisplayItemKey(entry.contentType, entry.contentId)] = entry.contentType
+        }
+        snapshot.traktUpNextItems.forEach { entry ->
+            itemTypes[homeDisplayItemKey(entry.contentType, entry.contentId)] = entry.contentType
+        }
+        return itemTypes
+    }
+
     private fun normalizeNextUpEntry(
         entry: TrackingNextUpEntry
     ): TrackingNextUpEntry? {
@@ -990,21 +1049,22 @@ class ContinueWatchingSnapshotService @Inject constructor(
         snapshot: ContinueWatchingSnapshot,
         fallbackMetadata: Map<String, HomeDisplayMetadata>
     ): ContinueWatchingSnapshot {
+        val routeUpgradedSnapshot = upgradeStaleRouteSnapshots(snapshot)
         val itemKeys = linkedMapOf<String, Pair<String, String>>()
-        snapshot.resumeItems.forEach { progress ->
+        routeUpgradedSnapshot.resumeItems.forEach { progress ->
             itemKeys[homeDisplayItemKey(progress.contentType, progress.contentId)] =
                 progress.contentType to progress.contentId
         }
-        snapshot.nextUpItems.forEach { entry ->
+        routeUpgradedSnapshot.nextUpItems.forEach { entry ->
             itemKeys[homeDisplayItemKey(entry.contentType, entry.contentId)] =
                 entry.contentType to entry.contentId
         }
-        snapshot.traktUpNextItems.forEach { entry ->
+        routeUpgradedSnapshot.traktUpNextItems.forEach { entry ->
             itemKeys[homeDisplayItemKey(entry.contentType, entry.contentId)] =
                 entry.contentType to entry.contentId
         }
         if (itemKeys.isEmpty()) {
-            return snapshot.copy(displayMetadataByItemKey = emptyMap())
+            return routeUpgradedSnapshot.copy(displayMetadataByItemKey = emptyMap())
         }
 
         val hydratedMetadata = linkedMapOf<String, HomeDisplayMetadata>()
@@ -1013,11 +1073,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val fetched = fetchHomeDisplayMetadata(
                 contentType = contentType,
                 contentId = contentId,
-                snapshot = snapshot
+                snapshot = routeUpgradedSnapshot
             )
             val merged = ContinueWatchingMetadataSnapshot.renderDisplayMetadata(
                 canonical = fetched,
-                clickTime = snapshot.metadataSnapshotsByItemKey[itemKey]?.clickTimeDisplayMetadata,
+                clickTime = routeUpgradedSnapshot.metadataSnapshotsByItemKey[itemKey]?.clickTimeDisplayMetadata,
                 persistedFallback = fallbackMetadata[itemKey]
             )
             if (merged.hasRenderableDisplayMetadata()) {
@@ -1025,7 +1085,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             }
         }
 
-        return snapshot.copy(displayMetadataByItemKey = hydratedMetadata)
+        return routeUpgradedSnapshot.copy(displayMetadataByItemKey = hydratedMetadata)
     }
 
     private suspend fun fetchHomeDisplayMetadata(

@@ -260,7 +260,7 @@ internal suspend fun HomeViewModel.recordContinueWatchingRouteContextForPlayback
 ) {
     try {
         val contentType = ContentType.fromString(item.contentType())
-        val route = metadataRouterFacade.resolveRequest(
+        val route = metadataRouterFacade.routeRequest(
             MetadataRequest(
                 contentId = item.contentId(),
                 contentType = contentType,
@@ -271,7 +271,7 @@ internal suspend fun HomeViewModel.recordContinueWatchingRouteContextForPlayback
                 seasonNumber = item.season(),
                 depth = MetadataDepth.DETAIL_CORE
             )
-        ).route ?: return
+        )
         continueWatchingSnapshotService.recordMetadataSnapshot(
             itemKey = homeDisplayItemKey(item.contentType(), item.contentId()),
             metadataSnapshot = ContinueWatchingMetadataSnapshot.fromRoute(
