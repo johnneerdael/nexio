@@ -45,6 +45,23 @@ class MetadataRouterFacadeTest {
         assertSame(addonMetadata, result.displayMetadata)
     }
 
+    @Test
+    fun `player requests route and return route only provider plan`() = runTest {
+        val result = facade().resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:550",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(),
+                depth = MetadataDepth.PLAYER
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TMDB, result.route?.provider)
+        assertEquals(MetadataDepth.PLAYER, result.plan?.depth)
+        assertEquals(emptyList<ProviderPlanStep>(), result.plan?.steps)
+        assertEquals(MetadataDepth.PLAYER, result.resolverSchedule.depth)
+    }
+
     private fun facade(): MetadataRouterFacade =
         MetadataRouterFacade(
             router = MetadataRouter(

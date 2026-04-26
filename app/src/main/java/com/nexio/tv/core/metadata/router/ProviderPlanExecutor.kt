@@ -21,6 +21,10 @@ class ProviderPlanExecutor @Inject constructor() {
             "SEASON provider plan requires seasonNumber"
         }
 
+        if (depth == MetadataDepth.PLAYER) {
+            return ProviderExecutionPlan(route = route, depth = depth, steps = emptyList())
+        }
+
         val steps = when (route.provider) {
             MetadataPrimaryProvider.TMDB -> tmdbSteps(route, depth)
             MetadataPrimaryProvider.TVDB -> tvdbSteps(route, depth)
@@ -177,7 +181,7 @@ class ProviderPlanExecutor @Inject constructor() {
             MetadataDepth.DETAIL_MEDIA,
             MetadataDepth.DETAIL_SECONDARY
         )
-        val unsupportedDepths = setOf(MetadataDepth.PREVIEW, MetadataDepth.PLAYER)
+        val unsupportedDepths = setOf(MetadataDepth.PREVIEW)
     }
 
     private fun step(
