@@ -27,14 +27,24 @@ class KitsuMetadataProviderAdapter @Inject constructor(
         val kitsuId = MetadataProviderTargetIds.kitsu(route.targetIds[MetadataPrimaryProvider.KITSU])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val mediaKind = route.mediaKind.toContentMediaKind()
+        val policy = LocalizationPolicy.kitsu(route.language)
         val candidate = when (step.apiShapeId) {
             KitsuApiShapes.ANIME_CORE ->
                 integrationProvider.fetchEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { resource ->
                     val attributes = resource.attributes ?: return@fetchEnrichment null
+                    val titles = attributes.titles.orEmpty()
                     TvMetadataEnrichment(
                         seriesTvdbId = null,
-                        localizedTitle = attributes.canonicalTitle,
-                        description = attributes.synopsis ?: attributes.description,
+                        localizedTitle = selectKitsuTitle(
+                            policy = policy,
+                            titles = titles,
+                            canonicalTitle = attributes.canonicalTitle,
+                            romanizedTitle = titles["en_jp"]
+                        ),
+                        description = selectKitsuSynopsis(
+                            synopsis = attributes.synopsis,
+                            description = attributes.description
+                        ),
                         backdrop = attributes.coverImage.bestUrl(),
                         poster = attributes.posterImage.bestUrl(),
                         releaseInfo = attributes.startDate,
