@@ -1,0 +1,16 @@
+{
+  "addonId": "conflict-fixture",
+  "catalogId": "provider-native-conflict",
+  "catalogType": "series",
+  "sourceName": "Provider Native Conflict Fixture",
+  "items": [
+    {
+      "id": "tmdb:1399",
+      "type": "series",
+      "name": "TMDB Series Conflict",
+      "poster": "https://example.test/provider-native-conflict.jpg",
+      "background": "https://example.test/provider-native-conflict-bg.jpg",
+      "description": "A provider-native TMDB id paired with series type to prove identity resolution before TVDB execution."
+    }
+  ]
+}

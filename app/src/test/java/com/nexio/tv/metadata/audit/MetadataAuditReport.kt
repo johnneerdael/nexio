@@ -38,6 +38,7 @@ sealed interface AuditEvent {
     data class ResolverSchedule(val event: ResolverScheduleEvent) : AuditEvent
     data class FieldSelected(val event: FieldSelectedEvent) : AuditEvent
     data class ForbiddenOverwrite(val event: ForbiddenOverwriteEvent) : AuditEvent
+    data class ContinueWatching(val event: ContinueWatchingSnapshotEvent) : AuditEvent
     data class PolicyViolation(val event: PolicyViolationEvent) : AuditEvent
 }
 
@@ -114,7 +115,8 @@ data class FieldSelectedEvent(
     val selectedProvider: MetadataPrimaryProvider,
     val sourceRole: String,
     val valuePreview: String?,
-    val rejectedCandidates: List<RejectedCandidateReport>
+    val rejectedCandidates: List<RejectedCandidateReport>,
+    val ownershipRule: String
 )
 
 data class RejectedCandidateReport(
@@ -138,12 +140,29 @@ data class PolicyViolationEvent(
     val evidence: String? = null
 )
 
+data class ContinueWatchingSnapshotEvent(
+    val contentId: String,
+    val parentId: String,
+    val provider: MetadataPrimaryProvider?,
+    val routingVersion: Int?,
+    val hasClickTimeMetadata: Boolean,
+    val reroutedDueToVersionMismatch: Boolean
+)
+
 data class MetadataExecutionReport(
     val verdict: AuditVerdict,
     val scenario: MetadataAuditScenario,
     val fixtureName: String,
     val generatedAtEpochMs: Long,
     val items: List<ItemExecutionReport>,
+    val summaries: AuditSummaries,
+    val policyViolations: List<PolicyViolationEvent>
+)
+
+data class MetadataExecutionReportBundle(
+    val verdict: AuditVerdict,
+    val generatedAtEpochMs: Long,
+    val reports: List<MetadataExecutionReport>,
     val summaries: AuditSummaries,
     val policyViolations: List<PolicyViolationEvent>
 )
@@ -160,6 +179,7 @@ data class ItemExecutionReport(
     val resolverSchedule: ResolverScheduleEvent?,
     val selectedFields: List<FieldSelectedEvent>,
     val forbiddenOverwrites: List<ForbiddenOverwriteEvent>,
+    val continueWatchingSnapshot: ContinueWatchingSnapshotEvent?,
     val violations: List<PolicyViolationEvent>,
     val events: List<AuditEvent>
 )

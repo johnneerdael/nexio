@@ -91,7 +91,7 @@ class DefaultIntegrationRuntimeTest {
         assertTrue(fixture.auditSink.events.any { it.phase == IntegrationAuditPhase.BACKOFF_BLOCKED && !it.networkStarted })
 
         writeRuntimeAuditSample(fixture.auditSink.events)
-        val fixtureRows = File("app/build/reports/integration-runtime-audit/runtime-event-sample.generated.jsonl")
+        val fixtureRows = runtimeAuditSampleFile()
             .readLines()
             .filter { it.isNotBlank() }
 
@@ -139,7 +139,7 @@ class DefaultIntegrationRuntimeTest {
     }
 
     private fun writeRuntimeAuditSample(events: List<IntegrationAuditEvent>) {
-        val output = File("app/build/reports/integration-runtime-audit/runtime-event-sample.generated.jsonl")
+        val output = runtimeAuditSampleFile()
         output.parentFile?.mkdirs()
         output.writeText(
             events.joinToString(separator = "\n", postfix = "\n") { event ->
@@ -148,6 +148,11 @@ class DefaultIntegrationRuntimeTest {
             }
         )
     }
+
+    private fun runtimeAuditSampleFile(): File =
+        System.getProperty("integrationRuntimeAudit.sampleFile")
+            ?.let(::File)
+            ?: File("app/build/reports/integration-runtime-audit/runtime-event-sample.generated.jsonl")
 
     @Test
     fun `fresh cache hit never enters provider gate or loader`() = runTest {

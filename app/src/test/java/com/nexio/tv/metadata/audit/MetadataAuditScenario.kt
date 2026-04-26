@@ -11,7 +11,10 @@ data class MetadataAuditScenario(
     val premiumArtworkProvider: String? = null,
     val cacheMode: AuditCacheMode = AuditCacheMode.COLD,
     val routingVersion: Int = 1,
-    val assertNoNetwork: Boolean = false
+    val assertNoNetwork: Boolean = false,
+    val injectSecondaryTitleOverwrite: Boolean = false,
+    val continueWatching: Boolean = false,
+    val staleRoutingVersion: Boolean = false
 )
 
 enum class AuditCacheMode {

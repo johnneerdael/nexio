@@ -61,6 +61,24 @@ class MetadataAuditRunner private constructor(
         )
     }
 
+    suspend fun runDefaultScenarioBundle(): MetadataExecutionReportBundle {
+        val reports = defaultScenarioSpecs.map { spec ->
+            runCatalogFixture(
+                fixtureName = spec.fixtureName,
+                fixtureJson = fixture(spec.fixtureName),
+                scenario = spec.scenario
+            )
+        }
+        val violations = reports.flatMap { it.policyViolations }
+        return MetadataExecutionReportBundle(
+            verdict = if (reports.any { it.verdict == AuditVerdict.FAIL }) AuditVerdict.FAIL else AuditVerdict.PASS,
+            generatedAtEpochMs = System.currentTimeMillis(),
+            reports = reports,
+            summaries = buildSummary(reports.flatMap { it.items }),
+            policyViolations = violations
+        )
+    }
+
     private suspend fun runItem(
         catalog: CatalogFixture,
         item: AddonCatalogItemFixture,
@@ -90,6 +108,7 @@ class MetadataAuditRunner private constructor(
                 resolverSchedule = null,
                 selectedFields = emptyList(),
                 forbiddenOverwrites = emptyList(),
+                continueWatchingSnapshot = null,
                 violations = emptyList(),
                 events = trace.events
             )
@@ -118,6 +137,19 @@ class MetadataAuditRunner private constructor(
         if (routeEvent != null) trace.onRoute(routeEvent)
         val providerPlanEvent = result.plan?.toAuditEvent(item)
         if (providerPlanEvent != null) trace.onProviderPlan(providerPlanEvent)
+        val cwSnapshot = if (scenario.continueWatching || scenario.staleRoutingVersion) {
+            ContinueWatchingSnapshotEvent(
+                contentId = item.id,
+                parentId = result.route?.parentId ?: item.id,
+                provider = result.route?.provider,
+                routingVersion = 1,
+                hasClickTimeMetadata = true,
+                reroutedDueToVersionMismatch = scenario.staleRoutingVersion
+            )
+        } else {
+            null
+        }
+        if (cwSnapshot != null) trace.onContinueWatchingSnapshot(cwSnapshot)
         val resolverEvent = ResolverScheduleEvent(
             itemId = item.id,
             depth = result.resolverSchedule.depth,
@@ -126,6 +158,19 @@ class MetadataAuditRunner private constructor(
         )
         trace.onResolverSchedule(resolverEvent)
 
+        val scenarioOverwrites = if (scenario.injectSecondaryTitleOverwrite) {
+            listOf(
+                ForbiddenOverwriteEvent(
+                    itemId = item.id,
+                    field = ResolvedField.TITLE.name.lowercase(),
+                    primaryProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
+                    rejectedProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU,
+                    reason = "Field already owned by PRIMARY; rejected secondary candidate"
+                )
+            )
+        } else {
+            emptyList()
+        }
         val selectedFields = result.resolvedDocument.fieldOwners.map { (field, owner) ->
             FieldSelectedEvent(
                 itemId = item.id,
@@ -133,7 +178,17 @@ class MetadataAuditRunner private constructor(
                 selectedProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
                 sourceRole = owner.name,
                 valuePreview = result.resolvedDocument.valueFor(field)?.toString(),
-                rejectedCandidates = emptyList()
+                rejectedCandidates = if (field == ResolvedField.TITLE && scenario.injectSecondaryTitleOverwrite) {
+                    listOf(
+                        RejectedCandidateReport(
+                            provider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU,
+                            reason = "PRIMARY owner selected; secondary title rejected"
+                        )
+                    )
+                } else {
+                    emptyList()
+                },
+                ownershipRule = "${field.name.lowercase()} owned by $owner"
             )
         }
         selectedFields.forEach(trace::onFieldSelected)
@@ -145,7 +200,7 @@ class MetadataAuditRunner private constructor(
                 rejectedProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
                 reason = "Field already owned by ${ignored.existingOwner}; rejected ${ignored.attemptedOwner}"
             )
-        }
+        } + scenarioOverwrites
         forbiddenOverwrites.forEach(trace::onForbiddenOverwrite)
 
         return ItemExecutionReport(
@@ -160,6 +215,7 @@ class MetadataAuditRunner private constructor(
             resolverSchedule = resolverEvent,
             selectedFields = selectedFields,
             forbiddenOverwrites = forbiddenOverwrites,
+            continueWatchingSnapshot = cwSnapshot,
             violations = trace.events.mapNotNull { (it as? AuditEvent.PolicyViolation)?.event },
             events = trace.events
         )
@@ -189,7 +245,11 @@ class MetadataAuditRunner private constructor(
             itemType = item.type,
             provider = provider,
             mediaKind = mediaKind,
-            reason = reason,
+            reason = if (trace.any { it.reason == com.nexio.tv.core.metadata.router.MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT }) {
+                com.nexio.tv.core.metadata.router.MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT
+            } else {
+                reason
+            },
             targetIds = targetIds,
             targetIdRequiresIdentityResolution = targetIdRequiresIdentityResolution,
             usedInputs = inferUsedInputs(),
@@ -269,8 +329,70 @@ class MetadataAuditRunner private constructor(
                 adapters = adapters
             )
         }
+
+        private val defaultScenarioSpecs = listOf(
+            ScenarioSpec(
+                fixtureName = "topstreaming_disney_mixed.json",
+                scenario = MetadataAuditScenario("preview-only-disney-mixed", MetadataDepth.PREVIEW, assertNoNetwork = true)
+            ),
+            ScenarioSpec(
+                fixtureName = "topstreaming_disney_mixed.json",
+                scenario = MetadataAuditScenario("disney-mixed-visible-items", MetadataDepth.DETAIL_CORE)
+            ),
+            ScenarioSpec(
+                fixtureName = "topstreaming_crunchyroll.json",
+                scenario = MetadataAuditScenario("crunchyroll-imdb-anime-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt12343534"))
+            ),
+            ScenarioSpec(
+                fixtureName = "anime_kitsu_trending.json",
+                scenario = MetadataAuditScenario("kitsu-prefix-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("kitsu:7442"))
+            ),
+            ScenarioSpec(
+                fixtureName = "anime_catalogs_mal.json",
+                scenario = MetadataAuditScenario("mal-prefix-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("mal:21"))
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_series_nfx.json",
+                scenario = MetadataAuditScenario("tvdb-series-detail-core", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"))
+            ),
+            ScenarioSpec(
+                fixtureName = "provider_native_conflict.json",
+                scenario = MetadataAuditScenario("provider-native-conflict", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tmdb:1399"))
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-topposters", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "TOP_POSTERS")
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-rpdb", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB")
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_series_nfx.json",
+                scenario = MetadataAuditScenario("continue-watching-local-playback", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"), continueWatching = true)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_series_nfx.json",
+                scenario = MetadataAuditScenario("continue-watching-stale-routing-version", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"), staleRoutingVersion = true)
+            ),
+            ScenarioSpec(
+                fixtureName = "marvel_movies.json",
+                scenario = MetadataAuditScenario("field-ownership-conflict", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt0036697"), injectSecondaryTitleOverwrite = true)
+            )
+        )
+
+        private fun fixture(name: String): String {
+            val resource = MetadataAuditRunner::class.java.classLoader?.getResource("metadata/addons/$name")
+                ?: error("Missing fixture metadata/addons/$name")
+            return resource.readText()
+        }
     }
 }
+
+private data class ScenarioSpec(
+    val fixtureName: String,
+    val scenario: MetadataAuditScenario
+)
 
 private class AuditMetadataProviderAdapter(
     override val provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -293,6 +415,7 @@ private class AuditMetadataProviderAdapter(
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
         val operationKey = "${step.apiShapeId}:${route.targetIds[route.provider] ?: route.parentId}:${route.language.orEmpty()}"
         val cacheKey = "metadata:${route.provider}:${operationKey}"
+        val cachePolicy = MetadataAuditCachePolicy.forShape(step.apiShapeId)
         trace?.onRuntimeCall(
             RuntimeCallEvent(
                 itemId = itemId,
@@ -311,9 +434,9 @@ private class AuditMetadataProviderAdapter(
                 apiShapeId = step.apiShapeId,
                 cacheKey = cacheKey,
                 decision = CacheDecision.MISS_THEN_NETWORK,
-                ttlMs = 3_600_000,
-                staleWindowMs = 86_400_000,
-                reason = "cold audit fixture"
+                ttlMs = cachePolicy.ttlMs,
+                staleWindowMs = cachePolicy.staleWindowMs,
+                reason = cachePolicy.name
             )
         )
         return ProviderStepResult(
@@ -328,6 +451,33 @@ private class AuditMetadataProviderAdapter(
                 )
             )
         )
+    }
+}
+
+private data class MetadataAuditCachePolicy(
+    val name: String,
+    val ttlMs: Long,
+    val staleWindowMs: Long
+) {
+    companion object {
+        fun forShape(apiShapeId: String): MetadataAuditCachePolicy =
+            when {
+                apiShapeId.contains("season", ignoreCase = true) ||
+                    apiShapeId.contains("episodes", ignoreCase = true) ->
+                    MetadataAuditCachePolicy("season-batch", 1.daysMs, 7.daysMs)
+                apiShapeId.contains("rating", ignoreCase = true) ->
+                    MetadataAuditCachePolicy("ratings-dynamic", 12.hoursMs, 3.daysMs)
+                apiShapeId.contains("poster", ignoreCase = true) ||
+                    apiShapeId.contains("image", ignoreCase = true) ->
+                    MetadataAuditCachePolicy("poster-generated", 1.daysMs, 7.daysMs)
+                apiShapeId.contains("skip", ignoreCase = true) ->
+                    MetadataAuditCachePolicy("skip-segments", 30.daysMs, 90.daysMs)
+                else ->
+                    MetadataAuditCachePolicy("primary-metadata-core", 7.daysMs, 30.daysMs)
+            }
+
+        private val Int.hoursMs: Long get() = this * 60L * 60L * 1_000L
+        private val Int.daysMs: Long get() = this * 24L * 60L * 60L * 1_000L
     }
 }
 
