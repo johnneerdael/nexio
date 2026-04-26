@@ -32,6 +32,9 @@ class ProviderPlanExecutor @Inject constructor() {
 
     private fun tmdbSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {
         validateMediaKind(route, MetadataMediaKind.MOVIE, MetadataMediaKind.SERIES)
+        check(depth != MetadataDepth.SEASON || route.mediaKind == MetadataMediaKind.SERIES) {
+            "TMDB SEASON provider plan requires SERIES mediaKind"
+        }
 
         val isSeries = route.mediaKind == MetadataMediaKind.SERIES
         val steps = mutableListOf<ProviderPlanStep>()
