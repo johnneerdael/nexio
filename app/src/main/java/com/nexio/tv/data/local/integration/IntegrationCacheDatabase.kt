@@ -7,12 +7,18 @@ import androidx.room.RoomDatabase
     entities = [
         IntegrationCacheEntity::class,
         IntegrationOwnerEntity::class,
-        IntegrationProviderBackoffEntity::class
+        IntegrationProviderBackoffEntity::class,
+        RailCacheEntity::class,
+        RailItemEntity::class,
+        MediaIdentityEntity::class,
+        ExternalIdEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class IntegrationCacheDatabase : RoomDatabase() {
     abstract fun cacheDao(): IntegrationCacheDao
     abstract fun backoffDao(): IntegrationProviderBackoffDao
+    abstract fun railStoreDao(): RailStoreDao
+    abstract fun mediaIdentityDao(): MediaIdentityDao
 }
