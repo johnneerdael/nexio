@@ -1054,8 +1054,13 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         secondaryLanguage = state.subtitleStyle.secondaryPreferredLanguage,
         hasScannedTextTracksOnce = hasScannedTextTracksOnce,
         playerReady = backendIsReady(),
-        addonSubtitleDiscoveryPending =
-            state.isLoadingAddonSubtitles || startupSubtitlePreparationJob?.isActive == true,
+        // Use only `isLoadingAddonSubtitles` (the actual fetch flag). The
+        // job-active check self-blocks: tryAutoSelectPreferredSubtitleFromAvailableTracks()
+        // is invoked from inside startupSubtitlePreparationJob.launch { ... },
+        // so the job is always active during the eval that has the freshly
+        // landed addon list — making the policy defer instead of falling
+        // through to the AI-translation tier.
+        addonSubtitleDiscoveryPending = state.isLoadingAddonSubtitles,
         aiTranslationConfigured =
             subtitleTranslationSettings.enabled && subtitleTranslationSettings.apiKey.isNotBlank(),
         startupPhase = allowStartupAiFallback,

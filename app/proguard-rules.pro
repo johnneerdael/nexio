@@ -124,6 +124,18 @@
 # on Android runtime and should not fail release shrinking.
 -dontwarn org.osgi.annotation.bundle.**
 
+# ── Compose UI: AndroidLayoutApi34 (API 34 helper) ────────────────────────────
+# AndroidLayoutApi34.getRangeForRect contains a SAM lambda that implements
+# android.text.Layout$TextInclusionStrategy, an interface that only exists from
+# API 34. The aggressive optimize-proguard config inlines the helper (and/or
+# its $$ExternalSyntheticLambda) into MultiParagraph.<init>; that drags the
+# missing interface onto the verifier load path and crashes on Android <14.
+# Keep the helper as its own class so the synthetic lambda only loads when
+# the SDK_INT>=34-gated method actually runs.
+-keep,allowoptimization,allowshrinking class androidx.compose.ui.text.android.AndroidLayoutApi34
+-keep,allowoptimization,allowshrinking class androidx.compose.ui.text.android.AndroidLayoutApi34$*
+-keepclassmembers class androidx.compose.ui.text.android.AndroidLayoutApi34 { *; }
+
 # ── General ────────────────────────────────────────────────────────────────────
 # Keep line numbers for crash reports
 -keepattributes SourceFile,LineNumberTable
