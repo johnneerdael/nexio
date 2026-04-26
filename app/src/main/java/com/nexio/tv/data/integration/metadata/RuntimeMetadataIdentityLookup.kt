@@ -10,7 +10,7 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
     private val tvdbProvider: TvdbIntegrationProvider
 ) : MetadataIdentityResolver.Lookup {
     override suspend fun tmdbToTvdb(tmdbId: String): String? {
-        val imdbId = tmdbProvider.findImdbIdByTmdbId(tmdbId.toIntOrNull() ?: return null, "tv") ?: return null
+        val imdbId = tmdbProvider.findImdbIdByTmdbId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null, "tv") ?: return null
         return tvdbProvider.searchByRemoteId(imdbId)
             ?.data
             ?.firstOrNull()
@@ -20,7 +20,7 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
     }
 
     override suspend fun tvdbToTmdb(tvdbId: String): String? {
-        val series = tvdbProvider.fetchSeriesExtended(tvdbId.toIntOrNull() ?: return null)
+        val series = tvdbProvider.fetchSeriesExtended(MetadataProviderTargetIds.tvdbInt(tvdbId) ?: return null)
         val imdbId = series
             ?.remoteIds
             ?.firstOrNull { it.sourceName.equals("IMDB", ignoreCase = true) }

@@ -24,7 +24,7 @@ class KitsuMetadataProviderAdapter @Inject constructor(
     override fun supports(step: ProviderPlanStep): Boolean = step.apiShapeId in kitsuShapes
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
-        val kitsuId = route.targetIds[MetadataPrimaryProvider.KITSU]
+        val kitsuId = MetadataProviderTargetIds.kitsu(route.targetIds[MetadataPrimaryProvider.KITSU])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val mediaKind = route.mediaKind.toContentMediaKind()
         val candidate = when (step.apiShapeId) {

@@ -262,7 +262,7 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
-    fun `TVDB SEASON includes season type and language episode shapes`() {
+    fun `TVDB SEASON with localized language fetches english base then localized episode shapes`() {
         val plan = executor.buildPlan(
             route = route(
                 provider = MetadataPrimaryProvider.TVDB,
@@ -277,19 +277,18 @@ class ProviderPlanExecutorTest {
         assertEquals(
             listOf(
                 TvdbApiShapes.SERIES_EXTENDED,
-                TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
                 TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
                 TvdbApiShapes.EPISODE_TRANSLATION
             ),
             plan.apiShapeIds()
         )
-        assertFalse(plan.step(TvdbApiShapes.SERIES_EPISODES_LANGUAGE).required)
+        assertTrue(plan.step(TvdbApiShapes.SERIES_EPISODES_LANGUAGE).required)
         assertFalse(plan.step(TvdbApiShapes.EPISODE_TRANSLATION).required)
         assertAllShapesCovered(plan)
     }
 
     @Test
-    fun `TVDB SEASON with default language omits translated episode language shape`() {
+    fun `TVDB SEASON with default or unsupported language still fetches english episode language shape`() {
         listOf(null, " ", "en", "en-AU", "it", "ja-JP").forEach { language ->
             val plan = executor.buildPlan(
                 route = route(
@@ -304,13 +303,11 @@ class ProviderPlanExecutorTest {
             assertEquals("language=$language", 4, plan.route.seasonNumber)
             assertEquals(
                 "language=$language",
-                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE),
+                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_EPISODES_LANGUAGE),
                 plan.apiShapeIds()
             )
-            assertFalse(
-                "language=$language",
-                plan.apiShapeIds().contains(TvdbApiShapes.SERIES_EPISODES_LANGUAGE)
-            )
+            assertTrue("language=$language", plan.step(TvdbApiShapes.SERIES_EPISODES_LANGUAGE).required)
+            assertFalse("language=$language", plan.apiShapeIds().contains(TvdbApiShapes.EPISODE_TRANSLATION))
             assertAllShapesCovered(plan)
         }
     }
@@ -365,7 +362,7 @@ class ProviderPlanExecutorTest {
 
         assertEquals(7, plan.route.seasonNumber)
         assertEquals(
-            listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE),
+            listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_EPISODES_LANGUAGE),
             plan.apiShapeIds()
         )
         assertAllShapesCovered(plan)

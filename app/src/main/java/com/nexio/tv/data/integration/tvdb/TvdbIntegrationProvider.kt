@@ -16,6 +16,8 @@ import com.nexio.tv.core.integration.gsonCodec
 import com.nexio.tv.core.integration.valueOrNull
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.core.tvdb.TvdbReferenceKind
 import com.nexio.tv.core.tvdb.TvdbRemoteIdSource
 import com.nexio.tv.core.tvdb.TvdbSeriesIdentity
@@ -29,6 +31,8 @@ import com.nexio.tv.data.remote.api.TvdbSeriesBaseRecord
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesData
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
+import com.nexio.tv.data.integration.metadata.LocalizationPolicy
+import com.nexio.tv.data.integration.metadata.TvdbEpisodeLocalization
 import com.nexio.tv.data.remote.api.TvdbUpdatesResponse
 import com.nexio.tv.domain.model.ContentType
 import kotlinx.coroutines.CancellationException
@@ -316,14 +320,15 @@ class TvdbIntegrationProvider @Inject constructor(
         seasonType: String,
         language: String,
         page: Int = 0,
-        season: Int? = null
+        season: Int? = null,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): TvdbSeriesEpisodesData? {
         val authorization = tvdbAuthService.bearerToken() ?: return null
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
             operationKey = "tvdb.series.episodes.language",
-            cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page",
+            cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
             codec = gsonCodec<TvdbSeriesEpisodesData>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
@@ -355,16 +360,71 @@ class TvdbIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
+    suspend fun fetchLocalizedSeasonEpisodeMetadata(
+        tvdbId: Int,
+        seasonType: String,
+        requestedLanguage: String?,
+        season: Int? = null
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        val policy = LocalizationPolicy.tvdb(requestedLanguage)
+        val englishEpisodes = fetchSeriesEpisodesTranslated(
+            tvdbId = tvdbId,
+            seasonType = seasonType,
+            language = policy.fallbackLanguage,
+            season = season,
+            localizationPolicyVersion = policy.policyVersion
+        )?.episodes.orEmpty()
+        if (englishEpisodes.isEmpty()) return emptyMap()
+
+        if (policy.requestedIsFallback) {
+            return TvdbEpisodeLocalization.mergeEnglishBase(
+                policy = policy,
+                englishEpisodes = englishEpisodes,
+                localizedSeasonEpisodes = emptyList(),
+                perEpisodeTranslations = emptyMap()
+            )
+        }
+
+        val localizedEpisodes = fetchSeriesEpisodesTranslated(
+            tvdbId = tvdbId,
+            seasonType = seasonType,
+            language = policy.requestedLanguage,
+            season = season,
+            localizationPolicyVersion = policy.policyVersion
+        )?.episodes.orEmpty()
+        val perEpisodeTranslations = TvdbEpisodeLocalization
+            .idsMissingLocalizedFields(policy, englishEpisodes, localizedEpisodes)
+            .associateWith { episodeId ->
+                fetchEpisodeTranslation(
+                    episodeId = episodeId,
+                    language = policy.requestedLanguage,
+                    localizationPolicyVersion = policy.policyVersion
+                )
+            }
+            .mapNotNull { (episodeId, translation) ->
+                translation?.let { episodeId to it }
+            }
+            .toMap()
+
+        return TvdbEpisodeLocalization.mergeEnglishBase(
+            policy = policy,
+            englishEpisodes = englishEpisodes,
+            localizedSeasonEpisodes = localizedEpisodes,
+            perEpisodeTranslations = perEpisodeTranslations
+        )
+    }
+
     suspend fun fetchEpisodeTranslation(
         episodeId: Int,
-        language: String
+        language: String,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): TvdbTranslationRecord? {
         val authorization = tvdbAuthService.bearerToken() ?: return null
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
             operationKey = "tvdb.episode.translation",
-            cacheKey = "tvdb:episode:$episodeId:translation:$language",
+            cacheKey = "tvdb:episode:$episodeId:translation:$language:policy:$localizationPolicyVersion",
             codec = gsonCodec<TvdbTranslationRecord>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
