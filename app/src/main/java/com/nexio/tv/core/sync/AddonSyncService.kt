@@ -9,6 +9,8 @@ import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
+import com.nexio.tv.data.remote.supabase.requireValidV1Secret
+import com.nexio.tv.data.remote.supabase.requireValidV2Transport
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -191,7 +193,10 @@ class AddonSyncService @Inject constructor(
                             put("p_source", "app")
                         }
                     ).decodeAs<AccountAddonSecretPayload>()
-                }
+                }.requireValidV2Transport(
+                    secretRef = addon.transportSecretRef,
+                    addonUrl = addon.url
+                )
                 return@runCatching buildResolvedAddonUrl(
                     baseUrl = addon.transportBaseUrl ?: addon.url,
                     manifestUrl = null,
@@ -212,7 +217,10 @@ class AddonSyncService @Inject constructor(
                                 put("p_source", "app")
                             }
                         ).decodeAs<AccountAddonSecretPayload>()
-                    }
+                    }.requireValidV1Secret(
+                        secretRef = secretRef,
+                        addonUrl = addon.url
+                    )
                 }
 
             buildResolvedAddonUrl(
