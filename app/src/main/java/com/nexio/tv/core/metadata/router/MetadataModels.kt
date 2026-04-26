@@ -91,6 +91,7 @@ data class ResolvedMetadataDocument(
     val backdrop: String?,
     val logo: String?,
     val rating: Any?,
+    val runtimeMinutes: Int?,
     val fieldOwners: Map<ResolvedField, FieldOwner>,
     val ignoredOverwrites: List<IgnoredFieldOverwrite>
 )
