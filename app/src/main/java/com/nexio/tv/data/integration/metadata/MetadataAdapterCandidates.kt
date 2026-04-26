@@ -201,6 +201,29 @@ internal fun buildTmdbLocalizedCandidate(
     )
 }
 
+internal fun selectKitsuTitle(
+    policy: LocalizationPolicy,
+    titles: Map<String, String?>,
+    canonicalTitle: String?,
+    romanizedTitle: String?
+): String? {
+    val requestedCode = policy.requestedLanguage.providerCode
+    val requested = titles[requestedCode]
+        ?: titles[requestedCode.replace("-", "_")]
+        ?: titles[requestedCode.replace("_", "-")]
+    val english = titles["en"] ?: titles["en_us"] ?: titles["en-US"] ?: titles["en_jp"]
+    return requested.cleanLocalizedValue()
+        ?: english.cleanLocalizedValue()
+        ?: canonicalTitle.cleanLocalizedValue()
+        ?: romanizedTitle.cleanLocalizedValue()
+}
+
+internal fun selectKitsuSynopsis(
+    synopsis: String?,
+    description: String?
+): String? =
+    synopsis.cleanLocalizedValue() ?: description.cleanLocalizedValue()
+
 private fun TvdbTranslationRecord.toLocalizedCandidate(
     field: ResolvedField,
     value: String?,
