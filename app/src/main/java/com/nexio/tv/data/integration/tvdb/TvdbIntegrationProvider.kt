@@ -370,7 +370,7 @@ class TvdbIntegrationProvider @Inject constructor(
         val englishEpisodes = fetchSeriesEpisodesTranslated(
             tvdbId = tvdbId,
             seasonType = seasonType,
-            language = policy.fallbackLanguage,
+            language = policy.fallbackLanguage.providerCode,
             season = season,
             localizationPolicyVersion = policy.policyVersion
         )?.episodes.orEmpty()
@@ -388,7 +388,7 @@ class TvdbIntegrationProvider @Inject constructor(
         val localizedEpisodes = fetchSeriesEpisodesTranslated(
             tvdbId = tvdbId,
             seasonType = seasonType,
-            language = policy.requestedLanguage,
+            language = policy.requestedLanguage.providerCode,
             season = season,
             localizationPolicyVersion = policy.policyVersion
         )?.episodes.orEmpty()
@@ -397,7 +397,7 @@ class TvdbIntegrationProvider @Inject constructor(
             .associateWith { episodeId ->
                 fetchEpisodeTranslation(
                     episodeId = episodeId,
-                    language = policy.requestedLanguage,
+                    language = policy.requestedLanguage.providerCode,
                     localizationPolicyVersion = policy.policyVersion
                 )
             }
