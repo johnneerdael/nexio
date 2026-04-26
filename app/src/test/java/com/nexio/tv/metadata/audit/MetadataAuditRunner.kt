@@ -666,14 +666,25 @@ private class AuditMetadataProviderAdapter(
             fallbackLanguage = fallback,
             policyVersion = 2,
             providerFallbackAllowedForMissingLocalizedFields = false,
-            payloads = listOf(
+            payloads = listOfNotNull(
                 LocalizationPayloadReport(
                     apiShapeId = step.apiShapeId,
                     language = requested,
                     cacheKey = cacheKey,
                     cacheDecision = decision,
                     executedNetwork = executedNetwork
-                )
+                ),
+                if (requested == fallback) {
+                    null
+                } else {
+                    LocalizationPayloadReport(
+                        apiShapeId = step.apiShapeId,
+                        language = fallback,
+                        cacheKey = "$cacheKey:fallback:$fallback",
+                        cacheDecision = CacheDecision.HIT,
+                        executedNetwork = false
+                    )
+                }
             ),
             perEpisodeTranslationFallbacksAttempted = if (step.apiShapeId.contains("episode", ignoreCase = true)) 1 else 0,
             maxPerEpisodeTranslationFallbacksAllowed = if (route.provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB) 8 else 0,
