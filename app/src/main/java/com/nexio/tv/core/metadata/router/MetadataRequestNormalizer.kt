@@ -24,6 +24,7 @@ class MetadataRequestNormalizer @Inject constructor() {
 
         val parts = id.split(":")
         return when {
+            id.startsWith("imdb:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("kitsu:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("mal:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
             id.startsWith("anilist:", ignoreCase = true) && parts.size >= 2 -> "${parts[0]}:${parts[1]}"
@@ -39,6 +40,7 @@ class MetadataRequestNormalizer @Inject constructor() {
         when (this) {
             ContentType.MOVIE -> MetadataMediaKind.MOVIE
             ContentType.SERIES -> MetadataMediaKind.SERIES
+            ContentType.TV -> MetadataMediaKind.SERIES
             else -> MetadataMediaKind.UNKNOWN
         }
 }

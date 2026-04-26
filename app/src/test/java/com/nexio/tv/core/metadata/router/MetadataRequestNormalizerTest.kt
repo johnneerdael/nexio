@@ -35,6 +35,19 @@ class MetadataRequestNormalizerTest {
     }
 
     @Test
+    fun `IMDB-prefixed episode id normalizes to parent IMDB id`() {
+        val request = MetadataRequest(
+            contentId = "imdb:tt1355642:1:1",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext()
+        )
+
+        val normalized = normalizer.normalize(request)
+
+        assertEquals("imdb:tt1355642", normalized.parentId)
+    }
+
+    @Test
     fun `provider title id remains unchanged`() {
         val request = MetadataRequest(
             contentId = "tmdb:550",
@@ -48,7 +61,7 @@ class MetadataRequestNormalizerTest {
     }
 
     @Test
-    fun `blank id is preserved as blank and recorded as unsupported`() {
+    fun `blank id is preserved as blank`() {
         val request = MetadataRequest(
             contentId = "   ",
             contentType = ContentType.MOVIE,
@@ -58,6 +71,7 @@ class MetadataRequestNormalizerTest {
         val normalized = normalizer.normalize(request)
 
         assertEquals("", normalized.parentId)
+        assertEquals("", normalized.originalContentId)
         assertEquals(MetadataMediaKind.MOVIE, normalized.mediaKind)
     }
 }
