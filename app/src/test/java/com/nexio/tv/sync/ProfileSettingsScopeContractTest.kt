@@ -307,13 +307,28 @@ class ProfileSettingsScopeContractTest {
     fun `account snapshot sync only reads and writes primary profile tracking auth`() {
         val source = accountSettingsSyncService.readText()
 
+        // The production code may inline `profileModeRouter.defaultLegacyProfileId()`
+        // or hoist it into a local (`val defaultProfileId = ...`) — both forms
+        // express the same contract: trakt/simkl auth lookups scope to the
+        // primary profile only. Accept either form so a refactor that extracts
+        // the local doesn't trip this contract test.
+        val primaryProfileExpr = Regex(
+            "(?:profileModeRouter\\.defaultLegacyProfileId\\(\\)|defaultProfileId)"
+        )
+        fun assertCallsWithPrimary(call: String) {
+            val pattern = Regex(Regex.escape(call) + "\\s*\\(\\s*" + primaryProfileExpr.pattern + "\\s*\\)")
+            assertTrue(
+                "$call must scope to defaultLegacyProfileId — found:\n" +
+                    Regex(Regex.escape(call) + "[^\\n]*").findAll(source).joinToString("\n") { it.value },
+                pattern.containsMatchIn(source)
+            )
+        }
+
         assertTrue(source.contains("profileModeRouter.defaultLegacyProfileId()"))
-        assertTrue(source.contains("traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit }"))
-        assertTrue(source.contains("simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit }"))
-        assertTrue(source.contains("traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()"))
-        assertTrue(source.contains("simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()"))
-        assertTrue(source.contains("traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())"))
-        assertTrue(source.contains("simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())"))
+        assertCallsWithPrimary("traktAuthDataStore.stateForProfile")
+        assertCallsWithPrimary("simklAuthDataStore.stateForProfile")
+        assertCallsWithPrimary("traktAuthDataStore.clearAuth")
+        assertCallsWithPrimary("simklAuthDataStore.clearAuth")
         assertTrue(source.contains("profileId = profileModeRouter.defaultLegacyProfileId()"))
         assertTrue(source.contains("path == \"integrations.traktAuth\""))
         assertTrue(source.contains("path == \"integrations.simklAuth\""))

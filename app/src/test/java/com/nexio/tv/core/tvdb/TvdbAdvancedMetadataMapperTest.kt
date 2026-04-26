@@ -67,14 +67,17 @@ class TvdbAdvancedMetadataMapperTest {
 
         val result = mapper.mapAdvancedMetadata(series, listOf("usa"))
 
-        // Characters map to MetaCastMember
+        // Characters map to MetaCastMember. Mapper now tags TVDB-sourced
+        // members with provider="tvdb" so downstream merge logic can prefer
+        // an authoritative provider.
         assertEquals(2, result.castMembers.size)
         assertEquals(
             MetaCastMember(
                 name = "Anna Torv",
                 character = "Olivia Dunham",
                 photo = "https://artworks.thetvdb.com/fake/anna_torv.jpg",
-                tmdbId = null
+                tmdbId = null,
+                provider = "tvdb"
             ),
             result.castMembers[0]
         )
@@ -83,18 +86,30 @@ class TvdbAdvancedMetadataMapperTest {
                 name = "Joshua Jackson",
                 character = "Peter Bishop",
                 photo = "https://artworks.thetvdb.com/fake/joshua_jackson.jpg",
-                tmdbId = null
+                tmdbId = null,
+                provider = "tvdb"
             ),
             result.castMembers[1]
         )
 
-        // Networks from originalNetwork/latestNetwork, distinct
+        // Networks from originalNetwork/latestNetwork, distinct.
+        // Mapper tags TVDB-sourced companies with provider="tvdb".
         assertEquals(1, result.networks.size)
-        assertEquals(MetaCompany(name = "FOX", kind = MetaCompanyKind.NETWORK), result.networks[0])
+        assertEquals(
+            MetaCompany(name = "FOX", kind = MetaCompanyKind.NETWORK, provider = "tvdb"),
+            result.networks[0]
+        )
 
-        // Production companies exclude network names
+        // Production companies exclude network names.
         assertEquals(1, result.productionCompanies.size)
-        assertEquals(MetaCompany(name = "Bad Robot Productions", kind = MetaCompanyKind.COMPANY), result.productionCompanies[0])
+        assertEquals(
+            MetaCompany(
+                name = "Bad Robot Productions",
+                kind = MetaCompanyKind.COMPANY,
+                provider = "tvdb"
+            ),
+            result.productionCompanies[0]
+        )
 
         // Genres nonblank, distinct preserving order
         assertEquals(listOf("Science Fiction", "Drama", "Mystery"), result.genres)

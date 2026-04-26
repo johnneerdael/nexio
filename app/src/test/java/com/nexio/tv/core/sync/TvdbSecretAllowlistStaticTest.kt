@@ -10,12 +10,15 @@ class TvdbSecretAllowlistStaticTest {
 
     @Test
     fun `tvdb yml exists and declares the TVDB V4 API contract`() {
-        val tvdbContractPath = Paths.get("tvdb.yml")
+        val tvdbContractPath = Paths.get("apiblueprints/tvdb.yml")
 
-        assertTrue("tvdb.yml must be checked in at the repository root", Files.exists(tvdbContractPath))
-        val tvdbContract = readRepositoryFile("tvdb.yml")
         assertTrue(
-            "tvdb.yml should include https://api4.thetvdb.com/v4/",
+            "apiblueprints/tvdb.yml must be checked in",
+            Files.exists(tvdbContractPath)
+        )
+        val tvdbContract = readRepositoryFile("apiblueprints/tvdb.yml")
+        assertTrue(
+            "apiblueprints/tvdb.yml should include https://api4.thetvdb.com/v4/",
             tvdbContract.contains("https://api4.thetvdb.com/v4")
         )
     }

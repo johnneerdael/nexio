@@ -1063,6 +1063,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             tmdbService = resolvedTmdbService,
             tmdbMetadataService = resolvedTmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = mockk(relaxed = true),
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
             titleRatingOverrideRepository = titleRatingOverrideRepository,
