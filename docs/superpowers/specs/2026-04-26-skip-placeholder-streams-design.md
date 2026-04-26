@@ -63,11 +63,11 @@ The resolver issues exactly the request it issues today: `GET` with `Range: byte
 **`app/src/main/java/com/nexio/tv/core/player/CometProxyUrlResolver.kt`**
 - Add `ProxyResolution` sealed class (top-level in same file).
 - `resolve()` and `resolveBlocking()` return `ProxyResolution` (was `String?`).
-- `prewarm()` keeps returning `Job?`. Add internal `lastResolutionFor(url): ProxyResolution?` backed by a short-lived (≈30 s) verdict map so the autoplay selector can read prewarm outcomes without firing a second request.
+- `prewarm()` keeps returning `Job?`. Add internal `lastResolutionFor(url): ProxyResolution?` backed by a short-lived verdict map (`SHORT_VERDICT_TTL_MS = 30_000L`) so the autoplay selector can read prewarm outcomes without firing a second request.
 - `Transport` interface widens its return type to `ProxyResolution`.
 - Long-cache (`CacheEntry`, 50 min) continues to store **only** `Redirected` outcomes. `Placeholder` and `ResolveFailed` are not long-cached — same URL may resolve later (e.g., after auth recovers).
 - Existing test hook `setTransportForTesting` updated for the new return shape.
-- `RESOLVE_RESPONSE` log line gains `decision=placeholder` as a fourth case.
+- `RESOLVE_RESPONSE` log line's `decision=` field is rationalized to one of `redirect` | `placeholder` | `failed`. (Today's `null-no-redirect` value is replaced; `failed` covers `4xx` / `5xx` / network errors / non-video `200`.)
 
 **`app/src/main/java/com/nexio/tv/ui/screens/stream/StreamScreenViewModel.kt`**
 - `prepareMediaSourceUrl` (line 1001-1004): map `Redirected → url`; all other variants → original `url` (preserves today's fallback for direct-playback paths).
@@ -78,7 +78,7 @@ The resolver issues exactly the request it issues today: `GET` with `Range: byte
 - Picker fallback branch (line 969) gains a one-shot toast "Autoplay could not select a stream." — fired only when the placeholder filter actually dropped at least one candidate.
 
 **`app/src/main/java/com/nexio/tv/core/player/StreamAutoPlaySelector.kt`**
-- `candidateAutoPlayStreams` accepts an injected placeholder predicate that consults `CometProxyUrlResolver.lastResolutionFor(url)`. Filter runs **before** any ffprobe so we don't waste probe cost on known placeholders.
+- `candidateAutoPlayStreams` accepts an injected placeholder predicate. Predicate signature: `(stream) -> Boolean` returning `true` to drop. Implementation: `skipEnabled && resolver.lastResolutionFor(stream.url) is ProxyResolution.Placeholder`. The `skipEnabled` boolean is read from `PlayerSettingsDataStore.skipPlaceholderStreamsEnabledFlow` at candidate-selection time. Filter runs **before** any ffprobe so we don't waste probe cost on known placeholders.
 - `findViableFallback` is unchanged — placeholder filtering happens upstream so it sees only non-placeholder candidates.
 
 **`tv/data/local/PlayerSettingsDataStore.kt`**
@@ -121,7 +121,7 @@ If every candidate is filtered out: `selectAutoPlayStream` returns null → exis
 
 ## Cache lifetimes
 
-| Verdict | Long cache (50 min) | Short verdict cache (≈30 s) |
+| Verdict | Long cache (50 min) | Short verdict cache (30 s) |
 |---|---|---|
 | `Redirected(url)` | yes (existing) | n/a |
 | `Placeholder` | no | yes — only to bridge prewarm → selector read |
@@ -161,7 +161,7 @@ Default `true`. The autoplay path observes the flow at candidate-selection time,
 
 ## Telemetry
 
-- `RESOLVE_RESPONSE` log line gains `decision=placeholder` as a fourth value (alongside `redirect` / `null-no-redirect`).
+- `RESOLVE_RESPONSE` log line's `decision=` field is rationalized to `redirect` | `placeholder` | `failed`.
 - Selector adds one INFO log per filtered candidate: `AUTOPLAY_SKIP reason=placeholder url=<sanitized>`.
 - No new metrics dashboards.
 
