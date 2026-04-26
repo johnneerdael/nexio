@@ -33,7 +33,8 @@ import org.json.JSONObject
 class MetadataAuditRunner private constructor(
     private val facade: MetadataRouterFacade,
     private val adapters: List<AuditMetadataProviderAdapter>,
-    private val parser: CatalogFixtureParser = CatalogFixtureParser()
+    private val parser: CatalogFixtureParser = CatalogFixtureParser(),
+    private val provenanceProvider: MetadataAuditProvenanceProvider = GitMetadataAuditProvenanceProvider()
 ) {
     suspend fun runCatalogFixture(
         fixtureName: String,
@@ -47,6 +48,8 @@ class MetadataAuditRunner private constructor(
 
         val violations = items.flatMap { it.violations }
         return MetadataExecutionReport(
+            schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
+            provenance = provenanceProvider.current(),
             verdict = if (violations.any { it.severity == Severity.BLOCKER || it.severity == Severity.HIGH }) {
                 AuditVerdict.FAIL
             } else {
@@ -71,6 +74,8 @@ class MetadataAuditRunner private constructor(
         }
         val violations = reports.flatMap { it.policyViolations }
         return MetadataExecutionReportBundle(
+            schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
+            provenance = provenanceProvider.current(),
             verdict = if (reports.any { it.verdict == AuditVerdict.FAIL }) AuditVerdict.FAIL else AuditVerdict.PASS,
             generatedAtEpochMs = System.currentTimeMillis(),
             reports = reports,
@@ -297,6 +302,9 @@ class MetadataAuditRunner private constructor(
                 reason
             },
             targetIds = targetIds,
+            preResolutionTargetIdRequiresIdentityResolution = trace.any {
+                it.reason == com.nexio.tv.core.metadata.router.MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT
+            } || targetIdRequiresIdentityResolution,
             targetIdRequiresIdentityResolution = targetIdRequiresIdentityResolution,
             usedInputs = inferUsedInputs(),
             ignoredInputs = setOf("catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity")
@@ -369,6 +377,8 @@ class MetadataAuditRunner private constructor(
         }
 
     companion object {
+        private const val METADATA_AUDIT_SCHEMA_VERSION = 1
+
         fun default(): MetadataAuditRunner {
             val adapters = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.entries
                 .map { provider -> AuditMetadataProviderAdapter(provider) }
@@ -476,6 +486,38 @@ class MetadataAuditRunner private constructor(
                 ?: error("Missing fixture metadata/addons/$name")
             return resource.readText()
         }
+    }
+}
+
+private interface MetadataAuditProvenanceProvider {
+    fun current(): MetadataAuditProvenance
+}
+
+private class GitMetadataAuditProvenanceProvider : MetadataAuditProvenanceProvider {
+    override fun current(): MetadataAuditProvenance {
+        val statusLines = git("status", "--porcelain").lines().filter { it.isNotBlank() }
+        val untracked = statusLines.count { it.startsWith("??") || it.startsWith(" ?") }
+        return MetadataAuditProvenance(
+            gitSha = git("rev-parse", "--short=9", "HEAD").ifBlank { "UNKNOWN" },
+            gitWorktree = GitWorktreeState(
+                state = if (statusLines.isEmpty()) "CLEAN" else "DIRTY",
+                dirtyFileCount = (statusLines.size - untracked).coerceAtLeast(0),
+                untrackedFileCount = untracked
+            )
+        )
+    }
+
+    private fun git(vararg args: String): String {
+        return runCatching {
+            ProcessBuilder(listOf("git") + args)
+                .redirectErrorStream(true)
+                .start()
+                .let { process ->
+                    val output = process.inputStream.bufferedReader().readText().trim()
+                    process.waitFor()
+                    output
+                }
+        }.getOrDefault("UNKNOWN")
     }
 }
 
