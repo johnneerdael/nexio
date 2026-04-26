@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvMetadataDiagnosticEvent
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -117,12 +118,38 @@ class MetadataRouterFacade @Inject constructor(
         seasonNumber: Int,
         language: String? = null
     ): TvMetadataDecision<List<TvSeasonEpisode>> {
-        val result = resolveRequest(metadataRequest)
+        val route = routeRequest(
+            metadataRequest.copy(
+                depth = MetadataDepth.SEASON,
+                seasonNumber = seasonNumber,
+                language = language ?: metadataRequest.language
+            )
+        )
+        val plan = providerPlanExecutor.buildPlan(route = route, depth = MetadataDepth.SEASON)
+        val runResult = providerPlanRunner.run(plan)
+        val episodes = runResult.stepResults
+            .flatMap { stepResult -> stepResult.episodeMetadata.values }
+            .map { episodeMetadata ->
+                TvSeasonEpisode(
+                    episodeNumber = episodeMetadata.episodeNumber,
+                    airDate = episodeMetadata.airDate,
+                    metadata = episodeMetadata
+                )
+            }
+            .sortedWith(compareBy<TvSeasonEpisode> { it.episodeNumber ?: Int.MAX_VALUE })
+
         return TvMetadataDecision(
-            provider = result.route?.provider.toTvProvider(),
+            provider = route.provider.toTvProvider(),
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-            value = emptyList(),
-            diagnostics = emptyList()
+            value = episodes,
+            diagnostics = runResult.trace.map { trace ->
+                TvMetadataDiagnosticEvent(
+                    reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                    contentId = route.parentId,
+                    provider = route.provider.toTvProvider(),
+                    detail = trace.detail
+                )
+            }
         )
     }
 

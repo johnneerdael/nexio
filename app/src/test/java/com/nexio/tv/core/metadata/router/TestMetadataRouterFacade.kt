@@ -32,19 +32,32 @@ private class TestMetadataProviderAdapter(
     override fun supports(step: ProviderPlanStep): Boolean = true
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
-        val episodeMetadata = route.seasonNumber
-            ?.let { seasonNumber ->
+        val episodeMetadata = when {
+            route.seasonNumber == null -> emptyMap()
+            step.role == ProviderPlanRole.SEASON -> {
+                val seasonNumber = route.seasonNumber
+                providerMetadataRouter.fetchSeasonEpisodes(
+                    contentId = route.parentId,
+                    fallbackContentId = route.parentId,
+                    seasonNumber = seasonNumber,
+                    language = route.language
+                ).value.orEmpty().mapNotNull { episode ->
+                    val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
+                    (seasonNumber to episodeNumber) to episode.metadata
+                }.toMap()
+            }
+            else -> {
                 providerMetadataRouter.fetchEpisodeEnrichment(
                     TvMetadataRequest(
                         contentId = route.parentId,
                         fallbackContentId = route.parentId,
                         contentType = route.mediaKind.toContentType(),
                         language = route.language,
-                        seasonNumbers = listOf(seasonNumber)
+                        seasonNumbers = listOfNotNull(route.seasonNumber)
                     )
                 ).value.orEmpty()
             }
-            .orEmpty()
+        }
 
         return ProviderStepResult(
             step = step,
