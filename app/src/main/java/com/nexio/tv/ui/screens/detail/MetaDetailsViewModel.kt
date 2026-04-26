@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
-import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.metadata.router.FieldResolver
 import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
@@ -24,7 +23,6 @@ import com.nexio.tv.core.metadata.router.ProviderPlanRunner
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
-import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -43,6 +41,7 @@ import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
@@ -95,10 +94,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
-
-private fun missingKitsuMetadataServiceForManualConstruction(): KitsuMetadataService {
-    error("KitsuMetadataService must be provided to MetaDetailsViewModel")
-}
 
 private fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFacade =
     MetadataRouterFacade(
@@ -205,9 +200,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val reviewsRepository: ReviewsRepository,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
-    private val tmdbMetadataService: TmdbMetadataService,
     private val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
-    private val kitsuMetadataService: KitsuMetadataService = missingKitsuMetadataServiceForManualConstruction(),
+    private val metadataSecondaryRepository: MetadataSecondaryRepository,
     private val profileBoundary: ProfileBoundary,
     private val mdbListRepository: MDBListRepository,
     private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
@@ -878,7 +872,7 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val rawRecommendations = runCatching {
-                tmdbMetadataService.fetchMoreLikeThis(
+                metadataSecondaryRepository.fetchMoreLikeThis(
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
                 )
@@ -1077,7 +1071,7 @@ class MetaDetailsViewModel @Inject constructor(
     ): List<MetaReview> {
         if (tmdbId.isNullOrBlank()) return emptyList()
         return runCatching {
-            tmdbMetadataService.fetchReviews(
+            metadataSecondaryRepository.fetchReviews(
                 tmdbId = tmdbId,
                 contentType = tmdbContentType
             )
@@ -1230,7 +1224,7 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val items = runCatching {
-                tmdbMetadataService.fetchMovieCollection(
+                metadataSecondaryRepository.fetchMovieCollection(
                     collectionId = collectionId
                 )
             }.getOrElse {
@@ -1394,7 +1388,7 @@ class MetaDetailsViewModel @Inject constructor(
                 settings.isActive &&
                 shouldSupplementTvdbDetailWithTmdb(tvEnrichment, settings)
             ) {
-                tmdbMetadataService.fetchEnrichment(
+                metadataSecondaryRepository.fetchTmdbEnrichment(
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
                 )
@@ -1409,7 +1403,7 @@ class MetaDetailsViewModel @Inject constructor(
                 val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
                     ?: tmdbService.ensureTmdbId(itemId, itemType)
                     ?: return result(meta)
-                tmdbMetadataService.fetchEnrichment(
+                metadataSecondaryRepository.fetchTmdbEnrichment(
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
                 )
@@ -1429,7 +1423,7 @@ class MetaDetailsViewModel @Inject constructor(
             null
         }
         val kitsuAdvanced = if (kitsuAdvancedSourceId != null) {
-            kitsuMetadataService.fetchAdvancedDetail(
+            metadataSecondaryRepository.fetchKitsuAdvancedDetail(
                 rawId = kitsuAdvancedSourceId,
                 mediaKind = tmdbContentType.toAnimeMediaKind(),
                 preferredLanguageCode = tvEnrichment?.language
@@ -1623,12 +1617,12 @@ class MetaDetailsViewModel @Inject constructor(
         kitsuBridgeHydrationJob = viewModelScope.launch {
             val tmdbPersonIdsByActorName = coroutineScope {
                 actorNamesNeedingIds.associateWith { actorName ->
-                    async { tmdbMetadataService.findPersonIdByExactName(actorName) }
+                    async { metadataSecondaryRepository.findPersonIdByExactName(actorName) }
                 }.mapValues { (_, deferred) -> deferred.await() }
             }
             val tmdbCompanyIdsByName = coroutineScope {
                 companyNamesNeedingIds.associateWith { companyName ->
-                    async { tmdbMetadataService.findCompanyIdByExactName(companyName) }
+                    async { metadataSecondaryRepository.findCompanyIdByExactName(companyName) }
                 }.mapValues { (_, deferred) -> deferred.await() }
             }
 
@@ -2391,10 +2385,7 @@ class MetaDetailsViewModel @Inject constructor(
                             )
                             return@launch
                         }
-                    // Passing null language: TmdbMetadataService.fetchSeasonEpisodes falls back to
-                    // currentTmdbLanguageTag() internally, and MetaDetailsViewModel has no locale
-                    // source of its own to override that.
-                    tmdbMetadataService.fetchSeasonEpisodes(tvId, season, null)
+                    metadataSecondaryRepository.fetchSeasonEpisodes(tvId, season, null)
                         .filter { ep -> AirDateGate.isAired(0L, ep.airDate, nowMs) }
                         .map { ep ->
                             com.nexio.tv.domain.model.SeasonEpisodeMark(

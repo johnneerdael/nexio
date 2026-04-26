@@ -19,6 +19,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
@@ -298,7 +299,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         coEvery {
             tmdbMetadataService.fetchEpisodeEnrichment(
                 tmdbId = "1399",
-                seasonNumbers = listOf(1, 2),
+                seasonNumbers = any(),
                 language = any()
             )
         } returns mapOf(
@@ -1058,9 +1059,11 @@ class MetaDetailsSeasonMediaViewModelTest {
             reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
-            tmdbMetadataService = resolvedTmdbMetadataService,
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            kitsuMetadataService = mockk(relaxed = true),
+            metadataSecondaryRepository = MetadataSecondaryRepository(
+                tmdbMetadataService = resolvedTmdbMetadataService,
+                kitsuMetadataService = mockk(relaxed = true)
+            ),
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
             titleRatingOverrideRepository = titleRatingOverrideRepository,

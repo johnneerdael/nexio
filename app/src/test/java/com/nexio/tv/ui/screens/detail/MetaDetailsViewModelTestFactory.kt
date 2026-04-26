@@ -20,6 +20,7 @@ import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
@@ -88,9 +89,11 @@ fun buildMetaDetailsViewModel(
         reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         tmdbService = tmdbService,
-        tmdbMetadataService = tmdbMetadataService,
         metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-        kitsuMetadataService = kitsuMetadataService,
+        metadataSecondaryRepository = MetadataSecondaryRepository(
+            tmdbMetadataService = tmdbMetadataService,
+            kitsuMetadataService = kitsuMetadataService
+        ),
         profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),
         titleRatingOverrideRepository = titleRatingOverrideRepository,

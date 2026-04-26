@@ -7,7 +7,7 @@ import org.junit.Test
 class MetadataProductionBoundaryTest {
     private val metadataCallerRoots = listOf(
         File("app/src/main/java/com/nexio/tv/ui"),
-        File("app/src/main/java/com/nexio/tv/data/repository")
+        File("app/src/main/java/com/nexio/tv/workers")
     )
 
     @Test

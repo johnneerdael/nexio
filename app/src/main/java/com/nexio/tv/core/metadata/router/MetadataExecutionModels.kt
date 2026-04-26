@@ -1,10 +1,12 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 
 data class ProviderStepResult(
     val step: ProviderPlanStep,
     val candidate: MetadataCandidate? = null,
+    val episodeMetadata: Map<Pair<Int, Int>, TvEpisodeMetadata> = emptyMap(),
     val trace: List<MetadataRouteTrace> = emptyList()
 )
 
