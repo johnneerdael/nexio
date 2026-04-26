@@ -7,6 +7,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
+import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
+import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
+import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
+import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -26,9 +30,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import okhttp3.OkHttpClient
 import javax.inject.Inject
-import javax.inject.Named
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
@@ -47,11 +49,13 @@ class PlayerViewModel @Inject constructor(
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     private val subtitleTranslationService: SubtitleTranslationService,
+    private val subtitleSourceDownloadIntegrationProvider: SubtitleSourceDownloadIntegrationProvider,
     private val metadataRouterFacade: MetadataRouterFacade,
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val playbackActivityTracker: PlaybackActivityTracker,
-    @Named("playback")
-    private val playbackOkHttpClient: OkHttpClient,
+    private val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
+    private val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
+    private val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -70,10 +74,13 @@ class PlayerViewModel @Inject constructor(
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         subtitleTranslationService = subtitleTranslationService,
+        subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider,
         metadataRouterFacade = metadataRouterFacade,
         playbackIdleGateState = playbackIdleGateState,
         playbackActivityTracker = playbackActivityTracker,
-        playbackOkHttpClient = playbackOkHttpClient,
+        playbackMediaSourceTransport = playbackMediaSourceTransport,
+        openSubtitlesHashIntegrationProvider = openSubtitlesHashIntegrationProvider,
+        playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )
