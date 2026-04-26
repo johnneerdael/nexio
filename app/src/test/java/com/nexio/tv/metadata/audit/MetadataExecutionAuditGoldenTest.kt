@@ -167,6 +167,11 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(scenarioNames.contains("continue-watching-local-playback"))
         assertTrue(scenarioNames.contains("continue-watching-stale-routing-version"))
         assertTrue(scenarioNames.contains("field-ownership-conflict"))
+        assertTrue(scenarioNames.contains("tmdb-movie-core-warm-cache"))
+        assertTrue(scenarioNames.contains("tvdb-series-core-warm-cache"))
+        assertTrue(scenarioNames.contains("kitsu-anime-core-warm-cache"))
+        assertTrue(scenarioNames.contains("stale-on-429"))
+        assertTrue(scenarioNames.contains("production-caller-ownership"))
 
         val allItems = bundle.reports.flatMap { it.items }
         assertTrue(allItems.any { it.itemId == "tt26443597" && it.routing?.provider == MetadataPrimaryProvider.TMDB })
@@ -190,6 +195,98 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals(30.daysMs, decisionsByShape.getValue("tvdb.series.extended").staleWindowMs)
         assertEquals(7.daysMs, decisionsByShape.getValue("kitsu.anime.core").ttlMs)
         assertEquals(30.daysMs, decisionsByShape.getValue("kitsu.anime.core").staleWindowMs)
+    }
+
+    @Test
+    fun `fresh cache hit suppresses provider network for primary metadata`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val warmReports = bundle.reports.filter { it.scenario.cacheMode == AuditCacheMode.WARM_FRESH }
+        val warmDecisions = warmReports.flatMap { it.items }.flatMap { it.cacheDecisions }
+        val warmCalls = warmReports.flatMap { it.items }.flatMap { it.runtimeCalls }
+
+        assertTrue(warmDecisions.any { it.apiShapeId == "tmdb.movie.core" && it.decision == CacheDecision.HIT })
+        assertTrue(warmDecisions.any { it.apiShapeId == "tvdb.series.extended" && it.decision == CacheDecision.HIT })
+        assertTrue(warmDecisions.any { it.apiShapeId == "kitsu.anime.core" && it.decision == CacheDecision.HIT })
+        assertTrue(warmCalls.all { !it.executedNetwork })
+    }
+
+    @Test
+    fun `stale cache is served on forced 429 without network success`() = runTest {
+        val report = MetadataAuditRunner.default().runCatalogFixture(
+            fixtureName = "netflix_movie_nfx.json",
+            fixtureJson = fixture("metadata/addons/netflix_movie_nfx.json"),
+            scenario = MetadataAuditScenario(
+                name = "stale-on-429",
+                depth = MetadataDepth.DETAIL_CORE,
+                visibleItemIds = setOf("tt16431404"),
+                cacheMode = AuditCacheMode.FORCE_429
+            )
+        )
+
+        val item = report.items.single()
+        assertTrue(item.cacheDecisions.any { it.decision == CacheDecision.STALE_HIT })
+        assertTrue(item.runtimeCalls.all { !it.executedNetwork })
+    }
+
+    @Test
+    fun `premium artwork providers win poster without refetching primary metadata`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val topposters = bundle.reports.single { it.scenario.name == "premium-artwork-topposters" }.items.single()
+        val rpdb = bundle.reports.single { it.scenario.name == "premium-artwork-rpdb" }.items.single()
+
+        assertEquals("TOP_POSTERS", topposters.selectedFields.single { it.field == "poster" }.selectedProvider)
+        assertEquals("RPDB", rpdb.selectedFields.single { it.field == "poster" }.selectedProvider)
+        assertTrue(topposters.runtimeCalls.any { it.apiShapeId == "topposters.poster_template" })
+        assertTrue(rpdb.runtimeCalls.any { it.apiShapeId == "rpdb.poster_template" })
+        assertTrue((topposters.cacheDecisions + rpdb.cacheDecisions).any { it.apiShapeId == "tmdb.movie.core" && it.decision == CacheDecision.HIT })
+        assertTrue((topposters.runtimeCalls + rpdb.runtimeCalls).none {
+            it.apiShapeId == "tmdb.movie.core" && it.executedNetwork
+        })
+    }
+
+    @Test
+    fun `provider native conflict records identity resolution before execution`() = runTest {
+        val report = MetadataAuditRunner.default().runCatalogFixture(
+            fixtureName = "provider_native_conflict.json",
+            fixtureJson = fixture("metadata/addons/provider_native_conflict.json"),
+            scenario = MetadataAuditScenario(
+                name = "provider-native-conflict",
+                depth = MetadataDepth.DETAIL_CORE,
+                visibleItemIds = setOf("tmdb:1399")
+            )
+        )
+        val item = report.items.single()
+
+        assertEquals(MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT, item.routing?.reason)
+        assertEquals("tmdb:1399", item.identityResolution?.sourceId)
+        assertEquals(MetadataPrimaryProvider.TVDB, item.identityResolution?.targetProvider)
+        assertEquals("tvdb.remoteid.lookup", item.identityResolution?.apiShapeId)
+        assertTrue(item.identityResolution?.success == true)
+        assertTrue(item.runtimeCalls.none { it.apiShapeId == "tvdb.series.extended" && it.operationKey.contains("tmdb:") })
+    }
+
+    @Test
+    fun `production caller ownership is represented and legacy free`() = runTest {
+        val report = MetadataAuditRunner.default().runCatalogFixture(
+            fixtureName = "netflix_movie_nfx.json",
+            fixtureJson = fixture("metadata/addons/netflix_movie_nfx.json"),
+            scenario = MetadataAuditScenario(
+                name = "production-caller-ownership",
+                depth = MetadataDepth.DETAIL_CORE,
+                visibleItemIds = setOf("tt16431404"),
+                productionCallerOwnership = true
+            )
+        )
+        val events = report.items.single().productionCallerOwnership
+        val pathNames = events.map { it.pathName }.toSet()
+
+        assertTrue(pathNames.contains("home_catalog"))
+        assertTrue(pathNames.contains("detail_screen"))
+        assertTrue(pathNames.contains("player_start"))
+        assertTrue(pathNames.contains("continue_watching_write"))
+        assertTrue(pathNames.contains("continue_watching_render"))
+        assertTrue(events.all { it.facadeOrRepositoryCalled && it.providerPlanRunnerExpected && it.fieldResolverExpected })
+        assertTrue(events.none { it.legacyRouterUsedAfterFacade })
     }
 
     @Test
@@ -223,8 +320,12 @@ class MetadataExecutionAuditGoldenTest {
         val markdown = File(outputDir, "metadata-execution-report.md").readText()
         assertTrue(json.contains("crunchyroll-imdb-anime-detail-core"))
         assertTrue(json.contains("field-ownership-conflict"))
+        assertTrue(json.contains("identityResolution"))
+        assertTrue(json.contains("productionCallerOwnership"))
         assertTrue(markdown.contains("Metadata Execution Audit Bundle"))
         assertTrue(markdown.contains("provider-native-conflict"))
+        assertTrue(markdown.contains("Identity resolution"))
+        assertTrue(markdown.contains("Production caller ownership"))
     }
 
     private fun fixture(path: String): String {

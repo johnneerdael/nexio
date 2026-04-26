@@ -76,7 +76,9 @@ class MetadataAuditReportWriter {
                     appendLine("          \"resolverSchedule\": ${resolverScheduleJson(item.resolverSchedule, indent = "          ")},")
                     appendLine("          \"selectedFields\": [${item.selectedFields.joinToString { selectedFieldJson(it) }}],")
                     appendLine("          \"forbiddenOverwrites\": [${item.forbiddenOverwrites.joinToString { forbiddenOverwriteJson(it) }}],")
-                    appendLine("          \"continueWatchingSnapshot\": ${continueWatchingJson(item.continueWatchingSnapshot, indent = "          ")}")
+                    appendLine("          \"continueWatchingSnapshot\": ${continueWatchingJson(item.continueWatchingSnapshot, indent = "          ")},")
+                    appendLine("          \"identityResolution\": ${identityResolutionJson(item.identityResolution)},")
+                    appendLine("          \"productionCallerOwnership\": [${item.productionCallerOwnership.joinToString { productionCallerOwnershipJson(it) }}]")
                     append("        }")
                     if (itemIndex != report.items.lastIndex) append(",")
                     appendLine()
@@ -227,6 +229,8 @@ class MetadataAuditReportWriter {
                         }
                         appendLine()
                     }
+                    appendIdentityResolution(item.identityResolution)
+                    appendProductionCallerOwnership(item.productionCallerOwnership)
                     appendContinueWatching(item.continueWatchingSnapshot)
                 }
             }
@@ -253,6 +257,26 @@ class MetadataAuditReportWriter {
         appendLine("| Parent ID | Provider | Routing version | Click-time metadata | Rerouted due to version mismatch |")
         appendLine("|---|---|---:|---:|---:|")
         appendLine("| `${snapshot.parentId}` | `${snapshot.provider}` | `${snapshot.routingVersion}` | `${snapshot.hasClickTimeMetadata}` | `${snapshot.reroutedDueToVersionMismatch}` |")
+        appendLine()
+    }
+
+    private fun StringBuilder.appendIdentityResolution(event: IdentityResolutionEvent?) {
+        event ?: return
+        appendLine("#### Identity resolution")
+        appendLine("| Required | Source ID | Target provider | Resolver | API shape | Result | Success |")
+        appendLine("|---:|---|---|---|---|---|---:|")
+        appendLine("| `${event.required}` | `${event.sourceId}` | `${event.targetProvider}` | `${event.resolver}` | `${event.apiShapeId}` | `${event.resultId}` | `${event.success}` |")
+        appendLine()
+    }
+
+    private fun StringBuilder.appendProductionCallerOwnership(events: List<ProductionCallerOwnershipEvent>) {
+        if (events.isEmpty()) return
+        appendLine("#### Production caller ownership")
+        appendLine("| Path | Entrypoint | Facade/repository | Plan runner | FieldResolver | Legacy after facade |")
+        appendLine("|---|---|---:|---:|---:|---:|")
+        events.forEach {
+            appendLine("| `${it.pathName}` | `${it.entrypoint}` | `${it.facadeOrRepositoryCalled}` | `${it.providerPlanRunnerExpected}` | `${it.fieldResolverExpected}` | `${it.legacyRouterUsedAfterFacade}` |")
+        }
         appendLine()
     }
 
@@ -290,4 +314,12 @@ class MetadataAuditReportWriter {
         snapshot?.let {
             """{"contentId":"${it.contentId}","parentId":"${it.parentId}","provider":"${it.provider}","routingVersion":${it.routingVersion},"hasClickTimeMetadata":${it.hasClickTimeMetadata},"reroutedDueToVersionMismatch":${it.reroutedDueToVersionMismatch}}"""
         } ?: "null"
+
+    private fun identityResolutionJson(event: IdentityResolutionEvent?): String =
+        event?.let {
+            """{"required":${it.required},"sourceId":"${it.sourceId}","targetProvider":"${it.targetProvider}","resolver":"${it.resolver}","apiShapeId":"${it.apiShapeId}","resultId":"${it.resultId}","success":${it.success}}"""
+        } ?: "null"
+
+    private fun productionCallerOwnershipJson(event: ProductionCallerOwnershipEvent): String =
+        """{"pathName":"${event.pathName}","entrypoint":"${event.entrypoint}","facadeOrRepositoryCalled":${event.facadeOrRepositoryCalled},"providerPlanRunnerExpected":${event.providerPlanRunnerExpected},"fieldResolverExpected":${event.fieldResolverExpected},"legacyRouterUsedAfterFacade":${event.legacyRouterUsedAfterFacade}}"""
 }
