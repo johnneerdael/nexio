@@ -98,7 +98,7 @@ class CatalogRepositoryImpl @Inject constructor(
 
         if (!allowNetworkRefresh) {
             if (cached == null) {
-                emit(NetworkResult.Error("Catalog refresh deferred by startup gate"))
+                emit(NetworkResult.Error("Catalog network refresh disabled"))
             }
             return@flow
         }

@@ -7,8 +7,8 @@ import javax.inject.Singleton
 
 /**
  * Gateway for priority catalog hydration. ONLY emit from explicit UI actions
- * (auth approved, catalog feed enabled, first login). Never from background
- * auth state observers or boot-time code — that would bypass startup gates on every boot.
+ * (auth approved, catalog feed enabled, first login). Never emit from broad
+ * background observers where every boot would look like a user-priority refresh.
  */
 @Singleton
 class CatalogPriorityHydrationNotifier @Inject constructor() {

@@ -850,8 +850,6 @@
     <string name="playback_logging_stream_subtitle">Emitir diagnósticos detallados de tiempo y filtrado de obtención de streams en logcat.</string>
     <string name="playback_logging_startup_perf_title">Habilitar telemetría de fotogramas de inicio</string>
     <string name="playback_logging_startup_perf_subtitle">Emitir diagnósticos de hitos de inicio y tiempo de fotogramas lentos en logcat para perfilar el primer renderizado.</string>
-    <string name="playback_logging_disk_first_home_startup_title">Habilitar modo de inicio en casa con prioridad de disco</string>
-    <string name="playback_logging_disk_first_home_startup_subtitle">Aplazar el trabajo de actualización pesado del inicio durante los primeros 20 segundos y preferir el contenido en disco en caché al arrancar.</string>
     <string name="audio_lang_original">Idioma original</string>
     <string name="audio_iec_packer_channel_layout_title">Canales PCM del IEC Packer</string>
     <string name="audio_iec_packer_channel_layout_sub">Establece la disposición máxima de altavoces PCM estilo Kodi cuando el passthrough está desactivado o no es compatible.</string>

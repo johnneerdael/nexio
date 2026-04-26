@@ -850,8 +850,6 @@
     <string name="playback_logging_stream_subtitle">Detaillierte Stream-Abruf-Timing- und Filterungs-Diagnose an Logcat senden.</string>
     <string name="playback_logging_startup_perf_title">Startframe-Telemetrie aktivieren</string>
     <string name="playback_logging_startup_perf_subtitle">Start-Meilenstein- und Slow-Frame-Timing-Diagnose an Logcat für First-Render-Profiling senden.</string>
-    <string name="playback_logging_disk_first_home_startup_title">Disk-First-Home-Startmodus aktivieren</string>
-    <string name="playback_logging_disk_first_home_startup_subtitle">Schwere Home-Aktualisierungsarbeit für die ersten 20 Sekunden verzögern und beim Start gecachte Festplatteninhalte bevorzugen.</string>
     <string name="audio_lang_original">Originalsprache</string>
     <string name="audio_iec_packer_channel_layout_title">IEC-Packer PCM-Kanäle</string>
     <string name="audio_iec_packer_channel_layout_sub">Legt das maximale PCM-Lautsprecherlayout im Kodi-Stil fest, wenn Passthrough deaktiviert oder nicht unterstützt ist.</string>

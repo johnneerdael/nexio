@@ -856,8 +856,6 @@
     <string name="playback_logging_stream_subtitle">Gedetailleerde timing- en filteringdiagnostiek voor streamophalen naar logcat verzenden.</string>
     <string name="playback_logging_startup_perf_title">Startframetelemetrie inschakelen</string>
     <string name="playback_logging_startup_perf_subtitle">Startmijlpaal- en langzame-framediagnostiek naar logcat verzenden voor eerste-renderprofilering.</string>
-    <string name="playback_logging_disk_first_home_startup_title">Disk-eerste startmodus voor home inschakelen</string>
-    <string name="playback_logging_disk_first_home_startup_subtitle">Zwaar vernieuwen van home uitstellen gedurende de eerste 20 seconden en gecachte schijfinhoud voorrang geven bij het opstarten.</string>
     <string name="audio_lang_original">Originele taal</string>
     <string name="audio_iec_packer_channel_layout_title">IEC-packer PCM-kanalen</string>
     <string name="audio_iec_packer_channel_layout_sub">Stelt de maximale PCM-luidsprekerconfiguratie in Kodi-stijl in bij uitgeschakeld of niet-ondersteund passthrough.</string>

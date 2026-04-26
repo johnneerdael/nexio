@@ -104,27 +104,12 @@ class TraktLibraryService @Inject constructor(
     private var lastRefreshMs: Long = 0L
 
     private val cacheTtlMs = 24L * 60 * 60 * 1_000L
-    private val startupRefreshGateMs = 20_000L
     private val metadataHydrationLimit = 110
     private val listFetchConcurrency = 3
     private val metadataFetchSemaphore = Semaphore(5)
-    @Volatile
-    private var diskFirstHomeStartupEnabled: Boolean = false
-    @Volatile
-    private var startupRefreshGateUntilElapsedMs: Long = 0L
-    @Volatile
-    private var startupGateInitialized: Boolean = false
 
     init {
         restoreSnapshotForProfile(activeProfileId())
-        scope.launch {
-            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
-            applyStartupRefreshGate(enabled, "init")
-            startupGateInitialized = true
-            debugSettingsDataStore.diskFirstHomeStartupEnabled.collectLatest { updated ->
-                applyStartupRefreshGate(updated, "toggle_change")
-            }
-        }
         profileManager?.let { manager ->
             scope.launch {
                 manager.activeProfileId
@@ -392,11 +377,6 @@ class TraktLibraryService @Inject constructor(
     }
 
     private suspend fun refresh(force: Boolean, profileId: Int = activeProfileId()): Boolean {
-        ensureStartupGateInitialized()
-        if (!force && isStartupRefreshGated()) {
-            Log.d("TraktLibraryService", "refresh deferred by startup gate")
-            return false
-        }
         val now = System.currentTimeMillis()
         return refreshMutex.withLock {
             if (
@@ -432,29 +412,6 @@ class TraktLibraryService @Inject constructor(
                 }
             }
         }
-    }
-
-    private suspend fun ensureStartupGateInitialized() {
-        if (startupGateInitialized) return
-        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
-        applyStartupRefreshGate(enabled, "lazy_init")
-        startupGateInitialized = true
-    }
-
-    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
-        diskFirstHomeStartupEnabled = enabled
-        if (enabled) {
-            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
-            logDebug("Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
-        } else {
-            startupRefreshGateUntilElapsedMs = 0L
-            logDebug("Startup refresh gate disabled reason=$reason")
-        }
-    }
-
-    private fun isStartupRefreshGated(): Boolean {
-        if (!diskFirstHomeStartupEnabled) return false
-        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private suspend fun performOptimisticMutation(
