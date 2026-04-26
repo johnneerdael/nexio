@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
@@ -740,11 +741,24 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
         ).value
     }
 
-    val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return null
-    return tmdbMetadataService.fetchEnrichment(
-        tmdbId = tmdbId,
-        contentType = item.type
-    )?.toTvMetadataEnrichment()
+    return metadataRouterFacade.fetchTvEnrichment(
+        metadataRequest = MetadataRequest(
+            contentId = item.id,
+            contentType = item.type,
+            sourceContext = MetadataSourceContext(
+                itemType = item.apiType,
+                addonMetadata = item.toHomeDisplayMetadata()
+            ),
+            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
+            depth = MetadataDepth.DETAIL_CORE
+        ),
+        tvRequest = TvMetadataRequest(
+            contentId = item.id,
+            fallbackContentId = null,
+            contentType = item.type,
+            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
+        )
+    ).value
 }
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
@@ -957,7 +971,7 @@ internal fun HomeViewModel.heroEnrichmentSignaturePipeline(
         append(':')
         append(settings.apiKey.hashCode())
         append(':')
-        append(tmdbMetadataService.currentTmdbLanguageTag())
+        append(AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext))
         append(':')
         append(settings.useArtwork)
         append(':')

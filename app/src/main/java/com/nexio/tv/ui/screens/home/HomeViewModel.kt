@@ -18,7 +18,6 @@ import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
-import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
@@ -117,7 +116,6 @@ class HomeViewModel @Inject constructor(
     internal val mdbListRepository: MDBListRepository,
     internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
-    internal val tmdbMetadataService: TmdbMetadataService,
     internal val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
@@ -466,7 +464,6 @@ class HomeViewModel @Inject constructor(
                 .drop(1)
                 .collectLatest {
                     metaRepository.clearCache()
-                    tmdbMetadataService.clearCache()
                     val profileId = profileManager.activeProfileId.value
                     integrationOwnershipService.syncRails(
                         RailKeyFactory.homeCatalogNamespace(profileId),
