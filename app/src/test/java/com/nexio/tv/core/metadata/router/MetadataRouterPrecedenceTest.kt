@@ -95,6 +95,34 @@ class MetadataRouterPrecedenceTest {
     }
 
     @Test
+    fun `mixed-case imdb routes through normalized in-memory mapping`() = runTest {
+        val animeIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.IMDB, "tt0388629", "7442"))
+        )
+        val mappingStore = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = ParsedMetadataId(AnimeIdScheme.IMDB, "tt0388629", "tt0388629"),
+                    provider = MetadataPrimaryProvider.KITSU,
+                    providerId = "7442",
+                    source = IdMappingSource.LOCAL,
+                    evidence = "seeded"
+                )
+            )
+        )
+        val router = router(animeIndex = animeIndex, mappingStore = mappingStore)
+
+        val upperBare = router.route(request("TT0388629", ContentType.SERIES))
+        val upperPrefixed = router.route(request("IMDb:TT0388629", ContentType.SERIES))
+        val lowerPrefixed = router.route(request("imdb:tt0388629", ContentType.SERIES))
+
+        assertEquals("kitsu:7442", upperBare.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals("kitsu:7442", upperPrefixed.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals("kitsu:7442", lowerPrefixed.targetIds[MetadataPrimaryProvider.KITSU])
+        assertTrue(animeIndex.lookups.isEmpty())
+    }
+
+    @Test
     fun `tmdb and tvdb provider native ids route directly without fribb lookup`() = runTest {
         val animeIndex = InMemoryAnimeIdentityIndex()
         val router = router(animeIndex = animeIndex)

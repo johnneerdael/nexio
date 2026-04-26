@@ -34,7 +34,7 @@ interface IdMappingStore {
     suspend fun persist(mapping: IdMapping)
 }
 
-fun ParsedMetadataId.mappingKey(): String = "${scheme.name.lowercase()}:$value"
+fun ParsedMetadataId.mappingKey(): String = "${scheme.name.lowercase()}:${normalizeMetadataIdValue(scheme, value)}"
 
 class InMemoryIdMappingStore(
     initialMappings: List<IdMapping> = emptyList(),

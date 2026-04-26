@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "integration_external_id",
     indices = [
         Index("mediaKey"),
-        Index(value = ["provider", "externalId", "idType"], unique = true)
+        Index(value = ["provider", "externalId", "idType"]),
+        Index(value = ["mediaKey", "provider", "externalId", "idType"], unique = true)
     ]
 )
 data class ExternalIdEntity(
