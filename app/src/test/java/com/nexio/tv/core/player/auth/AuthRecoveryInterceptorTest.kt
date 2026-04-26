@@ -2,6 +2,7 @@ package com.nexio.tv.core.player.auth
 
 import android.util.Log
 import com.nexio.tv.core.player.CometProxyUrlResolver
+import com.nexio.tv.core.player.ProxyResolution
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic

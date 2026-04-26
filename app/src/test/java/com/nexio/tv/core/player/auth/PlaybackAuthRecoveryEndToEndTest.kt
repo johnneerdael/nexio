@@ -2,6 +2,7 @@ package com.nexio.tv.core.player.auth
 
 import android.util.Log
 import com.nexio.tv.core.player.CometProxyUrlResolver
+import com.nexio.tv.core.player.ProxyResolution
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolSession
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolWriter
 import io.mockk.every
@@ -58,10 +59,12 @@ class PlaybackAuthRecoveryEndToEndTest {
         try {
             // Resolver returns A first, then B after invalidate.
             CometProxyUrlResolver.setTransportForTesting { _, _ ->
-                if (resolveCount.getAndIncrement() == 0)
-                    cdnA.url("/movie.bin").toString()
-                else
-                    cdnB.url("/movie.bin").toString()
+                ProxyResolution.Redirected(
+                    if (resolveCount.getAndIncrement() == 0)
+                        cdnA.url("/movie.bin").toString()
+                    else
+                        cdnB.url("/movie.bin").toString()
+                )
             }
             val proxy = "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n"
             runBlocking {

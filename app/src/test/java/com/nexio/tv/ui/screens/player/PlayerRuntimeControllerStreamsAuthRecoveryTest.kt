@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.util.Log
 import com.nexio.tv.core.player.CometProxyUrlResolver
+import com.nexio.tv.core.player.ProxyResolution
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
@@ -29,7 +30,7 @@ class PlayerRuntimeControllerStreamsAuthRecoveryTest {
     fun `prepareMediaSourceUrl resolves comet proxy and returns resolved url`() {
         val proxy = "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n"
         val resolved = "https://1-1.download.real-debrid.com/d/AAAA/movie.mp4"
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected(resolved) }
 
         val out = prepareMediaSourceUrlForTesting(
             url = proxy,

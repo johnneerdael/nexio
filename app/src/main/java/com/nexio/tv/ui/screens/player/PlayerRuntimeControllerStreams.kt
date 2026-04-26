@@ -900,6 +900,17 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 playerSettings.streamAutoPlayRegex
             }
             var selectedStream: Stream? = null
+            // Accumulator so the empty-result branch below can fire a toast
+            // only when the placeholder filter actually removed candidates —
+            // we don't want a generic "no streams found" to look like a
+            // placeholder problem.
+            var placeholdersDropped = 0
+            val placeholderPredicate: (Stream) -> Boolean = { stream ->
+                val streamUrl = stream.getStreamUrl()
+                playerSettings.skipPlaceholderStreamsEnabled &&
+                    streamUrl != null &&
+                    CometProxyUrlResolver.lastResolutionFor(streamUrl) is ProxyResolution.Placeholder
+            }
             val terminalResult = streamRepository.getStreamsFromAllAddons(
                 type = type,
                 videoId = nextVideo.id,
@@ -912,6 +923,7 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                     is NetworkResult.Success -> {
                         val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
                         val allStreams = orderedStreams.flatMap { it.streams }
+                        placeholdersDropped += allStreams.count(placeholderPredicate)
                         selectedStream = StreamAutoPlaySelector.selectAutoPlayStream(
                             streams = allStreams,
                             mode = effectiveMode,
@@ -923,7 +935,8 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                                 currentStreamBingeGroup
                             } else {
                                 null
-                            }
+                            },
+                            placeholderPredicate = placeholderPredicate
                         )
                         selectedStream != null
                     }
@@ -964,7 +977,12 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                         nextEpisodeCardDismissed = true,
                         nextEpisodeAutoPlaySearching = false,
                         nextEpisodeAutoPlaySourceName = null,
-                        nextEpisodeAutoPlayCountdownSec = null
+                        nextEpisodeAutoPlayCountdownSec = null,
+                        error = if (placeholdersDropped > 0) {
+                            "Autoplay could not select a stream."
+                        } else {
+                            it.error
+                        }
                     )
                 }
                 showEpisodeStreamPicker(
