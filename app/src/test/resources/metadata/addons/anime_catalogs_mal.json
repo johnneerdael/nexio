@@ -1,0 +1,13 @@
+{
+  "addonId": "anime-catalogs",
+  "catalogId": "mal-popular",
+  "catalogType": "series",
+  "items": [
+    {
+      "id": "mal:21",
+      "type": "series",
+      "name": "MAL Anime",
+      "poster": "https://example.test/mal.jpg"
+    }
+  ]
+}

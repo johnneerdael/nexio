@@ -1,0 +1,13 @@
+{
+  "addonId": "marvel",
+  "catalogId": "marvel-movies",
+  "catalogType": "movie",
+  "items": [
+    {
+      "id": "tt0036697",
+      "type": "movie",
+      "name": "Captain America",
+      "poster": "https://example.test/captain-america.jpg"
+    }
+  ]
+}
