@@ -645,26 +645,33 @@ object StreamPresentationEngine {
     }
 
     private fun pickBestRepresentative(items: List<StreamCardModel>): StreamCardModel {
+        if (items.size == 1) return items.first()
+        // Cluster-scoped deterministic shuffle key. Within a single render
+        // ("session") the same content cluster always picks the same winner so
+        // the UI doesn't flicker; across app restarts the choice rotates so
+        // RD and PM (or any other tied services) share the slot fairly over
+        // time. Replaces the previous hard-coded preferredServiceOrder which
+        // unconditionally favoured RD on every dedup tiebreak.
+        val clusterId = dedupeKeys(items.first()).sorted().joinToString("|")
         return items.minWithOrNull(
             compareBy<StreamCardModel> { dedupePriority(it) }
-                .thenBy { servicePriority(it) }
-                .thenBy { addonPriority(it) }
                 .thenByDescending { it.parsed.hasUsablePlaybackTarget }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
                 .thenByDescending { metadataRichness(it.parsed) }
+                .thenBy { tiebreakHash(it, clusterId) }
                 .thenBy { it.title.lowercase(Locale.US) }
         ) ?: items.first()
     }
 
-    private fun addonPriority(item: StreamCardModel): String {
-        return item.stream.addonName.lowercase(Locale.US)
+    private fun tiebreakHash(item: StreamCardModel, clusterId: String): Int {
+        val identity = item.stream.addonName + "|" +
+            (item.parsed.serviceId ?: "") + "|" + clusterId
+        return (identity.hashCode().toLong() xor SESSION_TIEBREAK_SEED).toInt()
     }
 
-    private fun servicePriority(item: StreamCardModel): Int {
-        val serviceId = item.parsed.serviceId ?: return Int.MAX_VALUE
-        val index = StreamDeduplicationDefaults.preferredServiceOrder.indexOf(serviceId)
-        return if (index >= 0) index else StreamDeduplicationDefaults.preferredServiceOrder.size
+    private fun addonPriority(item: StreamCardModel): String {
+        return item.stream.addonName.lowercase(Locale.US)
     }
 
     private fun metadataRichness(parsed: ParsedStreamInfo): Int {
@@ -1061,9 +1068,19 @@ private object StreamDeduplicationDefaults {
         youtube = DeduplicationMode.DISABLED,
         external = DeduplicationMode.DISABLED
     )
-
-    val preferredServiceOrder = listOf("RD", "PM", "AD", "DL", "TB", "ED", "PK")
 }
+
+/**
+ * Process-lifetime random seed used to break dedup ties between equivalent
+ * service candidates fairly. Within one process the same content cluster
+ * always picks the same representative (no UI flicker / inconsistent
+ * eligibles); across app restarts the choice rotates so RD / PM / AD etc.
+ * each have an equal chance of surfacing as the dedup winner over time.
+ *
+ * Replaces the previous hard-coded `preferredServiceOrder` which made RD
+ * unconditionally win every dedup tiebreak.
+ */
+private val SESSION_TIEBREAK_SEED: Long = java.util.concurrent.ThreadLocalRandom.current().nextLong()
 
 internal object AioStyleStreamParser {
     private val seasonEpisodeTokenRegex = Regex("""(?i)^s\d{1,2}e\d{1,2}$""")

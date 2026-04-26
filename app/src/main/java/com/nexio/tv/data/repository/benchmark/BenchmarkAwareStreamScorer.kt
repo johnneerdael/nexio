@@ -826,7 +826,29 @@ private fun baseDecisionComparator(): Comparator<ShadowStreamDecision> {
         .thenByDescending { it.safeBudgetMbps }
         .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
         .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
+        // Random-per-session tiebreak so PM and RD versions of the same file
+        // (which produce identical content/transport scores in the no-benchmark
+        // path) don't always sort the same way based on input-list order.
+        // Stable within a single process so a given autoplay decision is
+        // reproducible while running; rotates across app restarts so the
+        // primary alternates between providers over time.
+        .thenBy { autoplayTiebreakHash(it) }
 }
+
+/**
+ * Deterministic-per-process pseudo-random integer for [decision]. Two
+ * decisions with the same `(provider.storageKey, streamKey)` always receive
+ * the same hash within one process; restart the process and the hashes
+ * rotate, breaking the input-order bias that previously made RD always win
+ * tied score comparisons.
+ */
+private fun autoplayTiebreakHash(decision: ShadowStreamDecision): Int {
+    val key = decision.provider.storageKey + "|" + decision.streamKey
+    return (key.hashCode().toLong() xor AUTOPLAY_SESSION_TIEBREAK_SEED).toInt()
+}
+
+private val AUTOPLAY_SESSION_TIEBREAK_SEED: Long =
+    java.util.concurrent.ThreadLocalRandom.current().nextLong()
 
 private data class ShadowTransportOption(
     val transport: DebridBenchmarkTransportMode,

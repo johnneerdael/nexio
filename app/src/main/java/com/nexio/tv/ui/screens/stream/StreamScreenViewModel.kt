@@ -1704,6 +1704,7 @@ internal data class DeterministicEarlyFinishBreakdown(
     val resolutionBuckets: Map<String, Int>,
     val releaseTypeBuckets: Map<String, Int>,
     val bitrateBuckets: Map<String, Int>,
+    val providerBuckets: Map<String, Int>,
     val zeroBitrate: Int,
     val zeroBitrateMissingSize: Int,
     val zeroBitrateMissingDuration: Int,
@@ -1715,6 +1716,7 @@ internal data class DeterministicEarlyFinishBreakdown(
             "resolution=${resolutionBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
             "releaseType=${releaseTypeBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
             "bitrate=${bitrateBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
+            "provider=${providerBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
             "zeroBitrate=$zeroBitrate (missingSize=$zeroBitrateMissingSize missingDuration=$zeroBitrateMissingDuration)"
     }
 
@@ -1725,6 +1727,7 @@ internal data class DeterministicEarlyFinishBreakdown(
             resolutionBuckets = emptyMap(),
             releaseTypeBuckets = emptyMap(),
             bitrateBuckets = emptyMap(),
+            providerBuckets = emptyMap(),
             zeroBitrate = 0,
             zeroBitrateMissingSize = 0,
             zeroBitrateMissingDuration = 0,
@@ -1852,6 +1855,7 @@ private fun buildDeterministicEarlyFinishBreakdown(
 ): DeterministicEarlyFinishBreakdown {
     val resolutionBuckets = mutableMapOf<String, Int>()
     val releaseTypeBuckets = mutableMapOf<String, Int>()
+    val providerBuckets = mutableMapOf<String, Int>()
     val bitrateBuckets = linkedMapOf(
         "zero" to 0,
         "lt6" to 0,
@@ -1870,6 +1874,9 @@ private fun buildDeterministicEarlyFinishBreakdown(
 
         val rtKey = decision.breakdown.releaseType.lowercase(Locale.US).ifBlank { "unknown" }
         releaseTypeBuckets[rtKey] = (releaseTypeBuckets[rtKey] ?: 0) + 1
+
+        val provKey = decision.provider.storageKey
+        providerBuckets[provKey] = (providerBuckets[provKey] ?: 0) + 1
 
         val mbps = decision.breakdown.averageBitrateMbps
         val bucket = when {
@@ -1905,6 +1912,7 @@ private fun buildDeterministicEarlyFinishBreakdown(
         resolutionBuckets = resolutionBuckets,
         releaseTypeBuckets = releaseTypeBuckets,
         bitrateBuckets = bitrateBuckets,
+        providerBuckets = providerBuckets,
         zeroBitrate = zeroBitrate,
         zeroBitrateMissingSize = zeroBitrateMissingSize,
         zeroBitrateMissingDuration = zeroBitrateMissingDuration,
