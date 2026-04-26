@@ -14,7 +14,8 @@ data class MetadataAuditScenario(
     val assertNoNetwork: Boolean = false,
     val injectSecondaryTitleOverwrite: Boolean = false,
     val continueWatching: Boolean = false,
-    val staleRoutingVersion: Boolean = false
+    val staleRoutingVersion: Boolean = false,
+    val productionCallerOwnership: Boolean = false
 )
 
 enum class AuditCacheMode {

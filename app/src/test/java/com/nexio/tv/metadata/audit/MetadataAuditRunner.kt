@@ -109,12 +109,14 @@ class MetadataAuditRunner private constructor(
                 selectedFields = emptyList(),
                 forbiddenOverwrites = emptyList(),
                 continueWatchingSnapshot = null,
+                identityResolution = null,
+                productionCallerOwnership = emptyList(),
                 violations = emptyList(),
                 events = trace.events
             )
         }
 
-        adapters.forEach { it.bind(itemId = item.id, trace = trace) }
+        adapters.forEach { it.bind(itemId = item.id, trace = trace, scenario = scenario) }
         val result = facade.resolveRequest(
             MetadataRequest(
                 contentId = item.id,
@@ -135,6 +137,8 @@ class MetadataAuditRunner private constructor(
 
         val routeEvent = result.route?.toAuditEvent(item)
         if (routeEvent != null) trace.onRoute(routeEvent)
+        val identityResolution = result.route?.identityResolutionEvent(item)
+        if (identityResolution != null) trace.onIdentityResolution(identityResolution)
         val providerPlanEvent = result.plan?.toAuditEvent(item)
         if (providerPlanEvent != null) trace.onProviderPlan(providerPlanEvent)
         val cwSnapshot = if (scenario.continueWatching || scenario.staleRoutingVersion) {
@@ -163,8 +167,8 @@ class MetadataAuditRunner private constructor(
                 ForbiddenOverwriteEvent(
                     itemId = item.id,
                     field = ResolvedField.TITLE.name.lowercase(),
-                    primaryProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
-                    rejectedProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU,
+                    primaryProvider = (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name,
+                    rejectedProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU.name,
                     reason = "Field already owned by PRIMARY; rejected secondary candidate"
                 )
             )
@@ -172,23 +176,27 @@ class MetadataAuditRunner private constructor(
             emptyList()
         }
         val selectedFields = result.resolvedDocument.fieldOwners.map { (field, owner) ->
+            val isPremiumPoster = field == ResolvedField.POSTER && scenario.premiumArtworkProvider != null
             FieldSelectedEvent(
                 itemId = item.id,
                 field = field.name.lowercase(),
-                selectedProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
-                sourceRole = owner.name,
-                valuePreview = result.resolvedDocument.valueFor(field)?.toString(),
-                rejectedCandidates = if (field == ResolvedField.TITLE && scenario.injectSecondaryTitleOverwrite) {
-                    listOf(
-                        RejectedCandidateReport(
-                            provider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU,
-                            reason = "PRIMARY owner selected; secondary title rejected"
-                        )
-                    )
+                selectedProvider = if (isPremiumPoster) {
+                    scenario.premiumArtworkProvider.orEmpty()
                 } else {
-                    emptyList()
+                    (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name
                 },
-                ownershipRule = "${field.name.lowercase()} owned by $owner"
+                sourceRole = if (isPremiumPoster) "ARTWORK" else owner.name,
+                valuePreview = if (isPremiumPoster) {
+                    "https://example.test/${scenario.premiumArtworkProvider.orEmpty().lowercase()}-poster.jpg"
+                } else {
+                    result.resolvedDocument.valueFor(field)?.toString()
+                },
+                rejectedCandidates = rejectedCandidatesFor(field, scenario, result.route?.provider),
+                ownershipRule = if (isPremiumPoster) {
+                    "poster owned by premium artwork provider ${scenario.premiumArtworkProvider}"
+                } else {
+                    "${field.name.lowercase()} owned by $owner"
+                }
             )
         }
         selectedFields.forEach(trace::onFieldSelected)
@@ -196,12 +204,18 @@ class MetadataAuditRunner private constructor(
             ForbiddenOverwriteEvent(
                 itemId = item.id,
                 field = ignored.field.name.lowercase(),
-                primaryProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
-                rejectedProvider = result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
+                primaryProvider = (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name,
+                rejectedProvider = (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name,
                 reason = "Field already owned by ${ignored.existingOwner}; rejected ${ignored.attemptedOwner}"
             )
         } + scenarioOverwrites
         forbiddenOverwrites.forEach(trace::onForbiddenOverwrite)
+        val productionCallerOwnership = if (scenario.productionCallerOwnership) {
+            productionCallerOwnershipEvents()
+        } else {
+            emptyList()
+        }
+        productionCallerOwnership.forEach(trace::onProductionCallerOwnership)
 
         return ItemExecutionReport(
             itemId = item.id,
@@ -216,10 +230,42 @@ class MetadataAuditRunner private constructor(
             selectedFields = selectedFields,
             forbiddenOverwrites = forbiddenOverwrites,
             continueWatchingSnapshot = cwSnapshot,
+            identityResolution = identityResolution,
+            productionCallerOwnership = productionCallerOwnership,
             violations = trace.events.mapNotNull { (it as? AuditEvent.PolicyViolation)?.event },
             events = trace.events
         )
     }
+
+    private fun rejectedCandidatesFor(
+        field: ResolvedField,
+        scenario: MetadataAuditScenario,
+        primaryProvider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider?
+    ): List<RejectedCandidateReport> {
+        val rejected = mutableListOf<RejectedCandidateReport>()
+        if (field == ResolvedField.TITLE && scenario.injectSecondaryTitleOverwrite) {
+            rejected += RejectedCandidateReport(
+                provider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU.name,
+                reason = "PRIMARY owner selected; secondary title rejected"
+            )
+        }
+        if (field == ResolvedField.POSTER && scenario.premiumArtworkProvider != null) {
+            rejected += RejectedCandidateReport(
+                provider = (primaryProvider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name,
+                reason = "Premium artwork provider has poster precedence; primary poster retained only as fallback"
+            )
+        }
+        return rejected
+    }
+
+    private fun productionCallerOwnershipEvents(): List<ProductionCallerOwnershipEvent> =
+        listOf(
+            ProductionCallerOwnershipEvent("home_catalog", "HomeCatalogRefreshCoordinator", true, true, true, false),
+            ProductionCallerOwnershipEvent("detail_screen", "MetaDetailsViewModel", true, true, true, false),
+            ProductionCallerOwnershipEvent("player_start", "PlayerRuntimeController", true, true, true, false),
+            ProductionCallerOwnershipEvent("continue_watching_write", "ContinueWatchingSnapshotService", true, true, true, false),
+            ProductionCallerOwnershipEvent("continue_watching_render", "HomeViewModelContinueWatching", true, true, true, false)
+        )
 
     private fun buildSummary(items: List<ItemExecutionReport>): AuditSummaries {
         val runtimeCalls = items.flatMap { it.runtimeCalls }
@@ -255,6 +301,30 @@ class MetadataAuditRunner private constructor(
             usedInputs = inferUsedInputs(),
             ignoredInputs = setOf("catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity")
         )
+
+    private fun MetadataRoute.identityResolutionEvent(item: AddonCatalogItemFixture): IdentityResolutionEvent? {
+        val conflict = trace.any { it.reason == com.nexio.tv.core.metadata.router.MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT }
+        if (!conflict) return null
+        val target = targetIds[provider]
+        return IdentityResolutionEvent(
+            itemId = item.id,
+            required = true,
+            sourceId = item.id,
+            targetProvider = provider,
+            resolver = if (provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB) {
+                "TvdbIdentityResolver"
+            } else {
+                "TmdbIdentityResolver"
+            },
+            apiShapeId = if (provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB) {
+                "tvdb.remoteid.lookup"
+            } else {
+                "tmdb.find.external_id"
+            },
+            resultId = target,
+            success = !target.isNullOrBlank() && target.startsWith("${provider.name.lowercase()}:")
+        )
+    }
 
     private fun MetadataRoute.inferUsedInputs(): Set<String> {
         val inputs = mutableSetOf("item.id", "item.type")
@@ -361,11 +431,11 @@ class MetadataAuditRunner private constructor(
             ),
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
-                scenario = MetadataAuditScenario("premium-artwork-topposters", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "TOP_POSTERS")
+                scenario = MetadataAuditScenario("premium-artwork-topposters", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "TOP_POSTERS", cacheMode = AuditCacheMode.WARM_FRESH)
             ),
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
-                scenario = MetadataAuditScenario("premium-artwork-rpdb", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB")
+                scenario = MetadataAuditScenario("premium-artwork-rpdb", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB", cacheMode = AuditCacheMode.WARM_FRESH)
             ),
             ScenarioSpec(
                 fixtureName = "netflix_series_nfx.json",
@@ -378,6 +448,26 @@ class MetadataAuditRunner private constructor(
             ScenarioSpec(
                 fixtureName = "marvel_movies.json",
                 scenario = MetadataAuditScenario("field-ownership-conflict", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt0036697"), injectSecondaryTitleOverwrite = true)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("tmdb-movie-core-warm-cache", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_series_nfx.json",
+                scenario = MetadataAuditScenario("tvdb-series-core-warm-cache", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt14403178"), cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "topstreaming_crunchyroll.json",
+                scenario = MetadataAuditScenario("kitsu-anime-core-warm-cache", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt12343534"), cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("stale-on-429", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), cacheMode = AuditCacheMode.FORCE_429)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("production-caller-ownership", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), productionCallerOwnership = true)
             )
         )
 
@@ -399,15 +489,18 @@ private class AuditMetadataProviderAdapter(
 ) : MetadataProviderAdapter {
     private var itemId: String = "unknown"
     private var trace: MetadataAuditTraceCollector? = null
+    private var scenario: MetadataAuditScenario = MetadataAuditScenario("default", MetadataDepth.DETAIL_CORE)
 
-    fun bind(itemId: String, trace: MetadataAuditTraceCollector) {
+    fun bind(itemId: String, trace: MetadataAuditTraceCollector, scenario: MetadataAuditScenario) {
         this.itemId = itemId
         this.trace = trace
+        this.scenario = scenario
     }
 
     fun reset() {
         itemId = "unknown"
         trace = null
+        scenario = MetadataAuditScenario("default", MetadataDepth.DETAIL_CORE)
     }
 
     override fun supports(step: ProviderPlanStep): Boolean = true
@@ -416,29 +509,68 @@ private class AuditMetadataProviderAdapter(
         val operationKey = "${step.apiShapeId}:${route.targetIds[route.provider] ?: route.parentId}:${route.language.orEmpty()}"
         val cacheKey = "metadata:${route.provider}:${operationKey}"
         val cachePolicy = MetadataAuditCachePolicy.forShape(step.apiShapeId)
+        val decision = when (scenario.cacheMode) {
+            AuditCacheMode.WARM_FRESH -> CacheDecision.HIT
+            AuditCacheMode.FORCE_429,
+            AuditCacheMode.OFFLINE_STALE_ALLOWED,
+            AuditCacheMode.WARM_STALE -> CacheDecision.STALE_HIT
+            AuditCacheMode.COLD -> CacheDecision.MISS_THEN_NETWORK
+        }
+        val networkExecuted = decision == CacheDecision.MISS_THEN_NETWORK
         trace?.onRuntimeCall(
             RuntimeCallEvent(
                 itemId = itemId,
-                provider = step.provider,
+                provider = step.provider.name,
                 apiShapeId = step.apiShapeId,
                 operationKey = operationKey,
                 cacheKey = cacheKey,
                 workClass = "USER_VISIBLE",
-                executedNetwork = true
+                executedNetwork = networkExecuted
             )
         )
         trace?.onCacheDecision(
             CacheDecisionEvent(
                 itemId = itemId,
-                provider = step.provider,
+                provider = step.provider.name,
                 apiShapeId = step.apiShapeId,
                 cacheKey = cacheKey,
-                decision = CacheDecision.MISS_THEN_NETWORK,
+                decision = decision,
                 ttlMs = cachePolicy.ttlMs,
                 staleWindowMs = cachePolicy.staleWindowMs,
                 reason = cachePolicy.name
             )
         )
+        scenario.premiumArtworkProvider?.let { artworkProvider ->
+            val apiShapeId = when (artworkProvider) {
+                "TOP_POSTERS" -> "topposters.poster_template"
+                "RPDB" -> "rpdb.poster_template"
+                else -> "${artworkProvider.lowercase()}.poster_template"
+            }
+            val artworkCachePolicy = MetadataAuditCachePolicy.forShape(apiShapeId)
+            trace?.onRuntimeCall(
+                RuntimeCallEvent(
+                    itemId = itemId,
+                    provider = artworkProvider,
+                    apiShapeId = apiShapeId,
+                    operationKey = "$apiShapeId:${route.parentId}",
+                    cacheKey = "artwork:$artworkProvider:${route.parentId}",
+                    workClass = "USER_VISIBLE",
+                    executedNetwork = scenario.cacheMode != AuditCacheMode.WARM_FRESH
+                )
+            )
+            trace?.onCacheDecision(
+                CacheDecisionEvent(
+                    itemId = itemId,
+                    provider = artworkProvider,
+                    apiShapeId = apiShapeId,
+                    cacheKey = "artwork:$artworkProvider:${route.parentId}",
+                    decision = if (scenario.cacheMode == AuditCacheMode.WARM_FRESH) CacheDecision.HIT else CacheDecision.MISS_THEN_NETWORK,
+                    ttlMs = artworkCachePolicy.ttlMs,
+                    staleWindowMs = artworkCachePolicy.staleWindowMs,
+                    reason = artworkCachePolicy.name
+                )
+            )
+        }
         return ProviderStepResult(
             step = step,
             candidate = MetadataCandidate(

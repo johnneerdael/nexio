@@ -10,6 +10,8 @@ interface MetadataAuditTraceCollector {
     fun onFieldSelected(event: FieldSelectedEvent)
     fun onForbiddenOverwrite(event: ForbiddenOverwriteEvent)
     fun onContinueWatchingSnapshot(event: ContinueWatchingSnapshotEvent)
+    fun onIdentityResolution(event: IdentityResolutionEvent)
+    fun onProductionCallerOwnership(event: ProductionCallerOwnershipEvent)
     fun onPolicyViolation(event: PolicyViolationEvent)
 }
 
@@ -51,6 +53,14 @@ class RecordingMetadataAuditTraceCollector : MetadataAuditTraceCollector {
 
     override fun onContinueWatchingSnapshot(event: ContinueWatchingSnapshotEvent) {
         _events += AuditEvent.ContinueWatching(event)
+    }
+
+    override fun onIdentityResolution(event: IdentityResolutionEvent) {
+        _events += AuditEvent.IdentityResolution(event)
+    }
+
+    override fun onProductionCallerOwnership(event: ProductionCallerOwnershipEvent) {
+        _events += AuditEvent.ProductionCallerOwnership(event)
     }
 
     override fun onPolicyViolation(event: PolicyViolationEvent) {

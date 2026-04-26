@@ -39,6 +39,8 @@ sealed interface AuditEvent {
     data class FieldSelected(val event: FieldSelectedEvent) : AuditEvent
     data class ForbiddenOverwrite(val event: ForbiddenOverwriteEvent) : AuditEvent
     data class ContinueWatching(val event: ContinueWatchingSnapshotEvent) : AuditEvent
+    data class IdentityResolution(val event: IdentityResolutionEvent) : AuditEvent
+    data class ProductionCallerOwnership(val event: ProductionCallerOwnershipEvent) : AuditEvent
     data class PolicyViolation(val event: PolicyViolationEvent) : AuditEvent
 }
 
@@ -83,7 +85,7 @@ data class ProviderPlanStepReport(
 
 data class RuntimeCallEvent(
     val itemId: String,
-    val provider: MetadataPrimaryProvider,
+    val provider: String,
     val apiShapeId: String,
     val operationKey: String,
     val cacheKey: String,
@@ -93,7 +95,7 @@ data class RuntimeCallEvent(
 
 data class CacheDecisionEvent(
     val itemId: String,
-    val provider: MetadataPrimaryProvider,
+    val provider: String,
     val apiShapeId: String,
     val cacheKey: String,
     val decision: CacheDecision,
@@ -112,7 +114,7 @@ data class ResolverScheduleEvent(
 data class FieldSelectedEvent(
     val itemId: String,
     val field: String,
-    val selectedProvider: MetadataPrimaryProvider,
+    val selectedProvider: String,
     val sourceRole: String,
     val valuePreview: String?,
     val rejectedCandidates: List<RejectedCandidateReport>,
@@ -120,15 +122,15 @@ data class FieldSelectedEvent(
 )
 
 data class RejectedCandidateReport(
-    val provider: MetadataPrimaryProvider,
+    val provider: String,
     val reason: String
 )
 
 data class ForbiddenOverwriteEvent(
     val itemId: String,
     val field: String,
-    val primaryProvider: MetadataPrimaryProvider,
-    val rejectedProvider: MetadataPrimaryProvider,
+    val primaryProvider: String,
+    val rejectedProvider: String,
     val reason: String
 )
 
@@ -147,6 +149,26 @@ data class ContinueWatchingSnapshotEvent(
     val routingVersion: Int?,
     val hasClickTimeMetadata: Boolean,
     val reroutedDueToVersionMismatch: Boolean
+)
+
+data class IdentityResolutionEvent(
+    val itemId: String,
+    val required: Boolean,
+    val sourceId: String,
+    val targetProvider: MetadataPrimaryProvider,
+    val resolver: String,
+    val apiShapeId: String?,
+    val resultId: String?,
+    val success: Boolean
+)
+
+data class ProductionCallerOwnershipEvent(
+    val pathName: String,
+    val entrypoint: String,
+    val facadeOrRepositoryCalled: Boolean,
+    val providerPlanRunnerExpected: Boolean,
+    val fieldResolverExpected: Boolean,
+    val legacyRouterUsedAfterFacade: Boolean
 )
 
 data class MetadataExecutionReport(
@@ -180,6 +202,8 @@ data class ItemExecutionReport(
     val selectedFields: List<FieldSelectedEvent>,
     val forbiddenOverwrites: List<ForbiddenOverwriteEvent>,
     val continueWatchingSnapshot: ContinueWatchingSnapshotEvent?,
+    val identityResolution: IdentityResolutionEvent?,
+    val productionCallerOwnership: List<ProductionCallerOwnershipEvent>,
     val violations: List<PolicyViolationEvent>,
     val events: List<AuditEvent>
 )
