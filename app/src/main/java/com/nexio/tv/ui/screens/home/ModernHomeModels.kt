@@ -190,6 +190,7 @@ internal data class ModernHomeContentState(
     val posterLabelsEnabled: Boolean = true,
     val trailerPreviewUrls: Map<String, String> = emptyMap(),
     val trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
+    val trailerPreviewUserAgents: Map<String, String> = emptyMap(),
     val trailerPreviewExternalUrls: Map<String, String> = emptyMap(),
     val trailerPreviewLoadingIds: Set<String> = emptySet(),
     val trailerPreviewNegativeCacheIds: Set<String> = emptySet(),

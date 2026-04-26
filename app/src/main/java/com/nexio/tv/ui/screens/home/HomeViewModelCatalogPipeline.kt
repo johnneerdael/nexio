@@ -1912,6 +1912,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             trailerPreviewNegativeCache.clear()
             trailerPreviewUrlsState.clear()
             trailerPreviewAudioUrlsState.clear()
+            trailerPreviewUserAgentsState.clear()
             trailerPreviewExternalUrlsState.clear()
             clearTrailerMetadataAvailabilityPipeline()
             activeTrailerPreviewItemId = null
@@ -1949,6 +1950,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             trailerPreviewNegativeCache.clear()
             trailerPreviewUrlsState.clear()
             trailerPreviewAudioUrlsState.clear()
+            trailerPreviewUserAgentsState.clear()
             trailerPreviewExternalUrlsState.clear()
             clearTrailerMetadataAvailabilityPipeline()
             activeTrailerPreviewItemId = null
@@ -1988,6 +1990,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         trailerPreviewNegativeCache.clear()
         trailerPreviewUrlsState.clear()
         trailerPreviewAudioUrlsState.clear()
+        trailerPreviewUserAgentsState.clear()
         trailerPreviewExternalUrlsState.clear()
         activeTrailerPreviewItemId = null
         trailerPreviewRequestVersion = 0L

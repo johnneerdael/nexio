@@ -62,6 +62,7 @@ internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
+    trailerPreviewUserAgent: String?,
     showLoadingIndicator: Boolean,
     trailerMuted: Boolean,
     showFullscreenHint: Boolean,
@@ -119,6 +120,7 @@ internal fun ModernHeroMediaLayer(
                 },
                 muted = trailerMuted,
                 cropToFill = true,
+                trailerUserAgent = trailerPreviewUserAgent,
                 modifier = Modifier.fillMaxSize()
             )
             if (!stableBackdrop.isNullOrBlank()) {

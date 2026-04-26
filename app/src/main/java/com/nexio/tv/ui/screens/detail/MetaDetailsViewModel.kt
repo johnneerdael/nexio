@@ -2707,6 +2707,7 @@ class MetaDetailsViewModel @Inject constructor(
                     is TrailerResolutionResult.Playback -> baseState.copy(
                         trailerUrl = trailerResult.source.videoUrl,
                         trailerAudioUrl = trailerResult.source.audioUrl,
+                        trailerUserAgent = trailerResult.source.userAgent,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
                         isTrailerLoading = false,
@@ -2720,6 +2721,7 @@ class MetaDetailsViewModel @Inject constructor(
                     is TrailerResolutionResult.External -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
+                        trailerUserAgent = null,
                         trailerExternalUrl = trailerResult.url,
                         pendingExternalTrailerUrl = if (playWhenReady) trailerResult.url else null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
@@ -2729,6 +2731,7 @@ class MetaDetailsViewModel @Inject constructor(
                     null -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
+                        trailerUserAgent = null,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false

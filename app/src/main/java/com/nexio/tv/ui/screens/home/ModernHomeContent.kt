@@ -828,6 +828,14 @@ internal fun ModernHomeContent(
         } else {
             null
         }
+        val heroTrailerPreviewUserAgent = if (
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            unlockedTrailerForFocusedItem
+        ) {
+            heroTrailerItemId?.let { contentState.trailerPreviewUserAgents[it] }
+        } else {
+            null
+        }
         val heroTrailerExternalUrl = if (
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
@@ -999,6 +1007,7 @@ internal fun ModernHomeContent(
             heroBackdrop = heroBackdrop,
             trailerPreviewUrl = heroTrailerPreviewUrl,
             trailerPreviewAudioUrl = heroTrailerPreviewAudioUrl,
+            trailerPreviewUserAgent = heroTrailerPreviewUserAgent,
             showLoadingIndicator = heroTrailerPending && heroTrailerPreviewUrl.isNullOrBlank(),
             showTextOverlay = !heroTrailerFullscreenMode || fullscreenTextOverlayVisible,
             showFullscreenHint = heroFullscreenHintVisible,
@@ -1249,6 +1258,7 @@ internal fun ModernHomeContent(
                                 contentState.focusedPosterBackdropTrailerMuted,
                             trailerPreviewUrls = contentState.trailerPreviewUrls,
                             trailerPreviewAudioUrls = contentState.trailerPreviewAudioUrls,
+                            trailerPreviewUserAgents = contentState.trailerPreviewUserAgents,
                             trailerPreviewExternalUrls = contentState.trailerPreviewExternalUrls,
                             modernCatalogCardWidth = modernCatalogCardWidth,
                             modernCatalogCardHeight = modernCatalogCardHeight,
@@ -1347,6 +1357,7 @@ private fun ModernHeroSection(
     heroBackdrop: String?,
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
+    trailerPreviewUserAgent: String?,
     showLoadingIndicator: Boolean,
     showTextOverlay: Boolean,
     showFullscreenHint: Boolean,
@@ -1376,6 +1387,7 @@ private fun ModernHeroSection(
         heroBackdrop = heroBackdrop,
         trailerPreviewUrl = trailerPreviewUrl,
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
+        trailerPreviewUserAgent = trailerPreviewUserAgent,
         showLoadingIndicator = showLoadingIndicator,
         trailerMuted = trailerMuted,
         showFullscreenHint = showFullscreenHint,

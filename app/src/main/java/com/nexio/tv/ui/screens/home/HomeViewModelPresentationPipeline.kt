@@ -375,12 +375,19 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                     } else {
                         trailerPreviewAudioUrlsState[itemId] = audioUrl
                     }
+                    val ua = trailerResult.source.userAgent
+                    if (ua.isNullOrBlank()) {
+                        trailerPreviewUserAgentsState.remove(itemId)
+                    } else {
+                        trailerPreviewUserAgentsState[itemId] = ua
+                    }
                 }
 
                 is TrailerResolutionResult.External -> {
                     trailerPreviewNegativeCache.remove(itemId)
                     trailerPreviewUrlsState.remove(itemId)
                     trailerPreviewAudioUrlsState.remove(itemId)
+                    trailerPreviewUserAgentsState.remove(itemId)
                     trailerPreviewExternalUrlsState[itemId] = trailerResult.url
                 }
 
@@ -388,6 +395,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                     trailerPreviewNegativeCache[itemId] = true
                     trailerPreviewUrlsState.remove(itemId)
                     trailerPreviewAudioUrlsState.remove(itemId)
+                    trailerPreviewUserAgentsState.remove(itemId)
                     trailerPreviewExternalUrlsState.remove(itemId)
                 }
             }

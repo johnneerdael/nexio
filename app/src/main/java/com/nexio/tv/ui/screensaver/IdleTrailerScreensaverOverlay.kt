@@ -294,6 +294,7 @@ internal fun IdleTrailerScreensaverOverlay(
             trailerAudioUrl = currentPlayback.source.audioUrl,
             isPlaying = true,
             muted = sessionMuted,
+            trailerUserAgent = currentPlayback.source.userAgent,
             onEnded = { advanceSignal += 1 },
             onFirstFrameRendered = { hasRenderedFirstFrame = true },
             onError = {
