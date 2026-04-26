@@ -3,6 +3,7 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,7 +78,7 @@ class ProviderPlanExecutor @Inject constructor() {
                 role = ProviderPlanRole.PRIMARY_CORE
             )
         )
-        val needsTranslation = !isDefaultTvdbLanguage(route.language)
+        val needsTranslation = tvdbTranslationSupported(route.language)
 
         if (depth in tvdbCoreTranslationDepths && needsTranslation) {
             steps += step(
@@ -142,15 +143,17 @@ class ProviderPlanExecutor @Inject constructor() {
         }
     }
 
-    private fun isDefaultTvdbLanguage(language: String?): Boolean {
+    private fun tvdbTranslationSupported(language: String?): Boolean {
         val normalized = language
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?.replace('_', '-')
             ?.lowercase(Locale.US)
-            ?: return true
+            ?: return false
 
-        return normalized in setOf("en", "eng", "en-us", "en-gb")
+        if (normalized.substringBefore('-') == "en") return false
+
+        return TvdbLanguageMapper.normalize(normalized) != "eng"
     }
 
     private companion object {

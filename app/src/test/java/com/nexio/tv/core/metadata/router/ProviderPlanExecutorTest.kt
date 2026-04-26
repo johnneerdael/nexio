@@ -183,7 +183,7 @@ class ProviderPlanExecutorTest {
 
     @Test
     fun `TVDB DETAIL_CORE with English language variants does not include series translation`() {
-        listOf("EN", "en-US", "en_GB").forEach { language ->
+        listOf("EN", "en-US", "en_GB", "en-AU", "en-CA").forEach { language ->
             val plan = executor.buildPlan(
                 route = route(
                     provider = MetadataPrimaryProvider.TVDB,
@@ -200,7 +200,7 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
-    fun `TVDB DETAIL_CORE with unknown non-English locale includes optional series translation`() {
+    fun `TVDB DETAIL_CORE with unsupported non-English locale skips series translation`() {
         listOf("it", "ja-JP").forEach { language ->
             val plan = executor.buildPlan(
                 route = route(
@@ -213,10 +213,10 @@ class ProviderPlanExecutorTest {
 
             assertEquals(
                 "language=$language",
-                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_TRANSLATION),
+                listOf(TvdbApiShapes.SERIES_EXTENDED),
                 plan.apiShapeIds()
             )
-            assertFalse("language=$language", plan.step(TvdbApiShapes.SERIES_TRANSLATION).required)
+            assertFalse("language=$language", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
             assertAllShapesCovered(plan)
         }
     }
@@ -270,7 +270,7 @@ class ProviderPlanExecutorTest {
 
     @Test
     fun `TVDB SEASON with default language omits translated episode language shape`() {
-        listOf(null, "en").forEach { language ->
+        listOf(null, " ", "en", "en-AU", "it", "ja-JP").forEach { language ->
             val plan = executor.buildPlan(
                 route = route(
                     provider = MetadataPrimaryProvider.TVDB,
