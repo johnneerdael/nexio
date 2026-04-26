@@ -12,6 +12,7 @@ import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
+import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -93,6 +94,7 @@ class ContinueWatchingSnapshotStore private constructor(
                 add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
                 add("scheduledReemit", encodeNextUpItems(snapshot.scheduledReemit))
                 add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
+                add("metadataSnapshotsByItemKey", gson.toJsonTree(snapshot.metadataSnapshotsByItemKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
             prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
@@ -130,6 +132,7 @@ class ContinueWatchingSnapshotStore private constructor(
             },
             scheduledReemit = decodeNextUpItems(root, "scheduledReemit"),
             displayMetadataByItemKey = decodeDisplayMetadata(root, "displayMetadataByItemKey"),
+            metadataSnapshotsByItemKey = decodeMetadataSnapshots(root, "metadataSnapshotsByItemKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
         if (
@@ -137,7 +140,8 @@ class ContinueWatchingSnapshotStore private constructor(
             canonical.resumeItems.isNotEmpty() ||
             canonical.nextUpItems.isNotEmpty() ||
             canonical.traktUpNextItems.isNotEmpty() ||
-            canonical.displayMetadataByItemKey.isNotEmpty()
+            canonical.displayMetadataByItemKey.isNotEmpty() ||
+            canonical.metadataSnapshotsByItemKey.isNotEmpty()
         ) {
             return canonical
         }
@@ -234,6 +238,21 @@ class ContinueWatchingSnapshotStore private constructor(
         val type = object : TypeToken<Map<String, HomeDisplayMetadata>>() {}.type
         return gson.fromJson<Map<String, HomeDisplayMetadata>>(obj, type)
             ?.mapValues { (_, metadata) -> metadata.sanitizedForCache() }
+            ?: emptyMap()
+    }
+
+    private fun decodeMetadataSnapshots(
+        root: JsonObject,
+        key: String
+    ): Map<String, ContinueWatchingMetadataSnapshot> {
+        val obj = root.getAsJsonObject(key) ?: return emptyMap()
+        val type = object : TypeToken<Map<String, ContinueWatchingMetadataSnapshot>>() {}.type
+        return gson.fromJson<Map<String, ContinueWatchingMetadataSnapshot>>(obj, type)
+            ?.mapValues { (_, snapshot) ->
+                snapshot.copy(
+                    clickTimeDisplayMetadata = snapshot.clickTimeDisplayMetadata.sanitizedForCache()
+                )
+            }
             ?: emptyMap()
     }
 
