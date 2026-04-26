@@ -75,8 +75,8 @@ class TrailerSupportTest {
         val sorted = sortTrailerCandidatesForPlayback(
             listOf(
                 StreamCandidate(
-                    client = "android_vr",
-                    priority = 0,
+                    client = "android",
+                    priority = 1,
                     url = "https://example.com/trailer/video.webm",
                     score = 1080_060_000.0,
                     hasN = false,
@@ -87,7 +87,7 @@ class TrailerSupportTest {
                 ),
                 StreamCandidate(
                     client = "ios",
-                    priority = 1,
+                    priority = 0,
                     url = "https://example.com/trailer/video.mp4",
                     score = 720_030_000.0,
                     hasN = false,
