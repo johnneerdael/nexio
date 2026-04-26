@@ -450,4 +450,296 @@ class AuthRecoveryInterceptorTest {
         assertEquals(1, AuthRecoveryTracker.recoveredCount())
         assertTrue(AuthRecoveryTracker.totalAttempts() >= 1)
     }
+
+    // -----------------------------------------------------------------------
+    // 502 / 503 / 504 transient failure recovery (two-phase: same-URL retry,
+    // then re-resolve escalation).
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `Outcome enum exposes TRANSIENT_RETRIED for phase-1 same-url recovery`() {
+        val all = AuthRecoveryTracker.Outcome.values().toSet()
+        assertTrue(
+            "Outcome enum must expose TRANSIENT_RETRIED for 5xx phase-1 recovery telemetry. " +
+                "Got: $all",
+            AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED in all
+        )
+    }
+
+    @Test
+    fun `recovers from 502 by retrying the same URL once`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolved)
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                if (hits.getAndIncrement() == 0) MockResponse().setResponseCode(502)
+                else MockResponse().setResponseCode(200).setBody("ok")
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        val response = client.newCall(Request.Builder().url(resolved).build()).execute()
+        response.use {
+            assertEquals(200, it.code)
+            assertEquals("ok", it.body?.string())
+        }
+        assertEquals(
+            "server should see exactly two requests: original + same-URL retry",
+            2, hits.get()
+        )
+
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected TRANSIENT_RETRIED in outcomes, got $outcomes",
+            AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED in outcomes
+        )
+    }
+
+    @Test
+    fun `5xx phase-1 retry preserves the Range header so mid-stream resumes work`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolved)
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+
+        val rangeHeaders = mutableListOf<String>()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                rangeHeaders += request.getHeader("Range").orEmpty()
+                return if (rangeHeaders.size == 1) MockResponse().setResponseCode(503)
+                else MockResponse().setResponseCode(200).setBody("ok")
+            }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        client.newCall(
+            Request.Builder().url(resolved).header("Range", "bytes=50331648-75497471").build()
+        ).execute().close()
+
+        assertEquals(
+            "Range header must survive the phase-1 retry verbatim",
+            listOf("bytes=50331648-75497471", "bytes=50331648-75497471"),
+            rangeHeaders
+        )
+    }
+
+    @Test
+    fun `5xx with no proxy mapping is returned unchanged without retry`() {
+        server.enqueue(MockResponse().setResponseCode(502))
+        val unknown = server.url("/orphan").toString()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        val response = client.newCall(Request.Builder().url(unknown).build()).execute()
+        response.use { assertEquals(502, it.code) }
+
+        val attempts = AuthRecoveryTracker.snapshot()
+        assertEquals(1, attempts.size)
+        assertEquals(AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN, attempts.first().outcome)
+    }
+
+    @Test
+    fun `escalates to re-resolve when same-URL 502 retry also returns 502`() {
+        val staleResolved = server.url("/cdn/stale").toString()
+        val freshResolved = server.url("/cdn/fresh").toString()
+        val resolveCount = AtomicInteger(0)
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(
+                if (resolveCount.getAndIncrement() == 0) staleResolved else freshResolved
+            )
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+
+        val staleHits = AtomicInteger(0)
+        val freshHits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/cdn/stale" -> {
+                    staleHits.incrementAndGet()
+                    MockResponse().setResponseCode(502)
+                }
+                "/cdn/fresh" -> {
+                    freshHits.incrementAndGet()
+                    MockResponse().setResponseCode(200).setBody("ok")
+                }
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        val response = client.newCall(Request.Builder().url(staleResolved).build()).execute()
+        response.use {
+            assertEquals(200, it.code)
+            assertEquals("ok", it.body?.string())
+        }
+        assertEquals("stale URL hit twice (original + phase-1 retry)", 2, staleHits.get())
+        assertEquals("fresh URL hit once (phase-2 retry)", 1, freshHits.get())
+
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected RECOVERED in outcomes after phase-2 escalation, got $outcomes",
+            AuthRecoveryTracker.Outcome.RECOVERED in outcomes
+        )
+    }
+
+    @Test
+    fun `gives up on 502 when both phase-1 retry and phase-2 re-resolve fail`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolved)
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                MockResponse().setResponseCode(502)
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        val response = client.newCall(Request.Builder().url(resolved).build()).execute()
+        response.use { assertEquals(502, it.code) }
+
+        // Either GAVE_UP (resolver returns null/different URL that also failed)
+        // or RATE_LIMITED (resolver debounce returned the same URL we just
+        // failed on) is acceptable — both mean "no recovery was possible".
+        // The test transport here returns the same URL so RATE_LIMITED is the
+        // expected branch.
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected GAVE_UP or RATE_LIMITED after both phases exhausted, got $outcomes",
+            AuthRecoveryTracker.Outcome.GAVE_UP in outcomes ||
+                AuthRecoveryTracker.Outcome.RATE_LIMITED in outcomes
+        )
+    }
+
+    @Test
+    fun `503 follows the same two-phase recovery as 502`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolved)
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                if (hits.getAndIncrement() == 0) MockResponse().setResponseCode(503)
+                else MockResponse().setResponseCode(200).setBody("ok")
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        client.newCall(Request.Builder().url(resolved).build()).execute().use {
+            assertEquals(200, it.code)
+        }
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected TRANSIENT_RETRIED for 503 phase-1 recovery, got $outcomes",
+            AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED in outcomes
+        )
+    }
+
+    @Test
+    fun `504 follows the same two-phase recovery as 502`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolved)
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                if (hits.getAndIncrement() == 0) MockResponse().setResponseCode(504)
+                else MockResponse().setResponseCode(200).setBody("ok")
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+
+        client.newCall(Request.Builder().url(resolved).build()).execute().use {
+            assertEquals(200, it.code)
+        }
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected TRANSIENT_RETRIED for 504 phase-1 recovery, got $outcomes",
+            AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED in outcomes
+        )
+    }
+
+    @Test
+    fun `auth and transient recoveries share the maxAttemptsPerSession budget`() {
+        val resolved = server.url("/cdn").toString()
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolved)
+        }
+        runBlocking {
+            CometProxyUrlResolver.resolve(
+                "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
+                headers = emptyMap()
+            )
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                MockResponse().setResponseCode(502)
+        }
+        // Budget of 1: first call's phase-1 retry consumes the only attempt.
+        // Subsequent calls must not consume any further phase-1 retries.
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor(maxAttemptsPerSession = 1)).build()
+
+        client.newCall(Request.Builder().url(resolved).build()).execute().use {
+            assertEquals(502, it.code)
+        }
+        val hitsBefore = server.requestCount
+        client.newCall(Request.Builder().url(resolved).build()).execute().use {
+            assertEquals(502, it.code)
+        }
+        val hitsAfter = server.requestCount
+        assertEquals(
+            "second failing request must not consume a phase-1 retry once budget is gone",
+            1, hitsAfter - hitsBefore
+        )
+
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected GAVE_UP for budget-exhausted second request, got $outcomes",
+            AuthRecoveryTracker.Outcome.GAVE_UP in outcomes
+        )
+    }
 }

@@ -86,7 +86,10 @@ class AuthRecoveryInterceptor(
         val original = chain.request()
         val rewritten = applyStaleForward(original) ?: original
         val response = chain.proceed(rewritten)
-        if (!AuthFailureCodes.matches(response.code)) return response
+
+        val isAuth = AuthFailureCodes.matches(response.code)
+        val isTransient = TransientFailureCodes.matches(response.code)
+        if (!isAuth && !isTransient) return response
 
         val originalUrl = rewritten.url.toString()
         val proxyUrl = CometProxyUrlResolver.proxyUrlFor(originalUrl)
@@ -95,16 +98,84 @@ class AuthRecoveryInterceptor(
             return response
         }
 
+        // Transient 5xx: phase-1 same-URL retry first. Real-Debrid edge load
+        // balancers usually route the second attempt to a healthy edge while
+        // the signed URL itself is still valid, so a re-resolve is overkill
+        // for the first failure. The auth bucket skips phase-1 because
+        // auth-failure URLs are *known* dead — re-issuing won't help.
+        if (isTransient) {
+            if (attemptsRemaining.decrementAndGet() < 0) {
+                AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
+                return response
+            }
+            response.close()
+            sleepBeforeTransientRetry()
+            Log.i(
+                TAG,
+                "RETRYING_AFTER_TRANSIENT_FAIL status=${response.code} " +
+                    "host=${rewritten.url.host} attempt=phase1_same_url"
+            )
+            val phase1 = chain.proceed(rewritten)
+            if (phase1.isSuccessful) {
+                AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED)
+                return phase1
+            }
+            // Phase-1 retry failed. If it's another recoverable code,
+            // escalate to phase-2 (re-resolve). If it's anything else, give
+            // up — the response itself is the user-facing answer.
+            val phase1Code = phase1.code
+            val phase1Recoverable = AuthFailureCodes.matches(phase1Code) ||
+                TransientFailureCodes.matches(phase1Code)
+            if (!phase1Recoverable) {
+                AuthRecoveryTracker.record(proxyUrl, phase1Code, AuthRecoveryTracker.Outcome.GAVE_UP)
+                return phase1
+            }
+            return runReResolveRecovery(
+                chain = chain,
+                rewritten = rewritten,
+                originalUrl = originalUrl,
+                proxyUrl = proxyUrl,
+                triggerStatus = phase1Code,
+                failureResponse = phase1
+            )
+        }
+
+        // Auth path (401/403/410): no phase-1, jump straight to re-resolve.
         if (attemptsRemaining.decrementAndGet() < 0) {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
             return response
         }
+        return runReResolveRecovery(
+            chain = chain,
+            rewritten = rewritten,
+            originalUrl = originalUrl,
+            proxyUrl = proxyUrl,
+            triggerStatus = response.code,
+            failureResponse = response
+        )
+    }
 
+    private fun sleepBeforeTransientRetry() {
+        // Tiny backoff so the second request lands on a different edge load
+        // balancer cycle. Picked empirically — 250 ms is below the typical
+        // 4-second user-perceived "playback stall" threshold but long enough
+        // for an RD CDN to flap to a healthy backend.
+        runCatching { Thread.sleep(TRANSIENT_RETRY_BACKOFF_MS) }
+    }
+
+    private fun runReResolveRecovery(
+        chain: Interceptor.Chain,
+        rewritten: Request,
+        originalUrl: String,
+        proxyUrl: String,
+        triggerStatus: Int,
+        failureResponse: Response
+    ): Response {
         when (val ipState = PlaybackAuthFingerprintHolder.current()?.compareNow()) {
             is EgressIpFingerprint.State.Changed -> Log.w(
                 TAG,
                 "EGRESS_IP_SHIFTED baseline=${ipState.baseline} current=${ipState.current} " +
-                    "proxyHost=${original.url.host}"
+                    "proxyHost=${rewritten.url.host}"
             )
             else -> Unit
         }
@@ -116,38 +187,40 @@ class AuthRecoveryInterceptor(
 
         // Single coalescing recovery call: leader resolves, peers await the
         // leader's result, debounced callers pick up the leader's freshly-
-        // cached URL. Replaces the older invalidate-then-resolve sequence
-        // which raced into NO_PROXY_KNOWN under concurrent failures.
+        // cached URL.
         val freshUrl = CometProxyUrlResolver.recoverProxyBlocking(proxyUrl, headers, addonHost)
         if (freshUrl.isNullOrBlank()) {
-            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
-            return response
+            AuthRecoveryTracker.record(proxyUrl, triggerStatus, AuthRecoveryTracker.Outcome.GAVE_UP)
+            return failureResponse
         }
         if (freshUrl == originalUrl) {
             // Recovery returned the same URL we just failed on (debounced and
             // cache had not been refreshed yet). No retry would help; treat
             // as rate-limited so telemetry is honest.
-            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RATE_LIMITED)
-            return response
+            AuthRecoveryTracker.record(proxyUrl, triggerStatus, AuthRecoveryTracker.Outcome.RATE_LIMITED)
+            return failureResponse
         }
 
         val retryRequest = rewriteUrl(rewritten, freshUrl) ?: run {
-            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
-            return response
+            AuthRecoveryTracker.record(proxyUrl, triggerStatus, AuthRecoveryTracker.Outcome.GAVE_UP)
+            return failureResponse
         }
 
-        response.close()
+        // Only close the failure response now that we're committing to a
+        // fresh request. Earlier branches return it as the user-facing
+        // result instead.
+        failureResponse.close()
         Log.i(
             TAG,
-            "RETRYING_AFTER_AUTH_FAIL status=${response.code} " +
+            "RETRYING_AFTER_AUTH_FAIL status=$triggerStatus " +
                 "fromHost=${rewritten.url.host} toHost=${retryRequest.url.host}"
         )
         val retried = chain.proceed(retryRequest)
         if (retried.isSuccessful) {
             registerForward(originalUrl, freshUrl)
-            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.RECOVERED)
+            AuthRecoveryTracker.record(proxyUrl, triggerStatus, AuthRecoveryTracker.Outcome.RECOVERED)
         } else {
-            AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
+            AuthRecoveryTracker.record(proxyUrl, triggerStatus, AuthRecoveryTracker.Outcome.GAVE_UP)
         }
         return retried
     }
@@ -187,5 +260,6 @@ class AuthRecoveryInterceptor(
 
     companion object {
         private const val TAG = "AuthRecovery"
+        private const val TRANSIENT_RETRY_BACKOFF_MS = 250L
     }
 }

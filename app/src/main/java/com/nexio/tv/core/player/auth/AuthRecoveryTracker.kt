@@ -13,7 +13,18 @@ object AuthRecoveryTracker {
     private const val TAG = "AuthRecovery"
     private const val RING_SIZE = 16
 
-    enum class Outcome { RECOVERED, GAVE_UP, RATE_LIMITED, NO_PROXY_KNOWN }
+    enum class Outcome {
+        /** Phase-2 recovery: re-resolved the proxy URL, retried, retry succeeded. */
+        RECOVERED,
+        /** Phase-1 recovery: same-URL retry succeeded after a transient 5xx. */
+        TRANSIENT_RETRIED,
+        /** All recovery phases (or all attempts allowed by the budget) failed. */
+        GAVE_UP,
+        /** Resolver debounce returned the same URL we just failed on; retry would not help. */
+        RATE_LIMITED,
+        /** Failing URL is not a known addon-proxy mapping; no recovery is possible. */
+        NO_PROXY_KNOWN
+    }
 
     data class Attempt(
         val proxyUrl: String,
