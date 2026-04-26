@@ -250,6 +250,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                 )
             )
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Log.w(HomeViewModel.TAG, "Provider enrichment failed for continue watching item $contentId: ${e.message}")
         item
