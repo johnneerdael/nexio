@@ -64,6 +64,22 @@ class MetadataRouter @Inject constructor(
         parsedId: ParsedMetadataId,
         trace: MutableList<MetadataRouteTrace>
     ): MetadataRoute {
+        val localMapping = idMappingStore.lookupKitsu(parsedId)
+        if (localMapping != null) {
+            trace += MetadataRouteTrace(
+                MetadataDecisionReason.ANIME_PREFIX_MAPPED_TO_KITSU,
+                "Mapped ${parsedId.raw} to kitsu:${localMapping.providerId} from ${localMapping.source}"
+            )
+            return route(
+                normalized = normalized,
+                provider = MetadataPrimaryProvider.KITSU,
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.ANIME_PREFIX_MAPPED_TO_KITSU,
+                targetId = "kitsu:${localMapping.providerId}",
+                trace = trace
+            )
+        }
+
         val kitsuId = animeIdentityIndex.resolveKitsuId(parsedId)
         if (kitsuId != null) {
             idMappingStore.persist(
@@ -77,7 +93,7 @@ class MetadataRouter @Inject constructor(
             )
             trace += MetadataRouteTrace(
                 MetadataDecisionReason.ANIME_PREFIX_MAPPED_TO_KITSU,
-                "Mapped ${parsedId.raw} to kitsu:$kitsuId"
+                "Mapped ${parsedId.raw} to kitsu:$kitsuId from FRIBB"
             )
             return route(
                 normalized = normalized,
