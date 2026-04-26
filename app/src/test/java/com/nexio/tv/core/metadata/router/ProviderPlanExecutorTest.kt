@@ -132,11 +132,13 @@ class ProviderPlanExecutorTest {
         val plan = executor.buildPlan(
             route = route(
                 provider = MetadataPrimaryProvider.TMDB,
-                mediaKind = MetadataMediaKind.SERIES
+                mediaKind = MetadataMediaKind.SERIES,
+                seasonNumber = 3
             ),
             depth = MetadataDepth.SEASON
         )
 
+        assertEquals(3, plan.route.seasonNumber)
         assertEquals(
             listOf(TmdbApiShapes.TV_CORE, TmdbApiShapes.SEASON_EPISODES),
             plan.apiShapeIds()
@@ -220,16 +222,40 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TVDB deeper detail depths with non-default language include optional series translation`() {
+        listOf(MetadataDepth.DETAIL_MEDIA, MetadataDepth.DETAIL_SECONDARY).forEach { depth ->
+            val plan = executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TVDB,
+                    mediaKind = MetadataMediaKind.SERIES,
+                    language = "nl"
+                ),
+                depth = depth
+            )
+
+            assertEquals(
+                "depth=$depth",
+                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_TRANSLATION),
+                plan.apiShapeIds()
+            )
+            assertFalse("depth=$depth", plan.step(TvdbApiShapes.SERIES_TRANSLATION).required)
+            assertAllShapesCovered(plan)
+        }
+    }
+
+    @Test
     fun `TVDB SEASON includes season type and language episode shapes`() {
         val plan = executor.buildPlan(
             route = route(
                 provider = MetadataPrimaryProvider.TVDB,
                 mediaKind = MetadataMediaKind.SERIES,
-                language = "nl"
+                language = "nl",
+                seasonNumber = 2
             ),
             depth = MetadataDepth.SEASON
         )
 
+        assertEquals(2, plan.route.seasonNumber)
         assertEquals(
             listOf(
                 TvdbApiShapes.SERIES_EXTENDED,
@@ -240,6 +266,33 @@ class ProviderPlanExecutorTest {
         )
         assertFalse(plan.step(TvdbApiShapes.SERIES_EPISODES_LANGUAGE).required)
         assertAllShapesCovered(plan)
+    }
+
+    @Test
+    fun `TVDB SEASON with default language omits translated episode language shape`() {
+        listOf(null, "en").forEach { language ->
+            val plan = executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TVDB,
+                    mediaKind = MetadataMediaKind.SERIES,
+                    language = language,
+                    seasonNumber = 4
+                ),
+                depth = MetadataDepth.SEASON
+            )
+
+            assertEquals("language=$language", 4, plan.route.seasonNumber)
+            assertEquals(
+                "language=$language",
+                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE),
+                plan.apiShapeIds()
+            )
+            assertFalse(
+                "language=$language",
+                plan.apiShapeIds().contains(TvdbApiShapes.SERIES_EPISODES_LANGUAGE)
+            )
+            assertAllShapesCovered(plan)
+        }
     }
 
     @Test
@@ -261,11 +314,13 @@ class ProviderPlanExecutorTest {
         val plan = executor.buildPlan(
             route = route(
                 provider = MetadataPrimaryProvider.KITSU,
-                mediaKind = MetadataMediaKind.ANIME
+                mediaKind = MetadataMediaKind.ANIME,
+                seasonNumber = 1
             ),
             depth = MetadataDepth.SEASON
         )
 
+        assertEquals(1, plan.route.seasonNumber)
         assertEquals(
             listOf(KitsuApiShapes.ANIME_CORE, KitsuApiShapes.ANIME_EPISODES),
             plan.apiShapeIds()
@@ -347,6 +402,7 @@ class ProviderPlanExecutorTest {
         provider: MetadataPrimaryProvider,
         mediaKind: MetadataMediaKind,
         language: String? = null,
+        seasonNumber: Int? = null,
         targetIdRequiresIdentityResolution: Boolean = false
     ): MetadataRoute =
         MetadataRoute(
@@ -356,6 +412,7 @@ class ProviderPlanExecutorTest {
             reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
             sourceContext = MetadataSourceContext(),
             language = language,
+            seasonNumber = seasonNumber,
             targetIds = mapOf(provider to "provider:1"),
             targetIdRequiresIdentityResolution = targetIdRequiresIdentityResolution,
             trace = listOf(
