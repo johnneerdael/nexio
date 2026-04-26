@@ -9,21 +9,28 @@ class MetadataRouterBoundaryTest {
     private val productionRoots = listOf(File("app/src/main/java/com/nexio/tv"))
 
     @Test
-    fun `production callers use metadata router facade instead of legacy tv metadata router`() {
+    fun `production callers use metadata router facade instead of legacy metadata execution`() {
         val offenders = productionRegexScan(
             forbiddenPatterns = mapOf(
                 "TvMetadataRouter" to Regex("""\bTvMetadataRouter\b"""),
-                "ProviderMetadataRouter" to Regex("""\bProviderMetadataRouter\b""")
+                "ProviderMetadataRouter" to Regex("""\bProviderMetadataRouter\b"""),
+                "TmdbMetadataService" to Regex("""\bTmdbMetadataService\b"""),
+                "KitsuMetadataService" to Regex("""\bKitsuMetadataService\b"""),
+                "TvdbMetadataService" to Regex("""\bTvdbMetadataService\b""")
             ),
             allowedPaths = productionAllowedPathSuffixes(
-                "/com/nexio/tv/core/metadata/router/MetadataRouterFacade.kt",
                 "/com/nexio/tv/core/tvdb/ProviderMetadataRouter.kt",
-                "/com/nexio/tv/core/tvdb/TvMetadataRouter.kt"
+                "/com/nexio/tv/core/tvdb/TvMetadataRouter.kt",
+                "/com/nexio/tv/core/tmdb/TmdbMetadataService.kt",
+                "/com/nexio/tv/core/anime/KitsuMetadataService.kt",
+                "/com/nexio/tv/data/integration/metadata/TmdbMetadataProviderAdapter.kt",
+                "/com/nexio/tv/data/integration/metadata/TvdbMetadataProviderAdapter.kt",
+                "/com/nexio/tv/data/integration/metadata/KitsuMetadataProviderAdapter.kt"
             )
         )
 
         if (offenders.isNotEmpty()) {
-            fail("Production callers must depend on MetadataRouterFacade, not direct TV provider routers: $offenders")
+            fail("Production metadata paths must not call legacy metadata execution directly: $offenders")
         }
     }
 
