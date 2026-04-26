@@ -12,6 +12,7 @@ import com.nexio.tv.data.local.integration.IntegrationCacheDao
 import com.nexio.tv.data.local.integration.IntegrationCacheDatabase
 import com.nexio.tv.data.local.integration.IntegrationProviderBackoffDao
 import com.nexio.tv.data.local.integration.LocalIntegrationCacheStore
+import com.nexio.tv.data.local.integration.MediaIdentityDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -47,6 +48,11 @@ object IntegrationRuntimeModule {
     fun provideIntegrationProviderBackoffDao(
         database: IntegrationCacheDatabase
     ): IntegrationProviderBackoffDao = database.backoffDao()
+
+    @Provides
+    fun provideMediaIdentityDao(
+        database: IntegrationCacheDatabase
+    ): MediaIdentityDao = database.mediaIdentityDao()
 
     @Provides
     @Singleton
