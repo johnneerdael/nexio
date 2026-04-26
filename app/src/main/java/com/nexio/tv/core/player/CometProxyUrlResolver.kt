@@ -75,6 +75,7 @@ object CometProxyUrlResolver {
     private const val CACHE_TTL_MS = 50L * 60L * 1000L // 50 minutes, safely under Comet's 60-minute TTL
     private const val REQUEST_TIMEOUT_MS = 8_000L
     private const val INVALIDATE_DEBOUNCE_MS = 30_000L
+    private const val SHORT_VERDICT_TTL_MS = 30_000L
 
     private val knownProxyHosts: Set<String> = setOf(
         // Comet instances — 302 redirect, 1h server cache
@@ -135,6 +136,7 @@ object CometProxyUrlResolver {
     private val reverseCache: MutableMap<String, String> = HashMap()
     private val inFlight: MutableMap<String, CompletableDeferred<ProxyResolution>> = HashMap()
     private val lastInvalidatedAtMs: MutableMap<String, Long> = HashMap()
+    private val shortVerdictCache: MutableMap<String, VerdictEntry> = HashMap()
 
     @Volatile
     private var transportOverride: Transport? = null
@@ -158,6 +160,7 @@ object CometProxyUrlResolver {
             reverseCache.clear()
             inFlight.clear()
             lastInvalidatedAtMs.clear()
+            shortVerdictCache.clear()
         }
         transportOverride = null
         clockOverride = null
@@ -243,9 +246,40 @@ object CometProxyUrlResolver {
                 )
                 reverseCache[outcome.url] = url
             }
+            shortVerdictCache[url] = VerdictEntry(outcome, currentTimeMs())
         }
         ownDeferred.complete(outcome)
         return outcome
+    }
+
+    /**
+     * Returns the most recent terminal [ProxyResolution] observed for [url], if
+     * the verdict was produced within the last [SHORT_VERDICT_TTL_MS]
+     * milliseconds OR the long cache still holds a `Redirected` entry. Returns
+     * null when no recent verdict exists.
+     *
+     * The autoplay candidate-selection path consults this after [prewarm] has
+     * run so `Placeholder` candidates can be filtered without firing a second
+     * HTTP probe.
+     */
+    fun lastResolutionFor(url: String): ProxyResolution? {
+        synchronized(lock) {
+            val now = currentTimeMs()
+            // Long-cache short-circuit: surface Redirected even past the 30s
+            // short window so callers don't lose a cached redirect they could
+            // otherwise replay.
+            cache[url]?.let { entry ->
+                if (now - entry.storedAtMs <= CACHE_TTL_MS) {
+                    return ProxyResolution.Redirected(entry.resolvedUrl)
+                }
+            }
+            val verdict = shortVerdictCache[url] ?: return null
+            if (now - verdict.storedAtMs > SHORT_VERDICT_TTL_MS) {
+                shortVerdictCache.remove(url)
+                return null
+            }
+            return verdict.resolution
+        }
     }
 
     /**
@@ -547,6 +581,11 @@ object CometProxyUrlResolver {
         val storedAtMs: Long,
         val headers: Map<String, String>,
         val addonHost: String?
+    )
+
+    private data class VerdictEntry(
+        val resolution: ProxyResolution,
+        val storedAtMs: Long,
     )
 
     internal fun interface Transport {

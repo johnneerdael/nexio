@@ -416,6 +416,64 @@ class CometProxyUrlResolverTest {
     }
 
     @Test
+    fun `lastResolutionFor returns Placeholder within short verdict TTL`() = runBlocking {
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Placeholder }
+
+        val url = cometUrl
+        CometProxyUrlResolver.resolve(url, null)
+
+        assertEquals(ProxyResolution.Placeholder, CometProxyUrlResolver.lastResolutionFor(url))
+    }
+
+    @Test
+    fun `lastResolutionFor returns null after short verdict TTL elapses`() = runBlocking {
+        var t = 1_000_000L
+        CometProxyUrlResolver.setClockForTesting { t }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Placeholder }
+
+        val url = cometUrl
+        CometProxyUrlResolver.resolve(url, null)
+        assertEquals(ProxyResolution.Placeholder, CometProxyUrlResolver.lastResolutionFor(url))
+
+        t += 31_000L
+        assertNull(CometProxyUrlResolver.lastResolutionFor(url))
+    }
+
+    @Test
+    fun `lastResolutionFor surfaces Redirected from long cache past short TTL`() = runBlocking {
+        var t = 1_000_000L
+        CometProxyUrlResolver.setClockForTesting { t }
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolvedUrl)
+        }
+
+        CometProxyUrlResolver.resolve(cometUrl, null)
+        // Short-verdict TTL elapsed but long cache is still valid (< 50min).
+        t += 5 * 60_000L
+        assertEquals(
+            ProxyResolution.Redirected(resolvedUrl),
+            CometProxyUrlResolver.lastResolutionFor(cometUrl)
+        )
+    }
+
+    @Test
+    fun `lastResolutionFor returns null for unknown URL`() {
+        assertNull(CometProxyUrlResolver.lastResolutionFor("https://random.example/never-resolved"))
+    }
+
+    @Test
+    fun `lastResolutionFor returns ResolveFailed within short window`() = runBlocking {
+        var t = 1_000_000L
+        CometProxyUrlResolver.setClockForTesting { t }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.ResolveFailed }
+
+        CometProxyUrlResolver.resolve(cometUrl, null)
+        assertEquals(ProxyResolution.ResolveFailed, CometProxyUrlResolver.lastResolutionFor(cometUrl))
+        t += 31_000L
+        assertNull(CometProxyUrlResolver.lastResolutionFor(cometUrl))
+    }
+
+    @Test
     fun `invalidate is rate-limited per proxy url`() = runBlocking {
         var now = 1_000L
         CometProxyUrlResolver.setClockForTesting { now }
