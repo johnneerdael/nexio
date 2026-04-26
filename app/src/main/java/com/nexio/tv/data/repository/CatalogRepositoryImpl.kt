@@ -2,13 +2,12 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
-import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.sync.buildAddonRequestUrl
+import com.nexio.tv.data.integration.addon.AddonCatalogIntegrationProvider
 import com.nexio.tv.data.local.CatalogDiskCacheStore
 import com.nexio.tv.data.mapper.toDomain
-import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -23,7 +22,7 @@ import javax.inject.Singleton
 
 @Singleton
 class CatalogRepositoryImpl @Inject constructor(
-    private val api: AddonApi,
+    private val addonCatalogIntegrationProvider: AddonCatalogIntegrationProvider,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val catalogDiskCacheStore: CatalogDiskCacheStore
 ) : CatalogRepository {
@@ -275,7 +274,12 @@ class CatalogRepositoryImpl @Inject constructor(
             TAG,
             "Fetching catalog addonId=$addonId addonName=$addonName type=$type catalogId=$catalogId skip=$skip skipStep=$skipStep supportsSkip=$supportsSkip url=${sanitizeUrlForLogs(url)}"
         )
-        return when (val result = safeApiCall { api.getCatalog(url) }) {
+        return when (
+            val result = addonCatalogIntegrationProvider.getCatalog(
+                addonId = addonId,
+                catalogUrl = url
+            )
+        ) {
             is NetworkResult.Success -> {
                 val items = result.data.metas.map { meta ->
                     posterRatingsUrlResolver.apply(meta.toDomain(), activePosterProvider)

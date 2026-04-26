@@ -1,6 +1,7 @@
 package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbMergeAliasStore
@@ -105,7 +106,8 @@ class TvdbGracefulFallbackTest {
             advancedMetadataMapper = mockk(relaxed = true),
             mergeAliasStore = mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null },
             credentialHealth = credentialHealth,
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            integrationRuntime = passThroughTestRuntime()
         )
 
         val router = TvMetadataRouter(
@@ -181,7 +183,8 @@ class TvdbGracefulFallbackTest {
             advancedMetadataMapper = mockk(relaxed = true),
             mergeAliasStore = mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null },
             credentialHealth = credentialHealth,
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            integrationRuntime = passThroughTestRuntime()
         )
 
         val router = TvMetadataRouter(
@@ -244,7 +247,8 @@ class TvdbGracefulFallbackTest {
             advancedMetadataMapper = mockk(relaxed = true),
             mergeAliasStore = mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null },
             credentialHealth = credentialHealth,
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            integrationRuntime = passThroughTestRuntime()
         )
 
         val router = TvMetadataRouter(
@@ -316,7 +320,8 @@ class TvdbGracefulFallbackTest {
             advancedMetadataMapper = mockk(relaxed = true),
             mergeAliasStore = mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null },
             credentialHealth = credentialHealth,
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            integrationRuntime = passThroughTestRuntime()
         )
 
         val router = TvMetadataRouter(

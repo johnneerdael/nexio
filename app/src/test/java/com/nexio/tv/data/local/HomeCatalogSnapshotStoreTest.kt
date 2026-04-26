@@ -10,6 +10,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -184,6 +185,33 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals(snapshot, store.read("RPDB:12345"))
     }
 
+    @Test
+    fun `builder emits a profile scoped home catalog rail with canonical media keys`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val row = sampleRow("addon", "tmdb:popular:movies")
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("tmdb:popular:movies")
+        )
+
+        val membership = store.buildRailMemberships(snapshot, testPosterToken, profileId = 7).single()
+        assertEquals("profile:7:home:catalog:tmdb:popular:movies", membership.rail.railKey)
+        assertEquals("movie:imdb:tt123", membership.items.single().mediaKey)
+        assertEquals("movie:imdb:tt123", membership.mediaIdentities.single().mediaKey)
+        assertTrue(membership.externalIds.any { it.provider == "IMDB" && it.externalId == "tt123" })
+    }
+
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {
         val row = sampleRow("addon", "movies")
         return HomeCatalogSnapshotStore.Snapshot(
@@ -247,4 +275,5 @@ class HomeCatalogSnapshotStoreTest {
             }
         }
     }
+
 }

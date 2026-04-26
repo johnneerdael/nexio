@@ -1,6 +1,7 @@
 package com.nexio.tv.core.anime
 
-import android.util.Log
+import com.nexio.tv.data.integration.kitsu.KitsuAdvancedDetailPayload
+import com.nexio.tv.data.integration.kitsu.KitsuIntegrationProvider
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeDetail
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeStaffMember
@@ -9,7 +10,6 @@ import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
-import com.nexio.tv.data.remote.api.KitsuApi
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuAnimeCharacterResource
 import com.nexio.tv.data.remote.api.KitsuAnimeProductionResource
@@ -20,56 +20,42 @@ import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.data.remote.api.KitsuIncludedResource
 import com.nexio.tv.data.remote.api.KitsuInstallmentResource
 import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
-import com.nexio.tv.data.repository.KitsuAuthService
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private const val TAG = "KitsuMetadata"
-private const val KITSU_EPISODE_PAGE_LIMIT = 20
-private const val KITSU_EPISODE_MAX_PAGES = 100
-
 @Singleton
 class KitsuMetadataService @Inject constructor(
-    private val api: KitsuApi,
-    private val idMappingService: AnimeIdMappingService,
-    private val kitsuAuthService: KitsuAuthService
+    private val provider: KitsuIntegrationProvider,
+    private val idMappingService: AnimeIdMappingService
 ) {
+
     suspend fun fetchEnrichment(rawId: String, mediaKind: ContentMediaKind): TvMetadataEnrichment? =
         withContext(Dispatchers.IO) {
             val animeId = AnimeStremioId.parse(rawId) ?: return@withContext null
             val kitsuId = when (animeId.source) {
                 AnimeIdSource.KITSU -> animeId.value
-                else -> {
-                    if (!kitsuAuthService.providerAuthenticated()) return@withContext null
-                    idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
-                }
+                else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
             }
-            val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-            val response = runCatching {
-                api.getAnime(authorization, kitsuId)
-            }.onFailure {
-                Log.w(TAG, "Kitsu anime fetch failed id=$rawId reason=${it.javaClass.simpleName}")
-            }.getOrNull() ?: return@withContext null
-
-            val resource = response.takeIf { it.isSuccessful }?.body()?.data ?: return@withContext null
-            val attributes = resource.attributes ?: return@withContext null
-            TvMetadataEnrichment(
-                seriesTvdbId = null,
-                localizedTitle = attributes.canonicalTitle,
-                description = attributes.synopsis ?: attributes.description,
-                genres = emptyList(),
-                backdrop = attributes.coverImage?.bestUrl(),
-                poster = attributes.posterImage?.bestUrl(),
-                releaseInfo = attributes.startDate,
-                rating = null,
-                runtimeMinutes = attributes.episodeLength,
-                ageRating = attributes.ageRating,
-                language = "ja",
-                status = attributes.status,
-                remoteIds = mapOf("kitsu" to setOf(kitsuId))
-            )
+            provider.fetchEnrichment(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind) { resource ->
+                val attributes = resource.attributes ?: return@fetchEnrichment null
+                TvMetadataEnrichment(
+                    seriesTvdbId = null,
+                    localizedTitle = attributes.canonicalTitle,
+                    description = attributes.synopsis ?: attributes.description,
+                    genres = emptyList(),
+                    backdrop = attributes.coverImage?.bestUrl(),
+                    poster = attributes.posterImage?.bestUrl(),
+                    releaseInfo = attributes.startDate,
+                    rating = null,
+                    runtimeMinutes = attributes.episodeLength,
+                    ageRating = attributes.ageRating,
+                    language = "ja",
+                    status = attributes.status,
+                    remoteIds = mapOf("kitsu" to setOf(kitsuId))
+                )
+            }
         }
 
     suspend fun fetchEpisodeEnrichment(
@@ -80,33 +66,29 @@ class KitsuMetadataService @Inject constructor(
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext emptyMap()
         val kitsuId = when (animeId.source) {
             AnimeIdSource.KITSU -> animeId.value
-            else -> {
-                if (!kitsuAuthService.providerAuthenticated()) return@withContext emptyMap()
-                idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
-            }
+            else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
         }
-        val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-        val episodes = fetchEpisodePages(authorization, kitsuId, rawId)
-
-        val acceptedSeasons = seasonNumbers.toSet()
-        episodes
-            .mapNotNull { episode ->
-                val attributes = episode.attributes ?: return@mapNotNull null
-                val season = attributes.seasonNumber ?: 1
-                val number = attributes.number ?: return@mapNotNull null
-                if (acceptedSeasons.isNotEmpty() && season !in acceptedSeasons) return@mapNotNull null
-                (season to number) to TvEpisodeMetadata(
-                    providerEpisodeId = episode.id?.let { "kitsu:$it" },
-                    seasonNumber = season,
-                    episodeNumber = number,
-                    title = attributes.canonicalTitle,
-                    overview = attributes.synopsis ?: attributes.description,
-                    thumbnail = attributes.thumbnail?.bestUrl(),
-                    airDate = attributes.airdate,
-                    runtimeMinutes = attributes.length
-                )
-            }
-            .toMap()
+        provider.fetchEpisodeEnrichment(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind) { episodes ->
+            val acceptedSeasons = seasonNumbers.toSet()
+            episodes
+                .mapNotNull { episode ->
+                    val attributes = episode.attributes ?: return@mapNotNull null
+                    val season = attributes.seasonNumber ?: 1
+                    val number = attributes.number ?: return@mapNotNull null
+                    if (acceptedSeasons.isNotEmpty() && season !in acceptedSeasons) return@mapNotNull null
+                    (season to number) to TvEpisodeMetadata(
+                        providerEpisodeId = episode.id?.let { "kitsu:$it" },
+                        seasonNumber = season,
+                        episodeNumber = number,
+                        title = attributes.canonicalTitle,
+                        overview = attributes.synopsis ?: attributes.description,
+                        thumbnail = attributes.thumbnail?.bestUrl(),
+                        airDate = attributes.airdate,
+                        runtimeMinutes = attributes.length
+                    )
+                }
+                .toMap()
+        }
     }
 
     suspend fun fetchSeasonEpisodes(
@@ -134,79 +116,9 @@ class KitsuMetadataService @Inject constructor(
     ): KitsuAdvancedAnimeDetail? = withContext(Dispatchers.IO) {
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext null
         val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
-        val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-
-        val castingsResponse = runCatching {
-            api.getCastingsByMedia(authorization = authorization, mediaId = kitsuId)
-        }.onFailure {
-            Log.w(TAG, "Kitsu castings fetch failed id=$rawId reason=${it.javaClass.simpleName}")
-        }.getOrNull()
-
-        val animeStaffResponse = runCatching {
-            api.getAnimeStaff(authorization = authorization, id = kitsuId)
-        }.onFailure {
-            Log.w(TAG, "Kitsu anime staff fetch failed id=$rawId reason=${it.javaClass.simpleName}")
-        }.getOrNull()
-
-        val animeProductionsResponse = runCatching {
-            api.getAnimeProductions(authorization = authorization, id = kitsuId)
-        }.onFailure {
-            Log.w(TAG, "Kitsu anime productions fetch failed id=$rawId reason=${it.javaClass.simpleName}")
-        }.getOrNull()
-
-        val mediaRelationshipsResponse = runCatching {
-            api.getAnimeMediaRelationships(authorization = authorization, id = kitsuId)
-        }.onFailure {
-            Log.w(TAG, "Kitsu media relationships fetch failed id=$rawId reason=${it.javaClass.simpleName}")
-        }.getOrNull()
-
-        KitsuAdvancedAnimeDetail(
-            characters = castingsResponse.toAdvancedCharacters(
-                preferredLanguageCode = preferredLanguageCode
-            ),
-            staff = animeStaffResponse.toAdvancedStaff(),
-            // `anime/{id}/installments` currently returns 500 for real titles in live validation,
-            // so keep Related scoped to the stable relationship graph until Kitsu's installment
-            // surface proves reliable enough to consume in-product.
-            relatedTitles = mediaRelationshipsResponse
-                .toAdvancedRelatedTitles()
-                .filter { it.mediaType.equals("anime", ignoreCase = true) }
-                .distinctBy { "${it.mediaType}:${it.mediaId}" },
-            productionCompanies = animeProductionsResponse.toAdvancedProductionCompanies(),
-            franchiseIds = emptySet()
-        )
-    }
-
-    private suspend fun fetchEpisodePages(
-        authorization: String?,
-        kitsuId: String,
-        rawId: String
-    ): List<KitsuAnimeResource> {
-        val episodes = mutableListOf<KitsuAnimeResource>()
-        var offset = 0
-        var pageCount = 0
-        while (pageCount < KITSU_EPISODE_MAX_PAGES) {
-            val response = runCatching {
-                api.getAnimeEpisodes(
-                    authorization = authorization,
-                    id = kitsuId,
-                    limit = KITSU_EPISODE_PAGE_LIMIT,
-                    offset = offset
-                )
-            }.onFailure {
-                Log.w(TAG, "Kitsu episode fetch failed id=$rawId offset=$offset reason=${it.javaClass.simpleName}")
-            }.getOrNull() ?: break
-
-            if (!response.isSuccessful) break
-            val body = response.body() ?: break
-            val page = body.data.orEmpty()
-            episodes += page
-            if (body.links?.next.isNullOrBlank() || page.isEmpty()) break
-
-            offset += KITSU_EPISODE_PAGE_LIMIT
-            pageCount += 1
+        provider.fetchAdvancedDetail(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind) { payload ->
+            payload.toAdvancedDetail(preferredLanguageCode)
         }
-        return episodes
     }
 }
 
@@ -278,6 +190,23 @@ private fun retrofit2.Response<KitsuCollectionResponse<KitsuAnimeProductionResou
             role = relation.attributes?.role
         )
     }
+}
+
+private fun KitsuAdvancedDetailPayload.toAdvancedDetail(
+    preferredLanguageCode: String?
+): KitsuAdvancedAnimeDetail {
+    return KitsuAdvancedAnimeDetail(
+        characters = castingsResponse.toAdvancedCharacters(
+            preferredLanguageCode = preferredLanguageCode
+        ),
+        staff = animeStaffResponse.toAdvancedStaff(),
+        relatedTitles = mediaRelationshipsResponse
+            .toAdvancedRelatedTitles()
+            .filter { it.mediaType.equals("anime", ignoreCase = true) }
+            .distinctBy { "${it.mediaType}:${it.mediaId}" },
+        productionCompanies = animeProductionsResponse.toAdvancedProductionCompanies(),
+        franchiseIds = emptySet()
+    )
 }
 
 private fun retrofit2.Response<KitsuCollectionResponse<KitsuMediaRelationshipResource>>?.toAdvancedRelatedTitles(): List<KitsuAdvancedRelatedTitle> {

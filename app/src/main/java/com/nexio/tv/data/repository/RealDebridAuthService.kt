@@ -1,15 +1,16 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.integration.debrid.RealDebridAuthIntegrationProvider
 import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.RealDebridAuthState
-import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
 import kotlinx.coroutines.flow.first
 import retrofit2.Response
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val REAL_DEBRID_DEVICE_GRANT_TYPE = "http://oauth.net/grant_type/device/1.0"
 
@@ -23,7 +24,7 @@ sealed interface RealDebridTokenPollResult {
 
 @Singleton
 class RealDebridAuthService @Inject constructor(
-    private val realDebridApi: RealDebridApi,
+    private val realDebridAuthIntegrationProvider: RealDebridAuthIntegrationProvider,
     private val realDebridAuthDataStore: RealDebridAuthDataStore
 ) {
     private val refreshLeewayMs = 60_000L
@@ -39,13 +40,13 @@ class RealDebridAuthService @Inject constructor(
         }
 
         val response = runCatching {
-            realDebridApi.requestDeviceCode(
+            realDebridAuthIntegrationProvider.requestDeviceCode(
                 clientId = BuildConfig.REAL_DEBRID_CLIENT_ID,
                 newCredentials = if (hasClientSecret()) null else "yes"
             )
         }.getOrElse { error ->
             return Result.failure(IllegalStateException(error.message ?: "Failed to start Real-Debrid auth"))
-        }
+        } ?: return Result.failure(IllegalStateException("Failed to start Real-Debrid auth"))
 
         val body = response.body()
         if (!response.isSuccessful || body == null) {
@@ -76,13 +77,13 @@ class RealDebridAuthService @Inject constructor(
             getCurrentAuthState()
         } else if (state.userClientId.isNullOrBlank() || state.userClientSecret.isNullOrBlank()) {
             val credentialResponse = runCatching {
-                realDebridApi.requestDeviceCredentials(
+                realDebridAuthIntegrationProvider.requestDeviceCredentials(
                     clientId = BuildConfig.REAL_DEBRID_CLIENT_ID,
                     deviceCode = deviceCode
                 )
             }.getOrElse { error ->
                 return RealDebridTokenPollResult.Failed(error.message ?: "Failed to check Real-Debrid approval")
-            }
+            } ?: return RealDebridTokenPollResult.Failed("Failed to check Real-Debrid approval")
 
             if (!credentialResponse.isSuccessful) {
                 return when (credentialResponse.code()) {
@@ -112,7 +113,7 @@ class RealDebridAuthService @Inject constructor(
             ?: return RealDebridTokenPollResult.Failed("Missing Real-Debrid client secret")
 
         val tokenResponse = runCatching {
-            realDebridApi.requestToken(
+            realDebridAuthIntegrationProvider.requestToken(
                 clientId = clientId,
                 clientSecret = clientSecret,
                 code = deviceCode,
@@ -120,7 +121,7 @@ class RealDebridAuthService @Inject constructor(
             )
         }.getOrElse { error ->
             return RealDebridTokenPollResult.Failed(error.message ?: "Failed to fetch Real-Debrid token")
-        }
+        } ?: return RealDebridTokenPollResult.Failed("Failed to fetch Real-Debrid token")
 
         val tokenBody = tokenResponse.body()
         if (!tokenResponse.isSuccessful || tokenBody == null) {
@@ -151,7 +152,7 @@ class RealDebridAuthService @Inject constructor(
         val refreshToken = state.refreshToken ?: return false
 
         val response = runCatching {
-            realDebridApi.requestToken(
+            realDebridAuthIntegrationProvider.requestToken(
                 clientId = clientId,
                 clientSecret = clientSecret,
                 code = refreshToken,
@@ -174,30 +175,43 @@ class RealDebridAuthService @Inject constructor(
     suspend fun revokeAndLogout() {
         getCurrentAuthState().accessToken?.let { accessToken ->
             runCatching {
-                realDebridApi.disableCurrentAccessToken("Bearer $accessToken")
+                realDebridAuthIntegrationProvider.disableCurrentAccessToken("Bearer $accessToken")
             }
         }
         realDebridAuthDataStore.clearAuth()
     }
 
-    suspend fun <T> executeAuthorizedRequest(
+    suspend fun <T> executeAuthOwnerRequest(
         block: suspend (authorization: String) -> Response<T>
     ): Response<T>? {
         if (!refreshTokenIfNeeded(force = false)) {
             return null
         }
         val accessToken = getCurrentAuthState().accessToken ?: return null
-        val response = runCatching { block("Bearer $accessToken") }.getOrNull() ?: return null
+        val response = try {
+            block("Bearer $accessToken")
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            return null
+        }
         if (response.code() == 401 && refreshTokenIfNeeded(force = true)) {
             val refreshedToken = getCurrentAuthState().accessToken ?: return null
-            return runCatching { block("Bearer $refreshedToken") }.getOrNull()
+            return try {
+                block("Bearer $refreshedToken")
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                null
+            }
         }
         return response
     }
 
     private suspend fun fetchCurrentUsername(): String? {
-        val response = executeAuthorizedRequest { authHeader ->
-            realDebridApi.getCurrentUser(authHeader)
+        val response = executeAuthOwnerRequest { authHeader ->
+            realDebridAuthIntegrationProvider.getCurrentUser(authHeader)
+                ?: return@executeAuthOwnerRequest Response.error(500, okhttp3.ResponseBody.create(null, "realdebrid_runtime_missing"))
         } ?: return null
         return response.body()?.username
     }

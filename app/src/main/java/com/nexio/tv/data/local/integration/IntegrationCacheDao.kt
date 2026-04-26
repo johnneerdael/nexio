@@ -12,4 +12,10 @@ interface IntegrationCacheDao {
 
     @Query("SELECT * FROM integration_cache WHERE cacheKey = :cacheKey")
     suspend fun getCacheEntry(cacheKey: String): IntegrationCacheEntity?
+
+    @Query("SELECT * FROM integration_cache WHERE ownerToken = :mediaKey")
+    suspend fun findByMediaKey(mediaKey: String): List<IntegrationCacheEntity>
+
+    @Query("DELETE FROM integration_cache WHERE ownerToken = :mediaKey")
+    suspend fun deleteByMediaKey(mediaKey: String): Int
 }

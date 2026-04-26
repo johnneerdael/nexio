@@ -3,10 +3,6 @@ package com.nexio.tv.core.tvdb
 import com.nexio.tv.data.local.TvdbSettings
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbTokenState
-import com.nexio.tv.data.remote.api.TvdbApi
-import com.nexio.tv.data.remote.api.TvdbLoginRequest
-import com.nexio.tv.data.remote.api.TvdbLoginResponse
-import java.io.IOException
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -15,34 +11,33 @@ import io.mockk.mockk
 import io.mockk.every
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import retrofit2.Response
 
 class TvdbAuthServiceTest {
 
     @Test
-    fun `blank PIN is omitted from login payload`() = runTest {
-        val tvdbApi = mockk<TvdbApi>()
+    fun `blank PIN is trimmed before token request`() = runTest {
+        val loginGateway = mockk<TvdbLoginGateway>()
         val tokenStore = mockk<TvdbTokenStore>()
         val service = TvdbAuthService(
-            tvdbApi = tvdbApi,
+            loginGateway = loginGateway,
             tokenStore = tokenStore,
             nowMillis = { 1_700_000_000_000L }
         )
 
         coEvery { tokenStore.saveToken(any(), any()) } just Runs
-        coEvery { tvdbApi.login(any()) } returns Response.success(loginResponse("blank-pin-token"))
+        coEvery {
+            loginGateway.requestToken("tvdb-key", "", any())
+        } returns validAuth("blank-pin-token")
 
         val result = service.loginAndCacheToken(apiKey = "tvdb-key", pin = "   ")
 
         assertTrue(result is TvdbAuthResult.Valid)
         assertEquals("Bearer blank-pin-token", (result as TvdbAuthResult.Valid).authorizationHeader)
         coVerify(exactly = 1) {
-            tvdbApi.login(TvdbLoginRequest(apikey = "tvdb-key", pin = null))
+            loginGateway.requestToken("tvdb-key", "", any())
         }
         coVerify(exactly = 1) {
             tokenStore.saveToken(
@@ -53,24 +48,26 @@ class TvdbAuthServiceTest {
     }
 
     @Test
-    fun `non blank PIN is sent and token plus expiry metadata are persisted`() = runTest {
-        val tvdbApi = mockk<TvdbApi>()
+    fun `non blank PIN is trimmed and token plus expiry metadata are persisted`() = runTest {
+        val loginGateway = mockk<TvdbLoginGateway>()
         val tokenStore = mockk<TvdbTokenStore>()
         val service = TvdbAuthService(
-            tvdbApi = tvdbApi,
+            loginGateway = loginGateway,
             tokenStore = tokenStore,
             nowMillis = { 1_700_000_000_000L }
         )
 
         coEvery { tokenStore.saveToken(any(), any()) } just Runs
-        coEvery { tvdbApi.login(any()) } returns Response.success(loginResponse("subscriber-token"))
+        coEvery {
+            loginGateway.requestToken("tvdb-key", "subscriber-pin", any())
+        } returns validAuth("subscriber-token")
 
         val result = service.loginAndCacheToken(apiKey = "tvdb-key", pin = " subscriber-pin ")
 
         assertTrue(result is TvdbAuthResult.Valid)
         assertEquals("Bearer subscriber-token", (result as TvdbAuthResult.Valid).authorizationHeader)
         coVerify(exactly = 1) {
-            tvdbApi.login(TvdbLoginRequest(apikey = "tvdb-key", pin = "subscriber-pin"))
+            loginGateway.requestToken("tvdb-key", "subscriber-pin", any())
         }
         coVerify(exactly = 1) {
             tokenStore.saveToken(
@@ -83,17 +80,17 @@ class TvdbAuthServiceTest {
 
     @Test
     fun `401 login returns invalid credentials and does not persist cached token`() = runTest {
-        val tvdbApi = mockk<TvdbApi>()
+        val loginGateway = mockk<TvdbLoginGateway>()
         val tokenStore = mockk<TvdbTokenStore>(relaxed = true)
         val service = TvdbAuthService(
-            tvdbApi = tvdbApi,
+            loginGateway = loginGateway,
             tokenStore = tokenStore,
             nowMillis = { 1_700_000_000_000L }
         )
-        val errorBody = """{"status":"failure"}"""
-            .toResponseBody("application/json".toMediaType())
 
-        coEvery { tvdbApi.login(any()) } returns Response.error(401, errorBody)
+        coEvery {
+            loginGateway.requestToken("tvdb-key", "subscriber-pin", any())
+        } returns TvdbAuthResult.InvalidCredentials("Invalid TVDB credentials")
 
         val result = service.loginAndCacheToken(apiKey = "tvdb-key", pin = "subscriber-pin")
 
@@ -103,19 +100,19 @@ class TvdbAuthServiceTest {
 
     @Test
     fun `HTTP 500 login records fallback active and preserves cached token state`() = runTest {
-        val tvdbApi = mockk<TvdbApi>()
+        val loginGateway = mockk<TvdbLoginGateway>()
         val settingsDataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
         val tokenStore = mockk<TvdbTokenStore>(relaxed = true)
         val service = TvdbAuthService(
-            tvdbApi = tvdbApi,
+            loginGateway = loginGateway,
             settingsDataStore = settingsDataStore,
             tokenStore = tokenStore,
             nowMillis = { 1_700_000_000_000L }
         )
-        val errorBody = """{"status":"failure"}"""
-            .toResponseBody("application/json".toMediaType())
 
-        coEvery { tvdbApi.login(any()) } returns Response.error(500, errorBody)
+        coEvery {
+            loginGateway.requestToken("tvdb-key", "subscriber-pin", any())
+        } returns TvdbAuthResult.AuthUnavailable("TVDB login failed with HTTP 500")
 
         val result = service.validateCredentialsResult(apiKey = "tvdb-key", subscriberPin = "subscriber-pin")
 
@@ -138,11 +135,11 @@ class TvdbAuthServiceTest {
 
     @Test
     fun `IOException during token refresh records fallback active and preserves cached token state`() = runTest {
-        val tvdbApi = mockk<TvdbApi>()
+        val loginGateway = mockk<TvdbLoginGateway>()
         val settingsDataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
         val tokenStore = mockk<TvdbTokenStore>(relaxed = true)
         val service = TvdbAuthService(
-            tvdbApi = tvdbApi,
+            loginGateway = loginGateway,
             settingsDataStore = settingsDataStore,
             tokenStore = tokenStore,
             nowMillis = { 1_700_000_000_000L }
@@ -162,7 +159,9 @@ class TvdbAuthServiceTest {
                 credentialFingerprint = "tvdb-key:subscriber-pin".hashCode().toString()
             )
         )
-        coEvery { tvdbApi.login(any()) } throws IOException("offline")
+        coEvery {
+            loginGateway.requestToken("tvdb-key", "subscriber-pin", any())
+        } returns TvdbAuthResult.AuthUnavailable("TVDB login failed: IOException")
 
         val result = service.bearerToken()
 
@@ -182,8 +181,8 @@ class TvdbAuthServiceTest {
         }
     }
 
-    private fun loginResponse(token: String): TvdbLoginResponse = TvdbLoginResponse(
-        status = "success",
-        data = TvdbLoginResponse.Data(token = token)
+    private fun validAuth(token: String): TvdbAuthResult.Valid = TvdbAuthResult.Valid(
+        authorizationHeader = "Bearer $token",
+        expiresAtEpochMillis = 1_700_000_100_000L
     )
 }

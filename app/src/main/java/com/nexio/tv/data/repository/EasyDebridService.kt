@@ -1,7 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
-import com.nexio.tv.data.remote.api.EasyDebridApi
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.debrid.EasyDebridIntegrationProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,7 @@ data class EasyDebridAccountState(
 
 @Singleton
 class EasyDebridService @Inject constructor(
-    private val easyDebridApi: EasyDebridApi,
+    private val easyDebridIntegrationProvider: EasyDebridIntegrationProvider,
     private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore
 ) {
     private val _accountState = MutableStateFlow(EasyDebridAccountState())
@@ -37,31 +38,55 @@ class EasyDebridService @Inject constructor(
             return Result.success(cleared)
         }
 
-        val response = runCatching {
-            easyDebridApi.getUserDetails(authorization = "Bearer $apiKey")
-        }.getOrElse { error ->
-            return Result.failure(
-                IllegalStateException(error.message ?: "Failed to contact EasyDebrid")
-            )
-        }
+        return when (val result = easyDebridIntegrationProvider.fetchAccountInfo(apiKey)) {
+            is IntegrationCallResult.Success -> {
+                val body = result.value
+                val userId = body?.id?.trim().orEmpty()
+                if (userId.isBlank()) {
+                    val errorMessage =
+                        body?.message ?: body?.error ?: "Invalid EasyDebrid API key"
+                    _accountState.value = EasyDebridAccountState(
+                        apiKey = apiKey,
+                        isConnected = false,
+                        errorMessage = errorMessage
+                    )
+                    Result.failure(IllegalStateException(errorMessage))
+                } else {
+                    easyDebridSettingsDataStore.setApiKey(apiKey)
+                    val state = EasyDebridAccountState(
+                        apiKey = apiKey,
+                        userId = userId,
+                        paidUntil = body?.paidUntil,
+                        isConnected = true
+                    )
+                    _accountState.value = state
+                    Result.success(state)
+                }
+            }
 
-        val body = response.body()
-        val userId = body?.id?.trim().orEmpty()
-        if (!response.isSuccessful || userId.isBlank()) {
-            return Result.failure(
-                IllegalStateException(body?.message ?: body?.error ?: "Invalid EasyDebrid API key")
-            )
-        }
+            is IntegrationCallResult.NetworkError -> {
+                val errorMessage = result.throwable.message ?: "Failed to contact EasyDebrid"
+                _accountState.value = EasyDebridAccountState(
+                    apiKey = apiKey,
+                    isConnected = false,
+                    errorMessage = errorMessage
+                )
+                Result.failure(IllegalStateException(errorMessage))
+            }
 
-        easyDebridSettingsDataStore.setApiKey(apiKey)
-        val state = EasyDebridAccountState(
-            apiKey = apiKey,
-            userId = userId,
-            paidUntil = body?.paidUntil,
-            isConnected = true
-        )
-        _accountState.value = state
-        return Result.success(state)
+            else -> {
+                val errorMessage = when (result) {
+                    is IntegrationCallResult.HttpError -> result.reason
+                    else -> "Invalid EasyDebrid API key"
+                } ?: "Invalid EasyDebrid API key"
+                _accountState.value = EasyDebridAccountState(
+                    apiKey = apiKey,
+                    isConnected = false,
+                    errorMessage = errorMessage
+                )
+                Result.failure(IllegalStateException(errorMessage))
+            }
+        }
     }
 
     suspend fun refreshAccountState() {
@@ -71,12 +96,10 @@ class EasyDebridService @Inject constructor(
             return
         }
 
-        val response = runCatching {
-            easyDebridApi.getUserDetails(authorization = "Bearer $apiKey")
-        }.getOrNull()
-        val body = response?.body()
+        val result = easyDebridIntegrationProvider.fetchAccountInfo(apiKey)
+        val body = (result as? IntegrationCallResult.Success)?.value
         val userId = body?.id?.trim().orEmpty()
-        if (response?.isSuccessful == true && userId.isNotBlank()) {
+        if (result is IntegrationCallResult.Success && userId.isNotBlank()) {
             _accountState.value = EasyDebridAccountState(
                 apiKey = apiKey,
                 userId = userId,
@@ -89,7 +112,11 @@ class EasyDebridService @Inject constructor(
         _accountState.value = EasyDebridAccountState(
             apiKey = apiKey,
             isConnected = false,
-            errorMessage = body?.message ?: body?.error ?: "EasyDebrid authentication failed"
+            errorMessage = when (result) {
+                is IntegrationCallResult.HttpError -> result.reason
+                is IntegrationCallResult.NetworkError -> result.throwable.message
+                else -> null
+            } ?: "EasyDebrid authentication failed"
         )
     }
 }

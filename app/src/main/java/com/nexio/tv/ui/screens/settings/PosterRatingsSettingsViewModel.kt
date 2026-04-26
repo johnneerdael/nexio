@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.imageLoader
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -34,6 +37,8 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     private val providerSettingsRepository: ProviderSettingsRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
+    private val profileManager: ProfileManager,
+    private val integrationOwnershipService: IntegrationOwnershipService,
     private val metaRepository: MetaRepository,
     private val catalogRepository: CatalogRepository,
     private val tmdbMetadataService: TmdbMetadataService
@@ -79,7 +84,12 @@ class PosterRatingsSettingsViewModel @Inject constructor(
             withContext(Dispatchers.IO) {
                 // Clear metadata caches that store poster URLs
                 metadataDiskCacheStore.clearAll()
-                homeCatalogSnapshotStore.clear()
+                val profileId = profileManager.activeProfileId.value
+                integrationOwnershipService.syncRails(
+                    RailKeyFactory.homeCatalogNamespace(profileId),
+                    emptyList()
+                )
+                homeCatalogSnapshotStore.clear(profileId = profileId)
                 metaRepository.clearCache()
                 catalogRepository.clearCache()
                 tmdbMetadataService.clearCache()

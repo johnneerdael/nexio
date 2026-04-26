@@ -74,7 +74,8 @@ class TvdbAdvancedMetadataMapperTest {
                 name = "Anna Torv",
                 character = "Olivia Dunham",
                 photo = "https://artworks.thetvdb.com/fake/anna_torv.jpg",
-                tmdbId = null
+                tmdbId = null,
+                provider = "tvdb"
             ),
             result.castMembers[0]
         )
@@ -83,18 +84,22 @@ class TvdbAdvancedMetadataMapperTest {
                 name = "Joshua Jackson",
                 character = "Peter Bishop",
                 photo = "https://artworks.thetvdb.com/fake/joshua_jackson.jpg",
-                tmdbId = null
+                tmdbId = null,
+                provider = "tvdb"
             ),
             result.castMembers[1]
         )
 
         // Networks from originalNetwork/latestNetwork, distinct
         assertEquals(1, result.networks.size)
-        assertEquals(MetaCompany(name = "FOX", kind = MetaCompanyKind.NETWORK), result.networks[0])
+        assertEquals(MetaCompany(name = "FOX", kind = MetaCompanyKind.NETWORK, provider = "tvdb"), result.networks[0])
 
         // Production companies exclude network names
         assertEquals(1, result.productionCompanies.size)
-        assertEquals(MetaCompany(name = "Bad Robot Productions", kind = MetaCompanyKind.COMPANY), result.productionCompanies[0])
+        assertEquals(
+            MetaCompany(name = "Bad Robot Productions", kind = MetaCompanyKind.COMPANY, provider = "tvdb"),
+            result.productionCompanies[0]
+        )
 
         // Genres nonblank, distinct preserving order
         assertEquals(listOf("Science Fiction", "Drama", "Mystery"), result.genres)

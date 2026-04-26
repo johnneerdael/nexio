@@ -3,7 +3,7 @@ package com.nexio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.tvdb.TvdbAuthResult
-import com.nexio.tv.core.tvdb.TvdbAuthService
+import com.nexio.tv.core.tvdb.TvdbSettingsAuthGateway
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
 import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class TvdbSettingsViewModel @Inject constructor(
     private val dataStore: TvdbSettingsDataStore,
-    private val authService: TvdbAuthService,
+    private val authService: TvdbSettingsAuthGateway,
     private val diagnosticsDataStore: TvdbDiagnosticsDataStore
 ) : ViewModel() {
 

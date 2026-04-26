@@ -5,15 +5,14 @@ import android.util.Log
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
-import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.integration.addon.AddonMetaIntegrationProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.mapper.toDomain
-import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
@@ -30,7 +29,7 @@ import javax.inject.Singleton
 @Singleton
 class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val api: AddonApi,
+    private val addonMetaIntegrationProvider: AddonMetaIntegrationProvider,
     private val addonRepository: AddonRepository,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val metadataDiskCacheStore: MetadataDiskCacheStore
@@ -80,7 +79,12 @@ class MetaRepositoryImpl @Inject constructor(
         for (candidateType in typeCandidates) {
             for (candidateId in idCandidates) {
                 val url = buildMetaUrl(addonBaseUrl, candidateType, candidateId)
-                when (val result = safeApiCall { api.getMeta(url) }) {
+                when (
+                    val result = addonMetaIntegrationProvider.getMeta(
+                        addonId = addonBaseUrl.trim().trimEnd('/'),
+                        metaUrl = url
+                    )
+                ) {
                     is NetworkResult.Success -> {
                         val metaDto = result.data.meta
                         if (metaDto != null) {
@@ -185,7 +189,12 @@ class MetaRepositoryImpl @Inject constructor(
                 for (candidateType in typeCandidates) {
                     for (candidateId in idCandidates) {
                         val url = buildMetaUrl(addon.baseUrl, candidateType, candidateId)
-                        when (val result = safeApiCall { api.getMeta(url) }) {
+                        when (
+                            val result = addonMetaIntegrationProvider.getMeta(
+                                addonId = addon.id,
+                                metaUrl = url
+                            )
+                        ) {
                             is NetworkResult.Success -> {
                                 val metaDto = result.data.meta
                                 if (metaDto != null) {
@@ -228,7 +237,12 @@ class MetaRepositoryImpl @Inject constructor(
                     TAG,
                     "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$candidateId url=${sanitizeUrlForLogs(url)}"
                 )
-                when (val result = safeApiCall { api.getMeta(url) }) {
+                when (
+                    val result = addonMetaIntegrationProvider.getMeta(
+                        addonId = addon.id,
+                        metaUrl = url
+                    )
+                ) {
                     is NetworkResult.Success -> {
                         val metaDto = result.data.meta
                         if (metaDto != null) {

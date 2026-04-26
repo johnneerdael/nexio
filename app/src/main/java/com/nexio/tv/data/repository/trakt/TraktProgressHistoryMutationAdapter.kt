@@ -2,11 +2,7 @@ package com.nexio.tv.data.repository.trakt
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import com.nexio.tv.data.remote.api.TraktApi
-import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
-import com.nexio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nexio.tv.data.repository.TrackingAuthSession
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
@@ -25,8 +21,7 @@ import javax.inject.Singleton
 
 @Singleton
 class TraktProgressHistoryMutationAdapter @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
+    private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
     private val traktProgressService: TraktProgressService
 ) : TraktMutationAdapter {
 
@@ -102,9 +97,10 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
         )
 
         val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
-        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.addHistory(authHeader, body)
-        } ?: return TraktMutationExecutionResult.Failure(
+        val response = traktProgressMutationExecutor.addHistory(
+            session = session,
+            body = body
+        ) ?: return TraktMutationExecutionResult.Failure(
             reason = "Trakt request failed"
         )
 
@@ -129,9 +125,10 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
         ) ?: return TraktMutationExecutionResult.Success(httpStatusCode = 204)
 
         val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
-        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.removeHistory(authHeader, body)
-        } ?: return TraktMutationExecutionResult.Failure(
+        val response = traktProgressMutationExecutor.removeHistory(
+            session = session,
+            body = body
+        ) ?: return TraktMutationExecutionResult.Failure(
             reason = "Trakt request failed"
         )
 
@@ -149,9 +146,10 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
     private suspend fun executePlaybackDelete(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val playbackId = envelope.playbackId()
         val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
-        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.deletePlayback(authHeader, playbackId)
-        } ?: return TraktMutationExecutionResult.Failure(
+        val response = traktProgressMutationExecutor.deletePlayback(
+            session = session,
+            playbackId = playbackId
+        ) ?: return TraktMutationExecutionResult.Failure(
             reason = "Trakt request failed"
         )
 

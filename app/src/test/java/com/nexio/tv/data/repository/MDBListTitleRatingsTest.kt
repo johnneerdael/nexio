@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingItemDto
@@ -30,7 +32,11 @@ class MDBListTitleRatingsTest {
         val api = mockk<MDBListApi>()
         val settings = mockk<MDBListSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        val repository = MDBListRepository(api, settings, tmdbService)
+        val repository = MDBListRepository(
+            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
+            settingsDataStore = settings,
+            tmdbService = tmdbService
+        )
 
         every { settings.settings } returns flowOf(
             MDBListSettings(
@@ -68,7 +74,11 @@ class MDBListTitleRatingsTest {
         val api = mockk<MDBListApi>()
         val settings = mockk<MDBListSettingsDataStore>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        val repository = MDBListRepository(api, settings, tmdbService)
+        val repository = MDBListRepository(
+            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
+            settingsDataStore = settings,
+            tmdbService = tmdbService
+        )
 
         every { settings.settings } returns flowOf(
             MDBListSettings(

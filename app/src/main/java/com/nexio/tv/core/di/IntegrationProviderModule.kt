@@ -1,5 +1,7 @@
 package com.nexio.tv.core.di
 
+import com.nexio.tv.core.tvdb.TvdbLoginGateway
+import com.nexio.tv.data.integration.tvdb.TvdbLoginIntegrationProvider
 import com.nexio.tv.data.repository.DefaultProviderSettingsRepository
 import com.nexio.tv.data.repository.DefaultReviewsRepository
 import com.nexio.tv.data.repository.ProviderSettingsRepository
@@ -24,4 +26,10 @@ abstract class IntegrationProviderModule {
     abstract fun bindReviewsRepository(
         impl: DefaultReviewsRepository
     ): ReviewsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTvdbLoginGateway(
+        impl: TvdbLoginIntegrationProvider
+    ): TvdbLoginGateway
 }

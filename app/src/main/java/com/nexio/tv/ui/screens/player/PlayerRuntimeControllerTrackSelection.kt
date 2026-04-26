@@ -8,17 +8,21 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.core.integration.IntegrationCallResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 internal fun PlayerRuntimeController.filterEpisodeStreamsByAddon(addonName: String?) {
     val allStreams = _uiState.value.episodeAllStreams
@@ -191,6 +195,10 @@ internal fun PlayerRuntimeController.disableSubtitles() {
 }
 
 internal fun PlayerRuntimeController.buildAddonSubtitleTrackId(subtitle: Subtitle): String {
+    return addonSubtitleTrackId(subtitle)
+}
+
+private fun addonSubtitleTrackId(subtitle: Subtitle): String {
     val urlHashSuffix = subtitle.url.hashCode().toUInt().toString(16)
     return "${PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX}${subtitle.id}:$urlHashSuffix"
 }
@@ -200,9 +208,13 @@ internal fun PlayerRuntimeController.addonSubtitleKey(subtitle: Subtitle): Strin
 }
 
 internal fun PlayerRuntimeController.toSubtitleConfiguration(subtitle: Subtitle): MediaItem.SubtitleConfiguration {
+    return addonSubtitleConfiguration(subtitle)
+}
+
+private fun addonSubtitleConfiguration(subtitle: Subtitle): MediaItem.SubtitleConfiguration {
     val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
     val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
-    val addonTrackId = buildAddonSubtitleTrackId(subtitle)
+    val addonTrackId = addonSubtitleTrackId(subtitle)
 
     return MediaItem.SubtitleConfiguration.Builder(
         android.net.Uri.parse(subtitle.url)
@@ -261,8 +273,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
                 subtitle = subtitle,
                 selectedSubtitle = selectedSubtitle,
                 player = player,
-                normalizedLang = normalizedLang,
-                addonTrackId = addonTrackId
+                normalizedLang = normalizedLang
             )
         }
         if (addonSubtitleSupportsOverlay(subtitleMimeType)) {
@@ -290,11 +301,9 @@ internal fun PlayerRuntimeController.selectAddonSubtitleViaMediaSourceRefresh(
     subtitle: Subtitle,
     selectedSubtitle: Subtitle,
     player: ExoPlayer,
-    normalizedLang: String,
-    addonTrackId: String
+    normalizedLang: String
 ) {
     pendingAddonSubtitleLanguage = normalizedLang
-    pendingAddonSubtitleTrackId = addonTrackId
     pendingAudioSelectionAfterSubtitleRefresh =
         captureCurrentAudioSelectionForSubtitleRefresh(player)
 
@@ -312,21 +321,36 @@ internal fun PlayerRuntimeController.selectAddonSubtitleViaMediaSourceRefresh(
     )
 
     scope.launch {
-        // Use the addon-provided subtitle URL directly. A previous
-        // attempt to pre-download the .srt to a local cache was reverted
-        // because many addons require specific request headers that a
-        // bare HttpURLConnection cannot replicate, which caused Media3
-        // to receive HTML/error bytes and silently drop the track.
-        // Media3's own DataSource (with the addon URL) handles the fetch
-        // correctly, so let it do the work; the swap-flag below still
-        // suppresses the visible rebuffer flash.
-        val subtitleConfigurations = (_uiState.value.addonSubtitles + subtitle)
-            .distinctBy { "${it.id}|${it.url}" }
-            .map(::toSubtitleConfiguration)
-        attachedAddonSubtitleKeys = (_uiState.value.addonSubtitles + subtitle)
-            .distinctBy { addonSubtitleKey(it) }
-            .map(::addonSubtitleKey)
-            .toSet()
+        val preparedSelection = prepareAddonSubtitleRefreshSelectionViaProviderWithTimeout(
+            cacheRoot = File(context.cacheDir, "addon-subtitles"),
+            existingAddonSubtitles = _uiState.value.addonSubtitles,
+            subtitle = subtitle,
+            selectedSubtitle = selectedSubtitle,
+            timeoutMs = SUBTITLE_SWAP_TIMEOUT_MS,
+            headers = currentHeaders,
+            onTimeout = {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "ADDON_SUB: preparation TIMEOUT after ${SUBTITLE_SWAP_TIMEOUT_MS}ms; aborting swap"
+                )
+                _uiState.update {
+                    it.copy(
+                        isSwappingAddonSubtitle = false,
+                        selectedAddonSubtitle = previousSelectedAddonSubtitle
+                    )
+                }
+                pendingAddonSubtitleLanguage = null
+                pendingAddonSubtitleTrackId = null
+                pendingAudioSelectionAfterSubtitleRefresh = null
+            },
+            downloadBytes = subtitleSourceDownloadIntegrationProvider::downloadBytes
+        )
+        if (preparedSelection == null) {
+            return@launch
+        }
+        pendingAddonSubtitleTrackId = preparedSelection.addonTrackId
+        val subtitleConfigurations = preparedSelection.subtitleConfigurations
+        attachedAddonSubtitleKeys = preparedSelection.attachedAddonSubtitleKeys
         Log.i(
             PlayerRuntimeController.TAG,
             "ADDON_SUB: building refreshed source subs=${subtitleConfigurations.size} " +
@@ -382,7 +406,8 @@ internal fun PlayerRuntimeController.selectAddonSubtitleViaMediaSourceRefresh(
 
         _uiState.update {
             it.copy(
-                selectedAddonSubtitle = selectedSubtitle,
+                addonSubtitles = preparedSelection.effectiveAddonSubtitles,
+                selectedAddonSubtitle = preparedSelection.selectedSubtitle,
                 selectedSubtitleTrackIndex = -1,
                 addonOverlayCues = emptyList()
             )
@@ -401,73 +426,216 @@ internal fun PlayerRuntimeController.selectAddonSubtitleViaMediaSourceRefresh(
 
 private const val SUBTITLE_SWAP_TIMEOUT_MS: Long = 15_000L
 
-/**
- * Downloads the addon subtitle to a local cache file with fsync so the
- * resulting file URI is safe to hand to Media3 immediately. Returns a
- * Subtitle whose `url` points at the cached file, or null if the download
- * failed (caller will fall back to the original remote URL).
- */
-private fun PlayerRuntimeController.materializeAddonSubtitleToCache(
-    subtitle: Subtitle
+internal data class PreparedAddonSubtitleRefreshSelection(
+    val subtitle: Subtitle,
+    val selectedSubtitle: Subtitle,
+    val effectiveAddonSubtitles: List<Subtitle>,
+    val subtitleConfigurations: List<MediaItem.SubtitleConfiguration>,
+    val attachedAddonSubtitleKeys: Set<String>,
+    val addonTrackId: String
+)
+
+internal suspend fun prepareAddonSubtitleRefreshSelectionViaProvider(
+    cacheRoot: File,
+    existingAddonSubtitles: List<Subtitle>,
+    subtitle: Subtitle,
+    selectedSubtitle: Subtitle,
+    headers: Map<String, String> = emptyMap(),
+    downloadBytes: suspend (String, Map<String, String>) -> IntegrationCallResult<ByteArray>
+): PreparedAddonSubtitleRefreshSelection {
+    val effectiveSubtitle = materializeAddonSubtitleToCacheViaProvider(
+        cacheRoot = cacheRoot,
+        subtitle = subtitle,
+        headers = headers,
+        downloadBytes = downloadBytes
+    ) ?: subtitle
+    val effectiveSelectedSubtitle = if (selectedSubtitle.url == subtitle.url) {
+        selectedSubtitle.copy(url = effectiveSubtitle.url)
+    } else {
+        selectedSubtitle
+    }
+    val effectiveAddonSubtitles = replaceAddonSubtitleForRefresh(
+        existingAddonSubtitles = existingAddonSubtitles,
+        originalSubtitle = subtitle,
+        effectiveSubtitle = effectiveSubtitle
+    )
+
+    return PreparedAddonSubtitleRefreshSelection(
+        subtitle = effectiveSubtitle,
+        selectedSubtitle = effectiveSelectedSubtitle,
+        effectiveAddonSubtitles = effectiveAddonSubtitles,
+        subtitleConfigurations = effectiveAddonSubtitles
+            .distinctBy(::addonSubtitleSelectionKey)
+            .map(::addonSubtitleConfiguration),
+        attachedAddonSubtitleKeys = effectiveAddonSubtitles
+            .distinctBy(::addonSubtitleSelectionKey)
+            .map(::addonSubtitleSelectionKey)
+            .toSet(),
+        addonTrackId = addonSubtitleTrackId(effectiveSubtitle)
+    )
+}
+
+internal suspend fun prepareAddonSubtitleRefreshSelectionViaProviderWithTimeout(
+    cacheRoot: File,
+    existingAddonSubtitles: List<Subtitle>,
+    subtitle: Subtitle,
+    selectedSubtitle: Subtitle,
+    timeoutMs: Long = SUBTITLE_SWAP_TIMEOUT_MS,
+    headers: Map<String, String> = emptyMap(),
+    onTimeout: suspend () -> Unit = {},
+    downloadBytes: suspend (String, Map<String, String>) -> IntegrationCallResult<ByteArray>
+): PreparedAddonSubtitleRefreshSelection? {
+    val preparedSelection = withTimeoutOrNull(timeoutMs) {
+        prepareAddonSubtitleRefreshSelectionViaProvider(
+            cacheRoot = cacheRoot,
+            existingAddonSubtitles = existingAddonSubtitles,
+            subtitle = subtitle,
+            selectedSubtitle = selectedSubtitle,
+            headers = headers,
+            downloadBytes = downloadBytes
+        )
+    }
+    if (preparedSelection != null) {
+        return preparedSelection
+    }
+
+    onTimeout()
+    return null
+}
+
+private fun replaceAddonSubtitleForRefresh(
+    existingAddonSubtitles: List<Subtitle>,
+    originalSubtitle: Subtitle,
+    effectiveSubtitle: Subtitle
+): List<Subtitle> {
+    val originalKey = addonSubtitleSelectionKey(originalSubtitle)
+    var replaced = false
+    val updatedSubtitles = existingAddonSubtitles.map { existingSubtitle ->
+        if (!replaced && addonSubtitleSelectionKey(existingSubtitle) == originalKey) {
+            replaced = true
+            effectiveSubtitle
+        } else {
+            existingSubtitle
+        }
+    }
+
+    return if (replaced) updatedSubtitles else updatedSubtitles + effectiveSubtitle
+}
+
+private fun addonSubtitleSelectionKey(subtitle: Subtitle): String {
+    return "${subtitle.id}|${subtitle.url}"
+}
+
+internal suspend fun materializeAddonSubtitleToCacheViaProvider(
+    cacheRoot: File,
+    subtitle: Subtitle,
+    headers: Map<String, String> = emptyMap(),
+    downloadBytes: suspend (String, Map<String, String>) -> IntegrationCallResult<ByteArray>
 ): Subtitle? {
     val originalUrl = subtitle.url
     if (originalUrl.startsWith("file:")) return subtitle
 
     return try {
-        val cacheRoot = File(context.cacheDir, "addon-subtitles").apply { mkdirs() }
-        val extension = PlayerSubtitleUtils.mimeTypeFromUrl(originalUrl)
-            .let { mime ->
-                when {
-                    mime.endsWith("srt", ignoreCase = true) -> "srt"
-                    mime.endsWith("vtt", ignoreCase = true) -> "vtt"
-                    originalUrl.lowercase().substringBefore('?').endsWith(".vtt") -> "vtt"
-                    else -> "srt"
-                }
-            }
+        val extension = addonSubtitleCacheExtension(originalUrl)
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(originalUrl.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-        val cacheFile = File(cacheRoot, "$digest.$extension")
+        val cacheFile = runInterruptible(Dispatchers.IO) {
+            cacheRoot.mkdirs()
+            File(cacheRoot, "$digest.$extension")
+        }
 
-        if (!cacheFile.exists() || cacheFile.length() == 0L) {
-            val connection = (URL(originalUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8_000
-                readTimeout = 8_000
-                instanceFollowRedirects = true
-                requestMethod = "GET"
-            }
-            try {
-                if (connection.responseCode !in 200..299) {
-                    Log.w(
-                        PlayerRuntimeController.TAG,
-                        "Addon subtitle download failed http=${connection.responseCode}"
-                    )
-                    return null
-                }
-                connection.inputStream.use { input ->
-                    FileOutputStream(cacheFile).use { fos ->
-                        input.copyTo(fos)
-                        fos.flush()
+        val needsWrite = runInterruptible(Dispatchers.IO) {
+            !cacheFile.exists() || cacheFile.length() == 0L
+        }
+        if (needsWrite) {
+            when (val result = downloadBytes(originalUrl, headers)) {
+                is IntegrationCallResult.Success -> {
+                    runInterruptible(Dispatchers.IO) {
+                        val tempFile = File.createTempFile(
+                            "${digest}.",
+                            ".${extension}.tmp",
+                            cacheRoot
+                        )
                         try {
-                            fos.fd.sync()
-                        } catch (_: Throwable) {
-                            // sync may not be supported on every fs; ignore.
+                            FileOutputStream(tempFile).use { fos ->
+                                fos.write(result.value)
+                                fos.flush()
+                                try {
+                                    fos.fd.sync()
+                                } catch (_: Throwable) {
+                                    // sync may not be supported on every fs; ignore.
+                                }
+                            }
+                            moveAddonSubtitleCacheFile(tempFile = tempFile, cacheFile = cacheFile)
+                        } catch (throwable: Throwable) {
+                            tempFile.delete()
+                            throw throwable
+                        } finally {
+                            if (tempFile.exists()) {
+                                tempFile.delete()
+                            }
                         }
                     }
                 }
-            } finally {
-                connection.disconnect()
+                is IntegrationCallResult.HttpError -> {
+                    Log.w(
+                        PlayerRuntimeController.TAG,
+                        "Addon subtitle download failed http=${result.statusCode}"
+                    )
+                    return null
+                }
+                is IntegrationCallResult.NetworkError -> throw result.throwable
+                IntegrationCallResult.Missing -> {
+                    Log.w(PlayerRuntimeController.TAG, "Addon subtitle response body is empty")
+                    return null
+                }
             }
         }
 
-        if (!cacheFile.exists() || cacheFile.length() == 0L) {
+        val hasBytes = runInterruptible(Dispatchers.IO) {
+            cacheFile.exists() && cacheFile.length() > 0L
+        }
+        if (!hasBytes) {
             Log.w(PlayerRuntimeController.TAG, "Addon subtitle cache file empty after write")
             return null
         }
         subtitle.copy(url = cacheFile.toURI().toString())
     } catch (t: Throwable) {
+        if (t is CancellationException) throw t
         Log.w(PlayerRuntimeController.TAG, "materializeAddonSubtitleToCache failed: ${t.message}")
         null
+    }
+}
+
+private fun moveAddonSubtitleCacheFile(tempFile: File, cacheFile: File) {
+    val tempPath = tempFile.toPath()
+    val cachePath = cacheFile.toPath()
+
+    try {
+        Files.move(
+            tempPath,
+            cachePath,
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.ATOMIC_MOVE
+        )
+    } catch (exception: AtomicMoveNotSupportedException) {
+        Files.move(tempPath, cachePath, StandardCopyOption.REPLACE_EXISTING)
+    }
+}
+
+private fun addonSubtitleCacheExtension(url: String): String {
+    val lowered = url.lowercase().substringBefore('#').substringBefore('?')
+    val fileName = lowered.substringAfterLast('/', "")
+
+    return when {
+        fileName.endsWith(".ass") -> "ass"
+        fileName.endsWith(".ssa") -> "ssa"
+        fileName.endsWith(".vtt") || fileName.endsWith(".webvtt") -> "vtt"
+        fileName.endsWith(".srt") -> "srt"
+        PlayerSubtitleUtils.mimeTypeFromUrl(url) == MimeTypes.TEXT_SSA -> "ass"
+        PlayerSubtitleUtils.mimeTypeFromUrl(url) == MimeTypes.TEXT_VTT -> "vtt"
+        else -> "srt"
     }
 }
 

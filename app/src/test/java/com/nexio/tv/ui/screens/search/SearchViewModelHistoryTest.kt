@@ -7,8 +7,8 @@ import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
-import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
+import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.remote.api.TmdbMediaResult
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryService
@@ -69,7 +69,7 @@ class SearchViewModelHistoryTest {
             layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
             playerSettingsDataStore = playerSettingsDataStoreForTest(),
             searchHistoryDataStore = historyStore,
-            imdbSearchService = EmptyImdbSearchService,
+            imdbTitleSearchRepository = EmptyImdbTitleSearchRepository,
             imdbPosterLookupService = mockk<ImdbPosterLookupService>().apply {
                 coEvery { lookupPosterUrl(any(), any(), any()) } returns null
             },
@@ -94,8 +94,8 @@ class SearchViewModelHistoryTest {
         assertEquals(listOf("Severance"), recentSearches)
     }
 
-    private object EmptyImdbSearchService : ImdbSearchService {
-        override suspend fun search(query: String, types: Set<String>): List<ImdbSuggestion> = emptyList()
+    private object EmptyImdbTitleSearchRepository : ImdbTitleSearchRepository {
+        override suspend fun search(query: String): List<ImdbSuggestion> = emptyList()
     }
 
     private class EmptyAddonRepository : AddonRepository {

@@ -1,5 +1,7 @@
 package com.nexio.tv.core.poster
 
+import com.nexio.tv.core.image.PosterIntegrationRequest
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterRatingsProvider
@@ -28,10 +30,10 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        assertEquals(
-            "https://api.ratingposterdb.com/rpdb-key/imdb/poster-default/tt15940132.jpg",
-            resolved
-        )
+        val request = PosterIntegrationRequest.fromModel(resolved!!)
+        assertEquals(IntegrationProvider.RPDB, request?.provider)
+        assertEquals("rpdb-key", request?.apiKey)
+        assertEquals("imdb/poster-default/tt15940132.jpg", request?.path)
     }
 
     @Test
@@ -46,10 +48,10 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        assertEquals(
-            "https://api.top-posters.com/top-key/tmdb/poster/series-123.jpg",
-            resolved
-        )
+        val request = PosterIntegrationRequest.fromModel(resolved!!)
+        assertEquals(IntegrationProvider.TOP_POSTERS, request?.provider)
+        assertEquals("top-key", request?.apiKey)
+        assertEquals("tmdb/poster/series-123.jpg", request?.path)
     }
 
     @Test
@@ -64,10 +66,10 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        assertEquals(
-            "https://api.top-posters.com/top-key/tvdb/poster/121361.jpg",
-            resolved
-        )
+        val request = PosterIntegrationRequest.fromModel(resolved!!)
+        assertEquals(IntegrationProvider.TOP_POSTERS, request?.provider)
+        assertEquals("top-key", request?.apiKey)
+        assertEquals("tvdb/poster/121361.jpg", request?.path)
     }
 
     @Test
@@ -82,9 +84,9 @@ class PosterRatingsUrlResolverTest {
             )
         )
 
-        assertEquals(
-            "https://api.ratingposterdb.com/rpdb-key/tvdb/poster-default/121361.jpg",
-            resolved
-        )
+        val request = PosterIntegrationRequest.fromModel(resolved!!)
+        assertEquals(IntegrationProvider.RPDB, request?.provider)
+        assertEquals("rpdb-key", request?.apiKey)
+        assertEquals("tvdb/poster-default/121361.jpg", request?.path)
     }
 }

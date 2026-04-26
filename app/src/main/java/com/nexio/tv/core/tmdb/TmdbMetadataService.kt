@@ -2,27 +2,22 @@ package com.nexio.tv.core.tmdb
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.metadata.MetadataApiKeyResolver
-import com.nexio.tv.core.metadata.MetadataProviderConfig
-import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbImage
 import com.nexio.tv.data.remote.api.TmdbPersonCreditCast
 import com.nexio.tv.data.remote.api.TmdbPersonCreditCrew
 import com.nexio.tv.data.remote.api.TmdbRecommendationResult
-import com.nexio.tv.data.remote.api.TmdbReviewResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
-import com.nexio.tv.domain.model.MetaReviewSource
 import com.nexio.tv.domain.model.PersonDetail
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -31,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -45,47 +41,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 private const val TAG = "TmdbMetadataService"
 
 @Singleton
-class TmdbMetadataService(
+class TmdbMetadataService @Inject constructor(
     @ApplicationContext private val appContext: Context,
-    private val tmdbApi: TmdbApi,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val tmdbIntegrationProvider: TmdbIntegrationProvider
 ) {
-    @Inject
-    constructor(
-        @ApplicationContext appContext: Context,
-        tmdbApi: TmdbApi,
-        posterRatingsUrlResolver: PosterRatingsUrlResolver,
-        metadataApiKeyResolver: MetadataApiKeyResolver,
-        metadataDiskCacheStore: MetadataDiskCacheStore
-    ) : this(
-        appContext = appContext,
-        tmdbApi = tmdbApi,
-        posterRatingsUrlResolver = posterRatingsUrlResolver,
-        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() },
-        metadataDiskCacheStore = metadataDiskCacheStore
-    )
-
-    constructor(
-        appContext: Context,
-        tmdbApi: TmdbApi,
-        posterRatingsUrlResolver: PosterRatingsUrlResolver,
-        tmdbSettingsDataStore: TmdbSettingsDataStore,
-        metadataDiskCacheStore: MetadataDiskCacheStore
-    ) : this(
-        appContext = appContext,
-        tmdbApi = tmdbApi,
-        posterRatingsUrlResolver = posterRatingsUrlResolver,
-        tmdbCredentialProvider = {
-            MetadataProviderConfig.resolveCredential(
-                customApiKey = tmdbSettingsDataStore.settings.first().apiKey,
-                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
-            )
-        },
-        metadataDiskCacheStore = metadataDiskCacheStore
-    )
-
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
     private val episodeSeasonCache = ConcurrentHashMap<String, Map<Int, TmdbEpisodeEnrichment>>()
@@ -102,280 +63,12 @@ class TmdbMetadataService(
         withContext(Dispatchers.IO) {
             val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
             val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
-            val providerToken = posterProviderCacheToken(activePosterProvider)
-            val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:$providerToken"
-            enrichmentCache[cacheKey]?.let { return@withContext it }
-            metadataDiskCacheStore.readTmdbEnrichment(
-                tmdbKey = "$tmdbId:${contentType.name}",
-                languageTag = normalizedLanguage,
-                providerToken = providerToken
-            )?.let { cached ->
-                enrichmentCache[cacheKey] = cached
-                return@withContext cached
-            }
-            val apiKey = requireApiKey() ?: return@withContext null
-
-            val numericId = tmdbId.toIntOrNull() ?: return@withContext null
-            val tmdbType = when (contentType) {
-                ContentType.SERIES, ContentType.TV -> "tv"
-                else -> "movie"
-            }
-
-            try {
-                val includeImageLanguage = buildString {
-                    append(normalizedLanguage.substringBefore("-"))
-                    append(",")
-                    append(normalizedLanguage)
-                    append(",en,null")
-                }
-
-                val details = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvDetails(
-                        tvId = numericId,
-                        apiKey = apiKey,
-                        language = normalizedLanguage,
-                        appendToResponse = "credits,images,content_ratings",
-                        includeImageLanguage = includeImageLanguage
-                    )
-
-                    else -> tmdbApi.getMovieDetails(
-                        movieId = numericId,
-                        apiKey = apiKey,
-                        language = normalizedLanguage,
-                        appendToResponse = "credits,images,release_dates",
-                        includeImageLanguage = includeImageLanguage
-                    )
-                }.body()
-
-                val credits = details?.credits
-                val images = details?.images
-                val ageRating = when (tmdbType) {
-                    "tv" -> selectTvAgeRating(details?.contentRatings?.results.orEmpty(), normalizedLanguage)
-                    else -> selectMovieAgeRating(details?.releaseDates?.results.orEmpty(), normalizedLanguage)
-                }
-
-                val genres = details?.genres?.mapNotNull { genre ->
-                    genre.name.trim().takeIf { name -> name.isNotBlank() }
-                } ?: emptyList()
-                val description = details?.overview?.takeIf { it.isNotBlank() }
-                val releaseInfo = details?.releaseDate
-                    ?: details?.firstAirDate
-                val rating = details?.voteAverage
-                val runtime = details?.runtime ?: details?.episodeRunTime?.firstOrNull()
-                val countries = details?.productionCountries
-                    ?.mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
-                    ?.takeIf { it.isNotEmpty() }
-                    ?: details?.originCountry?.takeIf { it.isNotEmpty() }
-                val language = details?.originalLanguage?.takeIf { it.isNotBlank() }
-                val localizedTitle = (details?.title ?: details?.name)?.takeIf { it.isNotBlank() }
-                val productionCompanies = details?.productionCompanies
-                    .orEmpty()
-                    .mapNotNull { company ->
-                        val name = company.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        MetaCompany(
-                            tmdbId = company.id,
-                            name = name,
-                            logo = buildImageUrl(company.logoPath, size = "w300"),
-                            kind = MetaCompanyKind.COMPANY,
-                            provider = "tmdb",
-                            providerId = company.id?.toString()
-                        )
-                    }
-                val networks = details?.networks
-                    .orEmpty()
-                    .mapNotNull { network ->
-                        val name = network.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        MetaCompany(
-                            tmdbId = network.id,
-                            name = name,
-                            logo = buildImageUrl(network.logoPath, size = "w300"),
-                            kind = MetaCompanyKind.NETWORK,
-                            provider = "tmdb",
-                            providerId = network.id?.toString()
-                        )
-                    }
-                val poster = if (activePosterProvider == null) {
-                    buildImageUrl(details?.posterPath, size = "w500")
-                } else {
-                    null
-                }
-                val backdrop = buildImageUrl(details?.backdropPath, size = "w1280")
-                
-                val collectionId = details?.belongsToCollection?.id
-                val collectionName = details?.belongsToCollection?.name
-
-                val logoPath = images?.logos
-                    ?.sortedWith(
-                        compareByDescending<com.nexio.tv.data.remote.api.TmdbImage> {
-                            it.iso6391 == normalizedLanguage.substringBefore("-")
-                        }
-                            .thenByDescending { it.iso6391 == "en" }
-                            .thenByDescending { it.iso6391 == null }
-                    )
-                    ?.firstOrNull()
-                    ?.filePath
-
-                val logo = buildImageUrl(logoPath, size = "w500")
-
-                val castMembers = credits?.cast
-                    .orEmpty()
-                    .mapNotNull { member ->
-                        val name = member.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        MetaCastMember(
-                            name = name,
-                            character = member.character?.takeIf { it.isNotBlank() },
-                            photo = buildImageUrl(member.profilePath, size = "w500"),
-                            tmdbId = member.id,
-                            provider = "tmdb",
-                            providerId = member.id?.toString()
-                        )
-                    }
-
-                val creatorMembers = if (tmdbType == "tv") {
-                    details?.createdBy
-                        .orEmpty()
-                        .mapNotNull { creator ->
-                            val tmdbPersonId = creator.id ?: return@mapNotNull null
-                            val name = creator.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                            MetaCastMember(
-                                name = name,
-                                character = "Creator",
-                                photo = buildImageUrl(creator.profilePath, size = "w500"),
-                                tmdbId = tmdbPersonId,
-                                provider = "tmdb",
-                                providerId = tmdbPersonId.toString()
-                            )
-                        }
-                        .distinctBy { it.tmdbId ?: it.name.lowercase() }
-                } else {
-                    emptyList()
-                }
-
-                val creator = if (tmdbType == "tv") {
-                    details?.createdBy
-                        .orEmpty()
-                        .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
-                } else {
-                    emptyList()
-                }
-
-                val directorCrew = credits?.crew
-                    .orEmpty()
-                    .filter { it.job.equals("Director", ignoreCase = true) }
-
-                val directorMembers = directorCrew
-                    .mapNotNull { member ->
-                        val tmdbPersonId = member.id ?: return@mapNotNull null
-                        val name = member.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        MetaCastMember(
-                            name = name,
-                            character = "Director",
-                            photo = buildImageUrl(member.profilePath, size = "w500"),
-                            tmdbId = tmdbPersonId,
-                            provider = "tmdb",
-                            providerId = tmdbPersonId.toString()
-                        )
-                    }
-                    .distinctBy { it.tmdbId ?: it.name.lowercase() }
-
-                val director = directorCrew
-                    .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
-
-                val writerCrew = credits?.crew
-                    .orEmpty()
-                    .filter { crew ->
-                        val job = crew.job?.lowercase() ?: ""
-                        job.contains("writer") || job.contains("screenplay")
-                    }
-
-                val writerMembers = writerCrew
-                    .mapNotNull { member ->
-                        val tmdbPersonId = member.id ?: return@mapNotNull null
-                        val name = member.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        MetaCastMember(
-                            name = name,
-                            character = "Writer",
-                            photo = buildImageUrl(member.profilePath, size = "w500"),
-                            tmdbId = tmdbPersonId,
-                            provider = "tmdb",
-                            providerId = tmdbPersonId.toString()
-                        )
-                    }
-                    .distinctBy { it.tmdbId ?: it.name.lowercase() }
-
-                val writer = writerCrew
-                    .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
-
-                // Only expose either Director or Writer people (prefer Director).
-                val hasCreator = creatorMembers.isNotEmpty() || creator.isNotEmpty()
-                val hasDirector = directorMembers.isNotEmpty() || director.isNotEmpty()
-
-                val exposedDirectorMembers = when {
-                    tmdbType == "tv" && hasCreator -> creatorMembers
-                    tmdbType != "tv" && hasDirector -> directorMembers
-                    else -> emptyList()
-                }
-                val exposedWriterMembers = when {
-                    tmdbType == "tv" && hasCreator -> emptyList()
-                    tmdbType != "tv" && hasDirector -> emptyList()
-                    else -> writerMembers
-                }
-
-                val exposedDirector = when {
-                    tmdbType == "tv" && hasCreator -> creator
-                    tmdbType != "tv" && hasDirector -> director
-                    else -> emptyList()
-                }
-                val exposedWriter = when {
-                    tmdbType == "tv" && hasCreator -> emptyList()
-                    tmdbType != "tv" && hasDirector -> emptyList()
-                    else -> writer
-                }
-
-                if (
-                    genres.isEmpty() && description == null && backdrop == null && logo == null &&
-                    poster == null && castMembers.isEmpty() && director.isEmpty() && writer.isEmpty() &&
-                    releaseInfo == null && rating == null && runtime == null && countries.isNullOrEmpty() && language == null &&
-                    productionCompanies.isEmpty() && networks.isEmpty() && ageRating == null
-                ) {
-                    return@withContext null
-                }
-
-                val enrichment = TmdbEnrichment(
-                    localizedTitle = localizedTitle,
-                    description = description,
-                    genres = genres,
-                    backdrop = backdrop,
-                    logo = logo,
-                    poster = poster,
-                    directorMembers = exposedDirectorMembers,
-                    writerMembers = exposedWriterMembers,
-                    castMembers = castMembers,
-                    releaseInfo = releaseInfo,
-                    rating = rating,
-                    runtimeMinutes = runtime,
-                    director = exposedDirector,
-                    writer = exposedWriter,
-                    productionCompanies = productionCompanies,
-                    networks = networks,
-                    ageRating = ageRating,
-                    countries = countries,
-                    language = language,
-                    collectionId = collectionId,
-                    collectionName = collectionName
-                )
-                enrichmentCache[cacheKey] = enrichment
-                metadataDiskCacheStore.writeTmdbEnrichment(
-                    tmdbKey = "$tmdbId:${contentType.name}",
-                    languageTag = normalizedLanguage,
-                    providerToken = providerToken,
-                    enrichment = enrichment
-                )
-                enrichment
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch TMDB enrichment: ${e.message}", e)
-                null
-            }
+            tmdbIntegrationProvider.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = contentType,
+                normalizedLanguage = normalizedLanguage,
+                activePosterProvider = activePosterProvider
+            )
         }
 
     /**
@@ -390,10 +83,26 @@ class TmdbMetadataService(
     ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
         val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
         val apiKey = requireApiKey() ?: return@withContext emptyList()
+
         try {
-            tmdbApi.getTvSeasonDetails(tvId, seasonNumber, apiKey, normalizedLanguage)
-                .body()?.episodes.orEmpty()
+            when (val seasonResponse = tmdbIntegrationProvider.loadTvSeasonEpisodes(
+                tvId = tvId,
+                seasonNumber = seasonNumber,
+                apiKey = apiKey,
+                normalizedLanguage = normalizedLanguage
+            )) {
+                is IntegrationLoadResult.Success -> seasonResponse.value
+                is IntegrationLoadResult.NetworkError -> {
+                    Log.w(
+                        TAG,
+                        "fetchSeasonEpisodes failed for tvId=$tvId season=$seasonNumber: ${seasonResponse.throwable.message}"
+                    )
+                    emptyList()
+                }
+                is IntegrationLoadResult.HttpError -> emptyList()
+            }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.w(TAG, "fetchSeasonEpisodes failed for tvId=$tvId season=$seasonNumber: ${e.message}")
             emptyList()
         }
@@ -473,22 +182,45 @@ class TmdbMetadataService(
         }
 
         return try {
-            val response = tmdbApi.getTvSeasonDetails(numericId, seasonNumber, apiKey, language)
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Failed to fetch TMDB season $seasonNumber: HTTP ${response.code()} ${response.message()}")
-                deferred.complete(null)
-                null
-            } else {
-                val seasonData = response.body()?.episodes.orEmpty()
-                    .mapNotNull { episode ->
-                        val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
-                        episodeNumber to episode.toEnrichment()
-                    }
-                    .toMap()
-                episodeSeasonCache[cacheKey] = seasonData
-                deferred.complete(seasonData)
-                seasonData
+            when (val seasonResponse = tmdbIntegrationProvider.loadTvSeasonEpisodes(
+                tvId = numericId,
+                seasonNumber = seasonNumber,
+                apiKey = apiKey,
+                normalizedLanguage = language
+            )) {
+                is IntegrationLoadResult.Success -> {
+                    val seasonData = seasonResponse.value
+                        .mapNotNull { episode ->
+                            val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
+                            episodeNumber to episode.toEnrichment()
+                        }
+                        .toMap()
+                    episodeSeasonCache[cacheKey] = seasonData
+                    deferred.complete(seasonData)
+                    seasonData
+                }
+
+                is IntegrationLoadResult.NetworkError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch TMDB season $seasonNumber: ${seasonResponse.throwable.message}"
+                    )
+                    deferred.complete(null)
+                    null
+                }
+
+                is IntegrationLoadResult.HttpError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch TMDB season $seasonNumber: HTTP ${seasonResponse.statusCode}"
+                    )
+                    deferred.complete(null)
+                    null
+                }
             }
+        } catch (e: CancellationException) {
+            deferred.completeExceptionally(e)
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch TMDB season $seasonNumber: ${e.message}")
             deferred.complete(null)
@@ -515,9 +247,8 @@ class TmdbMetadataService(
         val providerToken = posterProviderCacheToken(activePosterProvider)
         val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:more_like:$providerToken"
         moreLikeThisCache[cacheKey]?.let { return@withContext it }
-        val apiKey = requireApiKey() ?: return@withContext emptyList()
+        requireApiKey() ?: return@withContext emptyList()
 
-        val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyList()
         val tmdbType = when (contentType) {
             ContentType.SERIES, ContentType.TV -> "tv"
             else -> "movie"
@@ -531,34 +262,28 @@ class TmdbMetadataService(
         }
 
         try {
-            val recommendations = when (tmdbType) {
-                "tv" -> tmdbApi.getTvRecommendations(numericId, apiKey, normalizedLanguage).body()
-                else -> tmdbApi.getMovieRecommendations(numericId, apiKey, normalizedLanguage).body()
+            val recommendationResults = when (val result = tmdbIntegrationProvider.loadMoreLikeThis(
+                tmdbId = tmdbId,
+                contentType = contentType,
+                normalizedLanguage = normalizedLanguage,
+                maxItems = maxItems
+            )) {
+                is IntegrationLoadResult.Success -> result.value
+                is IntegrationLoadResult.HttpError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch recommendations for $tmdbId: HTTP ${result.statusCode}"
+                    )
+                    return@withContext emptyList()
+                }
+                is IntegrationLoadResult.NetworkError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch recommendations for $tmdbId: ${result.throwable.message}"
+                    )
+                    return@withContext emptyList()
+                }
             }
-
-            val rawResults = recommendations?.results
-                .orEmpty()
-                .filter { it.id > 0 }
-            val languageCode = normalizedLanguage.substringBefore("-")
-            val sortedResults = rawResults
-                .sortedWith(
-                    compareByDescending<TmdbRecommendationResult> {
-                        it.originalLanguage?.equals(languageCode, ignoreCase = true) == true
-                    }
-                        .thenByDescending { it.voteCount ?: 0 }
-                        .thenByDescending { it.voteAverage ?: 0.0 }
-                )
-            val qualityFilteredResults = sortedResults.filter { rec ->
-                val voteCount = rec.voteCount ?: 0
-                val voteAverage = rec.voteAverage ?: 0.0
-                val localized = rec.originalLanguage?.equals(languageCode, ignoreCase = true) == true
-                localized || voteCount >= 20 || voteAverage >= 6.0
-            }
-            val recommendationResults = (if (qualityFilteredResults.isNotEmpty()) {
-                qualityFilteredResults
-            } else {
-                sortedResults
-            }).take(maxItems.coerceAtLeast(1))
 
             val items = coroutineScope {
                 recommendationResults.map { rec ->
@@ -575,16 +300,19 @@ class TmdbMetadataService(
                             ?: rec.originalName?.takeIf { it.isNotBlank() }
                             ?: return@async null
 
-                        val localizedBackdropPath = runCatching {
-                            when (recTmdbType) {
-                                "tv" -> tmdbApi.getTvImages(rec.id, apiKey, includeImageLanguage).body()
-                                else -> tmdbApi.getMovieImages(rec.id, apiKey, includeImageLanguage).body()
+                        val localizedBackdropPath = when (val imageResult = tmdbIntegrationProvider.loadRecommendationImages(
+                            tmdbId = rec.id,
+                            tmdbType = recTmdbType,
+                            includeImageLanguage = includeImageLanguage
+                        )) {
+                            is IntegrationLoadResult.Success -> {
+                                selectBestLocalizedImagePath(
+                                    images = imageResult.value.backdrops.orEmpty(),
+                                    normalizedLanguage = normalizedLanguage
+                                )
                             }
-                        }.getOrNull()?.let { images ->
-                            selectBestLocalizedImagePath(
-                                images = images.backdrops.orEmpty(),
-                                normalizedLanguage = normalizedLanguage
-                            )
+                            is IntegrationLoadResult.HttpError -> null
+                            is IntegrationLoadResult.NetworkError -> null
                         }
 
                         val backdrop = buildImageUrl(localizedBackdropPath ?: rec.backdropPath, size = "w1280")
@@ -593,11 +321,17 @@ class TmdbMetadataService(
                         val releaseInfo = if (recTmdbType == "tv") {
                             val startYear = rec.firstAirDate?.take(4)
                             if (startYear != null) {
-                                val tvDetails = runCatching {
-                                    tmdbApi.getTvDetails(rec.id, apiKey, normalizedLanguage).body()
-                                }.getOrNull()
-                                val status = tvDetails?.status
-                                val endYear = tvDetails?.lastAirDate?.take(4)
+                                val details = when (val detailsResult = tmdbIntegrationProvider.loadDetails(
+                                    tmdbId = rec.id,
+                                    tmdbType = "tv",
+                                    normalizedLanguage = normalizedLanguage
+                                )) {
+                                    is IntegrationLoadResult.Success -> detailsResult.value
+                                    is IntegrationLoadResult.HttpError -> null
+                                    is IntegrationLoadResult.NetworkError -> null
+                                }
+                                val status = details?.status
+                                val endYear = details?.lastAirDate?.take(4)
                                 buildShowYearRange(startYear, endYear, status)
                             } else null
                         } else {
@@ -626,6 +360,7 @@ class TmdbMetadataService(
             moreLikeThisCache[cacheKey] = items
             items
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.w(TAG, "Failed to fetch recommendations for $tmdbId: ${e.message}")
             emptyList()
         }
@@ -640,32 +375,36 @@ class TmdbMetadataService(
         val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
         val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:reviews:$maxItems"
         reviewsCache[cacheKey]?.let { return@withContext it }
-        val apiKey = requireApiKey() ?: return@withContext emptyList()
-
-        val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyList()
-        val tmdbType = when (contentType) {
-            ContentType.SERIES, ContentType.TV -> "tv"
-            else -> "movie"
-        }
+        requireApiKey() ?: return@withContext emptyList()
 
         try {
-            val response = when (tmdbType) {
-                "tv" -> tmdbApi.getTvReviews(numericId, apiKey, normalizedLanguage).body()
-                else -> tmdbApi.getMovieReviews(numericId, apiKey, normalizedLanguage).body()
+            val response = when (val result = tmdbIntegrationProvider.loadReviews(
+                tmdbId = tmdbId,
+                contentType = contentType,
+                normalizedLanguage = normalizedLanguage,
+                maxItems = maxItems
+            )) {
+                is IntegrationLoadResult.Success -> result.value
+                is IntegrationLoadResult.HttpError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch reviews for $tmdbId: HTTP ${result.statusCode}"
+                    )
+                    return@withContext emptyList()
+                }
+                is IntegrationLoadResult.NetworkError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch reviews for $tmdbId: ${result.throwable.message}"
+                    )
+                    return@withContext emptyList()
+                }
             }
 
-            val mapped = response?.results
-                .orEmpty()
-                .mapNotNull { it.toMetaReview() }
-                .sortedWith(
-                    compareByDescending<MetaReview> { it.updatedAt ?: it.createdAt ?: "" }
-                        .thenByDescending { it.rating ?: -1.0 }
-                )
-                .take(maxItems.coerceAtLeast(1))
-
-            reviewsCache[cacheKey] = mapped
-            mapped
+            reviewsCache[cacheKey] = response
+            response
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.w(TAG, "Failed to fetch reviews for $tmdbId: ${e.message}")
             emptyList()
         }
@@ -682,11 +421,28 @@ class TmdbMetadataService(
         val providerToken = posterProviderCacheToken(activePosterProvider)
         val cacheKey = "$collectionId:$normalizedLanguage:collection:$providerToken"
         collectionCache[cacheKey]?.let { return@withContext it }
-        val apiKey = requireApiKey() ?: return@withContext emptyList()
 
         try {
-            val collectionResponse = tmdbApi.getCollectionDetails(collectionId, apiKey, normalizedLanguage).body()
-            val rawParts = collectionResponse?.parts.orEmpty()
+            val rawParts = when (val result = tmdbIntegrationProvider.loadMovieCollection(
+                collectionId = collectionId,
+                normalizedLanguage = normalizedLanguage
+            )) {
+                is IntegrationLoadResult.Success -> result.value.parts.orEmpty()
+                is IntegrationLoadResult.HttpError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch collection for $collectionId: HTTP ${result.statusCode}"
+                    )
+                    return@withContext emptyList()
+                }
+                is IntegrationLoadResult.NetworkError -> {
+                    Log.w(
+                        TAG,
+                        "Failed to fetch collection for $collectionId: ${result.throwable.message}"
+                    )
+                    return@withContext emptyList()
+                }
+            }
             
             // Show in release order
             val sortedParts = rawParts.sortedBy { it.releaseDate ?: "9999" }
@@ -703,13 +459,19 @@ class TmdbMetadataService(
                     async {
                         val title = part.title ?: return@async null
 
-                        val localizedBackdropPath = runCatching {
-                            tmdbApi.getMovieImages(part.id, apiKey, includeImageLanguage).body()
-                        }.getOrNull()?.let { images ->
-                            selectBestLocalizedImagePath(
-                                images = images.backdrops.orEmpty(),
-                                normalizedLanguage = normalizedLanguage
-                            )
+                        val localizedBackdropPath = when (val imageResult = tmdbIntegrationProvider.loadRecommendationImages(
+                            tmdbId = part.id,
+                            tmdbType = "movie",
+                            includeImageLanguage = includeImageLanguage
+                        )) {
+                            is IntegrationLoadResult.Success -> {
+                                selectBestLocalizedImagePath(
+                                    images = imageResult.value.backdrops.orEmpty(),
+                                    normalizedLanguage = normalizedLanguage
+                                )
+                            }
+                            is IntegrationLoadResult.HttpError -> null
+                            is IntegrationLoadResult.NetworkError -> null
                         }
 
                         val backdrop = buildImageUrl(localizedBackdropPath ?: part.backdropPath, size = "w1280")
@@ -735,6 +497,8 @@ class TmdbMetadataService(
             }
             collectionCache[cacheKey] = items
             items
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch collection for $collectionId: ${e.message}")
             emptyList()
@@ -768,7 +532,7 @@ class TmdbMetadataService(
     }
 
     private suspend fun requireApiKey(): String? {
-        val credential = tmdbCredentialProvider()
+        val credential = tmdbIntegrationProvider.credential()
         if (credential.missing) {
             Log.w(TAG, "TMDB API key is missing; metadata request skipped")
             return null
@@ -812,12 +576,22 @@ class TmdbMetadataService(
             try {
                 val (person, credits) = coroutineScope {
                     val personDeferred = async {
-                        tmdbApi.getPersonDetails(personId, apiKey).body()
+                        tmdbIntegrationProvider.loadPersonDetails(personId = personId)
                     }
                     val creditsDeferred = async {
-                        tmdbApi.getPersonCombinedCredits(personId, apiKey).body()
+                        tmdbIntegrationProvider.loadPersonCombinedCredits(personId = personId)
                     }
-                    Pair(personDeferred.await(), creditsDeferred.await())
+                    val personResult = personDeferred.await()
+                    val creditsResult = creditsDeferred.await()
+                    val person = when (personResult) {
+                        is IntegrationLoadResult.Success -> personResult.value
+                        else -> null
+                    }
+                    val credits = when (creditsResult) {
+                        is IntegrationLoadResult.Success -> creditsResult.value
+                        else -> null
+                    }
+                    Pair(person, credits)
                 }
 
                 if (person == null) return@withContext null
@@ -884,15 +658,16 @@ class TmdbMetadataService(
             val apiKey = requireApiKey() ?: return@withContext null
 
             try {
-                val top = tmdbApi.searchPeople(
-                    apiKey = apiKey,
-                    query = query
-                ).body()?.results.orEmpty().firstOrNull() ?: return@withContext null
+                val top = when (val result = tmdbIntegrationProvider.searchPeople(query = query)) {
+                    is IntegrationLoadResult.Success -> result.value.results.orEmpty().firstOrNull()
+                    else -> null
+                } ?: return@withContext null
                 val topName = top.name?.trim().orEmpty()
                 if (topName.isBlank()) return@withContext null
                 if (!namesMatchExactly(query, topName)) return@withContext null
                 top.id
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.w(TAG, "Failed to search TMDB person by name '$query': ${e.message}")
                 null
             }
@@ -905,15 +680,16 @@ class TmdbMetadataService(
             val apiKey = requireApiKey() ?: return@withContext null
 
             try {
-                val top = tmdbApi.searchCompanies(
-                    apiKey = apiKey,
-                    query = query
-                ).body()?.results.orEmpty().firstOrNull() ?: return@withContext null
+                val top = when (val result = tmdbIntegrationProvider.searchCompanies(query = query)) {
+                    is IntegrationLoadResult.Success -> result.value.results.orEmpty().firstOrNull()
+                    else -> null
+                } ?: return@withContext null
                 val topName = top.name?.trim().orEmpty()
                 if (topName.isBlank()) return@withContext null
                 if (!namesMatchExactly(query, topName)) return@withContext null
                 top.id
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.w(TAG, "Failed to search TMDB company by name '$query': ${e.message}")
                 null
             }
@@ -1036,25 +812,6 @@ class TmdbMetadataService(
             .replace(Regex("[^a-z0-9]+"), " ")
             .trim()
     }
-}
-
-private fun TmdbReviewResult.toMetaReview(): MetaReview? {
-    val text = content?.trim()?.takeIf { it.isNotBlank() } ?: return null
-    val fallbackAuthor = author?.trim()?.takeIf { it.isNotBlank() } ?: "TMDB user"
-    val authorName = authorDetails?.name?.trim()?.takeIf { it.isNotBlank() }
-        ?: authorDetails?.username?.trim()?.takeIf { it.isNotBlank() }
-        ?: fallbackAuthor
-
-    return MetaReview(
-        id = id,
-        author = authorName,
-        content = text,
-        rating = authorDetails?.rating,
-        createdAt = createdAt?.takeIf { it.isNotBlank() },
-        updatedAt = updatedAt?.takeIf { it.isNotBlank() },
-        url = url?.takeIf { it.isNotBlank() },
-        source = MetaReviewSource.TMDB
-    )
 }
 
 private fun preferredRegions(normalizedLanguage: String): List<String> {

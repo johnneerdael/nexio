@@ -1,8 +1,7 @@
 package com.nexio.tv.core.tvdb
 
-import com.nexio.tv.data.local.TvdbMergeAliasStore
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbUpdateStateStore
-import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbEntityUpdate
 import com.nexio.tv.data.remote.api.TvdbLinks
 import com.nexio.tv.data.remote.api.TvdbUpdatesResponse
@@ -12,26 +11,24 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.just
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import retrofit2.Response
 
 class TvdbUpdateProcessorTest {
 
-    private val api = mockk<TvdbApi>()
+    private val integrationProvider = mockk<TvdbIntegrationProvider>()
     private val stateStore = mockk<TvdbUpdateStateStore>()
     private val invalidator = mockk<TvdbCacheInvalidator>()
     private val diagnosticsRecorder = mockk<TvdbDiagnosticsRecorder>()
-    private val authService = mockk<TvdbAuthService>()
 
     private fun buildProcessor() = TvdbUpdateProcessor(
-        api = api,
+        provider = integrationProvider,
         stateStore = stateStore,
         invalidator = invalidator,
-        diagnosticsRecorder = diagnosticsRecorder,
-        authService = authService
+        diagnosticsRecorder = diagnosticsRecorder
     )
 
     @Test
@@ -45,15 +42,12 @@ class TvdbUpdateProcessorTest {
             seriesId = null
         )
         coEvery { stateStore.currentCursor() } returns 1700000000L
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery {
-            api.getUpdates(any(), since = 1700000000L, type = null, page = null)
-        } returns Response.success(
-            TvdbUpdatesResponse(
-                status = "success",
-                data = listOf(updateEvent),
-                links = TvdbLinks(next = null)
-            )
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(updateEvent),
+            links = TvdbLinks(next = null)
         )
         coEvery { invalidator.invalidateChanged(any()) } just Runs
         coEvery { stateStore.storeSuccessfulCursor(any()) } just Runs
@@ -81,15 +75,12 @@ class TvdbUpdateProcessorTest {
             seriesId = null
         )
         coEvery { stateStore.currentCursor() } returns 1700000000L
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery {
-            api.getUpdates(any(), since = 1700000000L, type = null, page = null)
-        } returns Response.success(
-            TvdbUpdatesResponse(
-                status = "success",
-                data = listOf(deleteEvent),
-                links = TvdbLinks(next = null)
-            )
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(deleteEvent),
+            links = TvdbLinks(next = null)
         )
         coEvery { invalidator.invalidateDeletedOrMerged(any()) } just Runs
         coEvery { stateStore.storeSuccessfulCursor(any()) } just Runs
@@ -116,15 +107,12 @@ class TvdbUpdateProcessorTest {
             mergeToEntityType = "series"
         )
         coEvery { stateStore.currentCursor() } returns 1700000000L
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery {
-            api.getUpdates(any(), since = 1700000000L, type = null, page = null)
-        } returns Response.success(
-            TvdbUpdatesResponse(
-                status = "success",
-                data = listOf(mergeEvent),
-                links = TvdbLinks(next = null)
-            )
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(mergeEvent),
+            links = TvdbLinks(next = null)
         )
         coEvery { invalidator.invalidateDeletedOrMerged(any()) } just Runs
         coEvery { stateStore.storeSuccessfulCursor(any()) } just Runs
@@ -154,15 +142,12 @@ class TvdbUpdateProcessorTest {
             mergeToEntityType = "series"
         )
         coEvery { stateStore.currentCursor() } returns 1700000000L
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery {
-            api.getUpdates(any(), since = 1700000000L, type = null, page = null)
-        } returns Response.success(
-            TvdbUpdatesResponse(
-                status = "success",
-                data = listOf(mergeEvent),
-                links = TvdbLinks(next = null)
-            )
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(mergeEvent),
+            links = TvdbLinks(next = null)
         )
         coEvery { invalidator.invalidateDeletedOrMerged(any()) } just Runs
         coEvery { stateStore.storeSuccessfulCursor(any()) } just Runs
@@ -189,15 +174,12 @@ class TvdbUpdateProcessorTest {
             seriesId = null
         )
         coEvery { stateStore.currentCursor() } returns 1700000000L
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery {
-            api.getUpdates(any(), since = 1700000000L, type = null, page = null)
-        } returns Response.success(
-            TvdbUpdatesResponse(
-                status = "success",
-                data = listOf(updateEvent),
-                links = TvdbLinks(next = null)
-            )
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(updateEvent),
+            links = TvdbLinks(next = null)
         )
         coEvery { invalidator.invalidateChanged(any()) } throws RuntimeException("Cache write failed")
         coEvery { stateStore.recordStatus(any(), any()) } just Runs
@@ -227,15 +209,12 @@ class TvdbUpdateProcessorTest {
             seriesId = null
         )
         coEvery { stateStore.currentCursor() } returns 1700000000L
-        coEvery { authService.bearerToken() } returns "Bearer test-token"
         coEvery {
-            api.getUpdates(any(), since = 1700000000L, type = null, page = null)
-        } returns Response.success(
-            TvdbUpdatesResponse(
-                status = "success",
-                data = listOf(malformedEvent, validEvent),
-                links = TvdbLinks(next = null)
-            )
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(malformedEvent, validEvent),
+            links = TvdbLinks(next = null)
         )
         coEvery { invalidator.invalidateChanged(any()) } just Runs
         coEvery { stateStore.storeSuccessfulCursor(any()) } just Runs
@@ -253,5 +232,93 @@ class TvdbUpdateProcessorTest {
         // The processor should still process the valid event
         coVerify { invalidator.invalidateChanged(validEvent) }
         coVerify { stateStore.storeSuccessfulCursor(1700000600L) }
+    }
+
+    @Test
+    fun `processSince does not swallow coroutine cancellation`() = runTest {
+        coEvery { stateStore.currentCursor() } returns 1700000000L
+        coEvery {
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } throws CancellationException("cancel requested")
+        coEvery { diagnosticsRecorder.record(any()) } just Runs
+        coEvery { stateStore.recordStatus(any(), any()) } just Runs
+
+        val processor = buildProcessor()
+        try {
+            processor.processSince(1700000000L)
+            assertTrue(false)
+        } catch (e: CancellationException) {
+            assertEquals("cancel requested", e.message)
+        }
+    }
+
+    @Test
+    fun `processSince advances watermark even when all events are skipped`() = runTest {
+        val skippedMalformedEvent = TvdbEntityUpdate(
+            entityType = null,
+            methodInt = null,
+            method = "delete",
+            recordId = null,
+            timeStamp = 1700000100L,
+            seriesId = null
+        )
+        val skippedUnknownMethodEvent = TvdbEntityUpdate(
+            entityType = "series",
+            methodInt = 9,
+            method = "mystery",
+            recordId = 11111,
+            timeStamp = 1700000200L,
+            seriesId = null
+        )
+        coEvery { stateStore.currentCursor() } returns 1700000000L
+        coEvery {
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(skippedMalformedEvent, skippedUnknownMethodEvent),
+            links = TvdbLinks(next = null)
+        )
+        coEvery { stateStore.storeSuccessfulCursor(any()) } just Runs
+        coEvery { stateStore.recordStatus(any(), any()) } just Runs
+        coEvery { diagnosticsRecorder.record(any()) } just Runs
+
+        val processor = buildProcessor()
+        val result = processor.processSince(1700000000L)
+
+        assertTrue(result.success)
+        assertEquals(1700000200L, result.highWatermark)
+        coVerify(exactly = 0) { invalidator.invalidateChanged(any()) }
+        coVerify(exactly = 0) { invalidator.invalidateDeletedOrMerged(any()) }
+        coVerify { stateStore.storeSuccessfulCursor(1700000200L) }
+    }
+
+    @Test
+    fun `processSince fails when next page URL is malformed`() = runTest {
+        val validEvent = TvdbEntityUpdate(
+            entityType = "series",
+            methodInt = 2,
+            method = "update",
+            recordId = 12345,
+            timeStamp = 1700000100L,
+            seriesId = null
+        )
+        coEvery { stateStore.currentCursor() } returns 1700000000L
+        coEvery {
+            integrationProvider.fetchUpdates(1700000000L, null)
+        } returns TvdbUpdatesResponse(
+            status = "success",
+            data = listOf(validEvent),
+            links = TvdbLinks(next = "http://example.com/updates?page=bogus")
+        )
+        coEvery { invalidator.invalidateChanged(any()) } just Runs
+        coEvery { stateStore.recordStatus(any(), any()) } just Runs
+        coEvery { diagnosticsRecorder.record(any()) } just Runs
+
+        val processor = buildProcessor()
+        val result = processor.processSince(1700000000L)
+
+        assertTrue(!result.success)
+        assertEquals("Malformed updates next-page URL", result.error)
+        coVerify(exactly = 0) { stateStore.storeSuccessfulCursor(any()) }
     }
 }

@@ -8,11 +8,13 @@ import com.nexio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -51,7 +53,8 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
                 )
             }
         )
-        val response = traktProgressMutationExecutor.addHistory(body)
+        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val response = traktProgressMutationExecutor.addHistory(session, body)
             ?: return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
 
         val notFoundEpisodeNumbers = response.body()

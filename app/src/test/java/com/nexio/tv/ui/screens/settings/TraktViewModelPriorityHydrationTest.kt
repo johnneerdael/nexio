@@ -12,6 +12,7 @@ import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.TraktSettingsAuthGateway
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -61,7 +62,7 @@ class TraktViewModelPriorityHydrationTest {
         )
 
         return TraktViewModel(
-            authService, authDataStore, progressService, discoveryService,
+            TraktSettingsAuthGateway(authService), authDataStore, progressService, discoveryService,
             scrobbleService, settingsDataStore, notifier, testProfileManager(), context
         )
     }

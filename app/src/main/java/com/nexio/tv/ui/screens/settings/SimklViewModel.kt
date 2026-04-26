@@ -8,7 +8,7 @@ import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.data.repository.SimklAuthService
+import com.nexio.tv.data.repository.SimklSettingsAuthGateway
 import com.nexio.tv.data.repository.SimklTokenPollResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -48,7 +48,7 @@ data class SimklUiState(
 
 @HiltViewModel
 class SimklViewModel @Inject constructor(
-    private val simklAuthService: SimklAuthService,
+    private val simklAuthService: SimklSettingsAuthGateway,
     private val simklAuthDataStore: SimklAuthDataStore,
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,

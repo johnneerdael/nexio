@@ -3,34 +3,22 @@ package com.nexio.tv.data.repository.benchmark
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
-import android.util.Log
 import com.google.gson.JsonObject
 import com.nexio.tv.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-
-private const val TAG = "BenchmarkUpload"
 
 @Singleton
 class DebridBenchmarkCollectionUploader internal constructor(
-    private val okHttpClient: OkHttpClient,
     private val baseUrlProvider: () -> String,
     private val tokenProvider: () -> String,
     private val clientInfoProvider: () -> JsonObject
 ) {
     @Inject
     constructor(
-        @ApplicationContext context: Context,
-        okHttpClient: OkHttpClient
+        @ApplicationContext context: Context
     ) : this(
-        okHttpClient = okHttpClient,
         baseUrlProvider = { BuildConfig.SHADOW_DATA_COLLECTION_BASE_URL.trim().trimEnd('/') },
         tokenProvider = { BuildConfig.SHADOW_DATA_COLLECTION_WRITE_TOKEN.trim() },
         clientInfoProvider = { buildBenchmarkCollectorClientInfo(context) }

@@ -1,10 +1,9 @@
 package com.nexio.tv.core.auth
 
 import android.util.Log
-import com.nexio.tv.BuildConfig
+import com.nexio.tv.data.integration.supabase.transport.TvLoginExchangeTransport
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
-import com.nexio.tv.data.remote.supabase.TvLoginExchangeResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
 import com.nexio.tv.domain.model.AuthState
@@ -13,22 +12,16 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,12 +31,11 @@ private const val TAG = "AuthManager"
 class AuthManager @Inject constructor(
     private val auth: Auth,
     private val postgrest: Postgrest,
-    private val httpClient: OkHttpClient,
+    private val tvLoginExchangeTransport: TvLoginExchangeTransport,
     private val authPresenceDataStore: AuthPresenceDataStore,
     private val appOnboardingDataStore: AppOnboardingDataStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val json = Json { ignoreUnknownKeys = true }
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -469,26 +461,11 @@ class AuthManager @Inject constructor(
         return try {
             val token = auth.currentAccessTokenOrNull()
                 ?: return Result.failure(Exception("Not authenticated"))
-            val payload = buildJsonObject {
-                put("code", code)
-                put("device_nonce", deviceNonce)
-            }.toString()
-            val request = Request.Builder()
-                .url("${BuildConfig.SUPABASE_URL}/functions/v1/tv-logins-exchange")
-                .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                .header("Authorization", "Bearer $token")
-                .post(payload.toRequestBody("application/json".toMediaType()))
-                .build()
-            val body = withContext(Dispatchers.IO) {
-                httpClient.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) {
-                        throw IllegalStateException("TV login exchange failed (${response.code}): $responseBody")
-                    }
-                    responseBody
-                }
-            }
-            val result = json.decodeFromString<TvLoginExchangeResult>(body)
+            val result = tvLoginExchangeTransport.exchange(
+                token = token,
+                code = code,
+                deviceNonce = deviceNonce
+            )
             auth.importAuthToken(result.accessToken, result.refreshToken)
             Result.success(Unit)
         } catch (e: Exception) {

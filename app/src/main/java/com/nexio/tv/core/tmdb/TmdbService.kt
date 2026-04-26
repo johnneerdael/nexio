@@ -1,14 +1,11 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
-import com.nexio.tv.core.metadata.MetadataApiKeyResolver
-import com.nexio.tv.core.metadata.MetadataProviderConfig
-import com.nexio.tv.core.metadata.MetadataProviderCredential
-import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.integration.tmdb.DefaultTmdbExternalIdLookupProvider
+import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -23,31 +20,13 @@ private const val TAG = "TmdbService"
  * Provides caching to avoid redundant API calls.
  */
 @Singleton
-class TmdbService(
-    private val tmdbApi: TmdbApi,
-    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential
-) {
-    @Inject
-    constructor(
-        tmdbApi: TmdbApi,
-        metadataApiKeyResolver: MetadataApiKeyResolver
-    ) : this(
-        tmdbApi = tmdbApi,
-        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() }
-    )
+class TmdbService {
+    private val externalIdLookupProvider: TmdbExternalIdLookupProvider
 
-    constructor(
-        tmdbApi: TmdbApi,
-        tmdbSettingsDataStore: TmdbSettingsDataStore
-    ) : this(
-        tmdbApi = tmdbApi,
-        tmdbCredentialProvider = {
-            MetadataProviderConfig.resolveCredential(
-                customApiKey = tmdbSettingsDataStore.settings.first().apiKey,
-                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
-            )
-        }
-    )
+    @Inject
+    constructor(externalIdLookupProvider: DefaultTmdbExternalIdLookupProvider) {
+        this.externalIdLookupProvider = externalIdLookupProvider
+    }
 
     // Cache: IMDB ID -> TMDB ID
     private val imdbToTmdbCache = ConcurrentHashMap<String, Int>()
@@ -84,8 +63,6 @@ class TmdbService(
             return@withContext cached
         }
 
-        val apiKey = requireApiKey() ?: return@withContext null
-
         imdbToTmdbInFlight[inFlightKey]?.let { existing ->
             Log.d(TAG, "Joining in-flight TMDB lookup for IMDB: $imdbId (type: $normalizedType)")
             return@withContext existing.await()
@@ -100,48 +77,30 @@ class TmdbService(
         
         try {
             Log.d(TAG, "Looking up TMDB ID for IMDB: $imdbId (type: $mediaType)")
-            
-            val response = tmdbApi.findByExternalId(
-                externalId = imdbId,
-                apiKey = apiKey,
-                externalSource = "imdb_id"
-            )
-            
-            if (!response.isSuccessful) {
-                Log.e(TAG, "TMDB API error: ${response.code()} - ${response.message()}")
-                deferred.complete(null)
-                return@withContext null
-            }
-            
-            val body = response.body() ?: run {
-                deferred.complete(null)
-                return@withContext null
-            }
-            
-            // Determine which results to use based on media type
-            val result = when (normalizedType) {
-                "movie" -> body.movieResults?.firstOrNull()
-                "tv", "series" -> body.tvResults?.firstOrNull()
-                else -> body.movieResults?.firstOrNull() ?: body.tvResults?.firstOrNull()
-            }
-            
-            result?.let { found ->
-                Log.d(TAG, "Found TMDB ID: ${found.id} for IMDB: $imdbId")
-                
+
+            val tmdbId = externalIdLookupProvider.findTmdbIdByImdbId(imdbId, normalizedType)
+
+            tmdbId?.let { foundId ->
+                Log.d(TAG, "Found TMDB ID: $foundId for IMDB: $imdbId")
+
                 // Cache both directions
                 cacheMutex.withLock {
-                    imdbToTmdbCache[imdbId] = found.id
-                    tmdbToImdbCache[tmdbToImdbCacheKey(found.id, normalizedType)] = imdbId
+                    imdbToTmdbCache[imdbId] = foundId
+                    tmdbToImdbCache[tmdbToImdbCacheKey(foundId, normalizedType)] = imdbId
                 }
-                deferred.complete(found.id)
-                
-                return@withContext found.id
+                deferred.complete(foundId)
+
+                return@withContext foundId
             }
-            
+
             Log.w(TAG, "No TMDB result found for IMDB: $imdbId")
             deferred.complete(null)
             null
             
+        } catch (e: CancellationException) {
+            Log.w(TAG, "Cancelled TMDB ID lookup for IMDB: $imdbId", e)
+            deferred.completeExceptionally(e)
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error looking up TMDB ID for $imdbId: ${e.message}", e)
             deferred.complete(null)
@@ -170,8 +129,6 @@ class TmdbService(
 
         val inFlightKey = "$normalizedType:$tmdbId"
 
-        val apiKey = requireApiKey() ?: return@withContext null
-
         tmdbToImdbInFlight[inFlightKey]?.let { existing ->
             Log.d(TAG, "Joining in-flight IMDB lookup for TMDB: $tmdbId (type: $normalizedType)")
             return@withContext existing.await()
@@ -186,27 +143,10 @@ class TmdbService(
         
         try {
             Log.d(TAG, "Looking up IMDB ID for TMDB: $tmdbId (type: $mediaType)")
-            
-            val response = when (normalizedType) {
-                "movie" -> tmdbApi.getMovieExternalIds(tmdbId, apiKey)
-                "tv", "series" -> tmdbApi.getTvExternalIds(tmdbId, apiKey)
-                else -> tmdbApi.getMovieExternalIds(tmdbId, apiKey)
-            }
-            
-            if (!response.isSuccessful) {
-                Log.e(TAG, "TMDB API error: ${response.code()} - ${response.message()}")
-                deferred.complete(null)
-                return@withContext null
-            }
-            
-            val body = response.body() ?: run {
-                deferred.complete(null)
-                return@withContext null
-            }
-            
-            body.imdbId?.let { imdbId ->
+
+            externalIdLookupProvider.findImdbIdByTmdbId(tmdbId, normalizedType)?.let { imdbId ->
                 Log.d(TAG, "Found IMDB ID: $imdbId for TMDB: $tmdbId")
-                
+
                 // Cache both directions
                 cacheMutex.withLock {
                     tmdbToImdbCache[cacheKey] = imdbId
@@ -221,6 +161,10 @@ class TmdbService(
             deferred.complete(null)
             null
             
+        } catch (e: CancellationException) {
+            Log.w(TAG, "Cancelled IMDb ID lookup for TMDB: $tmdbId", e)
+            deferred.completeExceptionally(e)
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error looking up IMDB ID for $tmdbId: ${e.message}", e)
             deferred.complete(null)
@@ -299,14 +243,5 @@ class TmdbService(
         val normalizedType = normalizeMediaType(mediaType)
         imdbToTmdbCache[imdbId] = tmdbId
         tmdbToImdbCache[tmdbToImdbCacheKey(tmdbId, normalizedType)] = imdbId
-    }
-
-    private suspend fun requireApiKey(): String? {
-        val credential = tmdbCredentialProvider()
-        if (credential.missing) {
-            Log.w(TAG, "TMDB API key is missing; lookup skipped")
-            return null
-        }
-        return credential.apiKey
     }
 }

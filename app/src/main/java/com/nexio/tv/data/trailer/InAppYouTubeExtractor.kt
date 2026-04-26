@@ -4,6 +4,9 @@ import android.net.Uri
 import android.util.Log
 import com.google.gson.Gson
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.youtube.YouTubeTrailerIntegrationProvider
+import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransportCall
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -11,12 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
-import okhttp3.Headers
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URL
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -71,7 +69,12 @@ private data class ManifestCandidate(
     val bandwidth: Long
 )
 
-private val DEFAULT_HEADERS = buildStableYouTubeRequestHeaders()
+private val DEFAULT_YOUTUBE_FIELDS = mapOf(
+    "accept-language" to YOUTUBE_STABLE_ACCEPT_LANGUAGE,
+    "user-agent" to YOUTUBE_STABLE_WEB_USER_AGENT,
+    "origin" to YOUTUBE_STABLE_ORIGIN,
+    "referer" to YOUTUBE_STABLE_REFERER
+)
 
 internal class NonEnglishYouTubeTrailerException(
     val languageCode: String?,
@@ -167,17 +170,10 @@ private val CLIENTS = listOf(
 )
 
 @Singleton
-class InAppYouTubeExtractor @Inject constructor() {
+class InAppYouTubeExtractor @Inject constructor(
+    private val integrationProvider: YouTubeTrailerIntegrationProvider
+) {
     private val gson = Gson()
-
-    private val httpClient = OkHttpClient.Builder()
-        .dns(com.nexio.tv.core.network.IPv4FirstDns())
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
 
     suspend fun extractPlaybackSource(youtubeUrl: String): TrailerPlaybackSource? = withContext(Dispatchers.IO) {
         if (youtubeUrl.isBlank()) return@withContext null
@@ -216,10 +212,10 @@ class InAppYouTubeExtractor @Inject constructor() {
         val videoId = extractVideoId(youtubeUrl) ?: return null
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId&hl=en"
-        val watchResponse = performRequest(
+        val watchResponse = fetchTransport(
             url = watchUrl,
             method = "GET",
-            headers = DEFAULT_HEADERS
+            headers = DEFAULT_YOUTUBE_FIELDS
         )
         if (!watchResponse.ok) {
             throw IllegalStateException("Failed to fetch watch page (${watchResponse.status})")
@@ -446,7 +442,7 @@ class InAppYouTubeExtractor @Inject constructor() {
         return WatchConfig(apiKey = apiKey, visitorData = visitorData)
     }
 
-    private fun fetchPlayerResponse(
+    private suspend fun fetchPlayerResponse(
         apiKey: String,
         videoId: String,
         client: YouTubeClient,
@@ -456,7 +452,7 @@ class InAppYouTubeExtractor @Inject constructor() {
         val endpoint = "https://www.youtube.com/youtubei/v1/player?key=${Uri.encode(apiKey)}"
 
         val headers = buildMap {
-            putAll(DEFAULT_HEADERS)
+            putAll(DEFAULT_YOUTUBE_FIELDS)
             put("content-type", "application/json")
             put("origin", YOUTUBE_STABLE_ORIGIN)
             put("x-youtube-client-name", client.id)
@@ -476,7 +472,7 @@ class InAppYouTubeExtractor @Inject constructor() {
             )
         )
 
-        val response = performRequest(
+        val response = fetchTransport(
             url = endpoint,
             method = "POST",
             headers = headers,
@@ -491,11 +487,11 @@ class InAppYouTubeExtractor @Inject constructor() {
         return parsed ?: emptyMap<String, Any>()
     }
 
-    private fun parseHlsManifest(manifestUrl: String): ManifestBestVariant? {
-        val response = performRequest(
+    private suspend fun parseHlsManifest(manifestUrl: String): ManifestBestVariant? {
+        val response = fetchTransport(
             url = manifestUrl,
             method = "GET",
-            headers = DEFAULT_HEADERS
+            headers = DEFAULT_YOUTUBE_FIELDS
         )
         if (!response.ok) {
             throw IllegalStateException("Failed to fetch HLS manifest (${response.status})")
@@ -668,24 +664,13 @@ class InAppYouTubeExtractor @Inject constructor() {
         } ?: url
     }
 
-    private val probeClient = OkHttpClient.Builder()
-        .dns(com.nexio.tv.core.network.IPv4FirstDns())
-        .connectTimeout(2, TimeUnit.SECONDS)
-        .readTimeout(2, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
-
-    private fun isUrlReachable(url: String): Boolean {
-        return runCatching {
-            val request = Request.Builder()
-                .url(url)
-                .get()
-                .header("Range", "bytes=0-0")
-                .headers(buildHeaders(DEFAULT_HEADERS))
-                .build()
-            probeClient.newCall(request).execute().use { val code = it.code; Log.d(TAG, "CDN probe code: ${Uri.parse(url).host} -> $code"); code == 200 }
-        }.getOrDefault(false)
+    private suspend fun isUrlReachable(url: String): Boolean {
+        return integrationProvider.probe(
+            url = url,
+            headers = DEFAULT_YOUTUBE_FIELDS + ("Range" to "bytes=0-0")
+        ).also { reachable ->
+            Log.d(TAG, "CDN probe result: ${Uri.parse(url).host} -> $reachable")
+        }
     }
 
     private fun absolutizeUrl(baseUrl: String, maybeRelative: String): String {
@@ -703,49 +688,49 @@ class InAppYouTubeExtractor @Inject constructor() {
         }.getOrDefault(url.take(80))
     }
 
-    private fun performRequest(
+    private suspend fun fetchTransport(
         url: String,
         method: String,
         headers: Map<String, String>,
         body: String? = null
-    ): RequestResponse {
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .headers(buildHeaders(headers))
-
-        when (method.uppercase()) {
-            "POST" -> requestBuilder.post((body ?: "").toRequestBody())
-            "PUT" -> requestBuilder.put((body ?: "").toRequestBody())
-            "DELETE" -> requestBuilder.delete()
-            else -> requestBuilder.get()
-        }
-
-        httpClient.newCall(requestBuilder.build()).execute().use { response ->
-            return RequestResponse(
-                ok = response.isSuccessful,
-                status = response.code,
-                statusText = response.message,
-                url = response.request.url.toString(),
-                body = response.body?.string().orEmpty()
+    ): TrailerHttpResponse {
+        return when (
+            val result = integrationProvider.fetch(
+                YouTubeTrailerTransportCall(
+                    url = url,
+                    method = method,
+                    headers = headers,
+                    body = body
+                )
+            )
+        ) {
+            is IntegrationCallResult.Success -> TrailerHttpResponse(
+                ok = result.value.isSuccessful,
+                status = result.value.statusCode,
+                statusText = result.value.statusText,
+                url = result.value.url,
+                body = result.value.body
+            )
+            is IntegrationCallResult.HttpError -> TrailerHttpResponse(
+                ok = false,
+                status = result.statusCode,
+                statusText = result.reason.orEmpty(),
+                url = url,
+                body = result.reason.orEmpty()
+            )
+            is IntegrationCallResult.NetworkError -> throw result.throwable
+            IntegrationCallResult.Missing -> TrailerHttpResponse(
+                ok = false,
+                status = 404,
+                statusText = "Missing",
+                url = url,
+                body = ""
             )
         }
     }
-
-    private fun buildHeaders(source: Map<String, String>): Headers {
-        val headers = Headers.Builder()
-        source.forEach { (name, value) ->
-            if (!name.equals("Accept-Encoding", ignoreCase = true)) {
-                headers.add(name, value)
-            }
-        }
-        if (source.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-            headers.add("User-Agent", YOUTUBE_STABLE_WEB_USER_AGENT)
-        }
-        return headers.build()
-    }
 }
 
-private data class RequestResponse(
+private data class TrailerHttpResponse(
     val ok: Boolean,
     val status: Int,
     val statusText: String,

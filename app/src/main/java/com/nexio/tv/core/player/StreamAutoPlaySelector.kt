@@ -7,8 +7,6 @@ import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
-import java.net.HttpURLConnection
-import java.net.URL
 
 object StreamAutoPlaySelector {
     private const val TAG = "StreamAutoPlaySelector"
@@ -39,33 +37,6 @@ object StreamAutoPlaySelector {
 
         return url
     }
-
-
-
-    private fun urlWorks(url: String): Boolean {
-        val lower = url.lowercase()
-
-        // Skip probing for signed or tokened URLs
-        if (listOf("expires=", "signature=", "sig=", "auth=", "key=", "hash=", "x-amz-", "hdnts=", "cf_")
-                .any { lower.contains(it) }) {
-            return true
-        }
-
-        // Safe HEAD probe for everything else
-        return runCatching {
-            val connection = URL(url).openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Range", "bytes=0-1")
-            connection.connectTimeout = 3000
-            connection.readTimeout = 3000
-            connection.instanceFollowRedirects = true
-            connection.connect()
-            connection.responseCode in 200..399
-        }.getOrElse { false }
-    }
-
-
-
 
     fun candidateAutoPlayStreams(
         streams: List<Stream>,
@@ -148,14 +119,15 @@ object StreamAutoPlaySelector {
         }
     }
 
-    fun selectAutoPlayStream(
+    suspend fun selectAutoPlayStream(
         streams: List<Stream>,
         mode: StreamAutoPlayMode,
         regexPattern: String,
         source: StreamAutoPlaySource,
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
-        preferredBingeGroup: String? = null
+        preferredBingeGroup: String? = null,
+        probeUrlWorks: suspend (String) -> Boolean = { true }
     ): Stream? {
         val candidates = candidateAutoPlayStreams(
             streams = streams,
@@ -174,7 +146,7 @@ object StreamAutoPlaySelector {
         for (stream in candidates) {
             val resolved = resolvePlayableUrl(stream) ?: continue
             runCatching { Log.d(TAG, "Trying resolved stream ${sanitizeUrlForLogs(resolved)}") }
-            if (urlWorks(resolved)) return stream
+            if (probeUrlWorks(resolved)) return stream
         }
         return null
     }

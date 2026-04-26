@@ -16,7 +16,7 @@ import javax.inject.Singleton
  * starvation that the old OkHttp-interceptor approach caused, and eliminates
  * request bursts that trigger Trakt 429 rate limits.
  *
- * All Trakt API traffic flows through [TraktAuthService.executeAuthorizedRequest],
+ * All Trakt API traffic flows through [TraktAuthService.executeAuthOwnerRequest],
  * which acquires this gate before dispatching each request.
  */
 @Singleton

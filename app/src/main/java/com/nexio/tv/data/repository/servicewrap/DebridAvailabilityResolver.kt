@@ -1,15 +1,16 @@
 package com.nexio.tv.data.repository.servicewrap
 
 import android.util.Log
+import com.nexio.tv.data.integration.debrid.EasyDebridIntegrationProvider
+import com.nexio.tv.data.integration.debrid.PremiumizeIntegrationProvider
+import com.nexio.tv.data.integration.debrid.RealDebridIntegrationProvider
+import com.nexio.tv.data.integration.debrid.TorBoxIntegrationProvider
 import com.nexio.tv.data.repository.extractFilenameFromCandidatePath
 import com.nexio.tv.data.repository.isStrictPlayableVideoCandidate
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
+import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
-import com.nexio.tv.data.remote.api.EasyDebridApi
-import com.nexio.tv.data.remote.api.PremiumizeApi
-import com.nexio.tv.data.remote.api.RealDebridApi
-import com.nexio.tv.data.remote.api.TorBoxApi
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateRequestDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGeneratedFileDto
@@ -24,10 +25,6 @@ import com.nexio.tv.data.remote.dto.debrid.TorBoxCachedTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxCheckCachedRequestDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
-import com.nexio.tv.data.repository.EasyDebridService
-import com.nexio.tv.data.repository.PremiumizeService
-import com.nexio.tv.data.repository.RealDebridAuthService
-import com.nexio.tv.data.repository.TorBoxService
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -46,17 +43,14 @@ private const val TAG = "DebridAvailabilityResolver"
 
 @Singleton
 class DebridAvailabilityResolver @Inject constructor(
-    private val realDebridAuthService: RealDebridAuthService,
-    private val realDebridApi: RealDebridApi,
-    private val premiumizeApi: PremiumizeApi,
+    private val realDebridAuthDataStore: RealDebridAuthDataStore,
+    private val realDebridProvider: RealDebridIntegrationProvider,
+    private val premiumizeProvider: PremiumizeIntegrationProvider,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
-    private val premiumizeService: PremiumizeService,
-    private val torBoxApi: TorBoxApi,
+    private val torBoxProvider: TorBoxIntegrationProvider,
     private val torBoxSettingsDataStore: TorBoxSettingsDataStore,
-    private val torBoxService: TorBoxService,
-    private val easyDebridApi: EasyDebridApi,
+    private val easyDebridProvider: EasyDebridIntegrationProvider,
     private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
-    private val easyDebridService: EasyDebridService,
     private val resolvedStreamCache: ServiceWrapResolvedStreamCache
 ) : ServiceWrapResolver {
 
@@ -184,12 +178,9 @@ class DebridAvailabilityResolver @Inject constructor(
             val apiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
             if (apiKey.isBlank()) return emptyList()
 
-            val cacheResponse = runCatching {
-                premiumizeApi.checkCache(apiKey = apiKey, items = listOf(candidate.magnetUri))
-            }.getOrNull() ?: return emptyList()
-            val cacheBody = cacheResponse.body() ?: return emptyList()
-            if (!cacheResponse.isSuccessful ||
-                !cacheBody.status.equals("success", ignoreCase = true) ||
+            val cacheBody = premiumizeProvider.checkCache(apiKey = apiKey, items = listOf(candidate.magnetUri))
+                ?: return emptyList()
+            if (!cacheBody.status.equals("success", ignoreCase = true) ||
                 cacheBody.response.firstOrNull() != true
             ) {
                 return emptyList()
@@ -205,17 +196,11 @@ class DebridAvailabilityResolver @Inject constructor(
             val apiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
             if (apiKey.isBlank() || candidates.isEmpty()) return emptyMap()
 
-            val cacheResponse = runCatching {
-                premiumizeApi.checkCache(
-                    apiKey = apiKey,
-                    items = candidates.map { it.magnetUri }
-                )
-            }.getOrNull() ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
-            val cacheBody = cacheResponse.body()
-            if (!cacheResponse.isSuccessful ||
-                cacheBody == null ||
-                !cacheBody.status.equals("success", ignoreCase = true)
-            ) {
+            val cacheBody = premiumizeProvider.checkCache(
+                apiKey = apiKey,
+                items = candidates.map { it.magnetUri }
+            ) ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
+            if (!cacheBody.status.equals("success", ignoreCase = true)) {
                 return candidates.associate { it.normalizedInfoHash to emptyList() }
             }
 
@@ -238,11 +223,9 @@ class DebridAvailabilityResolver @Inject constructor(
             requestContext: ServiceWrapRequestContext,
             apiKey: String
         ): List<ResolvedServiceWrapStream> {
-            val directResponse = runCatching {
-                premiumizeApi.createDirectDownload(apiKey = apiKey, source = candidate.magnetUri)
-            }.getOrNull() ?: return emptyList()
-            val directBody = directResponse.body() ?: return emptyList()
-            if (!directResponse.isSuccessful || !directBody.status.equals("success", ignoreCase = true)) {
+            val directBody = premiumizeProvider.createDirectDownload(apiKey = apiKey, source = candidate.magnetUri)
+                ?: return emptyList()
+            if (!directBody.status.equals("success", ignoreCase = true)) {
                 return emptyList()
             }
 
@@ -282,21 +265,15 @@ class DebridAvailabilityResolver @Inject constructor(
         override val provider: ServiceWrapProvider = ServiceWrapProvider.REAL_DEBRID
 
         override suspend fun isConfigured(): Boolean {
-            return realDebridAuthService.getCurrentAuthState().isAuthenticated
+            return realDebridAuthDataStore.isAuthenticated.first()
         }
 
         override suspend fun resolve(
             candidate: WrapCandidate,
             requestContext: ServiceWrapRequestContext
         ): List<ResolvedServiceWrapStream> {
-            val availabilityResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                realDebridApi.getInstantAvailability(
-                    authorization = authorization,
-                    hash = candidate.normalizedInfoHash
-                )
-            } ?: return emptyList()
-            val availabilityBody = availabilityResponse.body() ?: return emptyList()
-            if (!availabilityResponse.isSuccessful) return emptyList()
+            val availabilityBody = realDebridProvider.fetchInstantAvailability(candidate.normalizedInfoHash)
+                ?: return emptyList()
 
             val variants = extractRealDebridVariants(
                 availabilityBody = availabilityBody,
@@ -308,33 +285,16 @@ class DebridAvailabilityResolver @Inject constructor(
 
             var torrentId: String? = null
             try {
-                val addMagnetResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                    realDebridApi.addMagnet(authorization = authorization, magnet = candidate.magnetUri)
-                } ?: return emptyList()
-                val magnetBody = addMagnetResponse.body() ?: return emptyList()
-                if (!addMagnetResponse.isSuccessful) return emptyList()
+                val magnetBody = realDebridProvider.addMagnet(candidate.magnetUri) ?: return emptyList()
                 torrentId = magnetBody.id
 
                 val selectedIds = selectedVariant.fileIds.joinToString(",")
-                val selectResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                    realDebridApi.selectFiles(
-                        authorization = authorization,
-                        id = torrentId,
-                        files = selectedIds
-                    )
-                } ?: return emptyList()
-                if (!selectResponse.isSuccessful) return emptyList()
+                if (!realDebridProvider.selectFiles(id = torrentId, files = selectedIds)) return emptyList()
 
                 val torrentInfo = pollRealDebridTorrentInfo(torrentId) ?: return emptyList()
                 val resolvedFile = resolveRealDebridTorrentFile(torrentInfo, selectedVariant.targetFileId) ?: return emptyList()
-                val unrestrictResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                    realDebridApi.unrestrictLink(
-                        authorization = authorization,
-                        link = resolvedFile.sourceLink
-                    )
-                } ?: return emptyList()
-                val unrestrictBody = unrestrictResponse.body() ?: return emptyList()
-                if (!unrestrictResponse.isSuccessful) return emptyList()
+                val unrestrictBody = realDebridProvider.unrestrictLink(resolvedFile.sourceLink)
+                    ?: return emptyList()
                 val playbackUrl = unrestrictBody.download?.takeIf { it.isNotBlank() } ?: return emptyList()
                 val mediaInfo = if (!unrestrictBody.id.isNullOrBlank()) {
                     fetchRealDebridMediaInfo(unrestrictBody.id)
@@ -371,9 +331,7 @@ class DebridAvailabilityResolver @Inject constructor(
                 )
             } finally {
                 torrentId?.let { id ->
-                    realDebridAuthService.executeAuthorizedRequest { authorization ->
-                        realDebridApi.deleteTorrent(authorization = authorization, id = id)
-                    }
+                    realDebridProvider.deleteTorrent(id)
                 }
             }
         }
@@ -393,14 +351,11 @@ class DebridAvailabilityResolver @Inject constructor(
             val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
             if (apiKey.isBlank()) return emptyList()
 
-            val cacheResponse = runCatching {
-                torBoxApi.checkCachedTorrents(
-                    authorization = "Bearer $apiKey",
-                    body = TorBoxCheckCachedRequestDto(hashes = listOf(candidate.normalizedInfoHash))
-                )
-            }.getOrNull() ?: return emptyList()
-            val cacheBody = cacheResponse.body() ?: return emptyList()
-            if (!cacheResponse.isSuccessful || cacheBody.success == false) {
+            val cacheBody = torBoxProvider.checkCachedTorrents(
+                apiKey = apiKey,
+                body = TorBoxCheckCachedRequestDto(hashes = listOf(candidate.normalizedInfoHash))
+            ) ?: return emptyList()
+            if (cacheBody.success == false) {
                 return emptyList()
             }
 
@@ -420,14 +375,11 @@ class DebridAvailabilityResolver @Inject constructor(
             val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
             if (apiKey.isBlank() || candidates.isEmpty()) return emptyMap()
 
-            val cacheResponse = runCatching {
-                torBoxApi.checkCachedTorrents(
-                    authorization = "Bearer $apiKey",
-                    body = TorBoxCheckCachedRequestDto(hashes = candidates.map { it.normalizedInfoHash })
-                )
-            }.getOrNull() ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
-            val cacheBody = cacheResponse.body()
-            if (!cacheResponse.isSuccessful || cacheBody == null || cacheBody.success == false) {
+            val cacheBody = torBoxProvider.checkCachedTorrents(
+                apiKey = apiKey,
+                body = TorBoxCheckCachedRequestDto(hashes = candidates.map { it.normalizedInfoHash })
+            ) ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
+            if (cacheBody.success == false) {
                 return candidates.associate { it.normalizedInfoHash to emptyList() }
             }
 
@@ -457,16 +409,13 @@ class DebridAvailabilityResolver @Inject constructor(
             cachedTorrent: TorBoxCachedTorrentDto,
             cachedSelection: TorBoxSelection
         ): List<ResolvedServiceWrapStream> {
-            val createResponse = runCatching {
-                torBoxApi.createTorrent(
-                    authorization = "Bearer $apiKey",
-                    magnet = candidate.magnetUri.toPlainTextBody(),
-                    allowZip = "false".toPlainTextBody(),
-                    addOnlyIfCached = "true".toPlainTextBody()
-                )
-            }.getOrNull() ?: return emptyList()
-            val createBody = createResponse.body() ?: return emptyList()
-            if (!createResponse.isSuccessful || createBody.success == false) {
+            val createBody = torBoxProvider.createTorrent(
+                apiKey = apiKey,
+                magnet = candidate.magnetUri.toPlainTextBody(),
+                allowZip = "false".toPlainTextBody(),
+                addOnlyIfCached = "true".toPlainTextBody()
+            ) ?: return emptyList()
+            if (createBody.success == false) {
                 return emptyList()
             }
 
@@ -475,16 +424,11 @@ class DebridAvailabilityResolver @Inject constructor(
             val selectedFile = chooseTorBoxFileFromItem(torrentItem, candidate, requestContext, cachedSelection.file.id)
                 ?: cachedSelection
 
-            val requestLinkResponse = runCatching {
-                torBoxApi.requestDownloadLink(
-                    token = apiKey,
-                    torrentId = torrentId,
-                    fileId = selectedFile.file.id
-                )
-            }.getOrNull() ?: return emptyList()
-            val requestLinkBody = requestLinkResponse.body() ?: return emptyList()
-            val playbackUrl = requestLinkBody.data?.takeIf { requestLinkResponse.isSuccessful && requestLinkBody.success != false && it.isNotBlank() }
-                ?: return emptyList()
+            val playbackUrl = torBoxProvider.requestDownloadLink(
+                apiKey = apiKey,
+                torrentId = torrentId,
+                fileId = selectedFile.file.id ?: return emptyList()
+            ) ?: return emptyList()
 
             val path = selectedFile.path
             return listOf(
@@ -520,17 +464,14 @@ class DebridAvailabilityResolver @Inject constructor(
             val apiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
             if (apiKey.isBlank()) return emptyList()
 
-            val authorization = "Bearer $apiKey"
-            val lookupBody = runCatching {
-                easyDebridApi.lookupDetails(
-                    authorization = authorization,
-                    body = EasyDebridLookupRequestDto(urls = listOf(candidate.magnetUri))
-                )
-            }.getOrNull()?.body() ?: return emptyList()
+            val lookupBody = easyDebridProvider.lookupDetails(
+                apiKey = apiKey,
+                body = EasyDebridLookupRequestDto(urls = listOf(candidate.magnetUri))
+            ) ?: return emptyList()
 
             val lookupResult = lookupBody.result.firstOrNull()?.takeIf { it.cached } ?: return emptyList()
 
-            return resolveCachedCandidate(candidate, requestContext, authorization, lookupResult)
+            return resolveCachedCandidate(candidate, requestContext, apiKey, lookupResult)
         }
 
         override suspend fun resolveChunk(
@@ -540,18 +481,15 @@ class DebridAvailabilityResolver @Inject constructor(
             val apiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
             if (apiKey.isBlank() || candidates.isEmpty()) return emptyMap()
 
-            val authorization = "Bearer $apiKey"
-            val lookupBody = runCatching {
-                easyDebridApi.lookupDetails(
-                    authorization = authorization,
-                    body = EasyDebridLookupRequestDto(urls = candidates.map { it.magnetUri })
-                )
-            }.getOrNull()?.body() ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
+            val lookupBody = easyDebridProvider.lookupDetails(
+                apiKey = apiKey,
+                body = EasyDebridLookupRequestDto(urls = candidates.map { it.magnetUri })
+            ) ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
 
             val resolved = LinkedHashMap<String, List<ResolvedServiceWrapStream>>()
             candidates.zip(lookupBody.result).forEach { (candidate, lookupResult) ->
                 resolved[candidate.normalizedInfoHash] = if (lookupResult.cached) {
-                    resolveCachedCandidate(candidate, requestContext, authorization, lookupResult)
+                    resolveCachedCandidate(candidate, requestContext, apiKey, lookupResult)
                 } else {
                     emptyList()
                 }
@@ -565,15 +503,13 @@ class DebridAvailabilityResolver @Inject constructor(
         private suspend fun resolveCachedCandidate(
             candidate: WrapCandidate,
             requestContext: ServiceWrapRequestContext,
-            authorization: String,
+            apiKey: String,
             lookupResult: EasyDebridLookupDetailsResultDto
         ): List<ResolvedServiceWrapStream> {
-            val generateBody = runCatching {
-                easyDebridApi.generate(
-                    authorization = authorization,
-                    body = EasyDebridGenerateRequestDto(url = candidate.magnetUri)
-                )
-            }.getOrNull()?.body() ?: return emptyList()
+            val generateBody = easyDebridProvider.generate(
+                apiKey = apiKey,
+                body = EasyDebridGenerateRequestDto(url = candidate.magnetUri)
+            ) ?: return emptyList()
 
             val selectedFile = chooseEasyDebridFile(generateBody, lookupResult, candidate, requestContext)
                 ?: return emptyList()
@@ -600,11 +536,8 @@ class DebridAvailabilityResolver @Inject constructor(
 
     private suspend fun pollRealDebridTorrentInfo(torrentId: String): RealDebridTorrentInfoDto? {
         repeat(20) { attempt ->
-            val infoResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                realDebridApi.getTorrentInfo(authorization = authorization, id = torrentId)
-            } ?: return null
-            val body = infoResponse.body()
-            if (infoResponse.isSuccessful && body != null) {
+            val body = realDebridProvider.fetchTorrentInfo(torrentId)
+            if (body != null) {
                 if (body.links.isNotEmpty() && body.files.any { it.selected == 1 }) {
                     return body
                 }
@@ -624,16 +557,13 @@ class DebridAvailabilityResolver @Inject constructor(
 
     private suspend fun pollTorBoxTorrent(apiKey: String, torrentId: Int): TorBoxTorrentListItemDto? {
         repeat(20) { attempt ->
-            val response = runCatching {
-                torBoxApi.getMyTorrentList(
-                    authorization = "Bearer $apiKey",
-                    id = torrentId,
-                    bypassCache = true
-                )
-            }.getOrNull() ?: return null
-            val body = response.body()
-            val item = body?.data?.firstOrNull { it.id == torrentId } ?: body?.data?.firstOrNull()
-            if (response.isSuccessful && body?.success != false && item != null) {
+            val body = torBoxProvider.fetchTorrentList(
+                apiKey = apiKey,
+                id = torrentId,
+                limit = null
+            ) ?: return null
+            val item = body.data?.firstOrNull { it.id == torrentId } ?: body.data?.firstOrNull()
+            if (body.success != false && item != null) {
                 if (item.isDownloaded() || item.resolvedState().equals("downloaded", ignoreCase = true)) {
                     return item
                 }
@@ -650,11 +580,7 @@ class DebridAvailabilityResolver @Inject constructor(
     }
 
     private suspend fun fetchRealDebridMediaInfo(downloadId: String): RealDebridMediaInfoDto? {
-        val response = realDebridAuthService.executeAuthorizedRequest { authorization ->
-            realDebridApi.getMediaInfos(authorization = authorization, id = downloadId)
-        } ?: return null
-        if (!response.isSuccessful) return null
-        return response.body()
+        return realDebridProvider.fetchMediaInfos(downloadId)
     }
 
     private fun choosePremiumizeContent(

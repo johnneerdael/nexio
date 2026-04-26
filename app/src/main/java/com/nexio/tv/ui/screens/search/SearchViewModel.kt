@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.ImdbPosterLookupService
-import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
@@ -12,6 +11,7 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DEFAULT_MAX_RECENT_SEARCHES
 import com.nexio.tv.data.local.SearchHistoryDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
+import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -44,7 +44,7 @@ class SearchViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val searchHistoryDataStore: SearchHistoryDataStore,
-    private val imdbSearchService: ImdbSearchService,
+    private val imdbTitleSearchRepository: ImdbTitleSearchRepository,
     private val imdbPosterLookupService: ImdbPosterLookupService,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val tmdbDiscoveryService: TmdbDiscoveryService,
@@ -266,7 +266,7 @@ class SearchViewModel @Inject constructor(
             kotlinx.coroutines.delay(SUGGESTION_DEBOUNCE_MS)
 
             val imdbResults: List<ImdbSuggestion> = try {
-                imdbSearchService.search(query)
+                imdbTitleSearchRepository.search(query)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

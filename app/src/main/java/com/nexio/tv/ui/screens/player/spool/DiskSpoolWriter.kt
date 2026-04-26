@@ -1,17 +1,14 @@
 package com.nexio.tv.ui.screens.player.spool
 
 import android.util.Log
+import com.nexio.tv.data.integration.playback.transport.DiskSpoolHttpTransport
+import com.nexio.tv.data.integration.playback.transport.DiskSpoolHttpResponse
 import java.io.EOFException
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
-import okhttp3.Call
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
 import okio.BufferedSource
 
 internal class DiskSpoolWriter(
-    private val okHttpClient: OkHttpClient,
+    private val transport: DiskSpoolHttpTransport,
     private val requestHeaders: Map<String, String> = emptyMap(),
     private val chunkBytes: Int = 18 * 1024 * 1024,
     private val ioBufferBytes: Int = 512 * 1024,
@@ -37,26 +34,17 @@ internal class DiskSpoolWriter(
         if (isCancelled()) {
             throw IOException("Interrupted before disk spool metadata probe")
         }
-        val request = requestBuilder(url)
-            .header("Range", "bytes=0-0")
-            .build()
-        val call = okHttpClient.newCall(request)
-        if (isCancelled()) {
-            call.cancel()
-            throw IOException("Interrupted before disk spool metadata probe")
-        }
-
-        return executeCancellable(
-            call = call,
+        return executeRequest(
+            url = url,
+            rangeHeader = "bytes=0-0",
             isCancelled = ::isCancelled,
             monitorName = "DiskSpoolProbeCancellation",
             interruptedMessage = "Interrupted during disk spool metadata probe"
         ) { response ->
             if (isCancelled()) {
-                call.cancel()
                 throw IOException("Interrupted during disk spool metadata probe")
             }
-            response.body?.source()?.let { source ->
+            response.bodySource()?.let { source ->
                 try {
                     source.readByte()
                 } catch (_: EOFException) {
@@ -64,7 +52,6 @@ internal class DiskSpoolWriter(
                 }
             }
             if (isCancelled()) {
-                call.cancel()
                 throw IOException("Interrupted during disk spool metadata probe")
             }
 
@@ -256,30 +243,21 @@ internal class DiskSpoolWriter(
         var attempt = 1
         while (attempt <= 4 && !isCancelled()) {
             try {
-                val request = requestBuilder(url)
-                    .header("Range", "bytes=$start-$endInclusive")
-                    .build()
-                val call = okHttpClient.newCall(request)
-                if (isCancelled()) {
-                    call.cancel()
-                    return start
-                }
-
-                return executeCancellable(
-                    call = call,
+                return executeRequest(
+                    url = url,
+                    rangeHeader = "bytes=$start-$endInclusive",
                     isCancelled = ::isCancelled,
                     monitorName = "DiskSpoolRangeCancellation",
                     interruptedMessage = "Interrupted during range $start-$endInclusive"
                 ) { response ->
                     if (isCancelled()) {
-                        call.cancel()
-                        return@executeCancellable start
+                        return@executeRequest start
                     }
                     if (!response.isSuccessful) {
                         throw IOException("Unexpected response ${response.code} for range $start-$endInclusive")
                     }
 
-                    val source = response.body?.source()
+                    val source = response.bodySource()
                         ?: throw IOException("Missing response body for range $start-$endInclusive")
                     downloadRangeIntoSession(source, start, endInclusive, session, ioBuffer)
                 }
@@ -302,58 +280,15 @@ internal class DiskSpoolWriter(
         return start
     }
 
-    private fun <T> executeCancellable(
-        call: Call,
+    private fun <T> executeRequest(
+        url: String,
+        rangeHeader: String,
         isCancelled: () -> Boolean,
         monitorName: String,
         interruptedMessage: String,
-        block: (Response) -> T
+        block: (DiskSpoolHttpResponse) -> T
     ): T {
-        if (isCancelled()) {
-            call.cancel()
-            throw IOException(interruptedMessage)
-        }
-
-        val callFinished = AtomicBoolean(false)
-        val cancellationMonitor = Thread {
-            while (!callFinished.get()) {
-                if (isCancelled()) {
-                    call.cancel()
-                    return@Thread
-                }
-                try {
-                    Thread.sleep(25L)
-                } catch (_: InterruptedException) {
-                    return@Thread
-                }
-            }
-        }
-        cancellationMonitor.isDaemon = true
-        cancellationMonitor.name = monitorName
-        cancellationMonitor.start()
-
-        try {
-            call.execute().use { response ->
-                if (isCancelled()) {
-                    call.cancel()
-                    throw IOException(interruptedMessage)
-                }
-                return block(response)
-            }
-        } finally {
-            callFinished.set(true)
-            cancellationMonitor.interrupt()
-        }
-    }
-
-    private fun requestBuilder(url: String): Request.Builder {
-        val builder = Request.Builder().url(url)
-        requestHeaders.forEach { (key, value) ->
-            if (!key.equals("Range", ignoreCase = true)) {
-                builder.header(key, value)
-            }
-        }
-        return builder
+        return transport.execute(url, requestHeaders, rangeHeader, isCancelled, monitorName, interruptedMessage, block)
     }
 
     private fun rebaseTo(session: SessionBridge, position: Long): Boolean {

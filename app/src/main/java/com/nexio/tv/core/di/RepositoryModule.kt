@@ -1,5 +1,7 @@
 package com.nexio.tv.core.di
 
+import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
+import com.nexio.tv.data.integration.imdb.ImdbTitleSearchIntegrationRepository
 import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.data.repository.CatalogRepositoryImpl
 import com.nexio.tv.data.repository.LibraryRepositoryImpl
@@ -9,9 +11,8 @@ import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
 import com.nexio.tv.data.repository.DefaultTrackingProgressService
 import com.nexio.tv.data.repository.DefaultTrackingScrobbleService
+import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.repository.KitsuDiscoveryClient
-import com.nexio.tv.data.repository.RetrofitKitsuDiscoveryClient
-import com.nexio.tv.data.repository.RetrofitTmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.repository.TrackingScrobbleService
@@ -19,7 +20,7 @@ import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
-import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -28,6 +29,7 @@ import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.SubtitleRepository
 import com.nexio.tv.domain.repository.SyncRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -86,20 +88,26 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindTmdbDiscoveryClient(impl: RetrofitTmdbDiscoveryClient): TmdbDiscoveryClient
+    abstract fun bindTmdbDiscoveryClient(impl: TmdbIntegrationProvider): TmdbDiscoveryClient
 
     @Binds
     @Singleton
-    abstract fun bindKitsuDiscoveryClient(impl: RetrofitKitsuDiscoveryClient): KitsuDiscoveryClient
+    abstract fun bindKitsuDiscoveryClient(impl: KitsuDiscoveryIntegrationProvider): KitsuDiscoveryClient
+
+    @Binds
+    @Singleton
+    abstract fun bindImdbTitleSearchRepository(
+        impl: ImdbTitleSearchIntegrationRepository
+    ): ImdbTitleSearchRepository
 
     companion object {
         @Provides
         @Singleton
         fun provideSeasonMarkBatcher(
-            traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator
+            providerMutationOutboxCoordinator: ProviderMutationOutboxCoordinator
         ): SeasonMarkBatcher {
             return SeasonMarkBatcher(
-                traktMutationOutboxCoordinator,
+                providerMutationOutboxCoordinator,
                 Dispatchers.IO
             )
         }

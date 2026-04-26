@@ -150,6 +150,24 @@ class TraktLibrarySnapshotStoreTest {
         assertEquals("trakt_library_snapshot", TraktLibrarySnapshotStore.BASE_PREFS_NAME)
     }
 
+    @Test
+    fun `builder emits a profile scoped trakt namespace and canonical media identities`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(
+            prefs,
+            profilePrefsName(TraktLibrarySnapshotStore.BASE_PREFS_NAME, 7)
+        )
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 7
+        val store = TraktLibrarySnapshotStore(context, metadataStore)
+        val watchlist = store.buildRailMemberships(sampleSnapshot(), profileId = 7)
+            .first { it.rail.paramsHash == "watchlist" }
+        assertEquals("profile:7:library:trakt:watchlist", watchlist.rail.railKey)
+        assertEquals("movie:imdb:tt1234567", watchlist.items.single().mediaKey)
+        assertTrue(watchlist.externalIds.any { it.provider == "IMDB" && it.externalId == "tt1234567" })
+        assertTrue(watchlist.externalIds.any { it.provider == "TRAKT" && it.externalId == "10" })
+    }
+
     private fun sampleSnapshot(): TraktLibrarySnapshotStore.Snapshot {
         val watchlistTab = LibraryListTab(
             key = "watchlist",
@@ -241,4 +259,5 @@ class TraktLibrarySnapshotStoreTest {
             every { getSharedPreferences(expectedName, Context.MODE_PRIVATE) } returns prefs
         }
     }
+
 }

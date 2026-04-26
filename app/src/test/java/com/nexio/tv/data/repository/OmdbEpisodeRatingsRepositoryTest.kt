@@ -1,6 +1,9 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.core.integration.byteArrayRuntimeFixture
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.data.integration.omdb.OmdbIntegrationProvider
 import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.OmdbSeasonEpisodeDto
@@ -44,7 +47,11 @@ class OmdbEpisodeRatingsRepositoryTest {
             )
         )
 
-        val repository = OmdbEpisodeRatingsRepository(omdbApi, settingsStore, tmdbService).also {
+        val repository = OmdbEpisodeRatingsRepository(
+            omdbProvider = OmdbIntegrationProvider(passThroughTestRuntime(), omdbApi),
+            omdbSettingsDataStore = settingsStore,
+            tmdbService = tmdbService
+        ).also {
             it.nowMsProvider = { now }
         }
         val meta = stubMeta(id = "tt27444205")
@@ -83,7 +90,11 @@ class OmdbEpisodeRatingsRepositoryTest {
             )
         ) andThenThrows IOException("rate limited")
 
-        val repository = OmdbEpisodeRatingsRepository(omdbApi, settingsStore, tmdbService).also {
+        val repository = OmdbEpisodeRatingsRepository(
+            omdbProvider = OmdbIntegrationProvider(passThroughTestRuntime(), omdbApi),
+            omdbSettingsDataStore = settingsStore,
+            tmdbService = tmdbService
+        ).also {
             it.nowMsProvider = { now }
         }
         val meta = stubMeta(id = "tt27444205")
@@ -135,7 +146,11 @@ class OmdbEpisodeRatingsRepositoryTest {
             )
         }
 
-        val repository = OmdbEpisodeRatingsRepository(omdbApi, settingsStore, tmdbService).also {
+        val repository = OmdbEpisodeRatingsRepository(
+            omdbProvider = OmdbIntegrationProvider(passThroughTestRuntime(), omdbApi),
+            omdbSettingsDataStore = settingsStore,
+            tmdbService = tmdbService
+        ).also {
             it.nowMsProvider = { now }
         }
         val meta = stubMeta(id = "tt27444205")
@@ -158,6 +173,30 @@ class OmdbEpisodeRatingsRepositoryTest {
         }
 
         assertEquals(first.await(), second.await())
+        coVerify(exactly = 1) { omdbApi.getSeason("omdb-key", "tt27444205", 1) }
+    }
+
+    @Test
+    fun `season ratings survive real runtime cache round trip`() = runTest {
+        val fixture = byteArrayRuntimeFixture()
+        val omdbApi = mockk<OmdbApi>()
+        val provider = OmdbIntegrationProvider(fixture.runtime, omdbApi)
+
+        coEvery { omdbApi.getSeason("omdb-key", "tt27444205", 1) } returns Response.success(
+            OmdbSeasonResponse(
+                response = "True",
+                episodes = listOf(
+                    OmdbSeasonEpisodeDto(episode = "1", imdbRating = "8.3", imdbId = "tt31547200"),
+                    OmdbSeasonEpisodeDto(episode = "3", imdbRating = "7.5", imdbId = "tt32459854")
+                )
+            )
+        )
+
+        val first = provider.getSeasonRatings("tt27444205", "omdb-key", 1)
+        val second = provider.getSeasonRatings("tt27444205", "omdb-key", 1)
+
+        assertEquals(mapOf((1 to 1) to 8.3, (1 to 3) to 7.5), first)
+        assertEquals(first, second)
         coVerify(exactly = 1) { omdbApi.getSeason("omdb-key", "tt27444205", 1) }
     }
 

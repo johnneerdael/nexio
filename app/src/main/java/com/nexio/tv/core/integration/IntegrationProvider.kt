@@ -1,6 +1,7 @@
 package com.nexio.tv.core.integration
 
 enum class IntegrationProvider {
+    ADDON,
     TRAKT,
     SIMKL,
     TMDB,
@@ -8,6 +9,7 @@ enum class IntegrationProvider {
     KITSU,
     MDBLIST,
     OMDB,
+    CUSTOM_IMDB,
     THEINTRODB,
     ANISKIP,
     ANIMESKIP,
@@ -18,5 +20,9 @@ enum class IntegrationProvider {
     PREMIUMIZE,
     TORBOX,
     EASY_DEBRID,
-    GITHUB
+    SHADOW_COLLECTOR,
+    GITHUB,
+    YOUTUBE_TRAILER,
+    SUBTITLE_SOURCE_DOWNLOAD,
+    SUBTITLE_TRANSLATION
 }

@@ -6,6 +6,8 @@ import android.provider.Settings
 import android.util.Log
 import com.google.gson.JsonObject
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.collector.ShadowAutoplayUploadIntegrationProvider
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -13,17 +15,14 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "ShadowAutoplayUpload"
 
 @Singleton
 class ShadowAutoplayCollectionUploader internal constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
-    private val okHttpClient: OkHttpClient,
+    private val uploadIntegrationProvider: ShadowAutoplayUploadIntegrationProvider,
     private val logger: ShadowAutoPlayDecisionLogger,
     private val baseUrlProvider: () -> String,
     private val tokenProvider: () -> String,
@@ -33,11 +32,11 @@ class ShadowAutoplayCollectionUploader internal constructor(
     constructor(
         @ApplicationContext context: Context,
         playerSettingsDataStore: PlayerSettingsDataStore,
-        okHttpClient: OkHttpClient,
+        uploadIntegrationProvider: ShadowAutoplayUploadIntegrationProvider,
         logger: ShadowAutoPlayDecisionLogger
     ) : this(
         playerSettingsDataStore = playerSettingsDataStore,
-        okHttpClient = okHttpClient,
+        uploadIntegrationProvider = uploadIntegrationProvider,
         logger = logger,
         baseUrlProvider = { BuildConfig.SHADOW_DATA_COLLECTION_BASE_URL.trim().trimEnd('/') },
         tokenProvider = { BuildConfig.SHADOW_DATA_COLLECTION_WRITE_TOKEN.trim() },
@@ -58,21 +57,23 @@ class ShadowAutoplayCollectionUploader internal constructor(
             add("payload", com.google.gson.JsonParser.parseString(payloadJson))
         }.toString()
 
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val request = Request.Builder()
-                    .url("$baseUrl/api/v1/shadow-autoplay-events")
-                    .header("Authorization", "Bearer $token")
-                    .post(envelope.toRequestBody("application/json".toMediaType()))
-                    .build()
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.w(TAG, "Upload failed code=${response.code}")
-                    }
+        try {
+            withContext(Dispatchers.IO) {
+                when (val result = uploadIntegrationProvider.uploadEvent(
+                    baseUrl = baseUrl,
+                    token = token,
+                    envelopeJson = envelope
+                )) {
+                    is IntegrationCallResult.Success -> Unit
+                    is IntegrationCallResult.HttpError -> Log.w(TAG, "Upload failed code=${result.statusCode}")
+                    is IntegrationCallResult.NetworkError -> Log.w(TAG, "Upload failed: ${result.throwable.message}")
+                    IntegrationCallResult.Missing -> Unit
                 }
-            }.onFailure { error ->
-                Log.w(TAG, "Upload failed: ${error.message}")
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.w(TAG, "Upload failed: ${error.message}")
         }
     }
 }

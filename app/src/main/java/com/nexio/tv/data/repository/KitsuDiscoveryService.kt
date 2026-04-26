@@ -1,9 +1,9 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
 import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
-import com.nexio.tv.data.remote.api.KitsuApi
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
@@ -14,30 +14,7 @@ import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
-class RetrofitKitsuDiscoveryClient @Inject constructor(
-    private val kitsuApi: KitsuApi
-) : KitsuDiscoveryClient {
-    override suspend fun fetchCatalog(
-        catalogId: String,
-        preferences: KitsuCatalogPreferences
-    ): List<KitsuAnimeResource> {
-        val response = when (catalogId) {
-            KitsuCatalogIds.TRENDING_ANIME -> kitsuApi.getTrendingAnime()
-            KitsuCatalogIds.HIGHEST_RATED_ANIME -> kitsuApi.getAnimeCollection(sort = "ratingRank")
-            KitsuCatalogIds.POPULAR_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank")
-            KitsuCatalogIds.POPULAR_ACTION_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank", category = "action")
-            KitsuCatalogIds.POPULAR_DRAMA_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank", category = "drama")
-            KitsuCatalogIds.POPULAR_COMEDY_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank", category = "comedy")
-            KitsuCatalogIds.POPULAR_FANTASY_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank", category = "fantasy")
-            KitsuCatalogIds.POPULAR_ROMANCE_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank", category = "romance")
-            KitsuCatalogIds.POPULAR_ADVENTURE_ANIME -> kitsuApi.getAnimeCollection(sort = "popularityRank", category = "adventure")
-            else -> return emptyList()
-        }
-        if (!response.isSuccessful) return emptyList()
-        return response.body()?.data.orEmpty()
-    }
-}
+typealias RetrofitKitsuDiscoveryClient = KitsuDiscoveryIntegrationProvider
 
 @Singleton
 class KitsuDiscoveryService @Inject constructor(

@@ -6,16 +6,22 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.integration.ActiveRailTracker
+import com.nexio.tv.core.integration.IntegrationHydrationCoordinator
+import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.integration.IntegrationPlaybackGate
+import com.nexio.tv.core.integration.NoOpIntegrationHydrationCoordinator
+import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
@@ -66,6 +72,7 @@ import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,8 +80,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.Mutex
 import java.util.Collections
@@ -126,6 +135,11 @@ class HomeViewModel @Inject constructor(
     internal val profileBoundary: ProfileBoundary,
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
+    internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
+    internal val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
+    internal val integrationHydrationCoordinator: IntegrationHydrationCoordinator = NoOpIntegrationHydrationCoordinator,
+    internal val integrationOwnershipService: IntegrationOwnershipService,
+    internal val homeRailHydrationExecutor: HomeRailHydrationExecutor = NoOpHomeRailHydrationExecutor,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -381,6 +395,7 @@ class HomeViewModel @Inject constructor(
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
+        observeActiveHomeRails()
         observeLibraryState()
         observeTmdbSettings()
         observeMDBListSettings()
@@ -398,6 +413,28 @@ class HomeViewModel @Inject constructor(
         observePriorityHydration()
         loadContinueWatching()
         observeInstalledAddons()
+    }
+
+    private fun observeActiveHomeRails() {
+        viewModelScope.launch {
+            _uiState
+                .map { state ->
+                    val profileId = profileManager.activeProfileId.value
+                    state.catalogRows.map { row ->
+                        RailKeyFactory.homeCatalog(profileId, row.catalogId)
+                    }.toSet()
+                }
+                .distinctUntilChanged()
+                .collectLatest { activeRails ->
+                    activeRailTracker.replaceActiveRails(activeRails)
+                    withContext(Dispatchers.IO) {
+                        val plannedRails = integrationHydrationCoordinator.hydrateNextBatch(
+                            limit = activeRails.size.coerceAtLeast(1)
+                        )
+                        homeRailHydrationExecutor.hydrate(plannedRails)
+                    }
+                }
+        }
     }
 
     private fun observeStartupPerfTelemetry() {
@@ -433,6 +470,10 @@ class HomeViewModel @Inject constructor(
                     metaRepository.clearCache()
                     tmdbMetadataService.clearCache()
                     val profileId = profileManager.activeProfileId.value
+                    integrationOwnershipService.syncRails(
+                        RailKeyFactory.homeCatalogNamespace(profileId),
+                        emptyList()
+                    )
                     homeCatalogSnapshotStore.clear(profileId = profileId)
                     syntheticHomeCatalogStore.clear(profileId = profileId)
                     inMemoryHomeSnapshot = null

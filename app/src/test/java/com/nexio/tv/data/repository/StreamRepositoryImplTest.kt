@@ -2,10 +2,11 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
+import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
-import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.StreamSearchRequestTag
 import com.nexio.tv.data.remote.dto.StreamDto
 import com.nexio.tv.data.remote.dto.StreamResponseDto
@@ -24,6 +25,7 @@ import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.repository.AddonRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -36,16 +38,9 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import okhttp3.Call
-import okhttp3.Dispatcher
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import retrofit2.Response
 
 class StreamRepositoryImplTest {
 
@@ -61,44 +56,40 @@ class StreamRepositoryImplTest {
     fun `getStreamsFromAllAddons emits progressive results and completes`() = runTest {
         mockAndroidLog()
 
-        val addonApi = mockk<AddonApi>()
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
         val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
-        val okHttpClient = mockk<OkHttpClient>(relaxed = true)
-        val dispatcher = mockk<Dispatcher>()
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
-        every { okHttpClient.dispatcher } returns dispatcher
-        every { dispatcher.runningCalls() } returns mutableListOf()
-        every { dispatcher.queuedCalls() } returns mutableListOf()
 
         val addonA = streamAddon("https://addon-a.example", "Addon A")
         val addonB = streamAddon("https://addon-b.example", "Addon B")
         val addonC = streamAddon("https://addon-c.example", "Addon C")
 
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(addonA, addonB, addonC))
-        coEvery { addonApi.getStreams(match { it.contains("addon-a.example") }, any()) } coAnswers {
+        coEvery { addonStreamIntegrationProvider.getStreams(addonA.id, match { it.contains("addon-a.example") }, any()) } coAnswers {
             delay(60)
-            Response.success(StreamResponseDto(streams = listOf(streamDto("A-1"))))
+            NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("A-1"))))
         }
-        coEvery { addonApi.getStreams(match { it.contains("addon-b.example") }, any()) } coAnswers {
+        coEvery { addonStreamIntegrationProvider.getStreams(addonB.id, match { it.contains("addon-b.example") }, any()) } coAnswers {
             delay(10)
-            Response.success(StreamResponseDto(streams = emptyList()))
+            NetworkResult.Success(StreamResponseDto(streams = emptyList()))
         }
-        coEvery { addonApi.getStreams(match { it.contains("addon-c.example") }, any()) } coAnswers {
+        coEvery { addonStreamIntegrationProvider.getStreams(addonC.id, match { it.contains("addon-c.example") }, any()) } coAnswers {
             delay(20)
-            Response.success(StreamResponseDto(streams = listOf(streamDto("C-1"))))
+            NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("C-1"))))
         }
 
         val repository = StreamRepositoryImpl(
-            api = addonApi,
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            okHttpClient = okHttpClient
+            addonStreamRequestCanceller = addonStreamRequestCanceller
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -127,40 +118,39 @@ class StreamRepositoryImplTest {
     fun `getStreamsFromAllAddons completes with empty success when no addon returns links`() = runTest {
         mockAndroidLog()
 
-        val addonApi = mockk<AddonApi>()
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
         val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
-        val okHttpClient = mockk<OkHttpClient>(relaxed = true)
-        val dispatcher = mockk<Dispatcher>()
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
-        every { okHttpClient.dispatcher } returns dispatcher
-        every { dispatcher.runningCalls() } returns mutableListOf()
-        every { dispatcher.queuedCalls() } returns mutableListOf()
 
         val addonA = streamAddon("https://addon-a.example", "Addon A")
         val addonB = streamAddon("https://addon-b.example", "Addon B")
         val addonC = streamAddon("https://addon-c.example", "Addon C")
 
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(addonA, addonB, addonC))
-        coEvery { addonApi.getStreams(match { it.contains("addon-a.example") }, any()) } returns Response.error(
-            503,
-            "Service unavailable".toResponseBody("text/plain".toMediaType())
-        )
-        coEvery { addonApi.getStreams(match { it.contains("addon-b.example") }, any()) } throws RuntimeException("boom")
-        coEvery { addonApi.getStreams(match { it.contains("addon-c.example") }, any()) } returns Response.success(
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(addonA.id, match { it.contains("addon-a.example") }, any())
+        } returns NetworkResult.Error("Service unavailable", 503)
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(addonB.id, match { it.contains("addon-b.example") }, any())
+        } throws RuntimeException("boom")
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(addonC.id, match { it.contains("addon-c.example") }, any())
+        } returns NetworkResult.Success(
             StreamResponseDto(streams = emptyList())
         )
 
         val repository = StreamRepositoryImpl(
-            api = addonApi,
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            okHttpClient = okHttpClient
+            addonStreamRequestCanceller = addonStreamRequestCanceller
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -186,22 +176,18 @@ class StreamRepositoryImplTest {
     fun `getStreamsFromAllAddons emits wrapped service streams as each provider resolves`() = runTest {
         mockAndroidLog()
 
-        val addonApi = mockk<AddonApi>()
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
-        val okHttpClient = mockk<OkHttpClient>(relaxed = true)
-        val dispatcher = mockk<Dispatcher>()
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings(serviceWrapEnabled = true))
-        every { okHttpClient.dispatcher } returns dispatcher
-        every { dispatcher.runningCalls() } returns mutableListOf()
-        every { dispatcher.queuedCalls() } returns mutableListOf()
 
         val addonA = streamAddon("https://addon-a.example", "Addon A")
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(addonA))
         val hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
-        coEvery { addonApi.getStreams(match { it.contains("addon-a.example") }, any()) } returns Response.success(
+        coEvery { addonStreamIntegrationProvider.getStreams(addonA.id, match { it.contains("addon-a.example") }, any()) } returns NetworkResult.Success(
             StreamResponseDto(
                 streams = listOf(
                     streamDto(
@@ -245,12 +231,12 @@ class StreamRepositoryImplTest {
         )
 
         val repository = StreamRepositoryImpl(
-            api = addonApi,
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            okHttpClient = okHttpClient
+            addonStreamRequestCanceller = addonStreamRequestCanceller
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -275,21 +261,17 @@ class StreamRepositoryImplTest {
     fun `getStreamsFromAllAddons emits first service-wrap chunk before later chunks finish`() = runTest {
         mockAndroidLog()
 
-        val addonApi = mockk<AddonApi>()
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
-        val okHttpClient = mockk<OkHttpClient>(relaxed = true)
-        val dispatcher = mockk<Dispatcher>()
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings(serviceWrapEnabled = true))
-        every { okHttpClient.dispatcher } returns dispatcher
-        every { dispatcher.runningCalls() } returns mutableListOf()
-        every { dispatcher.queuedCalls() } returns mutableListOf()
 
         val addonA = streamAddon("https://addon-a.example", "Addon A")
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(addonA))
-        coEvery { addonApi.getStreams(match { it.contains("addon-a.example") }, any()) } returns Response.success(
+        coEvery { addonStreamIntegrationProvider.getStreams(addonA.id, match { it.contains("addon-a.example") }, any()) } returns NetworkResult.Success(
             StreamResponseDto(
                 streams = (1..25).map { index ->
                     streamDto(
@@ -334,12 +316,12 @@ class StreamRepositoryImplTest {
         )
 
         val repository = StreamRepositoryImpl(
-            api = addonApi,
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            okHttpClient = okHttpClient
+            addonStreamRequestCanceller = addonStreamRequestCanceller
         )
 
         val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
@@ -359,52 +341,77 @@ class StreamRepositoryImplTest {
     }
 
     @Test
-    fun `cancelActiveStreamRequests only cancels matching tagged addon stream calls`() {
+    fun `cancelActiveStreamRequests delegates to addon stream request canceller`() {
         mockAndroidLog()
 
-        val addonApi = mockk<AddonApi>()
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>(relaxed = true)
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
         val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
-        val okHttpClient = mockk<OkHttpClient>()
-        val dispatcher = mockk<Dispatcher>()
-        val runningStreamCall = mockk<Call>(relaxed = true)
-        val queuedStreamCall = mockk<Call>(relaxed = true)
-        val metaCall = mockk<Call>(relaxed = true)
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>()
 
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
-        every { okHttpClient.dispatcher } returns dispatcher
-        every { dispatcher.runningCalls() } returns mutableListOf(runningStreamCall, metaCall)
-        every { dispatcher.queuedCalls() } returns mutableListOf(queuedStreamCall)
-        every { runningStreamCall.request() } returns Request.Builder()
-            .url("https://addon-a.example/stream/movie/tt123.json")
-            .tag(StreamSearchRequestTag::class.java, StreamSearchRequestTag("request-a"))
-            .build()
-        every { queuedStreamCall.request() } returns Request.Builder()
-            .url("https://addon-b.example/stream/movie/tt456.json")
-            .tag(StreamSearchRequestTag::class.java, StreamSearchRequestTag("request-b"))
-            .build()
-        every { metaCall.request() } returns Request.Builder()
-            .url("https://addon-c.example/meta/movie/tt789.json")
-            .tag(StreamSearchRequestTag::class.java, StreamSearchRequestTag("request-a"))
-            .build()
+        every { addonStreamRequestCanceller.cancelActiveStreamRequests("request-a") } returns 1
 
         val repository = StreamRepositoryImpl(
-            api = addonApi,
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             serviceWrapSessionFactory = serviceWrapSessionFactory,
-            okHttpClient = okHttpClient
+            addonStreamRequestCanceller = addonStreamRequestCanceller
         )
 
         repository.cancelActiveStreamRequests("request-a")
 
-        io.mockk.verify(exactly = 1) { runningStreamCall.cancel() }
-        io.mockk.verify(exactly = 0) { queuedStreamCall.cancel() }
-        io.mockk.verify(exactly = 0) { metaCall.cancel() }
+        io.mockk.verify(exactly = 1) { addonStreamRequestCanceller.cancelActiveStreamRequests("request-a") }
+    }
+
+    @Test
+    fun `getStreamsFromAddon uses normalized base url as standalone addon scope key`() = runTest {
+        mockAndroidLog()
+
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(
+                addonId = "https://addon.example/configured?token=abc",
+                streamUrl = "https://addon.example/configured/stream/movie/tt1234567.json?token=abc",
+                requestTag = StreamSearchRequestTag("standalone")
+            )
+        } returns NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("Standalone"))))
+
+        val repository = StreamRepositoryImpl(
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            addonStreamRequestCanceller = addonStreamRequestCanceller
+        )
+
+        val result = repository.getStreamsFromAddon(
+            baseUrl = "https://addon.example/configured/manifest.json?token=abc",
+            type = "movie",
+            videoId = "tt1234567"
+        )
+
+        assertTrue(result is NetworkResult.Success)
+        coVerify(exactly = 1) {
+            addonStreamIntegrationProvider.getStreams(
+                addonId = "https://addon.example/configured?token=abc",
+                streamUrl = "https://addon.example/configured/stream/movie/tt1234567.json?token=abc",
+                requestTag = StreamSearchRequestTag("standalone")
+            )
+        }
     }
 
     private fun streamAddon(baseUrl: String, displayName: String): Addon {

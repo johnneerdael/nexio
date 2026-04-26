@@ -6,9 +6,9 @@ import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.data.integration.simkl.SimklAuthIntegrationProvider
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
-import com.nexio.tv.data.remote.api.SimklApi
 import com.nexio.tv.data.remote.SimklRequestGate
 import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.flow.first
@@ -26,7 +26,7 @@ sealed interface SimklTokenPollResult {
 
 @Singleton
 class SimklAuthService @Inject constructor(
-    private val simklApi: SimklApi,
+    private val simklAuthIntegrationProvider: SimklAuthIntegrationProvider,
     private val simklAuthDataStore: SimklAuthDataStore,
     private val requestGate: SimklRequestGate,
     private val profileManager: ProfileManager,
@@ -47,10 +47,10 @@ class SimklAuthService @Inject constructor(
         }
         val session = currentAuthSession()
         val response = try {
-            simklApi.requestPinCode()
+            simklAuthIntegrationProvider.requestPinCode()
         } catch (e: IOException) {
             return Result.failure(IllegalStateException("Network error, please try again"))
-        }
+        } ?: return Result.failure(IllegalStateException("Network error, please try again"))
         val body = response.body()
         if (response.isSuccessful && body?.deviceCode != null && body.userCode != null) {
             simklAuthDataStore.saveDeviceFlow(body, profileId = session.profileId)
@@ -68,10 +68,10 @@ class SimklAuthService @Inject constructor(
         if (userCode.isNullOrBlank()) return SimklTokenPollResult.Failed("No active SIMKL PIN code")
 
         val response = try {
-            simklApi.getPinStatus(userCode)
+            simklAuthIntegrationProvider.getPinStatus(userCode)
         } catch (e: IOException) {
             return SimklTokenPollResult.Failed("Network error, will retry")
-        }
+        } ?: return SimklTokenPollResult.Failed("Network error, will retry")
         val body = response.body()
         if (!response.isSuccessful || body == null) {
             return SimklTokenPollResult.Failed("PIN polling failed (${response.code()})")
@@ -98,8 +98,9 @@ class SimklAuthService @Inject constructor(
     }
 
     private suspend fun fetchUserSettings(session: TrackingAuthSession): String? {
-        val response = executeAuthorizedRequest(session) { authHeader ->
-            simklApi.getUserSettings(authorization = authHeader)
+        val response = executeAuthOwnerRequest(session) { authHeader ->
+            simklAuthIntegrationProvider.getUserSettings(authorization = authHeader)
+                ?: return@executeAuthOwnerRequest Response.error(500, okhttp3.ResponseBody.create(null, "simkl_runtime_missing"))
         } ?: return null
         if (!response.isSuccessful) return null
         val body = response.body()
@@ -117,11 +118,11 @@ class SimklAuthService @Inject constructor(
         simklAuthDataStore.clearAuth(currentAuthSession().profileId)
     }
 
-    suspend fun <T> executeAuthorizedRequest(
+    suspend fun <T> executeAuthOwnerRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? = executeAuthorizedRequest(currentAuthSession(), call)
+    ): Response<T>? = executeAuthOwnerRequest(currentAuthSession(), call)
 
-    suspend fun <T> executeAuthorizedRequest(
+    suspend fun <T> executeAuthOwnerRequest(
         session: TrackingAuthSession,
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
@@ -136,12 +137,12 @@ class SimklAuthService @Inject constructor(
 
     suspend fun <T> executeAuthorizedWriteRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? = executeAuthorizedRequest(call)
+    ): Response<T>? = executeAuthOwnerRequest(call)
 
     suspend fun <T> executeAuthorizedWriteRequest(
         session: TrackingAuthSession,
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? = executeAuthorizedRequest(session, call)
+    ): Response<T>? = executeAuthOwnerRequest(session, call)
 
     private fun currentAuthSession(): TrackingAuthSession {
         return TrackingAuthSession(

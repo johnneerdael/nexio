@@ -1,5 +1,9 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.integration.IntegrationPlaybackGate
+import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.defaultIntegrationPolicyRegistry
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
@@ -12,6 +16,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomePlaybackWorkGateTest {
+
+    @Test
+    fun `playback gate blocks background work but not scrobble work`() {
+        val gate = IntegrationPlaybackGate()
+        val registry = defaultIntegrationPolicyRegistry()
+
+        gate.setPlaybackActive(true)
+
+        assertTrue(gate.isBlocked(registry.policyFor(IntegrationProvider.TMDB), IntegrationWorkClass.BACKGROUND_HYDRATION))
+        assertFalse(gate.isBlocked(registry.policyFor(IntegrationProvider.TRAKT), IntegrationWorkClass.SCROBBLE))
+    }
 
     @Test
     fun `home background work is blocked while playback session is active`() {

@@ -1,11 +1,15 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.local.EasyDebridSettingsDataStore
+import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.RealDebridAuthDataStore
-import com.nexio.tv.data.remote.api.EasyDebridApi
-import com.nexio.tv.data.remote.api.PremiumizeApi
-import com.nexio.tv.data.remote.api.RealDebridApi
-import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.data.local.TorBoxSettingsDataStore
+import com.nexio.tv.data.integration.debrid.EasyDebridIntegrationProvider
+import com.nexio.tv.data.integration.debrid.PremiumizeIntegrationProvider
+import com.nexio.tv.data.integration.debrid.RealDebridIntegrationProvider
+import com.nexio.tv.data.integration.debrid.TorBoxIntegrationProvider
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateRequestDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGeneratedFileDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupDetailsResultDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupRequestDto
@@ -43,15 +47,14 @@ import javax.inject.Singleton
 
 @Singleton
 class DebridLibraryService @Inject constructor(
-    private val realDebridApi: RealDebridApi,
+    private val realDebridProvider: RealDebridIntegrationProvider,
     private val realDebridAuthDataStore: RealDebridAuthDataStore,
-    private val realDebridAuthService: RealDebridAuthService,
-    private val premiumizeApi: PremiumizeApi,
-    private val premiumizeService: PremiumizeService,
-    private val torBoxApi: TorBoxApi,
-    private val torBoxService: TorBoxService,
-    private val easyDebridApi: EasyDebridApi,
-    private val easyDebridService: EasyDebridService
+    private val premiumizeProvider: PremiumizeIntegrationProvider,
+    private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
+    private val torBoxProvider: TorBoxIntegrationProvider,
+    private val torBoxSettingsDataStore: TorBoxSettingsDataStore,
+    private val easyDebridProvider: EasyDebridIntegrationProvider,
+    private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore
 ) {
     private data class RealDebridBenchmarkPreview(
         val torrent: RealDebridTorrentDto,
@@ -102,30 +105,24 @@ class DebridLibraryService @Inject constructor(
                 }
             }
             DebridBenchmarkProvider.PREMIUMIZE -> {
-                premiumizeService.refreshAccountState()
-                val premiumizeState = premiumizeService.observeAccountState().first()
-                val apiKey = premiumizeState.apiKey.trim()
-                if (!premiumizeState.isConnected || apiKey.isBlank()) {
+                val apiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
+                if (apiKey.isBlank() || !hasPremiumizeAccount(apiKey)) {
                     DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
                 } else {
                     fetchPremiumizeBenchmarkCandidates(apiKey)
                 }
             }
             DebridBenchmarkProvider.TORBOX -> {
-                torBoxService.refreshAccountState()
-                val torBoxState = torBoxService.observeAccountState().first()
-                val apiKey = torBoxState.apiKey.trim()
-                if (!torBoxState.isConnected || apiKey.isBlank()) {
+                val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
+                if (apiKey.isBlank() || !hasTorBoxAccount(apiKey)) {
                     DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
                 } else {
                     fetchTorBoxBenchmarkCandidates(apiKey)
                 }
             }
             DebridBenchmarkProvider.EASY_DEBRID -> {
-                easyDebridService.refreshAccountState()
-                val easyDebridState = easyDebridService.observeAccountState().first()
-                val apiKey = easyDebridState.apiKey.trim()
-                if (!easyDebridState.isConnected || apiKey.isBlank()) {
+                val apiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
+                if (apiKey.isBlank() || !hasEasyDebridAccount(apiKey)) {
                     DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
                 } else {
                     fetchEasyDebridBenchmarkCandidates(apiKey)
@@ -136,19 +133,12 @@ class DebridLibraryService @Inject constructor(
 
     private suspend fun fetchRealDebridBenchmarkCandidates(): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
         val playbackHeaders = buildRealDebridPlaybackHeaders()
-        val torrentsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getTorrents(authorization = authHeader)
-        } ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
-        val downloadsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getDownloads(authorization = authHeader)
-        } ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
-
-        if (!torrentsResponse.isSuccessful || !downloadsResponse.isSuccessful) {
+        val torrents = realDebridProvider.fetchTorrents()
+            .filter { it.status.equals("downloaded", ignoreCase = true) }
+        val downloads = realDebridProvider.fetchDownloads()
+        if (torrents.isEmpty() && downloads.isEmpty()) {
             return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
         }
-
-        val torrents = torrentsResponse.body().orEmpty()
-            .filter { it.status.equals("downloaded", ignoreCase = true) }
         val previews = resolveRealDebridBenchmarkPreviews(torrents)
         val shortlistedPreviews = selectBenchmarkResolutionShortlist(
             items = previews,
@@ -159,7 +149,7 @@ class DebridLibraryService @Inject constructor(
             return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
         }
 
-        val resolvedDownloadsByLink = downloadsResponse.body().orEmpty()
+        val resolvedDownloadsByLink = downloads
             .mapNotNull(::toResolvedDownload)
             .associateBy { it.link }
 
@@ -178,12 +168,11 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun fetchPremiumizeBenchmarkCandidates(apiKey: String): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
-        val response = runCatching { premiumizeApi.listAllItems(apiKey) }.getOrNull()
+        val listAll = premiumizeProvider.fetchListAllItems(apiKey)
             ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
-        if (!response.isSuccessful) return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
 
         val shortlistedFiles = selectBenchmarkResolutionShortlist(
-            items = response.body()?.files.orEmpty()
+            items = listAll.files.orEmpty()
                 .filter(::isLikelyPlayable),
             sizeOf = { file: PremiumizeListAllFileDto -> file.size },
             timestampOf = { file: PremiumizeListAllFileDto -> (file.createdAt ?: 0L) * 1000L }
@@ -193,10 +182,8 @@ class DebridLibraryService @Inject constructor(
         }
 
         val candidates = shortlistedFiles.mapNotNull { file ->
-            val detailsResponse = runCatching {
-                premiumizeApi.getItemDetails(apiKey = apiKey, id = file.id)
-            }.getOrNull() ?: return@mapNotNull null
-            val details = detailsResponse.body() ?: return@mapNotNull null
+            val details = premiumizeProvider.fetchItemDetails(apiKey = apiKey, id = file.id)
+                ?: return@mapNotNull null
             mapPremiumizeItem(file, details)?.toBenchmarkCandidate(DebridBenchmarkProvider.PREMIUMIZE)
         }
         if (candidates.isEmpty()) {
@@ -228,18 +215,11 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun fetchEasyDebridBenchmarkCandidates(apiKey: String): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
-        val authorization = "Bearer $apiKey"
         val sources = EASY_DEBRID_BENCHMARK_SOURCES
-        val lookupResponse = runCatching {
-            easyDebridApi.lookupDetails(
-                authorization = authorization,
-                body = EasyDebridLookupRequestDto(urls = sources.map { it.url })
-            )
-        }.getOrNull() ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
-        val lookupBody = lookupResponse.body() ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
-        if (!lookupResponse.isSuccessful) {
-            return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
-        }
+        val lookupBody = easyDebridProvider.lookupDetails(
+            apiKey = apiKey,
+            body = EasyDebridLookupRequestDto(urls = sources.map { it.url })
+        ) ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
 
         val lookupCandidates = sources.mapIndexedNotNull { index, source ->
             val result = lookupBody.result.getOrNull(index) ?: return@mapIndexedNotNull null
@@ -266,14 +246,10 @@ class DebridLibraryService @Inject constructor(
         }
 
         val resolvedCandidates = shortlisted.take(BENCHMARK_MAX_RESOLUTION_COUNT).mapNotNull { candidate ->
-            val generateResponse = runCatching {
-                easyDebridApi.generate(
-                    authorization = authorization,
-                    body = com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateRequestDto(url = candidate.source.url)
-                )
-            }.getOrNull() ?: return@mapNotNull null
-            val generateBody = generateResponse.body() ?: return@mapNotNull null
-            if (!generateResponse.isSuccessful) return@mapNotNull null
+            val generateBody = easyDebridProvider.generate(
+                apiKey = apiKey,
+                body = EasyDebridGenerateRequestDto(url = candidate.source.url)
+            ) ?: return@mapNotNull null
 
             val selectedFile = generateBody.files
                 .filter { file ->
@@ -301,17 +277,14 @@ class DebridLibraryService @Inject constructor(
     fun observeIsConnected(): Flow<Boolean> {
         return combine(
             realDebridAuthDataStore.isAuthenticated,
-            premiumizeService.observeAccountState(),
-            torBoxService.observeAccountState(),
-            easyDebridService.observeAccountState()
-        ) { rdAuthenticated, pmState, torBoxState, easyDebridState ->
+            premiumizeSettingsDataStore.settings,
+            torBoxSettingsDataStore.settings,
+            easyDebridSettingsDataStore.settings
+        ) { rdAuthenticated, premiumizeSettings, torBoxSettings, easyDebridSettings ->
             rdAuthenticated ||
-                pmState.isConnected ||
-                pmState.apiKey.isNotBlank() ||
-                torBoxState.isConnected ||
-                torBoxState.apiKey.isNotBlank() ||
-                easyDebridState.isConnected ||
-                easyDebridState.apiKey.isNotBlank()
+                premiumizeSettings.apiKey.isNotBlank() ||
+                torBoxSettings.apiKey.isNotBlank() ||
+                easyDebridSettings.apiKey.isNotBlank()
         }.distinctUntilChanged()
     }
 
@@ -378,10 +351,9 @@ class DebridLibraryService @Inject constructor(
             }
 
             if (refreshPremiumize) {
-                premiumizeService.refreshAccountState()
-                val premiumizeState = premiumizeService.observeAccountState().first()
-                if (premiumizeState.apiKey.isNotBlank()) {
-                    val premiumizeItems = fetchPremiumizeItems(premiumizeState.apiKey)
+                val premiumizeApiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
+                if (premiumizeApiKey.isNotBlank() && hasPremiumizeAccount(premiumizeApiKey)) {
+                    val premiumizeItems = fetchPremiumizeItems(premiumizeApiKey)
                     if (premiumizeItems.isNotEmpty()) {
                         tabs += LibraryListTab(
                             key = PREMIUMIZE_LIST_KEY,
@@ -395,10 +367,9 @@ class DebridLibraryService @Inject constructor(
             }
 
             if (refreshTorBox) {
-                torBoxService.refreshAccountState()
-                val torBoxState = torBoxService.observeAccountState().first()
-                if (torBoxState.apiKey.isNotBlank()) {
-                    val torBoxItems = fetchTorBoxItems(torBoxState.apiKey)
+                val torBoxApiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
+                if (torBoxApiKey.isNotBlank() && hasTorBoxAccount(torBoxApiKey)) {
+                    val torBoxItems = fetchTorBoxItems(torBoxApiKey)
                     if (torBoxItems.isNotEmpty()) {
                         tabs += LibraryListTab(
                             key = TORBOX_LIST_KEY,
@@ -423,21 +394,16 @@ class DebridLibraryService @Inject constructor(
 
     private suspend fun fetchRealDebridTorrents(): List<LibraryEntry> = withContext(Dispatchers.IO) {
         val playbackHeaders = buildRealDebridPlaybackHeaders()
-        val torrentsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getTorrents(authorization = authHeader)
-        } ?: return@withContext emptyList()
-        val downloadsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getDownloads(authorization = authHeader)
-        } ?: return@withContext emptyList()
+        val torrents = realDebridProvider.fetchTorrents()
+        val downloads = realDebridProvider.fetchDownloads()
+        if (torrents.isEmpty() && downloads.isEmpty()) return@withContext emptyList()
 
-        if (!torrentsResponse.isSuccessful || !downloadsResponse.isSuccessful) return@withContext emptyList()
-
-        val resolvedDownloadsByLink = downloadsResponse.body().orEmpty()
+        val resolvedDownloadsByLink = downloads
             .mapNotNull(::toResolvedDownload)
             .associateBy { it.link }
 
         val items = mutableListOf<LibraryEntry>()
-        torrentsResponse.body().orEmpty()
+        torrents
             .filter { it.status.equals("downloaded", ignoreCase = true) }
             .forEach { torrent ->
                 items += fetchRealDebridTorrentEntries(
@@ -454,12 +420,7 @@ class DebridLibraryService @Inject constructor(
         resolvedDownloadsByLink: Map<String, RealDebridResolvedDownload>,
         playbackHeaders: Map<String, String>?
     ): List<LibraryEntry> {
-        val infoResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getTorrentInfo(authorization = authHeader, id = torrent.id)
-        } ?: return emptyList()
-        if (!infoResponse.isSuccessful) return emptyList()
-
-        val info = infoResponse.body() ?: return emptyList()
+        val info = realDebridProvider.fetchTorrentInfo(torrent.id) ?: return emptyList()
         val selectedFiles = info.files.orEmpty()
             .filter { it.selected == 1 }
         if (selectedFiles.isEmpty()) return emptyList()
@@ -491,12 +452,7 @@ class DebridLibraryService @Inject constructor(
         torrents.map { torrent ->
             async {
                 infoSemaphore.withPermit {
-                    val infoResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-                        realDebridApi.getTorrentInfo(authorization = authHeader, id = torrent.id)
-                    } ?: return@withPermit null
-                    if (!infoResponse.isSuccessful) return@withPermit null
-
-                    val info = infoResponse.body() ?: return@withPermit null
+                    val info = realDebridProvider.fetchTorrentInfo(torrent.id) ?: return@withPermit null
                     val fileLinkPair = info.files.orEmpty()
                         .filter { it.selected == 1 }
                         .zip(info.links.orEmpty())
@@ -537,10 +493,9 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun fetchPremiumizeItems(apiKey: String): List<LibraryEntry> = withContext(Dispatchers.IO) {
-        val response = runCatching { premiumizeApi.listAllItems(apiKey) }.getOrNull() ?: return@withContext emptyList()
-        if (!response.isSuccessful) return@withContext emptyList()
+        val listAll = premiumizeProvider.fetchListAllItems(apiKey) ?: return@withContext emptyList()
 
-        val candidates = response.body()?.files.orEmpty()
+        val candidates = listAll.files.orEmpty()
             .filter(::isLikelyPlayable)
             .take(120)
 
@@ -549,10 +504,8 @@ class DebridLibraryService @Inject constructor(
             candidates.map { file ->
                 async {
                     detailsSemaphore.withPermit {
-                        val detailsResponse = runCatching {
-                            premiumizeApi.getItemDetails(apiKey = apiKey, id = file.id)
-                        }.getOrNull() ?: return@withPermit null
-                        val details = detailsResponse.body() ?: return@withPermit null
+                        val details = premiumizeProvider.fetchItemDetails(apiKey = apiKey, id = file.id)
+                            ?: return@withPermit null
                         mapPremiumizeItem(file, details)
                     }
                 }
@@ -561,16 +514,10 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun fetchTorBoxItems(apiKey: String): List<LibraryEntry> = withContext(Dispatchers.IO) {
-        val response = runCatching {
-            torBoxApi.getMyTorrentList(
-                authorization = "Bearer $apiKey",
-                bypassCache = true,
-                limit = 100
-            )
-        }.getOrNull() ?: return@withContext emptyList()
-        if (!response.isSuccessful) return@withContext emptyList()
+        val response = torBoxProvider.fetchTorrentList(apiKey = apiKey, limit = 100)
+            ?: return@withContext emptyList()
 
-        val candidates = response.body()?.data.orEmpty()
+        val candidates = response.data.orEmpty()
             .filter { it.id != null && it.files.isNotEmpty() }
             .filter { it.isDownloaded() || it.resolvedState().equals("downloaded", ignoreCase = true) }
             .take(100)
@@ -805,15 +752,25 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun unrestrictRealDebridLink(link: String): RealDebridResolvedDownload? {
-        val response = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.unrestrictLink(
-                authorization = authHeader,
-                link = link,
-                remote = 0
-            )
-        } ?: return null
-        if (!response.isSuccessful) return null
-        return response.body()?.let(::toResolvedDownload)
+        return realDebridProvider.unrestrictLink(link)?.let(::toResolvedDownload)
+    }
+
+    private suspend fun hasPremiumizeAccount(apiKey: String): Boolean {
+        val result = premiumizeProvider.fetchAccountInfo(apiKey)
+        return result is com.nexio.tv.core.integration.IntegrationCallResult.Success &&
+            result.value.status.equals("success", ignoreCase = true)
+    }
+
+    private suspend fun hasTorBoxAccount(apiKey: String): Boolean {
+        val result = torBoxProvider.fetchAccountInfo(apiKey)
+        return result is com.nexio.tv.core.integration.IntegrationCallResult.Success &&
+            result.value.success == true
+    }
+
+    private suspend fun hasEasyDebridAccount(apiKey: String): Boolean {
+        val result = easyDebridProvider.fetchAccountInfo(apiKey)
+        return result is com.nexio.tv.core.integration.IntegrationCallResult.Success &&
+            result.value.id?.isNotBlank() == true
     }
 
     private suspend fun buildRealDebridPlaybackHeaders(): Map<String, String>? {
@@ -827,19 +784,11 @@ class DebridLibraryService @Inject constructor(
         torrentId: Int,
         fileId: Int
     ): String? {
-        val response = runCatching {
-            torBoxApi.requestDownloadLink(
-                token = apiKey,
-                torrentId = torrentId,
-                fileId = fileId,
-                zipLink = false,
-                redirect = false
-            )
-        }.getOrNull() ?: return null
-        if (!response.isSuccessful) return null
-        val body = response.body()
-        if (body?.success == false) return null
-        return body?.data?.takeIf { it.isNotBlank() }
+        return torBoxProvider.requestDownloadLink(
+            apiKey = apiKey,
+            torrentId = torrentId,
+            fileId = fileId
+        )?.takeIf { it.isNotBlank() }
     }
 
     private fun parseIsoToMillis(rawValue: String?): Long {

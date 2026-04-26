@@ -75,7 +75,7 @@ class TraktScrobbleServiceTest {
         }
 
         val service = TraktScrobbleService(
-            traktAuthService = traktAuthService,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
             traktMutationOutboxCoordinator = coordinator
         )
@@ -117,7 +117,7 @@ class TraktScrobbleServiceTest {
         }
 
         val service = TraktScrobbleService(
-            traktAuthService = traktAuthService,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
             traktMutationOutboxCoordinator = coordinator
         )

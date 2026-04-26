@@ -1,11 +1,14 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.RailMembership
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -168,10 +171,103 @@ class ContinueWatchingSnapshotServiceProfileBoundaryTest {
         )
     }
 
+    @Test
+    fun `continue watching ownership rail is profile scoped and canonicalized`() = runTest {
+        val activeProfileId = MutableStateFlow(7)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val capturedMembership = slot<RailMembership>()
+        val ownershipService = mockk<IntegrationOwnershipService>()
+        coEvery { ownershipService.upsertRailMembership(capture(capturedMembership)) } returns Unit
+        ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { allProgress } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                every { state } returns MutableStateFlow(
+                    EffectiveTrackingProviderState(traktAuthenticated = true)
+                )
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metaRepository = mockk<MetaRepository>(relaxed = true),
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = mockk(relaxed = true),
+            profileManager = profileManager,
+            ownershipService = ownershipService
+        )
+
+        awaitCondition { capturedMembership.isCaptured }
+
+        val membership = capturedMembership.captured
+        assertEquals("profile:7:home:continue_watching", membership.rail.railKey)
+        assertEquals("series:imdb:tt0944947", membership.items.single().mediaKey)
+        assertFalse(membership.rail.railKey.startsWith("profile:7:home:catalog:"))
+    }
+
+    @Test
+    fun `continue watching syncs rail ownership before persisting snapshot`() = runTest {
+        val activeProfileId = MutableStateFlow(7)
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        val callOrder = mutableListOf<String>()
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read(any()) } returns null
+            every { write(any(), profileId = any()) } answers {
+                callOrder += "snapshot_write"
+            }
+        }
+        val ownershipService = mockk<IntegrationOwnershipService>(relaxed = true) {
+            coEvery { upsertRailMembership(any()) } answers {
+                callOrder += "rail_sync"
+            }
+        }
+
+        ContinueWatchingSnapshotService(
+            watchProgressRepository = mockk {
+                every { allProgress } returns MutableStateFlow(listOf(sampleProgress("series:tt0944947")))
+            },
+            trackingProgressService = mockk {
+                every { observeRemoteSnapshotLoaded() } returns MutableStateFlow(true)
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            },
+            trackingProviderStateService = mockk {
+                every { state } returns MutableStateFlow(
+                    EffectiveTrackingProviderState(traktAuthenticated = true)
+                )
+            },
+            traktSettingsDataStore = mockk {
+                every { dismissedNextUpKeys } returns flowOf(emptySet())
+            },
+            metaRepository = mockk<MetaRepository>(relaxed = true),
+            metadataDiskCacheStore = mockk(relaxed = true),
+            snapshotStore = snapshotStore,
+            profileManager = profileManager,
+            ownershipService = ownershipService
+        )
+
+        awaitCondition {
+            callOrder.size >= 2
+        }
+
+        assertEquals(listOf("rail_sync", "snapshot_write"), callOrder.takeLast(2))
+    }
+
     private fun sampleProgress(id: String, lastWatched: Long = 1L): WatchProgress {
         return WatchProgress(
             contentId = id,
-            contentType = "movie",
+            contentType = if (id.startsWith("series:")) "series" else "movie",
             name = id,
             poster = null,
             backdrop = null,

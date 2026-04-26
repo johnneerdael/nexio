@@ -7,8 +7,8 @@ import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.remote.api.ImdbSearchService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
+import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.remote.api.TmdbMediaResult
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryService
@@ -180,8 +180,8 @@ class SearchViewModelTmdbTest {
             layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
             playerSettingsDataStore = playerSettingsDataStoreForTest(),
             searchHistoryDataStore = searchHistoryDataStoreForTest(),
-            imdbSearchService = object : ImdbSearchService {
-                override suspend fun search(query: String, types: Set<String>): List<ImdbSuggestion> = emptyList()
+            imdbTitleSearchRepository = object : ImdbTitleSearchRepository {
+                override suspend fun search(query: String): List<ImdbSuggestion> = emptyList()
             },
             imdbPosterLookupService = mockk<ImdbPosterLookupService>().apply {
                 coEvery { lookupPosterUrl(any(), any(), any()) } returns null

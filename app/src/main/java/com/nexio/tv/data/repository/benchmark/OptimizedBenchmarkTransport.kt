@@ -1,22 +1,18 @@
 package com.nexio.tv.data.repository.benchmark
 
-import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.nexio.tv.data.integration.debrid.transport.PlayerPipelineBenchmarkTransportFactory
 import java.io.EOFException
 import java.io.InterruptedIOException
 import java.net.SocketException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 import javax.inject.Inject
-import javax.inject.Named
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 
 internal interface BenchmarkReadableSource {
     fun open(position: Long, length: Long = C.LENGTH_UNSET.toLong()): Long
@@ -56,11 +52,10 @@ class OptimizedBenchmarkTransport internal constructor(
 ) {
 
     @Inject
-    constructor(
-        @ApplicationContext context: Context,
-        @Named("benchmark") okHttpClient: OkHttpClient
+    internal constructor(
+        factoryBuilder: PlayerPipelineBenchmarkTransportFactory
     ) : this(
-        factoryBuilder = PlayerPipelineBenchmarkTransportFactory(context, okHttpClient),
+        factoryBuilder = factoryBuilder,
         nanoTimeNs = System::nanoTime,
         sustainedThresholdBytes = 500L * 1024L * 1024L,
         sustainedThresholdElapsedMs = 120_000L,
@@ -566,31 +561,6 @@ internal fun benchmarkChunkWaitTimeoutMs(): Long {
         while (current != null) {
             yield(current)
             current = current.cause?.takeUnless { it === current }
-        }
-    }
-}
-
-private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
-    private val okHttpClient: OkHttpClient
-) : OptimizedBenchmarkDataSourceFactoryBuilder {
-
-    override fun create(
-        candidate: DebridBenchmarkCandidate,
-        configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-        chunkWaitTimeoutMs: Long,
-        allowStartupBootstrapReuse: Boolean,
-        transportSampleTimeMs: () -> Long,
-        onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
-    ): BenchmarkReadableSourceFactory {
-        val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
-            setDefaultRequestProperties(candidate.headers)
-        }
-        return BenchmarkReadableSourceFactory {
-            Media3BenchmarkReadableSource(
-                dataSource = upstreamFactory.createDataSource(),
-                candidate = candidate
-            )
         }
     }
 }

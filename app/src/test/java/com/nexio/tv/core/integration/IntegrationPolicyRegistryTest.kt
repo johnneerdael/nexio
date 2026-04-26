@@ -18,6 +18,7 @@ class IntegrationPolicyRegistryTest {
             IntegrationProvider.KITSU,
             IntegrationProvider.MDBLIST,
             IntegrationProvider.OMDB,
+            IntegrationProvider.CUSTOM_IMDB,
             IntegrationProvider.THEINTRODB,
             IntegrationProvider.ANISKIP,
             IntegrationProvider.ANIMESKIP,
@@ -28,7 +29,10 @@ class IntegrationPolicyRegistryTest {
             IntegrationProvider.PREMIUMIZE,
             IntegrationProvider.TORBOX,
             IntegrationProvider.EASY_DEBRID,
-            IntegrationProvider.GITHUB
+            IntegrationProvider.SHADOW_COLLECTOR,
+            IntegrationProvider.GITHUB,
+            IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
+            IntegrationProvider.SUBTITLE_TRANSLATION
         )
 
         providers.forEach { provider ->

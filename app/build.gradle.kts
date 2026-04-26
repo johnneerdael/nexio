@@ -13,6 +13,7 @@ import groovy.json.JsonSlurper
 import java.net.URI
 import java.time.Instant
 import java.util.Properties
+import org.gradle.api.tasks.testing.Test
 
 fun parseBooleanProperty(value: String?): Boolean {
     val normalized = value?.trim()?.lowercase() ?: return false
@@ -346,6 +347,33 @@ val generateOpenRouterReasoningModels by tasks.registering {
         outputFile.writeText(rendered)
         println("Generated ${outputFile.relativeTo(projectDir)} (${slugs.size} entries)")
     }
+}
+
+val runtimeEventAuditSampleFile = layout.buildDirectory.file("reports/integration-runtime-audit/runtime-event-sample.generated.jsonl")
+val generateRuntimeEventAuditSample by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Generate runtime audit event sample from DefaultIntegrationRuntime tests."
+    val sourceTest = tasks.named<Test>("testUniversalDebugUnitTest")
+    testClassesDirs = sourceTest.get().testClassesDirs
+    classpath = sourceTest.get().classpath
+    outputs.file(runtimeEventAuditSampleFile)
+    filter {
+        includeTestsMatching("com.nexio.tv.core.integration.DefaultIntegrationRuntimeTest.generated runtime audit sample uses real phase names and network flags")
+    }
+}
+
+val generateIntegrationRuntimeAudit by tasks.registering(com.nexio.build.integrationaudit.GenerateIntegrationRuntimeAuditTask::class) {
+    group = "verification"
+    description = "Generate the IntegrationRuntime Connectivity & Policy Audit package."
+    dependsOn(generateRuntimeEventAuditSample)
+    sourceRoot.set(layout.projectDirectory.dir("src/main/java"))
+    expectedShapesFile.set(layout.projectDirectory.file("src/test/resources/integration/expected_api_shapes.yaml"))
+    expectedContractsFile.set(layout.projectDirectory.file("src/test/resources/integration/expected_integration_contracts.yaml"))
+    metadataRouterPrerequisitesFile.set(layout.projectDirectory.file("src/test/resources/integration/metadata_router_prerequisites.txt"))
+    runtimeEventFixtureFile.set(runtimeEventAuditSampleFile)
+    outputDirectory.set(layout.buildDirectory.dir("reports/integration-runtime-audit"))
+    projectRoot.set(rootProject.layout.projectDirectory)
+    failOnFailVerdict.set(providers.gradleProperty("integrationRuntimeAudit.failOnFailVerdict").map(String::toBoolean).orElse(true))
 }
 
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")

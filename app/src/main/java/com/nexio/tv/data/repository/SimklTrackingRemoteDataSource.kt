@@ -1,6 +1,6 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.data.remote.api.SimklApi
+import com.nexio.tv.data.integration.simkl.SimklIntegrationProvider
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklHistoryAddRequestDto
@@ -22,14 +22,11 @@ import retrofit2.Response
 
 @Singleton
 class SimklTrackingRemoteDataSource @Inject constructor(
-    private val simklApi: SimklApi,
-    private val simklAuthService: SimklAuthService,
-    private val moshi: Moshi
+    private val simklIntegrationProvider: SimklIntegrationProvider
 ) {
     suspend fun getLastActivities(session: TrackingAuthSession? = null): Response<SimklLastActivitiesResponseDto> {
-        return authorized(session) { authHeader ->
-            simklApi.getLastActivities(authHeader)
-        }
+        return simklIntegrationProvider.getLastActivities(session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun getAllItemsByStatus(
@@ -40,16 +37,14 @@ class SimklTrackingRemoteDataSource @Inject constructor(
         episodeWatchedAt: String? = null,
         session: TrackingAuthSession? = null
     ): Response<List<SimklLibraryItemDto>> {
-        return authorized(session) { authHeader ->
-            simklApi.getAllItemsByStatusRaw(
-                authorization = authHeader,
-                type = type,
-                status = status,
-                dateFrom = dateFrom,
-                extended = extended,
-                episodeWatchedAt = episodeWatchedAt
-            ).toLibraryItemsResponse(moshi)
-        }
+        return simklIntegrationProvider.getAllItemsByStatus(
+            type = type,
+            status = status,
+            dateFrom = dateFrom,
+            extended = extended,
+            episodeWatchedAt = episodeWatchedAt,
+            session = session
+        ) ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun getAllItemsByType(
@@ -58,14 +53,12 @@ class SimklTrackingRemoteDataSource @Inject constructor(
         extended: String? = null,
         session: TrackingAuthSession? = null
     ): Response<List<SimklLibraryItemDto>> {
-        return authorized(session) { authHeader ->
-            simklApi.getAllItemsByTypeRaw(
-                authorization = authHeader,
-                type = type,
-                dateFrom = dateFrom,
-                extended = extended
-            ).toLibraryItemsResponse(moshi)
-        }
+        return simklIntegrationProvider.getAllItemsByType(
+            type = type,
+            dateFrom = dateFrom,
+            extended = extended,
+            session = session
+        ) ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun getAllItems(
@@ -73,95 +66,79 @@ class SimklTrackingRemoteDataSource @Inject constructor(
         extended: String? = null,
         session: TrackingAuthSession? = null
     ): Response<List<SimklLibraryItemDto>> {
-        return authorized(session) { authHeader ->
-            simklApi.getAllItemsRaw(
-                authorization = authHeader,
-                dateFrom = dateFrom,
-                extended = extended
-            ).toLibraryItemsResponse(moshi)
-        }
+        return simklIntegrationProvider.getAllItems(
+            dateFrom = dateFrom,
+            extended = extended,
+            session = session
+        ) ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun getPlayback(type: String, session: TrackingAuthSession? = null): Response<List<SimklPlaybackItemDto>> {
-        return authorized(session) { authHeader -> simklApi.getPlayback(authorization = authHeader, type = type) }
+        return simklIntegrationProvider.getPlayback(type, session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun deletePlayback(playbackId: Long, session: TrackingAuthSession? = null): Response<Unit> {
-        return authorized(session) { authHeader -> simklApi.deletePlayback(authorization = authHeader, playbackId = playbackId) }
+        return simklIntegrationProvider.deletePlayback(playbackId, session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun addToList(
         body: SimklAddToListRequestDto,
         session: TrackingAuthSession? = null
     ): Response<SimklAddToListResponseDto> {
-        return authorizedWrite(session) { authHeader -> simklApi.addToList(authorization = authHeader, body = body) }
+        return simklIntegrationProvider.addToList(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun addHistory(body: SimklHistoryAddRequestDto, session: TrackingAuthSession? = null): Response<Unit> {
-        return authorizedWrite(session) { authHeader -> simklApi.addHistory(authorization = authHeader, body = body) }
+        return simklIntegrationProvider.addHistory(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun removeFromHistoryAndLists(
         body: SimklHistoryRemoveRequestDto,
         session: TrackingAuthSession? = null
     ): Response<Unit> {
-        return authorizedWrite(session) { authHeader ->
-            simklApi.removeFromHistoryAndLists(authorization = authHeader, body = body)
-        }
+        return simklIntegrationProvider.removeFromHistoryAndLists(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun scrobbleStart(
         body: SimklScrobbleRequestDto,
         session: TrackingAuthSession? = null
     ): Response<SimklScrobbleResponseDto> {
-        return authorizedWrite(session) { authHeader -> simklApi.scrobbleStart(authorization = authHeader, body = body) }
+        return simklIntegrationProvider.scrobbleStart(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun scrobblePause(
         body: SimklScrobbleRequestDto,
         session: TrackingAuthSession? = null
     ): Response<SimklScrobbleResponseDto> {
-        return authorizedWrite(session) { authHeader -> simklApi.scrobblePause(authorization = authHeader, body = body) }
+        return simklIntegrationProvider.scrobblePause(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun scrobbleStop(
         body: SimklScrobbleRequestDto,
         session: TrackingAuthSession? = null
     ): Response<SimklScrobbleResponseDto> {
-        return authorizedWrite(session) { authHeader -> simklApi.scrobbleStop(authorization = authHeader, body = body) }
+        return simklIntegrationProvider.scrobbleStop(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
     suspend fun checkin(
         body: SimklScrobbleRequestDto,
         session: TrackingAuthSession? = null
     ): Response<SimklScrobbleResponseDto> {
-        return authorizedWrite(session) { authHeader -> simklApi.checkin(authorization = authHeader, body = body) }
+        return simklIntegrationProvider.checkin(body = body, session = session)
+            ?: throw IllegalStateException("SIMKL authentication required")
     }
 
-    private suspend fun <T> authorized(
-        session: TrackingAuthSession?,
-        call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T> {
-        return if (session != null) {
-            simklAuthService.executeAuthorizedRequest(session, call)
-        } else {
-            simklAuthService.executeAuthorizedRequest(call)
-        } ?: throw IllegalStateException("SIMKL authentication required")
-    }
-
-    private suspend fun <T> authorizedWrite(
-        session: TrackingAuthSession?,
-        call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T> {
-        return if (session != null) {
-            simklAuthService.executeAuthorizedWriteRequest(session, call)
-        } else {
-            simklAuthService.executeAuthorizedWriteRequest(call)
-        } ?: throw IllegalStateException("SIMKL authentication required")
-    }
 }
 
-private fun Response<okhttp3.ResponseBody>.toLibraryItemsResponse(
+internal fun Response<okhttp3.ResponseBody>.toLibraryItemsResponse(
     moshi: Moshi
 ): Response<List<SimklLibraryItemDto>> {
     if (!isSuccessful) {

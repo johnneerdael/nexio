@@ -5,9 +5,14 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.integration.RailMembership
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.local.integration.RailCacheEntity
+import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -19,19 +24,22 @@ class HomeCatalogSnapshotStore private constructor(
     @ApplicationContext private val context: Context,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val activeProfileId: () -> Int
+    private val activeProfileId: () -> Int,
+    private val identityResolver: RailMediaIdentityResolver
 ) {
     @Inject
     constructor(
         @ApplicationContext context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver,
-        profileManager: ProfileManager
+        profileManager: ProfileManager,
+        identityResolver: RailMediaIdentityResolver
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
-        activeProfileId = { profileManager.activeProfileId.value }
+        activeProfileId = { profileManager.activeProfileId.value },
+        identityResolver = identityResolver
     )
 
     constructor(
@@ -42,7 +50,8 @@ class HomeCatalogSnapshotStore private constructor(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
-        activeProfileId = { 1 }
+        activeProfileId = { 1 },
+        identityResolver = RailMediaIdentityResolver()
     )
 
     companion object {
@@ -116,6 +125,47 @@ class HomeCatalogSnapshotStore private constructor(
             prefs.edit().remove(snapshotKey(profileId)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear home snapshot", error)
+        }
+    }
+
+    internal fun buildRailMemberships(
+        snapshot: Snapshot,
+        posterProviderToken: String,
+        profileId: Int
+    ): List<RailMembership> {
+        val now = System.currentTimeMillis()
+        val rows = linkedMapOf<String, CatalogRow>().apply {
+            snapshot.fullCatalogRows.forEach { put(it.catalogId, it) }
+            snapshot.catalogRows.forEach { putIfAbsent(it.catalogId, it) }
+        }.values.toList()
+
+        return rows.map { row ->
+            val railKey = RailKeyFactory.homeCatalog(profileId, row.catalogId)
+            val resolvedItems = row.items.map { item ->
+                identityResolver.fromPreview(item, updatedAtEpochMs = now)
+            }
+            RailMembership(
+                rail = RailCacheEntity(
+                    railKey = railKey,
+                    provider = row.catalogId.substringBefore(':').uppercase(),
+                    kind = row.type.name,
+                    paramsHash = "$posterProviderToken:${currentLanguageTag()}",
+                    fetchedAtEpochMs = now,
+                    expiresAtEpochMs = now + 30_000L,
+                    staleUntilEpochMs = now + 3_600_000L
+                ),
+                items = resolvedItems.mapIndexed { index, resolved ->
+                    RailItemEntity(
+                        key = "$railKey#${resolved.mediaIdentity.mediaKey}",
+                        railKey = railKey,
+                        mediaKey = resolved.mediaIdentity.mediaKey,
+                        position = index,
+                        updatedAtEpochMs = now
+                    )
+                },
+                mediaIdentities = resolvedItems.map { it.mediaIdentity },
+                externalIds = resolvedItems.flatMap { it.externalIds }
+            )
         }
     }
 

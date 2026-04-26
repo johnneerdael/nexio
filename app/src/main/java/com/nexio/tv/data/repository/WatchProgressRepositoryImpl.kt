@@ -43,7 +43,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
     private val metaRepository: MetaRepository,
     private val seasonMarkBatcher: SeasonMarkBatcher,
-    private val traktAuthService: TraktAuthService,
+    private val traktAuthService: TraktRepositoryAuthGateway,
     // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
     //   → WatchProgressRepositoryImpl → ContinueWatchingSnapshotService
     private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>

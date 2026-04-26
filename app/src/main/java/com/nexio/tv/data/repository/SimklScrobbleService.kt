@@ -2,7 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.repository.simkl.SimklScrobbleMutationAdapter
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
-import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +29,7 @@ internal sealed interface SimklScrobbleMutationResult {
 class SimklScrobbleService @Inject constructor(
     private val trackingProviderStateService: TrackingProviderStateService,
     private val watchingNowStateController: TraktWatchingNowStateController,
-    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator
+    private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator
 ) {
     data class WatchingNowState(
         val active: Boolean = false,

@@ -65,7 +65,7 @@ import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
 import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
-import com.nexio.tv.data.repository.RealDebridAuthService
+import com.nexio.tv.data.repository.RealDebridSettingsAuthGateway
 import com.nexio.tv.data.repository.RealDebridTokenPollResult
 import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkProvider
@@ -592,7 +592,7 @@ private fun maskApiKey(key: String, notSetLabel: String): String {
 @HiltViewModel
 internal class DebridSettingsViewModel @Inject internal constructor(
     @ApplicationContext private val appContext: Context,
-    private val realDebridAuthService: RealDebridAuthService,
+    private val realDebridAuthService: RealDebridSettingsAuthGateway,
     realDebridAuthDataStore: RealDebridAuthDataStore,
     private val premiumizeService: PremiumizeService,
     premiumizeSettingsDataStore: PremiumizeSettingsDataStore,

@@ -1,5 +1,7 @@
 package com.nexio.tv.core.anime
 
+import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.data.integration.kitsu.KitsuIntegrationProvider
 import com.nexio.tv.data.remote.api.KitsuAnimeAttributes
 import com.nexio.tv.data.remote.api.KitsuAnimeCharacterAttributes
 import com.nexio.tv.data.remote.api.KitsuAnimeCharacterRelationships
@@ -43,7 +45,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.MAL, "5114"), ContentMediaKind.SERIES) } returns "3936"
         coEvery { auth.providerEnabled() } returns true
@@ -86,7 +88,7 @@ class KitsuMetadataServiceTest {
     fun `fetchEnrichment allows native kitsu ids without authentication`() = runTest {
         val api = mockk<KitsuApi>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mockk(relaxed = true), auth)
+        val service = service(api, mockk(relaxed = true), auth)
 
         coEvery { auth.providerEnabled() } returns true
         coEvery { auth.validAccessToken() } returns null
@@ -110,7 +112,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
         coEvery { auth.providerEnabled() } returns true
@@ -146,7 +148,7 @@ class KitsuMetadataServiceTest {
     fun `fetchEpisodeEnrichment allows native kitsu ids without authentication`() = runTest {
         val api = mockk<KitsuApi>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mockk(relaxed = true), auth)
+        val service = service(api, mockk(relaxed = true), auth)
 
         coEvery { auth.providerEnabled() } returns true
         coEvery { auth.validAccessToken() } returns null
@@ -176,7 +178,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
         coEvery { auth.providerEnabled() } returns true
@@ -224,7 +226,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
         coEvery { auth.providerEnabled() } returns true
@@ -263,7 +265,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(AnimeStremioId(AnimeIdSource.KITSU, "1"), ContentMediaKind.SERIES) } returns "1"
         coEvery { auth.providerEnabled() } returns true
@@ -297,7 +299,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
@@ -431,7 +433,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
@@ -477,7 +479,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
@@ -516,7 +518,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
@@ -562,7 +564,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
@@ -608,7 +610,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "3936"
         coEvery { auth.providerEnabled() } returns true
@@ -626,7 +628,7 @@ class KitsuMetadataServiceTest {
     @Test
     fun `returns null when id is not anime`() = runTest {
         val auth = mockk<KitsuAuthService>(relaxed = true)
-        val service = KitsuMetadataService(mockk(relaxed = true), mockk(relaxed = true), auth)
+        val service = service(mockk(relaxed = true), mockk(relaxed = true), auth)
 
         assertNull(service.fetchEnrichment("trakt:123", ContentMediaKind.SERIES))
     }
@@ -636,7 +638,7 @@ class KitsuMetadataServiceTest {
         val api = mockk<KitsuApi>()
         val mapper = mockk<AnimeIdMappingService>()
         val auth = mockk<KitsuAuthService>()
-        val service = KitsuMetadataService(api, mapper, auth)
+        val service = service(api, mapper, auth)
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "3936"
         coEvery { auth.validAccessToken() } returns null
@@ -653,5 +655,17 @@ class KitsuMetadataServiceTest {
 
         assertEquals("Fullmetal Alchemist: Brotherhood", enrichment?.localizedTitle)
         coVerify(exactly = 1) { api.getAnime(null, "3936", any()) }
+    }
+    private fun service(
+        api: KitsuApi,
+        mapper: AnimeIdMappingService,
+        auth: KitsuAuthService
+    ): KitsuMetadataService {
+        val provider = KitsuIntegrationProvider(
+            runtime = passThroughTestRuntime(),
+            kitsuApi = api,
+            kitsuAuthService = auth
+        )
+        return KitsuMetadataService(provider, mapper)
     }
 }

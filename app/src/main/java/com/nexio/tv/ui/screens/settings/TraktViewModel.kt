@@ -10,11 +10,11 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktPopularListOption
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TraktSettingsAuthGateway
 import com.nexio.tv.data.repository.TraktTokenPollResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -60,7 +60,7 @@ data class TraktUiState(
 
 @HiltViewModel
 class TraktViewModel @Inject constructor(
-    private val traktAuthService: TraktAuthService,
+    private val traktAuthService: TraktSettingsAuthGateway,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
     private val traktDiscoveryService: TraktDiscoveryService,

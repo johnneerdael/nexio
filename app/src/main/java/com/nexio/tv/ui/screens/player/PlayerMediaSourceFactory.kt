@@ -30,6 +30,8 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
+import com.nexio.tv.data.integration.playback.transport.DiskSpoolHttpTransport
+import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
@@ -48,11 +50,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import okhttp3.OkHttpClient
 
 internal class PlayerMediaSourceFactory(
     private val context: Context,
-    private val playbackOkHttpClient: OkHttpClient,
+    private val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
+    private val diskSpoolHttpTransport: DiskSpoolHttpTransport = playbackMediaSourceTransport.diskSpoolHttpTransport,
 ) {
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
@@ -700,12 +702,7 @@ internal class PlayerMediaSourceFactory(
     }
 
     private fun createOkHttpDataSourceFactory(headers: Map<String, String>): OkHttpDataSource.Factory {
-        return OkHttpDataSource.Factory(playbackOkHttpClient).apply {
-            setDefaultRequestProperties(headers)
-            if (!headers.containsKey("User-Agent")) {
-                setUserAgent(DEFAULT_USER_AGENT)
-            }
-        }
+        return playbackMediaSourceTransport.createDataSourceFactory(headers, DEFAULT_USER_AGENT)
     }
 
     private fun selectProgressiveUpstreamFactory(
@@ -945,7 +942,7 @@ internal class PlayerMediaSourceFactory(
                         "connections=${profile.connectionCount} chunkMb=${chunkBytes / 1024 / 1024}"
                 }
                 DiskSpoolWriter(
-                    playbackOkHttpClient,
+                    diskSpoolHttpTransport,
                     requestHeaders = requestHeaders,
                     chunkBytes = chunkBytes,
                     parallelConnections = profile.connectionCount,

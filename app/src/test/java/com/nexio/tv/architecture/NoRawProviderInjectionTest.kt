@@ -5,14 +5,17 @@ import org.junit.Test
 
 class NoRawProviderInjectionTest {
     @Test
-    fun `feature packages do not inject raw retrofit or okhttp types`() {
-        val offenders = architectureScan(
-            allowedPackages = setOf(
-                "com.nexio.tv.data.integration",
-                "com.nexio.tv.data.remote",
-                "com.nexio.tv.core.di"
+    fun `feature packages do not inject raw retrofit or okhttp types across the whole tree`() {
+        val offenders = productionRegexScan(
+            forbiddenPatterns = linkedMapOf(
+                "Retrofit" to Regex("""\bRetrofit\b"""),
+                "OkHttpClient" to Regex("""\bOkHttpClient\b""")
             ),
-            forbiddenSimpleNames = setOf("Retrofit", "OkHttpClient")
+            allowedPaths = productionAllowedPathSuffixes("/com/nexio/tv/core/di/") +
+                productionAllowedPathContainsAll(
+                    "/com/nexio/tv/data/integration/",
+                    "/transport/"
+                )
         )
 
         if (offenders.isNotEmpty()) {

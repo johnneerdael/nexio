@@ -1,9 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
-import com.nexio.tv.data.remote.api.TraktApi
-import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
@@ -52,12 +49,10 @@ class TraktProgressHistoryMutationAdapterTest {
 
     @Test
     fun `apply optimistic and rollback delegate to progress service`() = kotlinx.coroutines.test.runTest {
-        val traktApi = mockk<TraktApi>(relaxed = true)
-        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true)
         val traktProgressService = mockk<TraktProgressService>(relaxed = true)
         val adapter = TraktProgressHistoryMutationAdapter(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktProgressMutationExecutor = traktProgressMutationExecutor,
             traktProgressService = traktProgressService
         )
         val envelope = TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
@@ -78,12 +73,10 @@ class TraktProgressHistoryMutationAdapterTest {
 
     @Test
     fun `execute returns success when Trakt accepts history add`() = kotlinx.coroutines.test.runTest {
-        val traktApi = mockk<TraktApi>(relaxed = true)
-        val traktAuthService = mockk<TraktAuthService>()
+        val traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>()
         val traktProgressService = mockk<TraktProgressService>()
         val adapter = TraktProgressHistoryMutationAdapter(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktProgressMutationExecutor = traktProgressMutationExecutor,
             traktProgressService = traktProgressService
         )
         val envelope = TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
@@ -99,7 +92,7 @@ class TraktProgressHistoryMutationAdapterTest {
             traktProgressService.hasHistoryAddNotFoundForOutbox(any())
         } returns false
         coEvery {
-            traktAuthService.executeAuthorizedWriteRequest<TraktHistoryAddResponseDto>(any(), any())
+            traktProgressMutationExecutor.addHistory(any(), any())
         } returns Response.success(null)
 
         val result = adapter.execute(envelope)
@@ -109,12 +102,10 @@ class TraktProgressHistoryMutationAdapterTest {
 
     @Test
     fun `execute returns success when Trakt accepts playback delete`() = kotlinx.coroutines.test.runTest {
-        val traktApi = mockk<TraktApi>(relaxed = true)
-        val traktAuthService = mockk<TraktAuthService>()
+        val traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>()
         val traktProgressService = mockk<TraktProgressService>(relaxed = true)
         val adapter = TraktProgressHistoryMutationAdapter(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktProgressMutationExecutor = traktProgressMutationExecutor,
             traktProgressService = traktProgressService
         )
         val envelope = TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
@@ -125,7 +116,7 @@ class TraktProgressHistoryMutationAdapterTest {
         )
 
         coEvery {
-            traktAuthService.executeAuthorizedWriteRequest<Unit>(any(), any())
+            traktProgressMutationExecutor.deletePlayback(any(), any())
         } returns Response.success(Unit)
 
         val result = adapter.execute(envelope)

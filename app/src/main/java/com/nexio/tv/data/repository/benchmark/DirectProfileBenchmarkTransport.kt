@@ -1,20 +1,18 @@
 package com.nexio.tv.data.repository.benchmark
 
-import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nexio.tv.data.integration.debrid.transport.DirectBenchmarkReadableSourceFactoryBuilder
 import javax.inject.Inject
-import javax.inject.Named
-import okhttp3.OkHttpClient
 
 class DirectProfileBenchmarkTransport internal constructor(
     private val delegate: OptimizedBenchmarkTransport
 ) {
 
     @Inject
-    constructor(
-        @Named("benchmark") okHttpClient: OkHttpClient
+    internal constructor(
+        factoryBuilder: DirectBenchmarkReadableSourceFactoryBuilder
     ) : this(
         delegate = OptimizedBenchmarkTransport(
-            factoryBuilder = DefaultDirectBenchmarkReadableSourceFactoryBuilder(okHttpClient),
+            factoryBuilder = factoryBuilder,
             nanoTimeNs = System::nanoTime,
             sustainedThresholdBytes = 500L * 1024L * 1024L,
             sustainedThresholdElapsedMs = 120_000L,
@@ -47,30 +45,5 @@ class DirectProfileBenchmarkTransport internal constructor(
         return result.copy(
             profile = result.profile.copy(configSnapshot = null)
         )
-    }
-}
-
-private class DefaultDirectBenchmarkReadableSourceFactoryBuilder(
-    private val okHttpClient: OkHttpClient
-) : OptimizedBenchmarkDataSourceFactoryBuilder {
-
-    override fun create(
-        candidate: DebridBenchmarkCandidate,
-        configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-        chunkWaitTimeoutMs: Long,
-        allowStartupBootstrapReuse: Boolean,
-        transportSampleTimeMs: () -> Long,
-        onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
-    ): BenchmarkReadableSourceFactory {
-        val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
-            setDefaultRequestProperties(candidate.headers)
-        }
-        return BenchmarkReadableSourceFactory {
-            Media3BenchmarkReadableSource(
-                dataSource = upstreamFactory.createDataSource(),
-                candidate = candidate
-            )
-        }
     }
 }

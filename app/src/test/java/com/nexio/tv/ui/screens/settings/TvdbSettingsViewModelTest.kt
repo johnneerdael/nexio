@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.settings
 
 import com.nexio.tv.core.tvdb.TvdbAuthResult
 import com.nexio.tv.core.tvdb.TvdbAuthService
+import com.nexio.tv.core.tvdb.TvdbSettingsAuthGateway
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
 import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
 import com.nexio.tv.data.local.TvdbDiagnosticsSnapshot
@@ -57,7 +58,7 @@ class TvdbSettingsViewModelTest {
         val authService = mockk<TvdbAuthService>()
         every { dataStore.settings } returns settingsFlow
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         viewModel.onEvent(TvdbSettingsEvent.ToggleEnabled(true))
@@ -83,7 +84,7 @@ class TvdbSettingsViewModelTest {
             )
         }
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         viewModel.saveCredentials(
@@ -115,7 +116,7 @@ class TvdbSettingsViewModelTest {
             lastFailure = "Invalid TVDB credentials"
         )
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         viewModel.saveCredentials(
@@ -148,7 +149,7 @@ class TvdbSettingsViewModelTest {
         val authService = mockk<TvdbAuthService>()
         every { dataStore.settings } returns settingsFlow
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.enabled)
@@ -171,7 +172,7 @@ class TvdbSettingsViewModelTest {
         val authService = mockk<TvdbAuthService>()
         every { dataStore.settings } returns settingsFlow
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         viewModel.clearCredentials()
@@ -196,7 +197,7 @@ class TvdbSettingsViewModelTest {
         val authService = mockk<TvdbAuthService>()
         every { dataStore.settings } returns settingsFlow
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         assertEquals("••••••1234", viewModel.uiState.value.credentialDisplayValue)
@@ -211,7 +212,7 @@ class TvdbSettingsViewModelTest {
         val authService = mockk<TvdbAuthService>()
         every { dataStore.settings } returns settingsFlow
 
-        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService, diagnosticsDataStore = emptyDiagnosticsDataStore)
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = TvdbSettingsAuthGateway(authService), diagnosticsDataStore = emptyDiagnosticsDataStore)
         advanceUntilIdle()
 
         assertEquals("Not set", viewModel.uiState.value.credentialDisplayValue)
@@ -238,7 +239,7 @@ class TvdbSettingsViewModelTest {
 
         val viewModel = TvdbSettingsViewModel(
             dataStore = dataStore,
-            authService = authService,
+            authService = TvdbSettingsAuthGateway(authService),
             diagnosticsDataStore = diagnosticsDataStore
         )
         advanceUntilIdle()

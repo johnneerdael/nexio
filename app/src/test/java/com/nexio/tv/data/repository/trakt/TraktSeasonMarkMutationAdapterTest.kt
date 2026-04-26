@@ -6,9 +6,11 @@ import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -106,7 +108,7 @@ class TraktSeasonMarkMutationAdapterTest {
                 episodes = 1..3
             )
         )
-        coEvery { executor.addHistory(any()) } returns Response.success(
+        coEvery { executor.addHistory(any(), any()) } returns Response.success(
             TraktHistoryAddResponseDto(
                 notFound = TraktHistoryAddNotFoundDto(
                     episodes = listOf(
@@ -124,6 +126,39 @@ class TraktSeasonMarkMutationAdapterTest {
         coVerify(exactly = 1) { snapshotService.rollbackEpisodes(capture(rollbackSlot)) }
         assertEquals(setOf(2), rollbackSlot.captured.resumeItems.mapNotNull { it.episode }.toSet())
         coVerify(exactly = 1) { snapshotService.ensureFresh(force = true) }
+    }
+
+    @Test
+    fun `execute sends season batch mutation with envelope profile session`() = kotlinx.coroutines.test.runTest {
+        val executor = mockk<TraktProgressMutationExecutor>()
+        val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
+        val progressService = mockk<TraktProgressService>(relaxed = true)
+        val adapter = TraktSeasonMarkMutationAdapter(
+            traktProgressMutationExecutor = executor,
+            snapshotServiceProvider = Provider { snapshotService },
+            traktProgressService = progressService
+        )
+        val envelope = TraktSeasonMarkMutationAdapter.buildEnvelope(
+            showContentId = "show-1",
+            seasonNumber = 2,
+            episodes = listOf(TraktEpisodeRef(episodeNumber = 1, traktId = 101)),
+            rollbackState = rollbackState(
+                showId = "show-1",
+                season = 2,
+                episodes = 1..1
+            ),
+            profileId = 42
+        )
+        coEvery { executor.addHistory(any(), any()) } returns Response.success(TraktHistoryAddResponseDto())
+
+        adapter.execute(envelope)
+
+        coVerify(exactly = 1) {
+            executor.addHistory(
+                TrackingAuthSession(TrackingProvider.TRAKT, 42),
+                any()
+            )
+        }
     }
 
     @Test

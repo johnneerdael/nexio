@@ -16,6 +16,7 @@ import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.TraktSettingsAuthGateway
 import com.nexio.tv.domain.model.MDBListSettings
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coVerify
@@ -79,7 +80,7 @@ class CatalogSelectionPersistenceTest {
         every { context.getString(R.string.trakt_catalogs_updated) } returns "Catalogs updated"
 
         val viewModel = TraktViewModel(
-            traktAuthService = traktAuthService,
+            traktAuthService = TraktSettingsAuthGateway(traktAuthService),
             traktAuthDataStore = traktAuthDataStore,
             traktProgressService = progressService,
             traktDiscoveryService = traktDiscoveryService,

@@ -23,20 +23,16 @@ import org.junit.Test
 class MetadataDiskCacheStoreTest {
 
     @Test
-    fun `removeHomeUnreferencedMetaEntries keeps shared metadata for inactive profile catalogs`() {
+    fun `shared metadata remains available without legacy home ownership references`() {
         val store = MetadataDiskCacheStore(
             context = mockContext(InMemorySharedPreferences())
         )
 
         store.writeMeta("movie:tt1", "en", "native", meta("tt1"))
         store.writeMeta("movie:tt2", "en", "native", meta("tt2"))
-        store.replaceHomeFeedReferences("home_catalog_snapshot", setOf("movie:tt1"))
-
-        val removedImageUrls = store.removeHomeUnreferencedMetaEntries()
 
         assertNotNull(store.readMeta("movie:tt1", "en", "native"))
         assertNotNull(store.readMeta("movie:tt2", "en", "native"))
-        assertEquals(emptyList<String>(), removedImageUrls)
     }
 
     @Test

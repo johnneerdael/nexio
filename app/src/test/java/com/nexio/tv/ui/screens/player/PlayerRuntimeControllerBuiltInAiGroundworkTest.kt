@@ -6,12 +6,25 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.core.integration.IntegrationCallSpec
+import com.nexio.tv.core.integration.IntegrationFetchOptions
+import com.nexio.tv.core.integration.IntegrationFetchResult
+import com.nexio.tv.core.integration.IntegrationRuntime
+import com.nexio.tv.core.integration.IntegrationStreamSpec
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationDefaults
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
+import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
+import com.nexio.tv.data.integration.subtitles.SubtitleTranslationIntegrationProvider
+import com.nexio.tv.data.integration.subtitles.transport.SubtitleSourceDownloadTransport
+import com.nexio.tv.data.integration.subtitles.transport.SubtitleTranslationTransport
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -22,9 +35,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.EmptyCoroutineContext
 
 class PlayerRuntimeControllerBuiltInAiGroundworkTest {
@@ -128,7 +138,8 @@ class PlayerRuntimeControllerBuiltInAiGroundworkTest {
         try {
             val service = SubtitleTranslationService(
                 context = mockk<Context>(relaxed = true),
-                httpClient = OkHttpClient()
+                subtitleTranslationIntegrationProvider = subtitleTranslationIntegrationProvider(OkHttpClient()),
+                subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider(OkHttpClient())
             )
             val translator = BuiltInSubtitleCueTranslator(
                 scope = CoroutineScope(EmptyCoroutineContext),
@@ -189,5 +200,42 @@ class PlayerRuntimeControllerBuiltInAiGroundworkTest {
                 failure.complete(error)
             }
         }
+    }
+
+    private fun subtitleTranslationIntegrationProvider(httpClient: OkHttpClient): SubtitleTranslationIntegrationProvider {
+        val runtime = object : IntegrationRuntime {
+            override suspend fun <T> get(
+                spec: com.nexio.tv.core.integration.IntegrationSpec<T>,
+                options: IntegrationFetchOptions
+            ): IntegrationFetchResult<T> = IntegrationFetchResult.Missing
+
+            override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+                spec.call()
+
+            override suspend fun <T> open(spec: IntegrationStreamSpec<T>) = null
+        }
+
+        return SubtitleTranslationIntegrationProvider(runtime, SubtitleTranslationTransport(httpClient))
+    }
+
+    private fun subtitleSourceDownloadIntegrationProvider(
+        httpClient: OkHttpClient
+    ): SubtitleSourceDownloadIntegrationProvider {
+        val runtime = object : IntegrationRuntime {
+            override suspend fun <T> get(
+                spec: com.nexio.tv.core.integration.IntegrationSpec<T>,
+                options: IntegrationFetchOptions
+            ): IntegrationFetchResult<T> = IntegrationFetchResult.Missing
+
+            override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+                spec.call()
+
+            override suspend fun <T> open(spec: IntegrationStreamSpec<T>) = null
+        }
+
+        return SubtitleSourceDownloadIntegrationProvider(
+            runtime,
+            SubtitleSourceDownloadTransport(httpClient)
+        )
     }
 }

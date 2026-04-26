@@ -6,9 +6,9 @@ import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import retrofit2.Response
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
+import dagger.Lazy
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,7 +40,7 @@ sealed interface TraktTokenPollResult {
 
 @Singleton
 class TraktAuthService @Inject constructor(
-    private val traktApi: TraktApi,
+    private val traktIntegrationProvider: Lazy<TraktIntegrationProvider>,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val requestGate: TraktRequestGate,
     private val profileManager: ProfileManager,
@@ -115,12 +116,13 @@ class TraktAuthService @Inject constructor(
         val session = currentAuthSession()
 
         val response = try {
-            traktApi.requestDeviceCode(
-                TraktDeviceCodeRequestDto(clientId = BuildConfig.TRAKT_CLIENT_ID)
+            traktIntegrationProvider.get().requestDeviceCode(
+                session = session,
+                body = TraktDeviceCodeRequestDto(clientId = BuildConfig.TRAKT_CLIENT_ID)
             )
         } catch (e: IOException) {
             return Result.failure(IllegalStateException("Network error, please try again"))
-        }
+        } ?: return Result.failure(IllegalStateException("Network error, please try again"))
 
         val body = response.body()
         if (response.isSuccessful && body != null) {
@@ -155,8 +157,9 @@ class TraktAuthService @Inject constructor(
         }
 
         val response = try {
-            traktApi.requestDeviceToken(
-                TraktDeviceTokenRequestDto(
+            traktIntegrationProvider.get().requestDeviceToken(
+                session = session,
+                body = TraktDeviceTokenRequestDto(
                     code = deviceCode,
                     clientId = BuildConfig.TRAKT_CLIENT_ID,
                     clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
@@ -164,7 +167,7 @@ class TraktAuthService @Inject constructor(
             )
         } catch (e: IOException) {
             return TraktTokenPollResult.Failed("Network error, will retry")
-        }
+        } ?: return TraktTokenPollResult.Failed("Network error, will retry")
 
         val tokenBody = response.body()
         if (response.isSuccessful && tokenBody != null) {
@@ -209,7 +212,8 @@ class TraktAuthService @Inject constructor(
 
     private suspend fun refreshTokenIfNeeded(
         session: TrackingAuthSession,
-        force: Boolean = false
+        force: Boolean = false,
+        withinRuntimeCall: Boolean = false
     ): Boolean {
         if (!hasRequiredCredentials()) return false
 
@@ -224,18 +228,28 @@ class TraktAuthService @Inject constructor(
 
             trace("refreshTokenIfNeeded: refreshing token (force=$force)")
             val response = try {
-                traktApi.refreshToken(
-                    TraktRefreshTokenRequestDto(
-                        refreshToken = refreshToken,
-                        clientId = BuildConfig.TRAKT_CLIENT_ID,
-                        clientSecret = BuildConfig.TRAKT_CLIENT_SECRET,
-                        redirectUri = traktRedirectUri()
-                    )
+                val provider = traktIntegrationProvider.get()
+                val body = TraktRefreshTokenRequestDto(
+                    refreshToken = refreshToken,
+                    clientId = BuildConfig.TRAKT_CLIENT_ID,
+                    clientSecret = BuildConfig.TRAKT_CLIENT_SECRET,
+                    redirectUri = traktRedirectUri()
                 )
+                if (withinRuntimeCall) {
+                    provider.refreshTokenWithinRuntimeCall(
+                        session = session,
+                        body = body
+                    )
+                } else {
+                    provider.refreshToken(
+                        session = session,
+                        body = body
+                    )
+                }
             } catch (e: IOException) {
                 logWarn { "Network error while refreshing token: ${e.message ?: "unknown"}" }
                 return@withLock false
-            }
+            } ?: return@withLock false
 
             val tokenBody = response.body()
             if (!response.isSuccessful || tokenBody == null) {
@@ -256,14 +270,34 @@ class TraktAuthService @Inject constructor(
         }
     }
 
+    suspend fun <T> executeAuthorizedRequestWithinRuntimeCall(
+        session: TrackingAuthSession,
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T>? =
+        executeAuthOwnerRequest(
+            session = session,
+            withinRuntimeCall = true,
+            call = call
+        )
+
+    suspend fun <T> executeAuthorizedRequestWithinRuntimeCall(
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T>? =
+        executeAuthOwnerRequest(
+            session = currentAuthSession(),
+            withinRuntimeCall = true,
+            call = call
+        )
+
     suspend fun revokeAndLogout(profileId: Int? = null) {
         val session = profileId?.let { TrackingAuthSession(TrackingProvider.TRAKT, it) } ?: currentAuthSession()
         val state = getCurrentAuthState(session)
         if (hasRequiredCredentials()) {
             state.accessToken?.let { accessToken ->
                 runCatching {
-                    traktApi.revokeToken(
-                        TraktRevokeRequestDto(
+                    traktIntegrationProvider.get().revokeToken(
+                        session = session,
+                        body = TraktRevokeRequestDto(
                             token = accessToken,
                             clientId = BuildConfig.TRAKT_CLIENT_ID,
                             clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
@@ -284,9 +318,7 @@ class TraktAuthService @Inject constructor(
     }
 
     private suspend fun fetchUserSettings(session: TrackingAuthSession): String? {
-        val response = executeAuthorizedRequest(session) { authHeader ->
-            traktApi.getUserSettings(authorization = authHeader)
-        } ?: return null
+        val response = traktIntegrationProvider.get().getUserSettings(session) ?: return null
 
         if (!response.isSuccessful) return null
 
@@ -296,12 +328,23 @@ class TraktAuthService @Inject constructor(
         return username
     }
 
-    suspend fun <T> executeAuthorizedRequest(
+    suspend fun <T> executeAuthOwnerRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? = executeAuthorizedRequest(currentAuthSession(), call)
+    ): Response<T>? = executeAuthOwnerRequest(currentAuthSession(), call)
 
-    suspend fun <T> executeAuthorizedRequest(
+    suspend fun <T> executeAuthOwnerRequest(
         session: TrackingAuthSession,
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T>? =
+        executeAuthOwnerRequest(
+            session = session,
+            withinRuntimeCall = false,
+            call = call
+        )
+
+    private suspend fun <T> executeAuthOwnerRequest(
+        session: TrackingAuthSession,
+        withinRuntimeCall: Boolean,
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
         if (isCircuitOpen()) {
@@ -309,7 +352,7 @@ class TraktAuthService @Inject constructor(
             return null
         }
 
-        var token = getValidAccessToken(session) ?: return null
+        var token = getValidAccessToken(session, withinRuntimeCall = withinRuntimeCall) ?: return null
         var retriedAuth = false
         var retriedRateLimit = false
         var retriedTransient = false
@@ -352,28 +395,38 @@ class TraktAuthService @Inject constructor(
             }
 
             if (code == 401 && !retriedAuth) {
-                val refreshed = refreshTokenIfNeeded(session, force = true)
+                val target = responseTarget(response)
+                val refreshed = refreshTokenIfNeeded(
+                    session = session,
+                    force = true,
+                    withinRuntimeCall = withinRuntimeCall
+                )
                 if (refreshed) {
-                    trace("authorized request: 401 for ${responseTarget(response)}, retrying after token refresh")
+                    trace("authorized request: 401 for $target, retrying after token refresh")
                     token = getCurrentAuthState(session).accessToken ?: return response
                     retriedAuth = true
+                    response.closeErrorBody()
                     continue
                 }
-                tripCircuit("401 Unauthorized and token refresh failed for ${responseTarget(response)}")
+                tripCircuit("401 Unauthorized and token refresh failed for $target")
                 return response
             }
 
             if (code == 429 && !retriedRateLimit) {
+                val target = responseTarget(response)
                 val waitSeconds = delayForRetryAfter(response = response, fallbackSeconds = 2L, maxSeconds = 60L)
-                trace("authorized request: 429 for ${responseTarget(response)}, retrying in ${waitSeconds}s")
+                trace("authorized request: 429 for $target, retrying in ${waitSeconds}s")
                 retriedRateLimit = true
+                response.closeErrorBody()
                 continue
             }
 
             if (code in transientRetryStatusCodes && !retriedTransient) {
+                val target = responseTarget(response)
                 val waitSeconds = delayForRetryAfter(response = response, fallbackSeconds = 30L, maxSeconds = 30L)
-                trace("authorized request: transient $code for ${responseTarget(response)}, retrying in ${waitSeconds}s")
+                trace("authorized request: transient $code for $target, retrying in ${waitSeconds}s")
                 retriedTransient = true
+                response.closeErrorBody()
                 continue
             }
 
@@ -381,19 +434,26 @@ class TraktAuthService @Inject constructor(
         }
     }
 
+    private fun <T> Response<T>.closeErrorBody() {
+        errorBody()?.close()
+    }
+
     suspend fun <T> executeAuthorizedWriteRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? = executeAuthorizedRequest(call)
+    ): Response<T>? = executeAuthOwnerRequest(call)
 
     suspend fun <T> executeAuthorizedWriteRequest(
         session: TrackingAuthSession,
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? = executeAuthorizedRequest(session, call)
+    ): Response<T>? = executeAuthOwnerRequest(session, call)
 
-    private suspend fun getValidAccessToken(session: TrackingAuthSession): String? {
+    private suspend fun getValidAccessToken(
+        session: TrackingAuthSession,
+        withinRuntimeCall: Boolean = false
+    ): String? {
         val state = getCurrentAuthState(session)
         if (state.accessToken.isNullOrBlank()) return null
-        if (refreshTokenIfNeeded(session, force = false)) {
+        if (refreshTokenIfNeeded(session, force = false, withinRuntimeCall = withinRuntimeCall)) {
             return getCurrentAuthState(session).accessToken
         }
         return null

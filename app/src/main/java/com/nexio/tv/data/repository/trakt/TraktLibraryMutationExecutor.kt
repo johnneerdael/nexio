@@ -1,6 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
-import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
@@ -8,23 +8,19 @@ import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktReorderListsRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktReorderListsResponseDto
 import com.nexio.tv.data.repository.TrackingAuthSession
-import com.nexio.tv.data.repository.TraktAuthService
 import retrofit2.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class TraktLibraryMutationExecutor @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService
+    private val traktIntegrationProvider: TraktIntegrationProvider
 ) {
     suspend fun createUserList(
         id: String,
         body: TraktCreateOrUpdateListRequestDto
     ): Response<TraktListSummaryDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.createUserList(authorization = authHeader, id = id, body = body)
-        }
+        return traktIntegrationProvider.createUserList(id = id, body = body)
     }
 
     suspend fun createUserList(
@@ -32,9 +28,7 @@ class TraktLibraryMutationExecutor @Inject constructor(
         id: String,
         body: TraktCreateOrUpdateListRequestDto
     ): Response<TraktListSummaryDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.createUserList(authorization = authHeader, id = id, body = body)
-        }
+        return traktIntegrationProvider.createUserList(session = session, id = id, body = body)
     }
 
     suspend fun updateUserList(
@@ -42,9 +36,7 @@ class TraktLibraryMutationExecutor @Inject constructor(
         listId: String,
         body: TraktCreateOrUpdateListRequestDto
     ): Response<TraktListSummaryDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.updateUserList(authorization = authHeader, id = id, listId = listId, body = body)
-        }
+        return traktIntegrationProvider.updateUserList(id = id, listId = listId, body = body)
     }
 
     suspend fun updateUserList(
@@ -53,18 +45,14 @@ class TraktLibraryMutationExecutor @Inject constructor(
         listId: String,
         body: TraktCreateOrUpdateListRequestDto
     ): Response<TraktListSummaryDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.updateUserList(authorization = authHeader, id = id, listId = listId, body = body)
-        }
+        return traktIntegrationProvider.updateUserList(session = session, id = id, listId = listId, body = body)
     }
 
     suspend fun deleteUserList(
         id: String,
         listId: String
     ): Response<Unit>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.deleteUserList(authorization = authHeader, id = id, listId = listId)
-        }
+        return traktIntegrationProvider.deleteUserList(id = id, listId = listId)
     }
 
     suspend fun deleteUserList(
@@ -72,18 +60,14 @@ class TraktLibraryMutationExecutor @Inject constructor(
         id: String,
         listId: String
     ): Response<Unit>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.deleteUserList(authorization = authHeader, id = id, listId = listId)
-        }
+        return traktIntegrationProvider.deleteUserList(session = session, id = id, listId = listId)
     }
 
     suspend fun reorderUserLists(
         id: String,
         body: TraktReorderListsRequestDto
     ): Response<TraktReorderListsResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.reorderUserLists(authorization = authHeader, id = id, body = body)
-        }
+        return traktIntegrationProvider.reorderUserLists(id = id, body = body)
     }
 
     suspend fun reorderUserLists(
@@ -91,43 +75,33 @@ class TraktLibraryMutationExecutor @Inject constructor(
         id: String,
         body: TraktReorderListsRequestDto
     ): Response<TraktReorderListsResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.reorderUserLists(authorization = authHeader, id = id, body = body)
-        }
+        return traktIntegrationProvider.reorderUserLists(session = session, id = id, body = body)
     }
 
     suspend fun addToWatchlist(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.addToWatchlist(authorization = authHeader, body = body)
-        }
+        return traktIntegrationProvider.addToWatchlist(body)
     }
 
     suspend fun addToWatchlist(
         session: TrackingAuthSession,
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.addToWatchlist(authorization = authHeader, body = body)
-        }
+        return traktIntegrationProvider.addToWatchlist(session, body)
     }
 
     suspend fun removeFromWatchlist(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.removeFromWatchlist(authorization = authHeader, body = body)
-        }
+        return traktIntegrationProvider.removeFromWatchlist(body)
     }
 
     suspend fun removeFromWatchlist(
         session: TrackingAuthSession,
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.removeFromWatchlist(authorization = authHeader, body = body)
-        }
+        return traktIntegrationProvider.removeFromWatchlist(session, body)
     }
 
     suspend fun addUserListItems(
@@ -135,9 +109,7 @@ class TraktLibraryMutationExecutor @Inject constructor(
         listId: String,
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.addUserListItems(authorization = authHeader, id = id, listId = listId, body = body)
-        }
+        return traktIntegrationProvider.addUserListItems(id = id, listId = listId, body = body)
     }
 
     suspend fun addUserListItems(
@@ -146,9 +118,7 @@ class TraktLibraryMutationExecutor @Inject constructor(
         listId: String,
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.addUserListItems(authorization = authHeader, id = id, listId = listId, body = body)
-        }
+        return traktIntegrationProvider.addUserListItems(session = session, id = id, listId = listId, body = body)
     }
 
     suspend fun removeUserListItems(
@@ -156,9 +126,7 @@ class TraktLibraryMutationExecutor @Inject constructor(
         listId: String,
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.removeUserListItems(authorization = authHeader, id = id, listId = listId, body = body)
-        }
+        return traktIntegrationProvider.removeUserListItems(id = id, listId = listId, body = body)
     }
 
     suspend fun removeUserListItems(
@@ -167,8 +135,6 @@ class TraktLibraryMutationExecutor @Inject constructor(
         listId: String,
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
-        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
-            traktApi.removeUserListItems(authorization = authHeader, id = id, listId = listId, body = body)
-        }
+        return traktIntegrationProvider.removeUserListItems(session = session, id = id, listId = listId, body = body)
     }
 }

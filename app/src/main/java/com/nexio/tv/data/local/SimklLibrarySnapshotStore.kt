@@ -6,8 +6,13 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.integration.RailMembership
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.profilePrefsName
+import com.nexio.tv.data.local.integration.RailCacheEntity
+import com.nexio.tv.data.local.integration.RailItemEntity
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.PosterShape
@@ -21,18 +26,21 @@ class SimklLibrarySnapshotStore private constructor(
     private val context: Context,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val activeProfileId: () -> Int,
-    private val injectedProfileManager: ProfileManager?
+    private val injectedProfileManager: ProfileManager?,
+    private val identityResolver: RailMediaIdentityResolver
 ) {
     @Inject
     constructor(
         @ApplicationContext context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
-        profileManager: ProfileManager
+        profileManager: ProfileManager,
+        identityResolver: RailMediaIdentityResolver
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         activeProfileId = { profileManager.activeProfileId.value },
-        injectedProfileManager = profileManager
+        injectedProfileManager = profileManager,
+        identityResolver = identityResolver
     )
 
     constructor(
@@ -42,7 +50,8 @@ class SimklLibrarySnapshotStore private constructor(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         activeProfileId = { 1 },
-        injectedProfileManager = null
+        injectedProfileManager = null,
+        identityResolver = RailMediaIdentityResolver()
     )
 
     companion object {
@@ -128,6 +137,38 @@ class SimklLibrarySnapshotStore private constructor(
             context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear SIMKL library snapshot", error)
+        }
+    }
+
+    internal fun buildRailMemberships(snapshot: Snapshot, profileId: Int): List<RailMembership> {
+        val now = System.currentTimeMillis()
+        return snapshot.entriesByList.map { (listKey, entries) ->
+            val railKey = RailKeyFactory.simklLibrary(profileId, listKey)
+            val resolvedEntries = entries.map { entry ->
+                identityResolver.fromLibraryEntry(entry, updatedAtEpochMs = now)
+            }
+            RailMembership(
+                rail = RailCacheEntity(
+                    railKey = railKey,
+                    provider = "SIMKL",
+                    kind = "LIBRARY",
+                    paramsHash = listKey,
+                    fetchedAtEpochMs = now,
+                    expiresAtEpochMs = now + 30_000L,
+                    staleUntilEpochMs = now + 3_600_000L
+                ),
+                items = resolvedEntries.mapIndexed { index, resolved ->
+                    RailItemEntity(
+                        key = "$railKey#${resolved.mediaIdentity.mediaKey}",
+                        railKey = railKey,
+                        mediaKey = resolved.mediaIdentity.mediaKey,
+                        position = index,
+                        updatedAtEpochMs = now
+                    )
+                },
+                mediaIdentities = resolvedEntries.map { it.mediaIdentity },
+                externalIds = resolvedEntries.flatMap { it.externalIds }
+            )
         }
     }
 

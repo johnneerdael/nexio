@@ -4,6 +4,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
@@ -41,20 +42,19 @@ class TraktDiscoveryServiceCustomListTest {
         coEvery { traktApi.getLastActivities(any()) } returns Response.success(
             TraktLastActivitiesResponseDto(all = "2026-04-19T20:00:00.000Z")
         )
-        coEvery { traktApi.getUserLists(any(), "me") } returns Response.success(
-            listOf(
-                TraktListSummaryDto(
-                    name = "Anime",
-                    type = "personal",
-                    itemCount = 1,
-                    ids = TraktListIdsDto(slug = "anime")
-                )
+        val traktIntegrationProvider = mockk<TraktIntegrationProvider>()
+        coEvery { traktIntegrationProvider.fetchUserLists("me") } returns listOf(
+            TraktListSummaryDto(
+                name = "Anime",
+                type = "personal",
+                itemCount = 1,
+                ids = TraktListIdsDto(slug = "anime")
             )
         )
-        coEvery { traktApi.getPopularLists(any(), any(), any()) } returns Response.success(emptyList())
-        coEvery { traktApi.getUserListItems(any(), "me", "anime", "movies") } returns Response.success(emptyList())
-        coEvery { traktApi.getUserListItems(any(), "me", "anime", "shows") } returns Response.success(emptyList())
-        coEvery { traktApi.getUserListItems(any(), "me", "anime", "seasons") } returns Response.success(
+        coEvery { traktIntegrationProvider.fetchPopularLists(page = 1, limit = 30) } returns emptyList()
+        coEvery { traktIntegrationProvider.fetchUserListItems("me", "anime", "movies") } returns emptyList()
+        coEvery { traktIntegrationProvider.fetchUserListItems("me", "anime", "shows") } returns emptyList()
+        coEvery { traktIntegrationProvider.fetchUserListItems("me", "anime", "seasons") } returns
             listOf(
                 TraktListItemDto(
                     type = "season",
@@ -66,12 +66,12 @@ class TraktDiscoveryServiceCustomListTest {
                     )
                 )
             )
-        )
-        coEvery { traktApi.getUserListItems(any(), "me", "anime", "episodes") } returns Response.success(emptyList())
+        coEvery { traktIntegrationProvider.fetchUserListItems("me", "anime", "episodes") } returns emptyList()
 
         val service = buildService(
             traktApi = traktApi,
-            dataStoreFactory = profileDataStoreFactoryForTest()
+            dataStoreFactory = profileDataStoreFactoryForTest(),
+            traktIntegrationProvider = traktIntegrationProvider
         )
 
         service.ensureFresh(force = true)
@@ -90,7 +90,8 @@ class TraktDiscoveryServiceCustomListTest {
 
     private suspend fun buildService(
         traktApi: TraktApi,
-        dataStoreFactory: com.nexio.tv.data.local.ProfileDataStoreFactory
+        dataStoreFactory: com.nexio.tv.data.local.ProfileDataStoreFactory,
+        traktIntegrationProvider: TraktIntegrationProvider
     ): TraktDiscoveryService {
         val profileManager = testProfileManager()
         val authDataStore = TraktAuthDataStore(
@@ -108,7 +109,7 @@ class TraktDiscoveryServiceCustomListTest {
         )
         authDataStore.saveUser(username = "johnneerdael", userSlug = "johnneerdael")
         val authService = TraktAuthService(
-            traktApi = traktApi,
+            traktIntegrationProvider = object : dagger.Lazy<TraktIntegrationProvider> { override fun get() = traktIntegrationProvider },
             traktAuthDataStore = authDataStore,
             requestGate = TraktRequestGate(),
             profileManager = profileManager,
@@ -141,8 +142,8 @@ class TraktDiscoveryServiceCustomListTest {
         coEvery { progressService.getRecentActivities(any()) } returns null
 
         return TraktDiscoveryService(
-            traktApi = traktApi,
-            traktAuthService = authService,
+            traktAuthService = TraktRepositoryAuthGateway(authService),
+            traktIntegrationProvider = traktIntegrationProvider,
             metaRepository = metaRepository,
             traktSettingsDataStore = traktSettings,
             posterRatingsUrlResolver = posterResolver,

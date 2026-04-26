@@ -13,6 +13,10 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
+import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
+import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
+import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
+import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -27,7 +31,6 @@ import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
-import okhttp3.OkHttpClient
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -64,11 +67,14 @@ class PlayerRuntimeController(
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     internal val subtitleTranslationService: SubtitleTranslationService,
+    internal val subtitleSourceDownloadIntegrationProvider: SubtitleSourceDownloadIntegrationProvider,
     internal val tvMetadataRouter: ProviderMetadataRouter,
     internal val metadataRouterFacade: MetadataRouterFacade,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val playbackActivityTracker: PlaybackActivityTracker,
-    internal val playbackOkHttpClient: OkHttpClient,
+    internal val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
+    internal val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
+    internal val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -120,7 +126,7 @@ class PlayerRuntimeController(
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
     internal val mediaSourceFactory = PlayerMediaSourceFactory(
         context = context.applicationContext,
-        playbackOkHttpClient = playbackOkHttpClient
+        playbackMediaSourceTransport = playbackMediaSourceTransport
     )
     internal var currentVideoHash: String? = navigationArgs.videoHash
     internal var currentVideoSize: Long? = navigationArgs.videoSize

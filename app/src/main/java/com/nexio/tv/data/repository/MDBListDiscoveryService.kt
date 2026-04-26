@@ -2,13 +2,14 @@ package com.nexio.tv.data.repository
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
-import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -60,7 +61,7 @@ data class MDBListDiscoverySnapshot(
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class MDBListDiscoveryService @Inject constructor(
-    private val mdbListApi: MDBListApi,
+    private val mdbListIntegrationProvider: MDBListIntegrationProvider,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: MDBListDiscoverySnapshotStore,
@@ -375,12 +376,14 @@ class MDBListDiscoveryService @Inject constructor(
 
     private suspend fun requestBody(apiKey: String, relativeUrl: String): String? {
         return try {
-            val response = mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
-            if (!response.isSuccessful) {
-                Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${response.code()}")
-                return null
+            when (val result = mdbListIntegrationProvider.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)) {
+                is IntegrationCallResult.Success -> result.value.trim()
+                is IntegrationCallResult.HttpError -> {
+                    Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${result.statusCode}")
+                    null
+                }
+                else -> null
             }
-            response.body()?.string()?.trim().orEmpty()
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
             null
@@ -389,12 +392,14 @@ class MDBListDiscoveryService @Inject constructor(
 
     private suspend fun requestBodyWithQuery(relativeUrl: String, query: Map<String, String>): String? {
         return try {
-            val response = mdbListApi.getRawWithQuery(relativeUrl = relativeUrl, query = query)
-            if (!response.isSuccessful) {
-                Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${response.code()} query=${query.keys.joinToString(",")}")
-                return null
+            when (val result = mdbListIntegrationProvider.getRawWithQuery(relativeUrl = relativeUrl, query = query)) {
+                is IntegrationCallResult.Success -> result.value.trim()
+                is IntegrationCallResult.HttpError -> {
+                    Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${result.statusCode} query=${query.keys.joinToString(",")}")
+                    null
+                }
+                else -> null
             }
-            response.body()?.string()?.trim().orEmpty()
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
             null
@@ -403,12 +408,14 @@ class MDBListDiscoveryService @Inject constructor(
 
     private suspend fun requestAbsoluteBody(url: String): String? {
         return try {
-            val response = mdbListApi.getRawWithQuery(relativeUrl = url, query = emptyMap())
-            if (!response.isSuccessful) {
-                Log.d("MDBListDiscovery", "Request failed: $url code=${response.code()}")
-                return null
+            when (val result = mdbListIntegrationProvider.getRawWithQuery(relativeUrl = url, query = emptyMap())) {
+                is IntegrationCallResult.Success -> result.value.trim()
+                is IntegrationCallResult.HttpError -> {
+                    Log.d("MDBListDiscovery", "Request failed: $url code=${result.statusCode}")
+                    null
+                }
+                else -> null
             }
-            response.body()?.string()?.trim().orEmpty()
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $url (${error.message})")
             null

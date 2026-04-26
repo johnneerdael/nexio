@@ -3,10 +3,8 @@ package com.nexio.tv.data.repository.trakt
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthState
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.TrackingAuthSession
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
@@ -43,13 +41,11 @@ class TraktScrobbleMutationAdapterTest {
 
     @Test
     fun `adapter rolls back watching state when terminal failure settles`() = kotlinx.coroutines.test.runTest {
-        val traktApi = mockk<TraktApi>(relaxed = true)
-        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
         val traktProgressService = mockk<TraktProgressService>(relaxed = true)
         val controller = TraktWatchingNowStateController()
         val adapter = TraktScrobbleMutationAdapter(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
             traktProgressService = traktProgressService,
             watchingNowStateController = controller,
             playerSettingsDataStore = playerSettingsStore()
@@ -79,13 +75,11 @@ class TraktScrobbleMutationAdapterTest {
 
     @Test
     fun `checkin execute returns success when trakt accepts request`() = kotlinx.coroutines.test.runTest {
-        val traktApi = mockk<TraktApi>(relaxed = true)
-        val traktAuthService = mockk<TraktAuthService>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>(relaxed = true)
         val traktProgressService = mockk<TraktProgressService>(relaxed = true)
         val controller = TraktWatchingNowStateController()
         val adapter = TraktScrobbleMutationAdapter(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
             traktProgressService = traktProgressService,
             watchingNowStateController = controller,
             playerSettingsDataStore = playerSettingsStore()
@@ -99,7 +93,7 @@ class TraktScrobbleMutationAdapterTest {
 
         val sessionSlot = io.mockk.slot<TrackingAuthSession>()
         coEvery {
-            traktAuthService.executeAuthorizedWriteRequest<Any?>(capture(sessionSlot), any())
+            traktIntegrationProvider.checkin(capture(sessionSlot), any())
         } returns Response.success(null)
 
         val result = adapter.execute(envelope)

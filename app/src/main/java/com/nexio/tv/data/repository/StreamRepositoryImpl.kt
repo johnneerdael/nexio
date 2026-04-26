@@ -4,11 +4,12 @@ import android.util.Log
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.core.sync.buildAddonRequestUrl
+import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.data.integration.addon.AddonStreamIntegrationProvider
+import com.nexio.tv.data.integration.addon.transport.AddonStreamRequestCanceller
 import com.nexio.tv.data.mapper.toDomain
-import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.StreamSearchRequestTag
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
@@ -28,20 +29,18 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import java.net.URLEncoder
 import javax.inject.Inject
-import javax.inject.Named
 
 private const val TAG = "StreamRepositoryImpl"
 
 class StreamRepositoryImpl @Inject constructor(
-    @Named("addonStreams") private val api: AddonApi,
+    private val addonStreamIntegrationProvider: AddonStreamIntegrationProvider,
     private val addonRepository: AddonRepository,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val serviceWrapSessionFactory: ServiceWrapSessionFactory,
-    @Named("addonStreams") private val okHttpClient: OkHttpClient
+    private val addonStreamRequestCanceller: AddonStreamRequestCanceller
 ) : StreamRepository {
 
     override fun getStreamsFromAllAddons(
@@ -98,6 +97,7 @@ class StreamRepositoryImpl @Inject constructor(
                         var shouldReport = true
                         try {
                             val streamsResult = getStreamsFromAddon(
+                                addonId = addon.id,
                                 baseUrl = addon.baseUrl,
                                 type = type,
                                 videoId = videoId,
@@ -241,6 +241,7 @@ class StreamRepositoryImpl @Inject constructor(
         videoId: String
     ): NetworkResult<List<Stream>> {
         return getStreamsFromAddon(
+            addonId = normalizeAddonInstallUrl(baseUrl),
             baseUrl = baseUrl,
             type = type,
             videoId = videoId,
@@ -252,6 +253,7 @@ class StreamRepositoryImpl @Inject constructor(
     }
 
     private suspend fun getStreamsFromAddon(
+        addonId: String,
         baseUrl: String,
         type: String,
         videoId: String,
@@ -265,7 +267,13 @@ class StreamRepositoryImpl @Inject constructor(
         val streamUrl = buildAddonRequestUrl(baseUrl, "stream/$encodedType/$encodedVideoId.json")
         Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=${sanitizeUrlForLogs(streamUrl)}")
 
-        return when (val result = safeApiCall { api.getStreams(streamUrl, requestTag) }) {
+        return when (
+            val result = addonStreamIntegrationProvider.getStreams(
+                addonId = addonId,
+                streamUrl = streamUrl,
+                requestTag = requestTag
+            )
+        ) {
             is NetworkResult.Success -> {
                 val streams = result.data.streams?.map {
                     it.toDomain(addonName, addonLogo, baseUrl, addonParserPreset)
@@ -285,17 +293,7 @@ class StreamRepositoryImpl @Inject constructor(
     }
 
     override fun cancelActiveStreamRequests(requestId: String) {
-        val calls = okHttpClient.dispatcher.runningCalls() + okHttpClient.dispatcher.queuedCalls()
-        var cancelledCount = 0
-        calls.forEach { call ->
-            val request = call.request()
-            val tag = request.tag(StreamSearchRequestTag::class.java)
-            val isStreamRequest = request.url.encodedPath.contains("/stream/")
-            if (isStreamRequest && tag?.requestId == requestId) {
-                cancelledCount += 1
-                call.cancel()
-            }
-        }
+        val cancelledCount = addonStreamRequestCanceller.cancelActiveStreamRequests(requestId)
         if (cancelledCount > 0) {
             Log.d(TAG, "Cancelled $cancelledCount in-flight addon stream request(s) requestId=$requestId")
         }

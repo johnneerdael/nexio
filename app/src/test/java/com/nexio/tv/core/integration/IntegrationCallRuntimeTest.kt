@@ -1,9 +1,12 @@
 package com.nexio.tv.core.integration
 
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -18,6 +21,8 @@ class IntegrationCallRuntimeTest {
         val result = fixture.runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.MOVIE_CORE,
+                operationKey = "test:call:success",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 call = {
                     calls.incrementAndGet()
@@ -41,6 +46,8 @@ class IntegrationCallRuntimeTest {
         val result = fixture.runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.MOVIE_CORE,
+                operationKey = "test:call:playback-blocked",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 call = {
                     calls.incrementAndGet()
@@ -69,6 +76,8 @@ class IntegrationCallRuntimeTest {
         val result = fixture.runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.MOVIE_CORE,
+                operationKey = "test:call:backoff-blocked",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 call = {
                     calls.incrementAndGet()
@@ -90,6 +99,8 @@ class IntegrationCallRuntimeTest {
         val result: IntegrationCallResult<String> = fixture.runtime.call(
             IntegrationCallSpec<String>(
                 provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.MOVIE_CORE,
+                operationKey = "test:call:exception",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 call = { throw failure }
             )
@@ -98,5 +109,57 @@ class IntegrationCallRuntimeTest {
         assertEquals(1, fixture.requestGate.acquireCount)
         assertTrue(result is IntegrationCallResult.NetworkError)
         assertEquals(failure, (result as IntegrationCallResult.NetworkError).throwable)
+    }
+
+    @Test
+    fun `network error call records synthetic 503 backoff`() = runTest {
+        val fixture = realRuntimeFixture()
+        val failure = IOException("socket closed")
+
+        val result: IntegrationCallResult<String> = fixture.runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.MOVIE_CORE,
+                operationKey = "test:call:network-error",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                call = {
+                    IntegrationCallResult.NetworkError(
+                        throwable = failure,
+                        retryAfterMs = 60_000L
+                    )
+                }
+            )
+        )
+
+        val entry = fixture.backoffDao.get("TMDB", "global")
+        assertTrue(result is IntegrationCallResult.NetworkError)
+        assertEquals(503, entry?.statusCode)
+        assertEquals("socket closed", entry?.reason)
+    }
+
+    @Test
+    fun `wrapped call cancellation is not converted to backoff`() = runTest {
+        val fixture = realRuntimeFixture()
+
+        try {
+            fixture.runtime.call(
+                IntegrationCallSpec<String>(
+                    provider = IntegrationProvider.TMDB,
+                    apiShapeId = TmdbApiShapes.MOVIE_CORE,
+                    operationKey = "test:call:wrapped-cancelled",
+                    workClass = IntegrationWorkClass.USER_VISIBLE,
+                    call = {
+                        IntegrationCallResult.NetworkError(
+                            throwable = CancellationException("wrapped cancelled")
+                        )
+                    }
+                )
+            )
+            fail("Expected CancellationException")
+        } catch (exception: CancellationException) {
+            assertEquals("wrapped cancelled", exception.message)
+        }
+
+        assertEquals(null, fixture.backoffDao.get("TMDB", "global"))
     }
 }

@@ -1,8 +1,8 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.data.integration.omdb.OmdbIntegrationProvider
 import com.nexio.tv.data.local.OmdbSettingsDataStore
-import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.OmdbSeasonResponse
 import com.nexio.tv.domain.model.Meta
 import kotlinx.coroutines.CoroutineScope
@@ -21,7 +21,7 @@ internal const val OMDB_EPISODE_RATINGS_TTL_MS = 24L * 60L * 60L * 1000L
 
 @Singleton
 class OmdbEpisodeRatingsRepository @Inject constructor(
-    private val omdbApi: OmdbApi,
+    private val omdbProvider: OmdbIntegrationProvider,
     private val omdbSettingsDataStore: OmdbSettingsDataStore,
     private val tmdbService: com.nexio.tv.core.tmdb.TmdbService
 ) {
@@ -30,10 +30,11 @@ class OmdbEpisodeRatingsRepository @Inject constructor(
         val expiresAtMs: Long
     )
 
+    private val scope = CoroutineScope(Dispatchers.IO)
     private val cache = ConcurrentHashMap<String, CacheEntry>()
+    private val lastGoodCache = ConcurrentHashMap<String, Map<Pair<Int, Int>, Double>>()
     private val inFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<Map<Pair<Int, Int>, Double>>>()
     private val inFlightMutex = Mutex()
-    private val scope = CoroutineScope(Dispatchers.IO)
     internal var nowMsProvider: () -> Long = { System.currentTimeMillis() }
 
     suspend fun getEpisodeRatingsForMeta(
@@ -75,7 +76,7 @@ class OmdbEpisodeRatingsRepository @Inject constructor(
         apiKey: String,
         season: Int
     ): Map<Pair<Int, Int>, Double> {
-        val cacheKey = buildCacheKey(seriesImdbId, season, apiKey)
+        val cacheKey = "$seriesImdbId:$season:${apiKey.hashCode()}"
         val now = nowMsProvider()
 
         cache[cacheKey]?.let { cached ->
@@ -85,18 +86,17 @@ class OmdbEpisodeRatingsRepository @Inject constructor(
         val deferred = inFlightMutex.withLock {
             inFlight[cacheKey] ?: scope.async {
                 val stale = cache[cacheKey]?.ratings.orEmpty()
+                val lastGood = lastGoodCache[cacheKey].orEmpty()
                 try {
-                    val response = omdbApi.getSeason(
-                        apiKey = apiKey,
+                    val fetched = omdbProvider.getSeasonRatings(
                         seriesImdbId = seriesImdbId,
+                        apiKey = apiKey,
                         season = season
                     )
-                    val fetched = if (response.isSuccessful) {
-                        response.body()?.let { parseSeasonRatings(season, it) }.orEmpty()
-                    } else {
-                        emptyMap()
+                    val resolved = if (fetched.isNotEmpty()) fetched else stale.ifEmpty { lastGood }
+                    if (resolved.isNotEmpty()) {
+                        lastGoodCache[cacheKey] = resolved
                     }
-                    val resolved = if (fetched.isNotEmpty()) fetched else stale
                     cache[cacheKey] = CacheEntry(
                         ratings = resolved,
                         expiresAtMs = nowMsProvider() + OMDB_EPISODE_RATINGS_TTL_MS
@@ -106,7 +106,7 @@ class OmdbEpisodeRatingsRepository @Inject constructor(
                     runCatching {
                         Log.w(TAG, "Failed OMDB episode ratings refresh for $seriesImdbId season $season: ${error.message}", error)
                     }
-                    val fallback = stale
+                    val fallback = stale.ifEmpty { lastGood }
                     cache[cacheKey] = CacheEntry(
                         ratings = fallback,
                         expiresAtMs = nowMsProvider() + OMDB_EPISODE_RATINGS_TTL_MS
@@ -144,9 +144,6 @@ class OmdbEpisodeRatingsRepository @Inject constructor(
         return Regex("tt\\d+").find(raw)?.value
     }
 
-    private fun buildCacheKey(seriesImdbId: String, season: Int, apiKey: String): String {
-        return "$seriesImdbId:$season:${apiKey.hashCode()}"
-    }
 }
 
 internal fun parseSeasonRatings(

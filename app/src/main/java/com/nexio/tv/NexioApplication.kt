@@ -10,7 +10,9 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.nexio.tv.core.image.IntegrationPosterFetcher
 import com.nexio.tv.core.image.ImageCacheTtlWorker
+import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.core.tvdb.TvdbUpdateCoordinator
 import com.nexio.tv.core.tvdb.TvdbUpdateTrigger
@@ -28,6 +30,8 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var startupSyncService: StartupSyncService
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var tvdbUpdateCoordinator: TvdbUpdateCoordinator
+    @Inject lateinit var integrationPlaybackGate: IntegrationPlaybackGate
+    @Inject lateinit var integrationPosterFetcherFactory: IntegrationPosterFetcher.Factory
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -55,12 +59,16 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
         // Schedule periodic TVDB update checks and run startup catch-up
         tvdbUpdateCoordinator.schedulePeriodicUpdates(WorkManager.getInstance(this))
         appScope.launch {
+            integrationPlaybackGate.setPlaybackActive(false)
             tvdbUpdateCoordinator.catchUpUpdates(TvdbUpdateTrigger.STARTUP)
         }
     }
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
+            .components {
+                add(integrationPosterFetcherFactory)
+            }
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.10)

@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.google.gson.JsonObject
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
@@ -43,7 +44,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `restored snapshot is returned without observer fetch`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -58,8 +59,8 @@ class TraktLibraryServiceTest {
             flowOf(NetworkResult.Error("metadata unavailable"))
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -77,12 +78,12 @@ class TraktLibraryServiceTest {
             listOf("tt1234567", "tmdb:321"),
             service.observeAllItems().first().map { it.id }
         )
-        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthOwnerRequest<Any?>(any<TrackingAuthSession>(), any()) }
     }
 
     @Test
     fun `refresh persists renewed snapshot`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -95,7 +96,9 @@ class TraktLibraryServiceTest {
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read(any()) } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
+        stubLibraryRefresh(
+            traktIntegrationProvider,
+            listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -112,6 +115,7 @@ class TraktLibraryServiceTest {
             ),
             successResponse(emptyList<TraktListItemDto>()),
             successResponse(emptyList<TraktListSummaryDto>())
+            )
         )
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
             val type = firstArg<String>()
@@ -120,8 +124,8 @@ class TraktLibraryServiceTest {
         }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -139,7 +143,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `first uncached refresh stays empty until disk snapshot is written`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -160,7 +164,9 @@ class TraktLibraryServiceTest {
             persistedSnapshot = firstArg()
         }
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
+        stubLibraryRefresh(
+            traktIntegrationProvider,
+            listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -177,13 +183,14 @@ class TraktLibraryServiceTest {
             ),
             successResponse(emptyList<TraktListItemDto>()),
             successResponse(emptyList<TraktListSummaryDto>())
+            )
         )
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
             flowOf(NetworkResult.Error("metadata unavailable"))
 
         service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -203,7 +210,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `warm cache refresh failure preserves restored snapshot`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -217,11 +224,11 @@ class TraktLibraryServiceTest {
         every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
             flowOf(NetworkResult.Error("metadata unavailable"))
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returns null
+        stubLibraryRefreshFailure(traktIntegrationProvider)
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -240,7 +247,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `create personal list persists provisional tab before Trakt settlement`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
         val metaRepository = mockk<MetaRepository>(relaxed = true)
@@ -256,8 +263,8 @@ class TraktLibraryServiceTest {
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -277,12 +284,12 @@ class TraktLibraryServiceTest {
         assertTrue(tabs.any { it.key.startsWith("personal:pending:") && it.title == "Queued List" })
         verify(atLeast = 1) { snapshotStore.write(any(), any()) }
         coVerify(exactly = 1) { traktMutationOutboxCoordinator.enqueueAndDrain(any()) }
-        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthOwnerRequest<Any?>(any<TrackingAuthSession>(), any()) }
     }
 
     @Test
     fun `create personal list success reconciles provisional tab in place`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
         val metaRepository = mockk<MetaRepository>(relaxed = true)
@@ -298,8 +305,8 @@ class TraktLibraryServiceTest {
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -336,7 +343,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `targeted rollback restores watchlist slice without removing unrelated provisional list`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
         val metaRepository = mockk<MetaRepository>(relaxed = true)
@@ -352,8 +359,8 @@ class TraktLibraryServiceTest {
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -390,7 +397,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `toggle watchlist stores list-scoped rollback payload`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
         val metaRepository = mockk<MetaRepository>(relaxed = true)
@@ -407,8 +414,8 @@ class TraktLibraryServiceTest {
         coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -433,7 +440,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `rollback queued library mutation restores affected list slice without blanking snapshot`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>(relaxed = true)
@@ -446,11 +453,11 @@ class TraktLibraryServiceTest {
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
         every { snapshotStore.read(any()) } answers { persistedSnapshot }
         every { snapshotStore.write(any(), any()) } answers { persistedSnapshot = firstArg() }
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returns null
+        stubLibraryRefreshFailure(traktIntegrationProvider)
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -476,7 +483,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `warm refresh keeps showing persisted cache until replacement snapshot is written`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -499,7 +506,9 @@ class TraktLibraryServiceTest {
         }
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
             flowOf(NetworkResult.Error("metadata unavailable"))
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
+        stubLibraryRefresh(
+            traktIntegrationProvider,
+            listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -516,11 +525,12 @@ class TraktLibraryServiceTest {
             ),
             successResponse(emptyList<TraktListItemDto>()),
             successResponse(emptyList<TraktListSummaryDto>())
+            )
         )
 
         service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -540,7 +550,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `auth loss preserves restored snapshot and persisted cache`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -555,8 +565,8 @@ class TraktLibraryServiceTest {
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -584,7 +594,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `startup unauthenticated emission does not wipe restored snapshot before auth settles`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -599,8 +609,8 @@ class TraktLibraryServiceTest {
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -625,12 +635,12 @@ class TraktLibraryServiceTest {
             listOf("tt1234567", "tmdb:321"),
             service.observeAllItems().first().map { it.id }
         )
-        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthOwnerRequest<Any?>(any<TrackingAuthSession>(), any()) }
     }
 
     @Test
     fun `refresh keeps custom lists and hydrates artwork for watchlist and custom list items`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -643,7 +653,9 @@ class TraktLibraryServiceTest {
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read(any()) } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
+        stubLibraryRefresh(
+            traktIntegrationProvider,
+            listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -683,6 +695,7 @@ class TraktLibraryServiceTest {
                     )
                 )
             )
+            )
         )
 
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
@@ -703,8 +716,8 @@ class TraktLibraryServiceTest {
         }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -716,7 +729,9 @@ class TraktLibraryServiceTest {
         service.refreshNow()
         advanceUntilIdle()
 
-        coVerify(exactly = 5) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
+        coVerify(exactly = 2) { traktIntegrationProvider.getWatchlist(any(), any()) }
+        coVerify(exactly = 1) { traktIntegrationProvider.getUserLists(any(), any()) }
+        coVerify(exactly = 2) { traktIntegrationProvider.getUserListItems(any(), any(), any(), any()) }
 
         val tabs = service.observeListTabs().first()
         val items = service.observeAllItems().first()
@@ -738,7 +753,7 @@ class TraktLibraryServiceTest {
 
     @Test
     fun `refresh hydrates metadata when trakt ids are the only stable ids`() = runTest {
-        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -751,7 +766,9 @@ class TraktLibraryServiceTest {
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read(any()) } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) } returnsMany listOf(
+        stubLibraryRefresh(
+            traktIntegrationProvider,
+            listOf(
             successResponse(
                 listOf(
                     TraktListItemDto(
@@ -768,6 +785,7 @@ class TraktLibraryServiceTest {
             ),
             successResponse(emptyList<TraktListItemDto>()),
             successResponse(emptyList<TraktListSummaryDto>())
+            )
         )
 
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
@@ -788,8 +806,8 @@ class TraktLibraryServiceTest {
         }
 
         val service = TraktLibraryService(
-            traktApi = traktApi,
-            traktAuthService = traktAuthService,
+            traktIntegrationProvider = traktIntegrationProvider,
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -801,7 +819,8 @@ class TraktLibraryServiceTest {
         service.refreshNow()
         advanceUntilIdle()
 
-        coVerify(exactly = 3) { traktAuthService.executeAuthorizedRequest<Any?>(any<TrackingAuthSession>(), any()) }
+        coVerify(exactly = 2) { traktIntegrationProvider.getWatchlist(any(), any()) }
+        coVerify(exactly = 1) { traktIntegrationProvider.getUserLists(any(), any()) }
 
         val item = service.observeAllItems().first().single()
 
@@ -953,6 +972,29 @@ class TraktLibraryServiceTest {
             Thread.sleep(10L)
         }
         throw AssertionError("Condition not met before timeout")
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun stubLibraryRefresh(
+        provider: TraktIntegrationProvider,
+        responses: List<Response<Any?>>
+    ) {
+        val queue = ArrayDeque(responses)
+        coEvery { provider.getWatchlist(any(), any()) } answers {
+            queue.removeFirst() as Response<List<TraktListItemDto>>
+        }
+        coEvery { provider.getUserLists(any(), any()) } answers {
+            queue.removeFirst() as Response<List<TraktListSummaryDto>>
+        }
+        coEvery { provider.getUserListItems(any(), any(), any(), any()) } answers {
+            queue.removeFirst() as Response<List<TraktListItemDto>>
+        }
+    }
+
+    private fun stubLibraryRefreshFailure(provider: TraktIntegrationProvider) {
+        coEvery { provider.getWatchlist(any(), any()) } returns null
+        coEvery { provider.getUserLists(any(), any()) } returns null
+        coEvery { provider.getUserListItems(any(), any(), any(), any()) } returns null
     }
 
     private fun successResponse(body: Any?): Response<Any?> {

@@ -1,15 +1,16 @@
 package com.nexio.tv.data.repository.trakt
 
 import com.google.gson.JsonObject
+import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.remote.api.TraktApi
-import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktRecommendationRef
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -20,8 +21,7 @@ import javax.inject.Singleton
 
 @Singleton
 class TraktDiscoveryMutationAdapter @Inject constructor(
-    private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService,
+    private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktSettingsDataStore: TraktSettingsDataStore
 ) : TraktMutationAdapter {
 
@@ -34,13 +34,12 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
     }
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.hideRecommendation(
-                authorization = authHeader,
-                type = envelope.recommendationType(),
-                id = envelope.pathId()
-            )
-        } ?: return TraktMutationExecutionResult.Failure(
+        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val response = traktIntegrationProvider.hideRecommendation(
+            session = session,
+            type = envelope.recommendationType(),
+            id = envelope.pathId()
+        ) ?: return TraktMutationExecutionResult.Failure(
             reason = "Trakt request failed"
         )
 
@@ -77,7 +76,8 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
         private const val MUTATION_KIND = "discovery.hideRecommendation"
 
         fun buildDismissRecommendationEnvelope(
-            ref: TraktRecommendationRef
+            ref: TraktRecommendationRef,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_RECOMMENDATION_KEY, ref.recommendationKey)
@@ -85,6 +85,7 @@ class TraktDiscoveryMutationAdapter @Inject constructor(
                 addProperty(PAYLOAD_PATH_ID, ref.pathId)
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND,
                 priority = TraktMutationPriorityBucket.LISTS,

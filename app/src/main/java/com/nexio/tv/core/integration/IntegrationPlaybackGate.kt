@@ -12,6 +12,8 @@ class IntegrationPlaybackGate @Inject constructor() {
         playbackActive = active
     }
 
+    fun isPlaybackActive(): Boolean = playbackActive
+
     fun isBlocked(policy: IntegrationProviderPolicy, workClass: IntegrationWorkClass): Boolean {
         if (!playbackActive) return false
         if (policy.allowDuringPlayback) return false

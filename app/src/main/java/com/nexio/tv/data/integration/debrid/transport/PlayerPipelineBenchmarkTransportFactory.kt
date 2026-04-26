@@ -1,8 +1,14 @@
-package com.nexio.tv.data.repository.benchmark
+package com.nexio.tv.data.integration.debrid.transport
 
 import android.content.Context
+import com.nexio.tv.data.integration.playback.transport.PlaybackMediaSourceTransport
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
+import com.nexio.tv.data.repository.benchmark.BenchmarkReadableSourceFactory
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidate
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
+import com.nexio.tv.data.repository.benchmark.Media3BenchmarkReadableSource
+import com.nexio.tv.data.repository.benchmark.OptimizedBenchmarkDataSourceFactoryBuilder
 import com.nexio.tv.ui.screens.player.PlayerMediaSourceFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -25,7 +31,7 @@ internal class PlayerPipelineBenchmarkTransportFactory @Inject constructor(
     ): BenchmarkReadableSourceFactory {
         val dataSourceFactory = PlayerMediaSourceFactory(
             context = context,
-            playbackOkHttpClient = okHttpClient
+            playbackMediaSourceTransport = PlaybackMediaSourceTransport(okHttpClient)
         ).createBenchmarkProgressiveDataSourceFactory(
             url = candidate.directUrl,
             headers = candidate.headers,

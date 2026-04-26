@@ -11,6 +11,7 @@ import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.text.subrip.SubripParser
 import androidx.media3.extractor.text.webvtt.WebvttParser
 import androidx.media3.exoplayer.ExoPlayer
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.domain.model.Subtitle
 import java.io.File
 import java.net.URI
@@ -21,7 +22,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Request
 
 private const val ADDON_SUBTITLE_OVERLAY_IDLE_DELAY_MS = 500L
 private const val ADDON_SUBTITLE_OVERLAY_MIN_DELAY_MS = 40L
@@ -287,7 +287,7 @@ private fun PlayerRuntimeController.clearAddonSubtitleOverlayAfterTextFailure(ge
 }
 
 @OptIn(UnstableApi::class)
-private fun PlayerRuntimeController.parseAddonSubtitleCueGroups(
+private suspend fun PlayerRuntimeController.parseAddonSubtitleCueGroups(
     subtitle: Subtitle,
     mimeType: String
 ): List<TimedAddonCueGroup> {
@@ -390,20 +390,27 @@ private fun toTimedAddonCueGroup(cuesWithTiming: CuesWithTiming): TimedAddonCueG
     )
 }
 
-private fun PlayerRuntimeController.readAddonSubtitleBytes(url: String): ByteArray {
+private suspend fun PlayerRuntimeController.readAddonSubtitleBytes(url: String): ByteArray {
     if (url.startsWith("file:", ignoreCase = true)) {
         return File(URI(url)).readBytes()
     }
 
-    val request = Request.Builder()
-        .url(url)
-        .get()
-        .build()
-    playbackOkHttpClient.newCall(request).execute().use { response ->
-        if (!response.isSuccessful) {
-            throw IllegalStateException("Addon subtitle download failed http=${response.code}")
+    return addonSubtitleBytesFromDownloadResult(
+        subtitleSourceDownloadIntegrationProvider.downloadText(url)
+    )
+}
+
+internal fun addonSubtitleBytesFromDownloadResult(
+    result: IntegrationCallResult<String>
+): ByteArray {
+    return when (result) {
+        is IntegrationCallResult.Success -> result.value.toByteArray(StandardCharsets.UTF_8)
+        is IntegrationCallResult.HttpError -> {
+            throw IllegalStateException("Addon subtitle download failed http=${result.statusCode}")
         }
-        val body = response.body ?: throw IllegalStateException("Addon subtitle response body is empty")
-        return body.bytes()
+        is IntegrationCallResult.NetworkError -> throw result.throwable
+        IntegrationCallResult.Missing -> {
+            throw IllegalStateException("Addon subtitle response body is empty")
+        }
     }
 }

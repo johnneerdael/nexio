@@ -4,6 +4,15 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.subtitles.SubtitleTranslationExecutionResult
+import com.nexio.tv.data.integration.subtitles.SubtitleTranslationIntegrationProvider
+import com.nexio.tv.data.integration.subtitles.SubtitleSourceDownloadIntegrationProvider
+import com.nexio.tv.data.integration.subtitles.transport.SubtitleTranslationTransportResult
+import com.nexio.tv.data.integration.subtitles.transport.anthropicRequest
+import com.nexio.tv.data.integration.subtitles.transport.dashScopeRequest
+import com.nexio.tv.data.integration.subtitles.transport.geminiRequest
+import com.nexio.tv.data.integration.subtitles.transport.openAiRequest
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.domain.model.SubtitleTranslationDefaults
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
@@ -13,11 +22,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -138,7 +145,8 @@ data class SubtitleTranslationChunkConfig(
 @Singleton
 class SubtitleTranslationService @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val httpClient: OkHttpClient,
+    private val subtitleTranslationIntegrationProvider: SubtitleTranslationIntegrationProvider,
+    private val subtitleSourceDownloadIntegrationProvider: SubtitleSourceDownloadIntegrationProvider,
     internal val diagnosticsLogger: AutoTranslateDiagnosticsLogger =
         AutoTranslateDiagnosticsLogger.disabled(),
     private val reasoningModels: OpenRouterReasoningModels =
@@ -541,17 +549,15 @@ class SubtitleTranslationService @Inject constructor(
     }
 
     private suspend fun downloadSubtitleText(url: String): String = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
-
-        httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IllegalStateException("Subtitle download failed with HTTP ${response.code}.")
+        when (val result = subtitleSourceDownloadIntegrationProvider.downloadText(url)) {
+            is com.nexio.tv.core.integration.IntegrationCallResult.Success -> result.value
+            is com.nexio.tv.core.integration.IntegrationCallResult.HttpError -> {
+                throw IllegalStateException("Subtitle download failed with HTTP ${result.statusCode}.")
             }
-            response.body?.string()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("Subtitle file is empty.")
+            is com.nexio.tv.core.integration.IntegrationCallResult.NetworkError -> throw result.throwable
+            com.nexio.tv.core.integration.IntegrationCallResult.Missing -> {
+                throw IllegalStateException("Subtitle file is empty.")
+            }
         }
     }
 
@@ -1175,64 +1181,73 @@ class SubtitleTranslationService @Inject constructor(
         var attempt = 1
         while (true) {
             val startedAtMs = SystemClock.elapsedRealtime()
-            httpClient.newCall(request).execute().use { response ->
-                val raw = response.body?.string().orEmpty()
-                val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-                logTranslationResponse(
-                    mode = "structured",
-                    provider = settings.provider,
-                    model = settings.model,
-                    responseCode = response.code,
-                    successful = response.isSuccessful,
-                    attempt = attempt,
-                    elapsedMs = elapsedMs,
-                    raw = raw
+            val response = executeTranslationProviderRequest(request)
+            val raw = response.body.orEmpty()
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+            logTranslationResponse(
+                mode = "structured",
+                provider = settings.provider,
+                model = settings.model,
+                responseCode = response.statusCode,
+                successful = response.isSuccessful,
+                attempt = attempt,
+                elapsedMs = elapsedMs,
+                raw = raw
+            )
+            if (!response.isSuccessful) {
+                Log.w(
+                    TAG,
+                    "Subtitle translation request failed provider=${settings.provider} " +
+                        "code=${response.statusCode} attempt=$attempt body=${raw.take(300)}"
                 )
-                if (!response.isSuccessful) {
-                    Log.w(TAG, "Subtitle translation request failed provider=${settings.provider} code=${response.code} attempt=$attempt body=${raw.take(300)}")
-                    val providerError = classifyProviderError(settings.provider, response.code, raw)
-                    if (includeSchema && isStructuredRequestFallbackEligible(response.code, providerError)) {
-                        diagnosticsLogger.log(
-                            "structured_fallback_eligible provider=${settings.provider} code=${response.code} error=$providerError"
-                        )
-                        return null
-                    }
-                    if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
-                        if (providerError == SubtitleTranslationProviderError.RateLimited) {
-                            onRateLimited()
-                        }
-                        val delayMs = retryDelayMs(
-                            responseHeader = response.header("Retry-After"),
-                            body = raw,
-                            attempt = attempt
-                        )
-                        Log.w(TAG, "Retrying subtitle translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
-                        diagnosticsLogger.log(
-                            "request_retry mode=structured provider=${settings.provider} " +
-                                "nextAttempt=${attempt + 1} delayMs=$delayMs error=$providerError"
-                        )
-                        sleepBeforeRetry(delayMs)
-                        attempt += 1
-                        continue
-                    }
+                val providerError = classifyProviderError(settings.provider, response.statusCode, raw)
+                if (includeSchema && isStructuredRequestFallbackEligible(response.statusCode, providerError)) {
+                    diagnosticsLogger.log(
+                        "structured_fallback_eligible provider=${settings.provider} " +
+                            "code=${response.statusCode} error=$providerError"
+                    )
+                    return null
+                }
+                if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
                     if (providerError == SubtitleTranslationProviderError.RateLimited) {
                         onRateLimited()
                     }
-                    throw providerException(settings.provider, response.code, raw)
+                    val delayMs = retryDelayMs(
+                        responseHeader = response.retryAfterHeader,
+                        responseHeaderMs = response.retryAfterHeaderMs,
+                        body = raw,
+                        attempt = attempt
+                    )
+                    Log.w(
+                        TAG,
+                        "Retrying subtitle translation provider=${settings.provider} " +
+                            "attempt=${attempt + 1} delayMs=$delayMs"
+                    )
+                    diagnosticsLogger.log(
+                        "request_retry mode=structured provider=${settings.provider} " +
+                            "nextAttempt=${attempt + 1} delayMs=$delayMs error=$providerError"
+                    )
+                    sleepBeforeRetry(delayMs)
+                    attempt += 1
+                    continue
                 }
-                val parsed = when (settings.provider) {
-                    SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
-                    SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
-                    SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
-                    SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
+                if (providerError == SubtitleTranslationProviderError.RateLimited) {
+                    onRateLimited()
                 }
-                logParsedTranslationResponse(
-                    mode = "structured",
-                    provider = settings.provider,
-                    parsed = parsed
-                )
-                return parsed
+                throw providerException(settings.provider, response.statusCode, raw)
             }
+            val parsed = when (settings.provider) {
+                SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
+                SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
+                SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+                SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
+            }
+            logParsedTranslationResponse(
+                mode = "structured",
+                provider = settings.provider,
+                parsed = parsed
+            )
+            return parsed
         }
     }
 
@@ -1296,52 +1311,60 @@ class SubtitleTranslationService @Inject constructor(
         var attempt = 1
         while (true) {
             val startedAtMs = SystemClock.elapsedRealtime()
-            httpClient.newCall(request).execute().use { response ->
-                val raw = response.body?.string().orEmpty()
-                val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-                logTranslationResponse(
-                    mode = "raw_ass",
-                    provider = settings.provider,
-                    model = settings.model,
-                    responseCode = response.code,
-                    successful = response.isSuccessful,
-                    attempt = attempt,
-                    elapsedMs = elapsedMs,
-                    raw = raw
+            val response = executeTranslationProviderRequest(request)
+            val raw = response.body.orEmpty()
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+            logTranslationResponse(
+                mode = "raw_ass",
+                provider = settings.provider,
+                model = settings.model,
+                responseCode = response.statusCode,
+                successful = response.isSuccessful,
+                attempt = attempt,
+                elapsedMs = elapsedMs,
+                raw = raw
+            )
+            if (!response.isSuccessful) {
+                Log.w(
+                    TAG,
+                    "Raw ASS/SSA translation request failed provider=${settings.provider} " +
+                        "code=${response.statusCode} attempt=$attempt body=${raw.take(300)}"
                 )
-                if (!response.isSuccessful) {
-                    Log.w(TAG, "Raw ASS/SSA translation request failed provider=${settings.provider} code=${response.code} attempt=$attempt body=${raw.take(300)}")
-                    val providerError = classifyProviderError(settings.provider, response.code, raw)
-                    if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
-                        val delayMs = retryDelayMs(
-                            responseHeader = response.header("Retry-After"),
-                            body = raw,
-                            attempt = attempt
-                        )
-                        Log.w(TAG, "Retrying raw ASS/SSA translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
-                        diagnosticsLogger.log(
-                            "request_retry mode=raw_ass provider=${settings.provider} " +
-                                "nextAttempt=${attempt + 1} delayMs=$delayMs error=$providerError"
-                        )
-                        sleepBeforeRetry(delayMs)
-                        attempt += 1
-                        continue
-                    }
-                    throw providerException(settings.provider, response.code, raw)
+                val providerError = classifyProviderError(settings.provider, response.statusCode, raw)
+                if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
+                    val delayMs = retryDelayMs(
+                        responseHeader = response.retryAfterHeader,
+                        responseHeaderMs = response.retryAfterHeaderMs,
+                        body = raw,
+                        attempt = attempt
+                    )
+                    Log.w(
+                        TAG,
+                        "Retrying raw ASS/SSA translation provider=${settings.provider} " +
+                            "attempt=${attempt + 1} delayMs=$delayMs"
+                    )
+                    diagnosticsLogger.log(
+                        "request_retry mode=raw_ass provider=${settings.provider} " +
+                            "nextAttempt=${attempt + 1} delayMs=$delayMs error=$providerError"
+                    )
+                    sleepBeforeRetry(delayMs)
+                    attempt += 1
+                    continue
                 }
-                val parsed = when (settings.provider) {
-                    SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
-                    SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
-                    SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
-                    SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
-                }
-                logParsedTranslationResponse(
-                    mode = "raw_ass",
-                    provider = settings.provider,
-                    parsed = parsed
-                )
-                return parsed
+                throw providerException(settings.provider, response.statusCode, raw)
             }
+            val parsed = when (settings.provider) {
+                SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
+                SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
+                SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+                SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
+            }
+            logParsedTranslationResponse(
+                mode = "raw_ass",
+                provider = settings.provider,
+                parsed = parsed
+            )
+            return parsed
         }
     }
 
@@ -1367,6 +1390,35 @@ class SubtitleTranslationService @Inject constructor(
         diagnosticsLogger.logUnsafe("request_body mode=$mode provider=$provider", requestBodyText)
         diagnosticsLogger.logUnsafe("request_system_prompt mode=$mode provider=$provider", systemPrompt)
         diagnosticsLogger.logUnsafe("request_user_payload mode=$mode provider=$provider", userPayload)
+    }
+
+    private fun executeTranslationProviderRequest(request: Request): SubtitleTranslationTransportResult {
+        return runBlocking {
+            when (val result = subtitleTranslationIntegrationProvider.execute(request)) {
+            is IntegrationCallResult.Success -> {
+                val response = result.value as? SubtitleTranslationExecutionResult.Response
+                    ?: throw IllegalStateException("Subtitle translation provider returned an unexpected response.")
+                SubtitleTranslationTransportResult(
+                    statusCode = response.statusCode,
+                    isSuccessful = response.isSuccessful,
+                    body = response.body,
+                    retryAfterHeader = response.retryAfterHeader,
+                    retryAfterHeaderMs = response.retryAfterHeaderMs
+                )
+            }
+            is IntegrationCallResult.HttpError -> SubtitleTranslationTransportResult(
+                statusCode = result.statusCode,
+                isSuccessful = false,
+                body = result.reason,
+                retryAfterHeader = null,
+                retryAfterHeaderMs = result.retryAfterMs
+            )
+            is IntegrationCallResult.NetworkError -> throw result.throwable
+                IntegrationCallResult.Missing -> throw IllegalStateException(
+                    "Subtitle translation request returned empty response."
+                )
+            }
+        }
     }
 
     private fun logTranslationResponse(
@@ -1397,19 +1449,6 @@ class SubtitleTranslationService @Inject constructor(
                 "parsedBytes=${parsed.orEmpty().utf8Size()} parsedHash=${AutoTranslateDiagnosticsLogger.sha256Short(parsed.orEmpty())}"
         )
         diagnosticsLogger.logUnsafe("parsed_text mode=$mode provider=$provider", parsed.orEmpty())
-    }
-
-    private fun geminiRequest(
-        endpoint: String,
-        apiKey: String,
-        body: JSONObject
-    ): Request {
-        return Request.Builder()
-            .url(endpoint)
-            .header("x-goog-api-key", apiKey)
-            .header("Content-Type", "application/json")
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
     }
 
     private fun parseGeminiResponseText(raw: String): String? {
@@ -1471,10 +1510,12 @@ class SubtitleTranslationService @Inject constructor(
 
     private fun retryDelayMs(
         responseHeader: String?,
+        responseHeaderMs: Long?,
         body: String,
         attempt: Int
     ): Long {
-        return retryAfterHeaderDelayMs(responseHeader)
+        return responseHeaderMs
+            ?: retryAfterHeaderDelayMs(responseHeader)
             ?: retryInfoDelayMs(body)
             ?: (DEFAULT_RETRY_DELAY_MS shl (attempt - 1)).coerceAtMost(MAX_RETRY_DELAY_MS)
     }

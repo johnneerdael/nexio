@@ -1,14 +1,30 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.IntegrationFetchOptions
+import com.nexio.tv.core.integration.IntegrationFetchResult
+import com.nexio.tv.core.integration.IntegrationLoadResult
+import com.nexio.tv.core.integration.IntegrationRuntime
+import com.nexio.tv.data.integration.debrid.EasyDebridIntegrationProvider
+import com.nexio.tv.data.integration.debrid.PremiumizeIntegrationProvider
+import com.nexio.tv.data.integration.debrid.RealDebridIntegrationProvider
+import com.nexio.tv.data.integration.debrid.TorBoxIntegrationProvider
+import com.nexio.tv.data.local.EasyDebridSettings
+import com.nexio.tv.data.local.EasyDebridSettingsDataStore
+import com.nexio.tv.data.local.PremiumizeSettings
+import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.RealDebridAuthState
+import com.nexio.tv.data.local.TorBoxSettings
+import com.nexio.tv.data.local.TorBoxSettingsDataStore
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.TorBoxApi
 import com.nexio.tv.data.remote.api.EasyDebridApi
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridUserDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllFileDto
+import com.nexio.tv.data.remote.dto.debrid.PremiumizeAccountInfoDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridGeneratedFileDto
 import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupDetailsDto
@@ -23,6 +39,7 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxEnvelopeDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxUserDto
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateLookupResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import io.mockk.coEvery
@@ -32,6 +49,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -121,12 +140,10 @@ class DebridLibraryServiceTest {
             )
         )
         coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -223,12 +240,10 @@ class DebridLibraryServiceTest {
             )
         )
         coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -303,12 +318,10 @@ class DebridLibraryServiceTest {
             )
         )
         coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -384,12 +397,10 @@ class DebridLibraryServiceTest {
                 streamable = 1
             )
         )
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -486,12 +497,10 @@ class DebridLibraryServiceTest {
                 streamable = 1
             )
         )
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -584,11 +593,9 @@ class DebridLibraryServiceTest {
             )
         )
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -755,11 +762,9 @@ class DebridLibraryServiceTest {
         )
         coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -876,11 +881,9 @@ class DebridLibraryServiceTest {
         )
         coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -925,11 +928,9 @@ class DebridLibraryServiceTest {
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(emptyList())
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -941,7 +942,6 @@ class DebridLibraryServiceTest {
         val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
 
         assertEquals(DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem, result)
-        coVerify(exactly = 1) { premiumizeService.refreshAccountState() }
         coVerify(exactly = 0) { premiumizeApi.listAllItems(any()) }
         coVerify(exactly = 0) { premiumizeApi.getItemDetails(any(), any()) }
     }
@@ -1033,11 +1033,9 @@ class DebridLibraryServiceTest {
             )
         )
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -1104,11 +1102,9 @@ class DebridLibraryServiceTest {
             )
         )
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -1188,11 +1184,9 @@ class DebridLibraryServiceTest {
             TorBoxEnvelopeDto(success = true, data = "https://tb.test/download/movie.mkv")
         )
 
-        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -1263,10 +1257,9 @@ class DebridLibraryServiceTest {
             torBoxApi.requestDownloadLink("tb-key", 9, 1, false, false)
         } returns Response.success(TorBoxEnvelopeDto(success = true, data = "https://tb.test/benchmark.mkv"))
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore),
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -1336,10 +1329,9 @@ class DebridLibraryServiceTest {
             )
         )
 
-        val service = DebridLibraryService(
+        val service = buildDebridLibraryService(
             realDebridApi = realDebridApi,
             realDebridAuthDataStore = realDebridAuthDataStore,
-            realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore),
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
@@ -1377,5 +1369,140 @@ class DebridLibraryServiceTest {
     private fun stubDisconnectedEasyDebrid(easyDebridService: EasyDebridService) {
         every { easyDebridService.observeAccountState() } returns flowOf(EasyDebridAccountState())
         coJustRun { easyDebridService.refreshAccountState() }
+    }
+}
+
+private fun buildDebridLibraryService(
+    realDebridApi: RealDebridApi,
+    realDebridAuthDataStore: RealDebridAuthDataStore,
+    premiumizeApi: PremiumizeApi,
+    premiumizeService: PremiumizeService,
+    torBoxApi: TorBoxApi,
+    torBoxService: TorBoxService,
+    easyDebridApi: EasyDebridApi,
+    easyDebridService: EasyDebridService
+): DebridLibraryService {
+    stubProviderAccountInfo(
+        premiumizeApi = premiumizeApi,
+        premiumizeService = premiumizeService,
+        torBoxApi = torBoxApi,
+        torBoxService = torBoxService,
+        easyDebridApi = easyDebridApi,
+        easyDebridService = easyDebridService
+    )
+
+    val runtime = object : IntegrationRuntime {
+        override suspend fun <T> get(
+            spec: com.nexio.tv.core.integration.IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> =
+            when (val result = spec.load()) {
+                is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(result.value)
+                is IntegrationLoadResult.HttpError -> IntegrationFetchResult.Missing
+                is IntegrationLoadResult.NetworkError -> IntegrationFetchResult.Missing
+            }
+
+        override suspend fun <T> call(spec: com.nexio.tv.core.integration.IntegrationCallSpec<T>) =
+            spec.call.invoke()
+
+        override suspend fun <T> open(spec: com.nexio.tv.core.integration.IntegrationStreamSpec<T>) =
+            null
+    }
+    val premiumizeSettingsDataStore = mockk<PremiumizeSettingsDataStore>()
+    every { premiumizeSettingsDataStore.settings } returns runCatching {
+        premiumizeService.observeAccountState().map { PremiumizeSettings(apiKey = it.apiKey) }
+    }.getOrElse { flowOf(PremiumizeSettings()) }
+    val torBoxSettingsDataStore = mockk<TorBoxSettingsDataStore>()
+    every { torBoxSettingsDataStore.settings } returns runCatching {
+        torBoxService.observeAccountState().map { TorBoxSettings(apiKey = it.apiKey) }
+    }.getOrElse { flowOf(TorBoxSettings()) }
+    val easyDebridSettingsDataStore = mockk<EasyDebridSettingsDataStore>()
+    every { easyDebridSettingsDataStore.settings } returns runCatching {
+        easyDebridService.observeAccountState().map { EasyDebridSettings(apiKey = it.apiKey) }
+    }.getOrElse { flowOf(EasyDebridSettings()) }
+    val realDebridAuthIntegrationProvider =
+        com.nexio.tv.data.integration.debrid.RealDebridAuthIntegrationProvider(runtime, realDebridApi)
+    val realDebridAuthService = RealDebridAuthService(realDebridAuthIntegrationProvider, realDebridAuthDataStore)
+    return DebridLibraryService(
+        realDebridProvider = RealDebridIntegrationProvider(runtime, realDebridApi, realDebridAuthService),
+        realDebridAuthDataStore = realDebridAuthDataStore,
+        premiumizeProvider = PremiumizeIntegrationProvider(runtime, premiumizeApi),
+        premiumizeSettingsDataStore = premiumizeSettingsDataStore,
+        torBoxProvider = TorBoxIntegrationProvider(runtime, torBoxApi),
+        torBoxSettingsDataStore = torBoxSettingsDataStore,
+        easyDebridProvider = EasyDebridIntegrationProvider(runtime, easyDebridApi),
+        easyDebridSettingsDataStore = easyDebridSettingsDataStore
+    )
+}
+
+private fun stubProviderAccountInfo(
+    premiumizeApi: PremiumizeApi,
+    premiumizeService: PremiumizeService,
+    torBoxApi: TorBoxApi,
+    torBoxService: TorBoxService,
+    easyDebridApi: EasyDebridApi,
+    easyDebridService: EasyDebridService
+) {
+    val premiumizeState = runCatching {
+        runBlocking { premiumizeService.observeAccountState().first() }
+    }.getOrDefault(PremiumizeAccountState())
+    coEvery { premiumizeApi.getAccountInfo(any()) } answers {
+        val apiKey = firstArg<String>()
+        if (premiumizeState.isConnected && apiKey == premiumizeState.apiKey && apiKey.isNotBlank()) {
+            Response.success(
+                PremiumizeAccountInfoDto(
+                    status = "success",
+                    customerId = premiumizeState.customerId,
+                    premiumUntil = premiumizeState.premiumUntil
+                )
+            )
+        } else {
+            Response.error(401, mockk(relaxed = true))
+        }
+    }
+
+    val torBoxState = runCatching {
+        runBlocking { torBoxService.observeAccountState().first() }
+    }.getOrDefault(TorBoxAccountState())
+    coEvery { torBoxApi.getCurrentUser(any()) } answers {
+        val authorization = firstArg<String>()
+        val expectedAuthorization = "Bearer ${torBoxState.apiKey}"
+        if (torBoxState.isConnected &&
+            torBoxState.apiKey.isNotBlank() &&
+            authorization == expectedAuthorization
+        ) {
+            Response.success(
+                TorBoxEnvelopeDto(
+                    success = true,
+                    data = TorBoxUserDto(
+                        email = torBoxState.email,
+                        plan = torBoxState.plan
+                    )
+                )
+            )
+        } else {
+            Response.error(401, mockk(relaxed = true))
+        }
+    }
+
+    val easyDebridState = runCatching {
+        runBlocking { easyDebridService.observeAccountState().first() }
+    }.getOrDefault(EasyDebridAccountState())
+    coEvery { easyDebridApi.getUserDetails(any()) } answers {
+        val authorization = firstArg<String>()
+        val expectedAuthorization = "Bearer ${easyDebridState.apiKey}"
+        if (easyDebridState.isConnected &&
+            easyDebridState.apiKey.isNotBlank() &&
+            authorization == expectedAuthorization
+        ) {
+            Response.success(
+                EasyDebridUserDto(
+                    id = easyDebridState.userId ?: "test-user",
+                    paidUntil = easyDebridState.paidUntil
+                )
+            )
+        } else {
+            Response.error(401, mockk(relaxed = true))
+        }
     }
 }

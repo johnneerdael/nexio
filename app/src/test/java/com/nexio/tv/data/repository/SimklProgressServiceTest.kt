@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.simkl.transport.SimklProgressTransport
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklProgressSyncStateStore
@@ -139,7 +140,8 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
+        val transport = SimklProgressTransport(client, SimklRequestGate())
+        val service = SimklProgressService(transport, authStore, syncStateStore)
 
         service.refreshNowImmediate()
 
@@ -182,7 +184,8 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
+        val transport = SimklProgressTransport(client, SimklRequestGate())
+        val service = SimklProgressService(transport, authStore, syncStateStore)
 
         service.refreshNowImmediate()
 
@@ -213,7 +216,8 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
+        val transport = SimklProgressTransport(client, SimklRequestGate())
+        val service = SimklProgressService(transport, authStore, syncStateStore)
 
         service.refreshNowImmediate()
 
@@ -281,7 +285,8 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
+        val transport = SimklProgressTransport(client, SimklRequestGate())
+        val service = SimklProgressService(transport, authStore, syncStateStore)
 
         service.refreshNowImmediate()
 
