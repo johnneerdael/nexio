@@ -1,15 +1,18 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.metadata.router.FieldResolver
 import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRequestNormalizer
 import com.nexio.tv.core.metadata.router.MetadataRouter
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
+import com.nexio.tv.core.metadata.router.ProviderPlanRunner
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -87,7 +90,13 @@ fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFacade =
             idMappingStore = InMemoryIdMappingStore()
         ),
         providerPlanExecutor = ProviderPlanExecutor(),
-        resolverOrchestrator = ResolverOrchestrator()
+        resolverOrchestrator = ResolverOrchestrator(),
+        identityResolver = MetadataIdentityResolver(object : MetadataIdentityResolver.Lookup {
+            override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+            override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+        }),
+        providerPlanRunner = ProviderPlanRunner(emptySet()),
+        fieldResolver = FieldResolver()
     )
 
 internal suspend fun MetadataRouterFacade.resolveHomeRequest(

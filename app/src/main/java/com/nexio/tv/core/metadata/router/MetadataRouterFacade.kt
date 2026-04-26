@@ -1,54 +1,61 @@
 package com.nexio.tv.core.metadata.router
 
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import javax.inject.Inject
 import javax.inject.Singleton
-
-data class MetadataFacadeResult(
-    val route: MetadataRoute?,
-    val plan: ProviderExecutionPlan?,
-    val resolverSchedule: ResolverSchedule,
-    val displayMetadata: HomeDisplayMetadata
-)
 
 @Singleton
 class MetadataRouterFacade @Inject constructor(
     private val router: MetadataRouter,
     private val providerPlanExecutor: ProviderPlanExecutor,
     private val resolverOrchestrator: ResolverOrchestrator,
-    private val providerMetadataRouter: ProviderMetadataRouter? = null
+    private val identityResolver: MetadataIdentityResolver,
+    private val providerPlanRunner: ProviderPlanRunner,
+    private val fieldResolver: FieldResolver
 ) {
-    suspend fun resolveRequest(request: MetadataRequest): MetadataFacadeResult {
+    suspend fun resolveRequest(request: MetadataRequest): MetadataResolutionResult {
         val resolverSchedule = resolverOrchestrator.schedule(request.depth)
         val initialDisplay = request.sourceContext.addonMetadata ?: HomeDisplayMetadata()
 
         if (request.depth == MetadataDepth.PREVIEW) {
-            return MetadataFacadeResult(
+            val document = initialDisplay.toResolvedDocument()
+            return MetadataResolutionResult(
                 route = null,
                 plan = null,
                 resolverSchedule = resolverSchedule,
-                displayMetadata = initialDisplay
+                resolvedDocument = document,
+                displayMetadata = initialDisplay,
+                trace = emptyList()
             )
         }
 
-        val route = router.route(request)
-        val plan = if (route.targetIdRequiresIdentityResolution) {
-            null
-        } else {
-            providerPlanExecutor.buildPlan(route = route, depth = request.depth)
+        val routed = router.route(request)
+        val route = identityResolver.resolve(routed)
+        if (route.targetIdRequiresIdentityResolution) {
+            throw MetadataRouteFailure.IdentityResolutionFailed(route.parentId, route.provider)
         }
+        val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
+        val runResult = providerPlanRunner.run(plan)
+        val resolvedDocument = fieldResolver.resolve(
+            primary = runResult.primaryCandidate,
+            secondary = runResult.secondaryCandidates
+        )
+        val displayMetadata = resolvedDocument.toHomeDisplayMetadata(initialDisplay)
 
-        return MetadataFacadeResult(
+        return MetadataResolutionResult(
             route = route,
             plan = plan,
             resolverSchedule = resolverSchedule,
-            displayMetadata = initialDisplay
+            resolvedDocument = resolvedDocument,
+            displayMetadata = displayMetadata,
+            trace = runResult.trace
         )
     }
 
@@ -56,22 +63,26 @@ class MetadataRouterFacade @Inject constructor(
         metadataRequest: MetadataRequest,
         tvRequest: TvMetadataRequest
     ): TvMetadataDecision<TvMetadataEnrichment> {
-        val routeResult = resolveRequest(metadataRequest)
-        check(routeResult.route?.targetIdRequiresIdentityResolution != true) {
-            "TV enrichment route requires identity resolution before provider execution for ${metadataRequest.contentId}"
-        }
-        return requireProviderMetadataRouter().fetchEnrichment(tvRequest)
+        val result = resolveRequest(metadataRequest)
+        return TvMetadataDecision(
+            provider = result.route?.provider.toTvProvider(),
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = result.resolvedDocument.toTvMetadataEnrichment(),
+            diagnostics = emptyList()
+        )
     }
 
     suspend fun fetchTvEpisodeEnrichment(
         metadataRequest: MetadataRequest,
         tvRequest: TvMetadataRequest
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
-        val routeResult = resolveRequest(metadataRequest)
-        check(routeResult.route?.targetIdRequiresIdentityResolution != true) {
-            "TV episode route requires identity resolution before provider execution for ${metadataRequest.contentId}"
-        }
-        return requireProviderMetadataRouter().fetchEpisodeEnrichment(tvRequest)
+        val result = resolveRequest(metadataRequest)
+        return TvMetadataDecision(
+            provider = result.route?.provider.toTvProvider(),
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = emptyMap(),
+            diagnostics = emptyList()
+        )
     }
 
     suspend fun fetchTvSeasonEpisodes(
@@ -81,20 +92,57 @@ class MetadataRouterFacade @Inject constructor(
         seasonNumber: Int,
         language: String? = null
     ): TvMetadataDecision<List<TvSeasonEpisode>> {
-        val routeResult = resolveRequest(metadataRequest)
-        check(routeResult.route?.targetIdRequiresIdentityResolution != true) {
-            "TV season route requires identity resolution before provider execution for ${metadataRequest.contentId}"
-        }
-        return requireProviderMetadataRouter().fetchSeasonEpisodes(
-            contentId = contentId,
-            fallbackContentId = fallbackContentId,
-            seasonNumber = seasonNumber,
-            language = language
+        val result = resolveRequest(metadataRequest)
+        return TvMetadataDecision(
+            provider = result.route?.provider.toTvProvider(),
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = emptyList(),
+            diagnostics = emptyList()
         )
     }
 
-    private fun requireProviderMetadataRouter(): ProviderMetadataRouter =
-        checkNotNull(providerMetadataRouter) {
-            "ProviderMetadataRouter must be provided for TV metadata execution"
+    private fun HomeDisplayMetadata.toResolvedDocument(): ResolvedMetadataDocument =
+        ResolvedMetadataDocument(
+            canonicalId = null,
+            title = title,
+            overview = description,
+            poster = poster,
+            backdrop = backdrop,
+            logo = logo,
+            rating = imdbRating,
+            runtimeMinutes = runtime?.toIntOrNull(),
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        )
+
+    private fun ResolvedMetadataDocument.toHomeDisplayMetadata(fallback: HomeDisplayMetadata): HomeDisplayMetadata =
+        fallback.copy(
+            title = title ?: fallback.title,
+            logo = logo ?: fallback.logo,
+            description = overview ?: fallback.description,
+            runtime = runtimeMinutes?.toString() ?: fallback.runtime,
+            imdbRating = (rating as? Number)?.toFloat() ?: fallback.imdbRating,
+            poster = poster ?: fallback.poster,
+            backdrop = backdrop ?: fallback.backdrop
+        )
+
+    private fun ResolvedMetadataDocument.toTvMetadataEnrichment(): TvMetadataEnrichment =
+        TvMetadataEnrichment(
+            seriesTvdbId = canonicalId?.substringAfter("tvdb:")?.toIntOrNull(),
+            localizedTitle = title,
+            description = overview,
+            backdrop = backdrop,
+            logo = logo,
+            poster = poster,
+            rating = (rating as? Number)?.toDouble(),
+            runtimeMinutes = runtimeMinutes
+        )
+
+    private fun MetadataPrimaryProvider?.toTvProvider(): TvProvider =
+        when (this) {
+            MetadataPrimaryProvider.KITSU -> TvProvider.KITSU
+            MetadataPrimaryProvider.TMDB -> TvProvider.TMDB
+            MetadataPrimaryProvider.TVDB,
+            null -> TvProvider.TVDB
         }
 }

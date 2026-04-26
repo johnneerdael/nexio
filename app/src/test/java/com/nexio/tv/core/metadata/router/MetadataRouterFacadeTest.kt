@@ -1,13 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
-import com.nexio.tv.core.tvdb.TvEpisodeMetadata
-import com.nexio.tv.core.tvdb.TvMetadataDecision
-import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
-import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
-import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import kotlinx.coroutines.test.runTest
@@ -21,7 +15,9 @@ class MetadataRouterFacadeTest {
     @Test
     fun `preview requests bypass route and provider plan`() = runTest {
         val addonMetadata = HomeDisplayMetadata(title = "Addon title")
-        val result = facade().resolveRequest(
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).resolveRequest(
             MetadataRequest(
                 contentId = "tvdb:123",
                 contentType = ContentType.SERIES,
@@ -34,64 +30,93 @@ class MetadataRouterFacadeTest {
         assertNull(result.plan)
         assertEquals(MetadataDepth.PREVIEW, result.resolverSchedule.depth)
         assertSame(addonMetadata, result.displayMetadata)
+        assertEquals(0, adapter.calls)
     }
 
     @Test
-    fun `detail requests route build provider plan and keep addon display as initial metadata`() = runTest {
-        val addonMetadata = HomeDisplayMetadata(title = "Addon title")
-        val result = facade().resolveRequest(
+    fun `metadata facade executes provider plan and never calls provider metadata router`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).resolveRequest(
             MetadataRequest(
                 contentId = "tvdb:123",
                 contentType = ContentType.SERIES,
-                sourceContext = MetadataSourceContext(addonMetadata = addonMetadata),
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(title = "Addon title")
+                ),
                 depth = MetadataDepth.DETAIL_CORE
             )
         )
 
         assertEquals(MetadataPrimaryProvider.TVDB, result.route?.provider)
         assertEquals(MetadataDepth.DETAIL_CORE, result.plan?.depth)
-        assertEquals(MetadataDepth.DETAIL_CORE, result.resolverSchedule.depth)
-        assertSame(addonMetadata, result.displayMetadata)
+        assertTrue(adapter.calls > 0)
+        assertEquals("Runtime title", result.resolvedDocument.title)
+        assertEquals("Runtime title", result.displayMetadata.title)
     }
 
     @Test
-    fun `player requests route and return route only provider plan`() = runTest {
-        val result = facade().resolveRequest(
-            MetadataRequest(
-                contentId = "tmdb:550",
-                contentType = ContentType.MOVIE,
-                sourceContext = MetadataSourceContext(),
-                depth = MetadataDepth.PLAYER
-            )
-        )
+    fun `provider plan steps are executed via integration runtime adapters`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
 
-        assertEquals(MetadataPrimaryProvider.TMDB, result.route?.provider)
-        assertEquals(MetadataDepth.PLAYER, result.plan?.depth)
-        assertEquals(emptyList<ProviderPlanStep>(), result.plan?.steps)
-        assertEquals(MetadataDepth.PLAYER, result.resolverSchedule.depth)
-    }
-
-    @Test
-    fun `provider-native conflict returns unresolved route without executable plan`() = runTest {
-        val result = facade().resolveRequest(
+        facade(adapter).resolveRequest(
             MetadataRequest(
-                contentId = "tmdb:1399",
+                contentId = "tvdb:123",
                 contentType = ContentType.SERIES,
                 sourceContext = MetadataSourceContext(),
                 depth = MetadataDepth.DETAIL_CORE
             )
         )
 
-        assertEquals(MetadataPrimaryProvider.TVDB, result.route?.provider)
-        assertTrue(result.route?.targetIdRequiresIdentityResolution == true)
-        assertNull(result.plan)
-        assertEquals(MetadataDepth.DETAIL_CORE, result.resolverSchedule.depth)
+        assertEquals(listOf("tvdb.series.extended"), adapter.apiShapeIds)
     }
 
     @Test
-    fun `facade routes then delegates tv enrichment through provider metadata router`() = runTest {
-        val providerRouter = RecordingProviderMetadataRouter()
-        val result = facade(providerRouter).fetchTvEnrichment(
+    fun `missing plan step adapter mapping fails test`() = runTest {
+        val error = try {
+            facade().resolveRequest(
+                MetadataRequest(
+                    contentId = "tvdb:123",
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(),
+                    depth = MetadataDepth.DETAIL_CORE
+                )
+            )
+            null
+        } catch (exception: MetadataRouteFailure.MissingPlanStepAdapter) {
+            exception
+        }
+
+        assertTrue(error?.message?.contains("tvdb.series.extended") == true)
+    }
+
+    @Test
+    fun `provider-native conflict fails before provider plan execution when identity is unresolved`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val error = try {
+            facade(adapter).resolveRequest(
+                MetadataRequest(
+                    contentId = "tmdb:1399",
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(),
+                    depth = MetadataDepth.DETAIL_CORE
+                )
+            )
+            null
+        } catch (exception: MetadataRouteFailure.IdentityResolutionFailed) {
+            exception
+        }
+
+        assertTrue("Expected unresolved identity route to be rejected", error != null)
+        assertEquals(0, adapter.calls)
+    }
+
+    @Test
+    fun `facade tv enrichment bridge uses resolved document output`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).fetchTvEnrichment(
             metadataRequest = MetadataRequest(
                 contentId = "tvdb:81189",
                 contentType = ContentType.SERIES,
@@ -105,39 +130,16 @@ class MetadataRouterFacadeTest {
         )
 
         assertEquals(TvProvider.TVDB, result.provider)
-        assertEquals(1, providerRouter.enrichmentCalls)
-        assertEquals("tvdb:81189", providerRouter.lastEnrichmentRequest?.contentId)
-    }
-
-    @Test
-    fun `facade refuses tv enrichment when route still needs identity resolution`() = runTest {
-        val providerRouter = RecordingProviderMetadataRouter()
-
-        val error = try {
-            facade(providerRouter).fetchTvEnrichment(
-                metadataRequest = MetadataRequest(
-                    contentId = "tmdb:1399",
-                    contentType = ContentType.SERIES,
-                    sourceContext = MetadataSourceContext(),
-                    depth = MetadataDepth.DETAIL_CORE
-                ),
-                tvRequest = TvMetadataRequest(
-                    contentId = "tmdb:1399",
-                    contentType = ContentType.SERIES
-                )
-            )
-            null
-        } catch (exception: IllegalStateException) {
-            exception
-        }
-
-        assertTrue("Expected unresolved identity route to be rejected", error != null)
-        assertTrue(error!!.message!!.contains("requires identity resolution"))
-        assertEquals(0, providerRouter.enrichmentCalls)
+        assertEquals("Runtime title", result.value?.localizedTitle)
+        assertTrue(adapter.calls > 0)
     }
 
     private fun facade(
-        providerMetadataRouter: ProviderMetadataRouter = RecordingProviderMetadataRouter()
+        vararg adapters: MetadataProviderAdapter,
+        identityLookup: MetadataIdentityResolver.Lookup = object : MetadataIdentityResolver.Lookup {
+            override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+            override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+        }
     ): MetadataRouterFacade =
         MetadataRouterFacade(
             router = MetadataRouter(
@@ -147,52 +149,30 @@ class MetadataRouterFacadeTest {
             ),
             providerPlanExecutor = ProviderPlanExecutor(),
             resolverOrchestrator = ResolverOrchestrator(),
-            providerMetadataRouter = providerMetadataRouter
+            identityResolver = MetadataIdentityResolver(identityLookup),
+            providerPlanRunner = ProviderPlanRunner(adapters.toSet()),
+            fieldResolver = FieldResolver()
         )
 
-    private class RecordingProviderMetadataRouter : ProviderMetadataRouter {
-        var enrichmentCalls = 0
-        var episodeCalls = 0
-        var seasonCalls = 0
-        var lastEnrichmentRequest: TvMetadataRequest? = null
+    private class RecordingMetadataProviderAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        var calls = 0
+        val apiShapeIds = mutableListOf<String>()
 
-        override suspend fun fetchEnrichment(
-            request: TvMetadataRequest
-        ): TvMetadataDecision<TvMetadataEnrichment> {
-            enrichmentCalls += 1
-            lastEnrichmentRequest = request
-            return TvMetadataDecision(
-                provider = TvProvider.TVDB,
-                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-                value = TvMetadataEnrichment(seriesTvdbId = request.contentId.substringAfter(":").toIntOrNull()),
-                diagnostics = emptyList()
-            )
-        }
+        override fun supports(step: ProviderPlanStep): Boolean = true
 
-        override suspend fun fetchEpisodeEnrichment(
-            request: TvMetadataRequest
-        ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
-            episodeCalls += 1
-            return TvMetadataDecision(
-                provider = TvProvider.TVDB,
-                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-                value = emptyMap(),
-                diagnostics = emptyList()
-            )
-        }
-
-        override suspend fun fetchSeasonEpisodes(
-            contentId: String,
-            fallbackContentId: String?,
-            seasonNumber: Int,
-            language: String?
-        ): TvMetadataDecision<List<TvSeasonEpisode>> {
-            seasonCalls += 1
-            return TvMetadataDecision(
-                provider = TvProvider.TVDB,
-                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-                value = emptyList(),
-                diagnostics = emptyList()
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+            calls += 1
+            apiShapeIds += step.apiShapeId
+            return ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = route.provider,
+                    fields = mapOf(
+                        ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY)
+                    )
+                )
             )
         }
     }

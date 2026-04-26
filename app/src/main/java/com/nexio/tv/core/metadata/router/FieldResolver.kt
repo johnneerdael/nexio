@@ -43,6 +43,7 @@ class FieldResolver @Inject constructor() {
             backdrop = fields[ResolvedField.BACKDROP] as? String,
             logo = fields[ResolvedField.LOGO] as? String,
             rating = fields[ResolvedField.RATING],
+            runtimeMinutes = fields[ResolvedField.RUNTIME] as? Int,
             fieldOwners = owners,
             ignoredOverwrites = ignoredOverwrites
         )
