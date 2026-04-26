@@ -180,6 +180,24 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TVDB DETAIL_CORE with English language variants does not include series translation`() {
+        listOf("EN", "en-US", "en_GB").forEach { language ->
+            val plan = executor.buildPlan(
+                route = route(
+                    provider = MetadataPrimaryProvider.TVDB,
+                    mediaKind = MetadataMediaKind.SERIES,
+                    language = language
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+
+            assertEquals("language=$language", listOf(TvdbApiShapes.SERIES_EXTENDED), plan.apiShapeIds())
+            assertFalse("language=$language", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
+            assertAllShapesCovered(plan)
+        }
+    }
+
+    @Test
     fun `TVDB SEASON includes season type and language episode shapes`() {
         val plan = executor.buildPlan(
             route = route(
@@ -272,6 +290,23 @@ class ProviderPlanExecutorTest {
         }
 
         assertTrue(error.message!!.contains("requires identity resolution"))
+    }
+
+    @Test
+    fun `plan executor rejects unknown media kind for each provider`() {
+        MetadataPrimaryProvider.entries.forEach { provider ->
+            val error = assertThrows("provider=$provider", IllegalStateException::class.java) {
+                executor.buildPlan(
+                    route = route(
+                        provider = provider,
+                        mediaKind = MetadataMediaKind.UNKNOWN
+                    ),
+                    depth = MetadataDepth.DETAIL_CORE
+                )
+            }
+
+            assertTrue(error.message!!.contains("Invalid mediaKind UNKNOWN for provider $provider"))
+        }
     }
 
     private fun ProviderExecutionPlan.apiShapeIds(): List<String> = steps.map { it.apiShapeId }
