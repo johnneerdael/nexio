@@ -65,7 +65,9 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
         } ?: return item
 
         item.applyTvMetadataEnrichmentForHome(enrichment)
-    } catch (_: Throwable) {
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
         item
     }
 }

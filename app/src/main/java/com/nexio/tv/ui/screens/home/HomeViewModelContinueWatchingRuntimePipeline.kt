@@ -144,11 +144,14 @@ internal suspend fun HomeViewModel.warmContinueWatchingRuntimeIfNeededPipeline()
 
     candidates.forEach { item ->
         if (!isNonPlaybackHomeWorkAllowed()) return
-        val runtime = runCatching { resolveContinueWatchingRuntimeMinutes(item) }
-            .onFailure { error ->
-                Log.w(HomeViewModel.TAG, "Failed to warm continue watching runtime for ${item.contentId()}: ${error.message}")
-            }
-            .getOrNull()
+        val runtime = try {
+            resolveContinueWatchingRuntimeMinutes(item)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(HomeViewModel.TAG, "Failed to warm continue watching runtime for ${item.contentId()}: ${e.message}")
+            null
+        }
         if (runtime != null) {
             updateContinueWatchingRuntime(item, runtime)
         }

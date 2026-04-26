@@ -40,7 +40,7 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
                 return@map entry
             }
 
-            runCatching {
+            try {
                 val request = TvMetadataRequest(
                     contentId = entry.contentId,
                     fallbackContentId = entry.videoId,
@@ -74,9 +74,12 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
                     tvdbAvailabilityDiagnosticReason = availability.diagnosticReason,
                     tvdbAvailabilityDeviceLocalDateTime = availability.deviceLocalDateTime
                 )
-            }.onFailure {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
                 Log.w(TAG, "exact_air_time_diagnostic reason=missing_timezone_policy contentId=${entry.contentId}")
-            }.getOrElse { entry }
+                entry
+            }
         }
     }
 
