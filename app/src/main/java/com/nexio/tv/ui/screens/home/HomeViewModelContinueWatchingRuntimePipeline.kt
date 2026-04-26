@@ -80,27 +80,23 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
         return null
     }
 
-    val tmdbId = tmdbService.ensureTmdbId(contentId, contentType)
-        ?: tmdbService.ensureTmdbId(
-            item.videoId(),
-            contentType
+    val enrichment = metadataRouterFacade.fetchTvEnrichment(
+        metadataRequest = MetadataRequest(
+            contentId = contentId,
+            contentType = parseContinueWatchingContentType(contentType),
+            sourceContext = MetadataSourceContext(itemType = contentType),
+            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
+            depth = MetadataDepth.DETAIL_CORE
+        ),
+        tvRequest = TvMetadataRequest(
+            contentId = contentId,
+            fallbackContentId = item.videoId(),
+            contentType = parseContinueWatchingContentType(contentType),
+            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
         )
-
-    if (!tmdbId.isNullOrBlank()) {
-        if (season != null && episode != null) {
-            val episodeRuntime = tmdbMetadataService.fetchEpisodeEnrichment(
-                tmdbId = tmdbId,
-                seasonNumbers = listOf(season)
-            )[season to episode]?.runtimeMinutes
-            if (episodeRuntime != null && episodeRuntime > 0) return episodeRuntime
-        } else {
-            val runtime = tmdbMetadataService.fetchEnrichment(
-                tmdbId = tmdbId,
-                contentType = parseContinueWatchingContentType(contentType)
-            )?.runtimeMinutes
-            if (runtime != null && runtime > 0) return runtime
-        }
-    }
+    ).value
+    val runtime = enrichment?.runtimeMinutes ?: enrichment?.averageRuntimeMinutes
+    if (runtime != null && runtime > 0) return runtime
 
     return null
 }

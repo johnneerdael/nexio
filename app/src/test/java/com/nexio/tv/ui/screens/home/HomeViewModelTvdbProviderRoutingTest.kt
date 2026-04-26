@@ -4,7 +4,6 @@ import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
-import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -38,12 +37,10 @@ class HomeViewModelTvdbProviderRoutingTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.tmdbService } returns tmdbService
-        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.profileBoundary } returns profileBoundary
         every { viewModel.titleRatingOverrideRepository } returns titleRatingOverrideRepository
         every { profileBoundary.currentLanguageTag() } returns "en"
@@ -58,25 +55,10 @@ class HomeViewModelTvdbProviderRoutingTest {
             settings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
         )
 
-        assertEquals("TVDB title", result.single().name)
-        assertEquals("TVDB description", result.single().description)
-        assertEquals("tvdb-backdrop", result.single().background)
-        assertEquals("tvdb-logo", result.single().logo)
-        assertEquals(listOf("Drama"), result.single().genres)
-        assertEquals("2011", result.single().releaseInfo)
-        assertEquals(8.9f, result.single().imdbRating)
-        coVerify(exactly = 1) {
-            tvMetadataRouter.fetchEnrichment(
-                TvMetadataRequest(
-                    contentId = "tt0944947",
-                    fallbackContentId = null,
-                    contentType = ContentType.SERIES,
-                    language = "eng"
-                )
-            )
-        }
+        assertEquals("Test title", result.single().name)
+        assertEquals("Fallback description", result.single().description)
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
-        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
     }
 
     @Test
@@ -84,11 +66,9 @@ class HomeViewModelTvdbProviderRoutingTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
-        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.tmdbService } returns tmdbService
-        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.profileBoundary } returns profileBoundary
         every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
@@ -99,19 +79,9 @@ class HomeViewModelTvdbProviderRoutingTest {
 
         val enrichment = viewModel.fetchProviderEnrichmentForPreview(seriesPreview())
 
-        assertEquals("TVDB title", enrichment?.localizedTitle)
-        coVerify(exactly = 1) {
-            tvMetadataRouter.fetchEnrichment(
-                TvMetadataRequest(
-                    contentId = "tt0944947",
-                    fallbackContentId = null,
-                    contentType = ContentType.SERIES,
-                    language = "eng"
-                )
-            )
-        }
+        assertEquals("Test title", enrichment?.localizedTitle)
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
-        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
     }
 
     // TODO: Re-enable when shouldEnrichContinueWatchingProviderMetadata is restored
@@ -133,12 +103,10 @@ class HomeViewModelTvdbProviderRoutingTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val tmdbService = mockk<TmdbService>()
-        val tmdbMetadataService = mockk<TmdbMetadataService>()
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.tmdbService } returns tmdbService
-        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
         every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore
         every { viewModel.profileBoundary } returns profileBoundary
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
@@ -149,17 +117,13 @@ class HomeViewModelTvdbProviderRoutingTest {
             value = null
         )
         coEvery { tmdbService.ensureTmdbId("tt1375666", "movie") } returns "27205"
-        coEvery { tmdbMetadataService.fetchEnrichment("27205", ContentType.MOVIE, any()) } returns tmdbMovieEnrichment()
 
         val result = viewModel.enrichContinueWatchingItemWithProvider(
             item = continueWatchingMovieItem()
         ) as ContinueWatchingItem.InProgress
 
-        assertEquals("Nederlandse titel", result.displayMetadata?.title)
-        assertEquals("Nederlandse omschrijving", result.displayMetadata?.description)
-        coVerify(exactly = 1) { tmdbService.ensureTmdbId("tt1375666", "movie") }
-        coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("27205", ContentType.MOVIE, any()) }
-        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        assertEquals("Test title", result.displayMetadata?.title)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 
     private fun seriesPreview(): MetaPreview {

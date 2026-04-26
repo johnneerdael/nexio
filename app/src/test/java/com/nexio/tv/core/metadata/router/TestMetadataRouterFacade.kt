@@ -15,13 +15,17 @@ fun testMetadataRouterFacade(providerMetadataRouter: ProviderMetadataRouter): Me
             override suspend fun tmdbToTvdb(tmdbId: String): String? = null
             override suspend fun tvdbToTmdb(tvdbId: String): String? = null
         }),
-        providerPlanRunner = ProviderPlanRunner(setOf(TestMetadataProviderAdapter())),
+        providerPlanRunner = ProviderPlanRunner(
+            MetadataPrimaryProvider.entries
+                .map { provider -> TestMetadataProviderAdapter(provider) }
+                .toSet()
+        ),
         fieldResolver = FieldResolver()
     )
 
-private class TestMetadataProviderAdapter : MetadataProviderAdapter {
-    override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
-
+private class TestMetadataProviderAdapter(
+    override val provider: MetadataPrimaryProvider
+) : MetadataProviderAdapter {
     override fun supports(step: ProviderPlanStep): Boolean = true
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
