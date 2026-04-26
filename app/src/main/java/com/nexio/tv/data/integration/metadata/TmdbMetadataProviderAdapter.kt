@@ -25,10 +25,33 @@ class TmdbMetadataProviderAdapter @Inject constructor(
         val tmdbId = MetadataProviderTargetIds.tmdbInt(route.targetIds[MetadataPrimaryProvider.TMDB])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val language = route.language.orEmpty()
+        val policy = LocalizationPolicy.tmdb(language)
         val seasonEpisodeMetadata = mutableMapOf<Pair<Int, Int>, TvEpisodeMetadata>()
         val candidate = when (step.apiShapeId) {
-            TmdbApiShapes.MOVIE_CORE ->
-                integrationProvider.fetchMovieCore(tmdbId, language, activePosterProvider = null).toMetadataCandidate(this.provider)
+            TmdbApiShapes.MOVIE_CORE -> {
+                val requested = integrationProvider.fetchMovieCore(
+                    movieId = tmdbId,
+                    normalizedLanguage = policy.requestedLanguage.providerCode,
+                    activePosterProvider = null,
+                    localizationPolicyVersion = policy.policyVersion
+                )
+                val english = if (policy.requestedIsFallback) {
+                    null
+                } else {
+                    integrationProvider.fetchMovieCore(
+                        movieId = tmdbId,
+                        normalizedLanguage = policy.fallbackLanguage.providerCode,
+                        activePosterProvider = null,
+                        localizationPolicyVersion = policy.policyVersion
+                    )
+                }
+                buildTmdbLocalizedCandidate(
+                    provider = this.provider,
+                    policy = policy,
+                    requested = requested,
+                    english = english
+                )
+            }
             TmdbApiShapes.TV_CORE ->
                 integrationProvider.fetchEnrichment(tmdbId.toString(), ContentType.TV, language, activePosterProvider = null)
                     .toMetadataCandidate(this.provider)
