@@ -348,6 +348,19 @@ val generateOpenRouterReasoningModels by tasks.registering {
     }
 }
 
+val generateIntegrationRuntimeAudit by tasks.registering(com.nexio.build.integrationaudit.GenerateIntegrationRuntimeAuditTask::class) {
+    group = "verification"
+    description = "Generate the IntegrationRuntime Connectivity & Policy Audit package."
+    sourceRoot.set(layout.projectDirectory.dir("src/main/java"))
+    expectedShapesFile.set(layout.projectDirectory.file("src/test/resources/integration/expected_api_shapes.yaml"))
+    expectedContractsFile.set(layout.projectDirectory.file("src/test/resources/integration/expected_integration_contracts.yaml"))
+    metadataRouterPrerequisitesFile.set(layout.projectDirectory.file("src/test/resources/integration/metadata_router_prerequisites.txt"))
+    runtimeEventFixtureFile.set(layout.projectDirectory.file("src/test/resources/integration/runtime-event-fixture.jsonl"))
+    outputDirectory.set(layout.buildDirectory.dir("reports/integration-runtime-audit"))
+    projectRoot.set(rootProject.layout.projectDirectory)
+    failOnFailVerdict.set(providers.gradleProperty("integrationRuntimeAudit.failOnFailVerdict").map(String::toBoolean).orElse(false))
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
     dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)

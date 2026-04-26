@@ -1,0 +1,4391 @@
+schemaVersion: 1
+reviewedAt: "2026-04-25"
+bestPracticeRuleSupport:
+  runtime-contract-baseline: EXECUTABLE
+  tmdb-detail-append-bundle: EXECUTABLE
+  tvdb-season-batch: EXECUTABLE
+  kitsu-top-level-castings-include-graph: EXECUTABLE
+  ratings-batch-where-available: EXECUTABLE
+  poster-cache-key-all-output-varying-inputs: EXECUTABLE
+contractSources:
+  ADDON:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  TMDB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/tmdb-contract.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  TVDB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/tvdb-contract.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  KITSU:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/kitsu-contract.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  TRAKT:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/trakt-simkl.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  SIMKL:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/trakt-simkl.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  OMDB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/tidb-mdblist.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  CUSTOM_IMDB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/tidb-mdblist.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  THEINTRODB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/tidb-mdblist.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  ANISKIP:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  ANIMESKIP:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  ARM:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  RPDB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/rpdb-topposters.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  TOP_POSTERS:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/rpdb-topposters.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+  REAL_DEBRID:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  PREMIUMIZE:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  TORBOX:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  EASY_DEBRID:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  SHADOW_COLLECTOR:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  GITHUB:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  YOUTUBE_TRAILER:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  SUBTITLE_SOURCE_DOWNLOAD:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  SUBTITLE_TRANSLATION:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
+  MDBLIST:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/tidb-mdblist.md"
+    sourceType: "human-reviewed blueprint brief"
+    reviewer: "IntegrationRuntime audit"
+headerPolicies:
+  tmdb-json-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: header.Authorization.bearer
+    requiredHeaders: [Authorization]
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  tvdb-json-bearer-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: header.Authorization.bearer
+    requiredHeaders: [Authorization]
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  json-body-no-auth-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: body.apikey
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: []
+    userAgentPolicy: nexio-default-user-agent
+  public-json-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: none
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  trakt-json-v2:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: header.X-Trakt-API-Key
+    requiredHeaders: [X-Trakt-API-Key, X-Trakt-API-Version]
+    optionalHeaders: [Authorization]
+    forbiddenHeaders: [simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After, X-Ratelimit, X-Account-Locked, X-Account-Deactivated]
+    userAgentPolicy: nexio-default-user-agent
+  simkl-json-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: header.simkl-api-key
+    requiredHeaders: [simkl-api-key]
+    optionalHeaders: [Authorization]
+    forbiddenHeaders: [X-Trakt-API-Key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  mdblist-api-key-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: query.apikey
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  introdb-json-optional-bearer-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: optional-header.Authorization.bearer
+    requiredHeaders: []
+    optionalHeaders: [Authorization]
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-UsageLimit-Limit, X-UsageLimit-Remaining, X-UsageLimit-Reset, Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  image-fetch-default-v1:
+    stock: [nexio-default-user-agent, image-accept]
+    credentialLocation: provider-specific
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  topposters-thumbnail-v1:
+    stock: [nexio-default-user-agent, image-accept]
+    credentialLocation: path.api_key
+    requiredHeaders: []
+    optionalHeaders: [query.user_agent]
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: default-or-approved-browser-profile
+  graphql-json-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: none
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  rpdb-json-api-key-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: path.apiKey
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  rpdb-image-path-key-v1:
+    stock: [nexio-default-user-agent, image-accept]
+    credentialLocation: path.apiKey
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  topposters-image-path-key-v1:
+    stock: [nexio-default-user-agent, image-accept]
+    credentialLocation: path.api_key
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  omdb-query-api-key-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: query.apikey
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  custom-imdb-json-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: provider-specific
+    requiredHeaders: []
+    optionalHeaders: [Authorization]
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  addon-json-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: addon-url
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  github-json-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: none
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  subtitle-provider-v1:
+    stock: [nexio-default-user-agent]
+    credentialLocation: provider-specific
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  youtube-html-v1:
+    stock: [nexio-default-user-agent]
+    credentialLocation: none
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  collector-json-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: provider-specific
+    requiredHeaders: []
+    optionalHeaders: [Authorization]
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  easy_debrid-json-token-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: header.Authorization.bearer
+    requiredHeaders: [Authorization]
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  real_debrid-json-token-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: header.Authorization.bearer
+    requiredHeaders: [Authorization]
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  real_debrid-oauth-v1:
+    stock: [nexio-default-user-agent, json-accept, json-content-type]
+    credentialLocation: body-or-query.oauth
+    requiredHeaders: []
+    optionalHeaders: []
+    forbiddenHeaders: [Authorization, X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  premiumize-json-token-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: query.apikey
+    requiredHeaders: []
+    optionalHeaders: [Authorization]
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+  torbox-json-token-v1:
+    stock: [nexio-default-user-agent, json-accept]
+    credentialLocation: header.Authorization.bearer
+    requiredHeaders: [Authorization]
+    optionalHeaders: []
+    forbiddenHeaders: [X-Trakt-API-Key, simkl-api-key, X-TVDB-ApiKey, api_key]
+    responseHeaders: [Retry-After]
+    userAgentPolicy: nexio-default-user-agent
+cacheContracts:
+  primary-identity-alias-v1:
+    cachePolicy: CacheFirst
+    ttl: 30d
+    staleAfterExpiry: 180d
+    requiresTypedCodec: true
+    retention: durable-identity
+  primary-metadata-core-v1:
+    cachePolicy: CacheFirst
+    ttl: 7d
+    staleAfterExpiry: 30d
+    requiresTypedCodec: true
+    retention: recently-viewed-or-rail-scoped
+  season-batch-v1:
+    cachePolicy: CacheFirst
+    ttl: 24h
+    staleAfterExpiry: 7d
+    requiresTypedCodec: true
+    retention: season-scoped
+  dynamic-list-v1:
+    cachePolicy: CacheFirst
+    ttl: 12h
+    staleAfterExpiry: 7d
+    requiresTypedCodec: true
+    retention: rail-scoped
+  discovery-rail-v1:
+    cachePolicy: CacheFirst
+    ttl: 6h
+    staleAfterExpiry: 24h
+    requiresTypedCodec: true
+    retention: rail-scoped
+  ratings-dynamic-v1:
+    cachePolicy: CacheFirst
+    ttl: 12h
+    staleAfterExpiry: 3d
+    requiresTypedCodec: true
+    retention: rail-scoped
+  skip-segments-episode-v1:
+    cachePolicy: CacheFirst
+    ttl: 30d
+    staleAfterExpiry: 90d
+    requiresTypedCodec: true
+    retention: episode-immutable
+  poster-generated-v1:
+    cachePolicy: CacheFirst
+    ttl: 24h
+    staleAfterExpiry: 7d
+    requiresTypedCodec: true
+    retention: artwork-scoped
+  account-state-observe-v1:
+    cachePolicy: ObserveOnly
+    ttl: none
+    staleAfterExpiry: none
+    requiresTypedCodec: false
+    retention: user-scoped
+  mutation-v1:
+    cachePolicy: Mutation
+    ttl: none
+    staleAfterExpiry: none
+    requiresTypedCodec: false
+    retention: mutation-outbox-or-none
+  disabled-no-cache-v1:
+    cachePolicy: Disabled
+    ttl: none
+    staleAfterExpiry: none
+    requiresTypedCodec: false
+    retention: none
+apiShapes:
+  tmdb.find.external_id:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/find/{external_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.movie.core:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movie/{movie_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [tmdb-detail-append-bundle]
+  tmdb.tv.core:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/{tv_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [tmdb-detail-append-bundle]
+  tmdb.season.episodes:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/{series_id}/season/{season_number}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.movie.videos:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movie/{movie_id}/videos"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.tv.videos:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/{tv_id}/videos"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.season.videos:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/{series_id}/season/{season_number}/videos"
+    headerPolicy: tmdb-json-v1
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.movie.recommendations:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movie/{movie_id}/recommendations"
+    headerPolicy: tmdb-json-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.tv.recommendations:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/{tv_id}/recommendations"
+    headerPolicy: tmdb-json-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.movie.reviews:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movie/{movie_id}/reviews"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.tv.reviews:
+    provider: TMDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/{tv_id}/reviews"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.collection:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/collection/{collection_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.person.detail:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/person/{person_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.person.combined_credits:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/person/{person_id}/combined_credits"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.company.detail:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/company/{company_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.network.detail:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/network/{network_id}"
+    headerPolicy: tmdb-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.discover.movie.by_company:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/discover/movie"
+    headerPolicy: tmdb-json-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.discover.tv.by_company_or_network:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/discover/tv"
+    headerPolicy: tmdb-json-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.login:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: POST
+    path: "/login"
+    headerPolicy: json-body-no-auth-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, MAINTENANCE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.remoteid.lookup:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/search/remoteid/{remoteId}"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.search:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/search"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.series.base:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/series/{id}"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.series.extended:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/series/{id}/extended"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.series.translation:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/series/{id}/translations/{language}"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.series.episodes.season_type:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/series/{id}/episodes/{seasonType}"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [tvdb-season-batch]
+  tvdb.series.episodes.language:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/series/{id}/episodes/{seasonType}/{language}"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [tvdb-season-batch]
+  tvdb.episode.translation:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/episodes/{id}/translations/{language}"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.updates:
+    provider: TVDB
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/updates"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.artwork_types:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/artwork/types"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.genres:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/genres"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.languages:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/languages"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.content_ratings:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/content/ratings"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: ratings-dynamic-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [ratings-batch-where-available]
+  tvdb.reference.season_types:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/seasons/types"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.person.extended:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/people/{id}/extended"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.discovery.trending:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/trending/anime"
+    headerPolicy: public-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [BACKGROUND_HYDRATION]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.discovery.anime:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime"
+    headerPolicy: public-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [BACKGROUND_HYDRATION, USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.anime.core:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime/{id}"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.anime.episodes:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime/{id}/episodes"
+    headerPolicy: public-json-v1
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.castings:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/castings"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [kitsu-top-level-castings-include-graph]
+  kitsu.anime_staff:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime/{id}/anime-staff"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.anime_productions:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime/{id}/anime-productions"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.media_relationships:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime/{id}/media-relationships"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.search.text:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime"
+    headerPolicy: public-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  mdblist.user:
+    provider: MDBLIST
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/user"
+    headerPolicy: mdblist-api-key-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  mdblist.rating.batch:
+    provider: MDBLIST
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: POST
+    path: "/rating/{mediaType}/{ratingType}"
+    headerPolicy: mdblist-api-key-v1
+    cacheContract: ratings-dynamic-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [ratings-batch-where-available]
+  mdblist.raw_url.list:
+    provider: MDBLIST
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "{remoteUrl}"
+    headerPolicy: mdblist-api-key-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [BACKGROUND_HYDRATION]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  omdb.season.ratings:
+    provider: OMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/"
+    headerPolicy: omdb-query-api-key-v1
+    cacheContract: ratings-dynamic-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [ratings-batch-where-available]
+  custom_imdb.title.bulk:
+    provider: CUSTOM_IMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: POST
+    path: "/v1/ratings/bulk"
+    headerPolicy: custom-imdb-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  custom_imdb.episode.series:
+    provider: CUSTOM_IMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/v1/ratings/{tconst}"
+    headerPolicy: custom-imdb-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.movie.comments:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movies/{id}/comments/{sort}"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.show.comments:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/shows/{id}/comments/{sort}"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  theintrodb.media:
+    provider: THEINTRODB
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/media"
+    headerPolicy: introdb-json-optional-bearer-v1
+    cacheContract: skip-segments-episode-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-UsageLimit-Limit, X-UsageLimit-Remaining, X-UsageLimit-Reset, Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  aniskip.skip_times:
+    provider: ANISKIP
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/skip-times/{malId}/{episode}"
+    headerPolicy: public-json-v1
+    cacheContract: skip-segments-episode-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  animeskip.graphql:
+    provider: ANIMESKIP
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: POST
+    path: "/graphql"
+    headerPolicy: graphql-json-v1
+    cacheContract: skip-segments-episode-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  arm.imdb_bridge:
+    provider: ARM
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/imdb"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  arm.ids_bridge:
+    provider: ARM
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/ids"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  rpdb.key_validation:
+    provider: RPDB
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/{apiKey}/isValid"
+    headerPolicy: rpdb-json-api-key-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [poster-cache-key-all-output-varying-inputs]
+  topposters.key_validation:
+    provider: TOP_POSTERS
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/auth/verify/{apiKey}"
+    headerPolicy: topposters-image-path-key-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [poster-cache-key-all-output-varying-inputs]
+  rpdb.poster_template:
+    provider: RPDB
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "{posterUrl}"
+    headerPolicy: rpdb-image-path-key-v1
+    cacheContract: poster-generated-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [poster-cache-key-all-output-varying-inputs]
+  topposters.poster_template:
+    provider: TOP_POSTERS
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "{posterUrl}"
+    headerPolicy: topposters-image-path-key-v1
+    cacheContract: poster-generated-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [poster-cache-key-all-output-varying-inputs]
+  topposters.thumbnail:
+    provider: TOP_POSTERS
+    lifecycleStatus: ACTIVE_REQUIRED
+    metadataRouterRequired: true
+    method: GET
+    path: "/{api_key}/{id_type}/thumbnail/{media_id}/S{season}E{episode}.jpg"
+    headerPolicy: topposters-thumbnail-v1
+    cacheContract: poster-generated-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash, user_agent_profile_id, badge_position, badge_size, blur]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [poster-cache-key-all-output-varying-inputs]
+  addon.manifest:
+    provider: ADDON
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{manifestUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  addon.catalog:
+    provider: ADDON
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{catalogUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  addon.meta:
+    provider: ADDON
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{metaUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  addon.streams:
+    provider: ADDON
+    lifecycleStatus: EXEMPT
+    metadataRouterRequired: false
+    method: GET
+    path: "{streamUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  addon.subtitles:
+    provider: ADDON
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{subtitleUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  github.latest_release:
+    provider: GITHUB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/repos/{owner}/{repo}/releases/latest"
+    headerPolicy: github-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  github.asset_download:
+    provider: GITHUB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{assetUrl}"
+    headerPolicy: github-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  subtitle.translation:
+    provider: SUBTITLE_TRANSLATION
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: ANY
+    path: "{requestUrl}"
+    headerPolicy: subtitle-provider-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  subtitle.source_download:
+    provider: SUBTITLE_SOURCE_DOWNLOAD
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{url}"
+    headerPolicy: subtitle-provider-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  playback.opensubtitles_hash:
+    provider: SUBTITLE_SOURCE_DOWNLOAD
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{mediaUrl}"
+    headerPolicy: subtitle-provider-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  playback.preflight_head:
+    provider: ADDON
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: HEAD
+    path: "{streamUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  playback.preflight_range:
+    provider: ADDON
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "{streamUrl}"
+    headerPolicy: addon-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  shadow_collector.autoplay_upload:
+    provider: SHADOW_COLLECTOR
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: POST
+    path: "{baseUrl}/autoplay"
+    headerPolicy: collector-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  youtube_trailer.transport.execute:
+    provider: YOUTUBE_TRAILER
+    lifecycleStatus: EXEMPT
+    metadataRouterRequired: false
+    method: ANY
+    path: "{callUrl}"
+    headerPolicy: youtube-html-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  youtube_trailer.transport.probe:
+    provider: YOUTUBE_TRAILER
+    lifecycleStatus: EXEMPT
+    metadataRouterRequired: false
+    method: GET
+    path: "{url}"
+    headerPolicy: youtube-html-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  animeskip.shows:
+    provider: ANIMESKIP
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: POST
+    path: "/graphql"
+    headerPolicy: graphql-json-v1
+    cacheContract: skip-segments-episode-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  animeskip.key_validation:
+    provider: ANIMESKIP
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: POST
+    path: "/graphql"
+    headerPolicy: graphql-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.search.movie:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/search/movie"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.search.tv:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/search/tv"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.trending.movie:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/trending/movie/day"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.trending.tv:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/trending/tv/day"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.popular.movie:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/movie/popular"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.popular.tv:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/tv/popular"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.discover.movie:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/discover/movie"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.discover.tv:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/discover/tv"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.key_validation:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/configuration"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.advanced_detail:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "{advancedDetailBatch}"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  mdblist.key_validation:
+    provider: MDBLIST
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/user"
+    headerPolicy: mdblist-api-key-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  omdb.key_validation:
+    provider: OMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/"
+    headerPolicy: omdb-query-api-key-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.artwork_statuses:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/artwork/statuses"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.series_statuses:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/series/statuses"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.source_types:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/sources/types"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.entity_types:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/entities/types"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tvdb.reference.company_types:
+    provider: TVDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/companies/types"
+    headerPolicy: tvdb-json-bearer-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [MAINTENANCE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  easy_debrid.lookup:
+    provider: EASY_DEBRID
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: POST
+    path: "/link/lookup"
+    headerPolicy: easy_debrid-json-token-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  easy_debrid.lookup_details:
+    provider: EASY_DEBRID
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: POST
+    path: "/link/lookup/details"
+    headerPolicy: easy_debrid-json-token-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  premiumize.list_all:
+    provider: PREMIUMIZE
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/folder/list"
+    headerPolicy: premiumize-json-token-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.last_activities:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/activities"
+    headerPolicy: simkl-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.discovery:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "{discoveryUrl}"
+    headerPolicy: simkl-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.pin.start:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/oauth/pin"
+    headerPolicy: simkl-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {redirect: present}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.pin.status:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/oauth/pin/{user_code}"
+    headerPolicy: simkl-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.user_settings:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/users/settings"
+    headerPolicy: simkl-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.playback:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/playback/{type}"
+    headerPolicy: simkl-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  simkl.scrobble:
+    provider: SIMKL
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/sync/scrobble"
+    headerPolicy: simkl-json-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  torbox.torrent_list:
+    provider: TORBOX
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/torrents/mylist"
+    headerPolicy: torbox-json-token-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  easy_debrid.account:
+    provider: EASY_DEBRID
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/user"
+    headerPolicy: easy_debrid-json-token-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  premiumize.account:
+    provider: PREMIUMIZE
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/account/info"
+    headerPolicy: premiumize-json-token-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  torbox.account:
+    provider: TORBOX
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: false
+    method: GET
+    path: "/user/me"
+    headerPolicy: torbox-json-token-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.calendar.shows:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/calendars/my/shows/{start_date}/{days}"
+    headerPolicy: trakt-json-v2
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.trending.movies:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movies/trending"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.trending.shows:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/shows/trending"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.popular.movies:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/movies/popular"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.popular.shows:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/shows/popular"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.recommended.shows:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/recommendations/shows"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.popular.lists:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/lists/popular"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.lists:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/users/{id}/lists"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.list_items:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/users/{id}/lists/{list_id}/items/{type}"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.authorized_response:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: ANY
+    path: "{authorizedMutationOrRead}"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE, BACKGROUND_HYDRATION, MUTATION_OUTBOX, SCROBBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, accountHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  custom_imdb.transport.execute:
+    provider: CUSTOM_IMDB
+    lifecycleStatus: EXEMPT
+    metadataRouterRequired: true
+    method: ANY
+    path: "{resolvedCustomImdbRoute}"
+    headerPolicy: custom-imdb-json-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version, credentialHash]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  premiumize.cache_check:
+    provider: PREMIUMIZE
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/cache/check"
+    headerPolicy: premiumize-json-token-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  premiumize.item_details:
+    provider: PREMIUMIZE
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/item/details"
+    headerPolicy: premiumize-json-token-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.add_magnet:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: POST
+    path: "/torrents/addMagnet"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.device_code:
+    provider: REAL_DEBRID
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/oauth/v2/device/code"
+    headerPolicy: real_debrid-oauth-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {client_id: present}
+      optionalQuery: {new_credentials: present}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.device_credentials:
+    provider: REAL_DEBRID
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/oauth/v2/device/credentials"
+    headerPolicy: real_debrid-oauth-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {client_id: present, code: present}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.token:
+    provider: REAL_DEBRID
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/oauth/v2/token"
+    headerPolicy: real_debrid-oauth-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Mutation
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: [client_id, client_secret, code, grant_type]
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.account:
+    provider: REAL_DEBRID
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/rest/1.0/user"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.revoke_token:
+    provider: REAL_DEBRID
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/rest/1.0/disable_access_token"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.downloads:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: GET
+    path: "/downloads"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.instant_availability:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: GET
+    path: "/torrents/instantAvailability/{hashes}"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.media_infos:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: GET
+    path: "/mediaInfos/{id}"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.select_files:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: POST
+    path: "/torrents/selectFiles/{id}"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.torrents:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: GET
+    path: "/torrents"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  real_debrid.unrestrict_link:
+    provider: REAL_DEBRID
+    lifecycleStatus: DORMANT_PROVIDER
+    metadataRouterRequired: false
+    method: POST
+    path: "/unrestrict/link"
+    headerPolicy: real_debrid-json-token-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  premiumize.direct_download:
+    provider: PREMIUMIZE
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/transfer/directdl"
+    headerPolicy: premiumize-json-token-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  torbox.check_cached:
+    provider: TORBOX
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/torrents/checkcached"
+    headerPolicy: torbox-json-token-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  torbox.download_link:
+    provider: TORBOX
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/torrents/requestdl"
+    headerPolicy: torbox-json-token-v1
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [PLAYBACK_RESOLUTION]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.checkin:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/checkin"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [SCROBBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.device_code:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/oauth/device/code"
+    headerPolicy: trakt-json-v2
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.device_token:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/oauth/device/token"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.episode.history:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/history/episodes/{id}"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.episode.summary:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/episodes/{id}"
+    headerPolicy: trakt-json-v2
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.hidden_items:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/users/hidden/{section}"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.history.add:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/sync/history"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.history.remove:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/sync/history/remove"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.last_activities:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/last_activities"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [BACKGROUND_HYDRATION]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.playback:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/playback/{type}"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.playback.delete:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: DELETE
+    path: "/sync/playback/{id}"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.recommendation.hide:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/recommendations/{type}/{id}/hide"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.scrobble:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/scrobble/{action}"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [SCROBBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.season.episodes:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/shows/{id}/seasons/{season}"
+    headerPolicy: trakt-json-v2
+    cacheContract: season-batch-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.show.progress_watched:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/shows/{id}/progress/watched"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.token_refresh:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/oauth/token"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.token_revoke:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/oauth/revoke"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.list_create:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/users/{id}/lists"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.list_delete:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: DELETE
+    path: "/users/{id}/lists/{list_id}"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.list_items.add:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/users/{id}/lists/{list_id}/items"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.list_items.remove:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/users/{id}/lists/{list_id}/items/remove"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.list_update:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: PUT
+    path: "/users/{id}/lists/{list_id}"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.lists_reorder:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/users/{id}/lists/reorder"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.settings:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/users/settings"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.user.stats:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/users/{id}/stats"
+    headerPolicy: trakt-json-v2
+    cacheContract: dynamic-list-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.watched:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/watched/{type}"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.watched.shows:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/watched/shows"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-state-observe-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: ObserveOnly
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.watchlist.add:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/sync/watchlist"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.watchlist.remove:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "/sync/watchlist/remove"
+    headerPolicy: trakt-json-v2
+    cacheContract: mutation-v1
+    runtimePolicy:
+      workClasses: [MUTATION_OUTBOX]
+      defaultCachePolicy: Mutation
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
