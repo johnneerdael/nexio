@@ -409,6 +409,8 @@
     <string name="streams_service_wrap_sub">Resolve hash-based addon results through your Real-Debrid and Premiumize accounts. Only cached wrapped streams are shown.</string>
     <string name="streams_filter_dv5_webdl_title">Filter WEB-DL Dolby Vision</string>
     <string name="streams_filter_dv5_webdl_sub">Hide WEB-DL streams tagged DV or DoVi to avoid problematic DV5 playback.</string>
+    <string name="streams_skip_placeholder_title">Skip addon placeholder streams</string>
+    <string name="streams_skip_placeholder_sub">Automatically skip streams that return an error video instead of real content.</string>
     <string name="streams_filter_wrong_episodes_title">Filter Wrong Episodes</string>
     <string name="streams_filter_wrong_episodes_sub">Hide episodic streams whose parsed season or episode tags do not match the requested episode.</string>
     <string name="streams_filter_wrong_movie_year_title">Filter Wrong Movie Year</string>
