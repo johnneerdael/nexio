@@ -113,6 +113,32 @@ fun isAddonCatalogDisabled(
     return disabledKeys.any { key -> key.startsWith(disableKeyPrefix) }
 }
 
+/**
+ * Tolerant variant of [parseAddonInstallUrl] for runtime re-derivation of an
+ * already-installed addon's parsed entry. The canonical form stored locally
+ * (via [normalizeAddonInstallUrl]) strips the `/manifest.json` suffix, so
+ * feeding it back to the strict install-time parser would trip the
+ * `splitAddonTransportUrl` invariant and silently drop the addon from the
+ * sync push payload (data loss). Re-attach `/manifest.json` here, preserving
+ * any query suffix, before delegating.
+ */
+fun parseStoredAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
+    val candidate = rawUrl.trim()
+        .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
+    require(candidate.isNotBlank()) { "Addon URL is required." }
+    val parsed = URL(candidate)
+    val path = parsed.path?.takeIf { it.isNotBlank() && it != "/" }.orEmpty()
+    val needsManifest = !path.endsWith("/manifest.json", ignoreCase = true)
+    val restored = if (!needsManifest) {
+        candidate
+    } else {
+        val newPath = if (path.isBlank()) "/manifest.json" else path.trimEnd('/') + "/manifest.json"
+        val querySuffix = parsed.query?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+        "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}$newPath$querySuffix"
+    }
+    return parseAddonInstallUrl(restored)
+}
+
 fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
     val candidate = rawUrl.trim()
         .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")

@@ -53,7 +53,7 @@ class AddonSyncService @Inject constructor(
             }
             val localAddons = addonPreferences.installedAddons.first()
             val parsedAddons = localAddons.mapNotNull { addon ->
-                runCatching { parseAddonInstallUrl(addon.url) to addon.parserPreset }
+                runCatching { parseStoredAddonInstallUrl(addon.url) to addon.parserPreset }
                     .onFailure { error ->
                         Log.w(TAG, "pushToRemote: dropping malformed local addon URL=${addon.url}", error)
                     }
