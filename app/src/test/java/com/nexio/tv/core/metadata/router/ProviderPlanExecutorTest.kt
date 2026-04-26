@@ -3,6 +3,8 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.domain.model.ContentType
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -332,6 +334,28 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `router-propagated season number is preserved in season execution plan`() = runTest {
+        val route = router().route(
+            MetadataRequest(
+                contentId = "tvdb:81189:season:7",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 7,
+                depth = MetadataDepth.SEASON
+            )
+        )
+
+        val plan = executor.buildPlan(route = route, depth = MetadataDepth.SEASON)
+
+        assertEquals(7, plan.route.seasonNumber)
+        assertEquals(
+            listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE),
+            plan.apiShapeIds()
+        )
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
     fun `Kitsu DETAIL_SECONDARY includes core episodes and relationship shapes`() {
         val plan = executor.buildPlan(
             route = route(
@@ -437,6 +461,13 @@ class ProviderPlanExecutorTest {
             coveredShapeIds.containsAll(plan.apiShapeIds())
         )
     }
+
+    private fun router(): MetadataRouter =
+        MetadataRouter(
+            normalizer = MetadataRequestNormalizer(),
+            animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+            idMappingStore = InMemoryIdMappingStore()
+        )
 
     private fun route(
         provider: MetadataPrimaryProvider,
