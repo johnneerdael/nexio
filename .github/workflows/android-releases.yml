@@ -159,7 +159,7 @@ jobs:
           fi
 
           echo "Universal release build failed, retrying armv7..."
-          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
+          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release -PNEXIO_SKIP_KODI_MODULE=true
           APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "armv7 release APK not found after successful fallback build." >&2
@@ -310,7 +310,7 @@ jobs:
           fi
 
           echo "Universal release build failed, retrying armv7..."
-          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
+          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release -PNEXIO_SKIP_KODI_MODULE=true
           APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "armv7 release APK not found after successful fallback build." >&2
