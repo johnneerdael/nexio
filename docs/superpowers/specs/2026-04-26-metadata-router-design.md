@@ -46,7 +46,7 @@ UI / Player / Continue Watching
 
 The implementation cycle is accepted only through tests. Manual inspection is not a gate.
 
-1. Routing and identity gate proves routing precedence, parent-id normalization, anime detection, and item-type fallback.
+1. Routing and identity gate proves routing precedence, parent-id normalization, deterministic anime identity mapping, and item-type fallback.
 2. Primary plan execution gate proves TMDB, TVDB, and Kitsu plans map to runtime-covered `apiShapeId`s.
 3. Secondary resolver gate proves resolvers run only at allowed request depths.
 4. Field ownership gate proves secondary providers cannot overwrite primary-owned fields.
@@ -54,16 +54,61 @@ The implementation cycle is accepted only through tests. Manual inspection is no
 6. Continue Watching gate proves click-time addon metadata, route provider, and parent id are persisted and reused.
 7. Boundary gate proves `TvMetadataRouter` call sites are migrated and no router/resolver layer bypasses IntegrationRuntime.
 
+## Input Contract: Addon Item Truth Model
+
+Every routing decision uses only the catalog row item's own required fields:
+
+```text
+item.id
+item.type
+```
+
+`item.type` is the authoritative media type. Catalog-level type is not authoritative because real catalog rows can be mixed, such as a Disney row whose catalog type is `series` but whose items include both movies and series.
+
+Identifier interpretation:
+
+```text
+kitsu:...      -> anime, authoritative Kitsu id
+mal:...        -> anime id requiring Kitsu mapping
+anilist:...    -> anime id requiring Kitsu mapping
+anidb:...      -> anime id requiring Kitsu mapping
+tt...          -> neutral IMDb id, requires anime mapping before Kitsu
+imdb:...       -> neutral IMDb id, requires anime mapping before Kitsu
+tmdb:...       -> provider-native TMDB id
+tvdb:...       -> provider-native TVDB id
+```
+
+The router must ignore these fields for routing:
+
+```text
+catalog.type
+addonId
+catalogId
+sourceName
+genre == Animation
+animeType
+popularity/trend fields
+links[]
+```
+
+Addon fields such as `name`, `poster`, `background`, `description`, `releaseInfo`, `runtime`, `imdbRating`, and `genres` are safe for first render only. They are render inputs, not routing inputs.
+
 ## Routing And Identity
 
 MetadataRouter does not fetch metadata. It only normalizes the request, chooses a primary provider, records trace evidence, and persists safe identity mappings.
 
 Final precedence:
 
-1. Anime id prefix first: `kitsu:`, `mal:`, `anilist:`, and `anidb:` route to Kitsu.
-2. Catalog/source anime hint second: anime catalog source, Crunchyroll source, or explicit addon anime catalog context routes to Kitsu even for plain `tt...` ids.
-3. `IdMappingStore` / Fribb third: parent id resolves to Kitsu, route to Kitsu and persist the mapping.
-4. Per-item type fallback: `series` routes to TVDB, `movie` routes to TMDB.
+1. Anime-prefixed row item first: `kitsu:{id}` routes directly to Kitsu without Fribb lookup.
+2. Anime-prefixed non-Kitsu row item second: `mal:{id}`, `anilist:{id}`, and `anidb:{id}` resolve through the AnimeIdentityIndex / Fribb to Kitsu, with local mapping as fallback.
+3. IMDb anime mapping third: `tt...` and `imdb:...` route to Kitsu only if `IdMappingStore` or AnimeIdentityIndex / Fribb maps the id to Kitsu.
+4. Provider-native primary ids fourth: `tmdb:{id}` with `item.type == movie` routes directly to TMDB, and `tvdb:{id}` with `item.type == series` routes directly to TVDB.
+5. Provider-native mismatch fifth: `tmdb:{id}` with `item.type == series` or `tvdb:{id}` with `item.type == movie` emits `ROUTING_ID_TYPE_CONFLICT` and falls back by explicit item-type policy.
+6. Per-item type fallback: `series` routes to TVDB, `movie` routes to TMDB.
+
+Catalog id, addon name, catalog name, genre, popularity, trend fields, and other catalog-level hints are not routing authority. Source context remains available for trace/debugging, catalog harvest, and click-time metadata capture only.
+
+AnimeIdentityIndex is for anime IDs and IMDb-anime detection. It is not the default resolver for TMDB/TVDB provider-native ids unless those datasets and semantics are separately verified.
 
 The router always computes a parent id before routing:
 
@@ -77,24 +122,108 @@ The route result includes provider, parent id, media kind, decision reason, sour
 
 ## Provider Plan Execution
 
-`ProviderPlanExecutor` accepts a `MetadataRoute` and requested depth, then asks the primary provider integration layer for canonical candidates.
+`ProviderPlanExecutor` accepts a `MetadataRoute` and requested depth, then asks the primary provider integration layer for canonical candidates. All downstream logic must use `route.mediaKind`, not the original request `ContentType`, when selecting provider behavior. After routing, `ContentType` MUST NOT be used for provider decisions.
 
 Required primary plan mapping:
 
 - TMDB movie `DETAIL_CORE` uses `tmdb.movie.core`.
 - TMDB media and secondary depths use videos, reviews, and recommendations only when requested.
-- TVDB series `DETAIL_CORE` uses `tvdb.series.extended` plus optional translation.
+- TVDB series `DETAIL_CORE` uses `tvdb.series.extended`. `tvdb.series.translation` runs only when the requested language differs from the default/base language and is not required for identity resolution.
 - TVDB season depth uses `tvdb.series.episodes.*`.
 - Kitsu anime `DETAIL_CORE` uses `kitsu.anime.core`.
 - Kitsu advanced anime detail uses episodes, castings, staff, productions, and relationships.
 
 Every primary plan must reference an IntegrationRuntime-covered `apiShapeId`. Missing runtime coverage is a failing test, not a warning.
 
+## Addon-First Rendering Contract
+
+Addon metadata is always used for first render:
+
+```text
+Catalog response
+    -> render MetaPreview immediately
+    -> do not block first paint on MetadataRouter
+
+Visible item or detail request
+    -> call MetadataRouter
+    -> fetch canonical metadata through provider plans
+
+Canonical success
+    -> replace primary-owned fields through FieldResolver
+
+Canonical failure
+    -> keep addon-rendered fields
+```
+
+Primary fields are replaced only by the selected primary provider. Secondary fields are merged only through resolver-owned fields.
+
+## Anime Identity Stores
+
+AnimeIdentityIndex:
+
+```text
+source: packaged Fribb dataset
+mutability: immutable during app run
+network: none
+responsibility: MAL/AniList/AniDB-to-Kitsu mapping and IMDb-anime detection
+allowed input schemes: MAL, AniList, AniDB, IMDb
+forbidden input schemes: TMDB, TVDB
+```
+
+IdMappingStore:
+
+```text
+source: runtime discoveries and persisted local mappings
+mutability: persistent and small
+network: none during route decision
+responsibility: high-confidence previously observed mappings
+```
+
+IdMappingStore keys use `(sourceScheme, sourceId)` rather than raw id strings so IMDb, MAL, AniList, AniDB, TMDB, and TVDB identifiers cannot collide and multiple source ids can point to the same Kitsu id.
+
+IdMappingStore TTL semantics:
+
+```text
+overwrite priority: LOCAL > ROUTER_OBSERVED > FRIBB > NEGATIVE
+LOCAL mappings: permanent
+FRIBB mappings: permanent
+ROUTER_OBSERVED mappings: permanent
+NEGATIVE mappings: 30 day TTL
+```
+
+The resolution chain is:
+
+```text
+explicit anime ids:
+    kitsu direct
+    MAL/AniList/AniDB -> AnimeIdentityIndex -> persist Fribb hit to IdMappingStore -> fallback to IdMappingStore if needed -> item.type fallback
+
+IMDb ids:
+    1. IdMappingStore for runtime-learned mappings
+    2. AnimeIdentityIndex for static Fribb dataset fallback, persisted back into IdMappingStore on hit
+    3. item.type fallback
+
+TMDB/TVDB provider-native ids:
+    route directly only when prefix agrees with item.type
+    otherwise emit ROUTING_ID_TYPE_CONFLICT, keep targetId as the original parentId, mark it as requiring identity resolution, and use explicit item-type fallback policy
+```
+
+ProviderPlanExecutor must not build provider calls for routes whose target id still requires identity resolution.
+
+Identity resolution is performed ONLY inside provider integration adapters or dedicated identity helper services before any IntegrationRuntime call is built. MetadataRouter and ProviderPlanExecutor MUST NOT resolve provider-native IDs.
+
+## Engineer Misreadings To Avoid
+
+- Fribb is not optional for correctness. It is required for static MAL/AniList/AniDB mapping and IMDb-anime detection when no runtime-learned mapping exists.
+- Addon metadata is not discarded. It is the first-render UI baseline; canonical metadata is a replacement layer when available.
+- Provider-native ids are not always safe. `tmdb:{id}` with `series` or `tvdb:{id}` with `movie` is a routing conflict, not a provider-ready id.
+- FieldResolver is mandatory. Provider candidates and secondary resolvers must not merge user-visible truth directly.
+
 ## Resolver Orchestration
 
 `ResolverOrchestrator` runs secondary resolvers only for depths that need them:
 
-- `PREVIEW`: addon metadata only, plus optional cached artwork/rating.
+- `PREVIEW`: addon metadata only. Initial row rendering must not execute MetadataRouter or block on routing/mapping; routing is deferred until an item becomes visible, a detail screen opens, playback starts, or enrichment is explicitly requested.
 - `DETAIL_CORE`: primary provider plus cheap or cached rating/artwork.
 - `DETAIL_MEDIA`: trailers and artwork media.
 - `DETAIL_SECONDARY`: reviews, recommendations, related titles, and advanced anime detail.
@@ -167,6 +296,7 @@ At playback start, the system persists:
 - `parentId`
 - provider route
 - click-time addon `HomeDisplayMetadata`
+- routing policy version
 
 At Continue Watching render, the merge order is:
 
@@ -176,9 +306,13 @@ canonical refresh, if available
 → existing persisted fallback
 ```
 
-Continue Watching must not re-decide Crunchyroll-style anime as TVDB, and must not lose the exact title/poster/description the user saw when playback started.
+Continue Watching must not re-decide a previously mapped anime route as TVDB, and must not lose the exact title/poster/description the user saw when playback started.
 
 Existing `WatchProgress` rows are backfilled by computing `parentId` and routing once, then persisting the result so future reads do not re-route repeatedly.
+
+If a stored Continue Watching route has an older routing policy version, the system may reroute that entry once and then persist the current version.
+
+Any change to routing precedence, AnimeIdentityIndex behavior, or IdMappingStore semantics must bump the current routing policy version.
 
 ## Migration
 
@@ -213,9 +347,10 @@ IntegrationRuntime
 ## Acceptance Criteria
 
 - Home and catalog rows render immediately from addon metadata.
-- Crunchyroll `tt...` anime with catalog anime hint routes to Kitsu.
-- Anime id prefixes route to Kitsu regardless of catalog source.
-- Fribb/id-mapping catches anime when catalog hint is absent.
+- `kitsu:` row-item ids route directly to Kitsu without Fribb lookup.
+- `mal:`, `anilist:`, and `anidb:` row-item ids resolve to Kitsu through AnimeIdentityIndex / Fribb.
+- Neutral IMDb ids route to Kitsu only through IdMappingStore or AnimeIdentityIndex / Fribb.
+- TMDB and TVDB provider-native ids route directly only when the prefix agrees with `item.type`; mismatches record `ROUTING_ID_TYPE_CONFLICT`.
 - Disney mixed rows use per-item `type`, not catalog manifest type.
 - Primary plans reference IntegrationRuntime-covered `apiShapeId`s.
 - Secondary resolvers cannot overwrite primary-owned fields.

@@ -2,15 +2,21 @@
 
 ## 1. Routing And Identity Gate
 
+- [ ] Add input-contract tests proving only item `id` and item `type` are routing authority.
 - [ ] Add request normalization and `parentIdOf()` behavior.
 - [ ] Add `MetadataRouter` route result model with trace evidence.
-- [ ] Add `IdMappingStore` and mapping source semantics.
-- [ ] Seed or consult Fribb/anime identity data after prefix and catalog-hint checks.
-- [ ] Add tests for anime prefix, catalog hint, Fribb/id-mapping, item-type fallback, Disney mixed rows, and episode parent normalization.
+- [ ] Add `IdMappingStore` with `(sourceScheme, sourceId)` keying, mapping source semantics, persist-enforced overwrite priority, and Fribb-hit persistence.
+- [ ] Add AnimeIdentityIndex / Fribb lookup for MAL, AniList, AniDB, and IMDb anime detection.
+- [ ] Add tests for `kitsu:` direct routing, MAL/AniList/AniDB-to-Kitsu mapping, IMDb local/Fribb anime mapping, provider-native TMDB/TVDB direct routing, provider-native conflict tracing, forbidden catalog-label routing, item-type fallback, Disney mixed rows, and episode parent normalization.
+- [ ] Add tests proving AnimeIdentityIndex rejects TMDB/TVDB ids and MetadataRouter rejects `PREVIEW` requests.
 
 ## 2. Primary Plan Execution Gate
 
 - [ ] Add `ProviderPlanExecutor`.
+- [ ] Add guard refusing to build provider calls while `targetIdRequiresIdentityResolution` is true.
+- [ ] Add provider-adapter or identity-helper path that resolves `targetIdRequiresIdentityResolution` before IntegrationRuntime execution.
+- [ ] Add tests proving ProviderPlanExecutor uses `route.mediaKind`, not original request `ContentType`.
+- [ ] Add tests proving TVDB translation is scheduled only when requested language differs from default/base language.
 - [ ] Map TMDB movie and media depths to runtime-covered TMDB `apiShapeId`s.
 - [ ] Map TVDB series, translation, season, episode, and update paths to runtime-covered TVDB `apiShapeId`s.
 - [ ] Map Kitsu core, episodes, castings, staff, productions, relationships, and search paths to runtime-covered Kitsu `apiShapeId`s.
@@ -40,6 +46,8 @@
 ## 6. Continue Watching Gate
 
 - [ ] Persist `parentId` and provider route at playback start.
+- [ ] Persist routing policy version at playback start and reroute stale entries once.
+- [ ] Document and enforce that routing precedence, AnimeIdentityIndex behavior, or IdMappingStore semantic changes bump the routing policy version.
 - [ ] Persist click-time addon `HomeDisplayMetadata`.
 - [ ] Backfill existing `WatchProgress` rows deterministically.
 - [ ] Update Continue Watching render merge order.

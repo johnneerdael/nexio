@@ -9,10 +9,12 @@ The IntegrationRuntime control plane is now auditable enough to support a higher
 ## What Changes
 
 - Add a deterministic `MetadataRouter` with route precedence:
-  1. anime id prefix
-  2. catalog/source anime hint
-  3. `IdMappingStore` / Fribb
-  4. per-item type fallback
+  1. `kitsu:` prefix routes directly to Kitsu.
+  2. `mal:`, `anilist:`, and `anidb:` prefixes map to Kitsu through AnimeIdentityIndex / Fribb or local mapping.
+  3. IMDb ids (`tt...` / `imdb:...`) map to Kitsu only through `IdMappingStore` or AnimeIdentityIndex / Fribb.
+  4. Provider-native ids route directly only when prefix agrees with item type (`tmdb:` + movie, `tvdb:` + series).
+  5. Provider-native prefix/type conflicts emit `ROUTING_ID_TYPE_CONFLICT`, keep the original parent id as target evidence, and use explicit item-type fallback.
+  6. Per-item type fallback routes `series` to TVDB and `movie` to TMDB.
 - Add request normalization and parent-id extraction for movie, series, anime, and episode ids.
 - Add provider plan execution for TMDB, TVDB, and Kitsu primary metadata routes.
 - Add resolver orchestration for ratings, artwork, reviews, trailers, skip segments, tracking, recommendations, and organization/person enrichment.
@@ -25,7 +27,8 @@ The IntegrationRuntime control plane is now auditable enough to support a higher
 ## Impact
 
 - Home/discover rendering remains addon-first and fast.
-- Crunchyroll-style `tt...` anime can route to Kitsu through catalog hints before Fribb fallback.
+- Initial catalog preview rendering does not execute MetadataRouter for every row item.
+- Anime `tt...` ids can route to Kitsu only through deterministic IdMappingStore or AnimeIdentityIndex / Fribb evidence.
 - Disney mixed rows use per-item type rather than catalog manifest type.
 - Secondary providers stop competing with primary-owned metadata fields.
 - Artwork policy changes update selected posters without invalidating primary provider metadata.

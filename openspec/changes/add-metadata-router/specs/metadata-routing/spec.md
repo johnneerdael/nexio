@@ -1,37 +1,118 @@
 ## ADDED Requirements
 
+### Requirement: Metadata routing uses only canonical addon item inputs
+The system SHALL use only addon item `id` and addon item `type` as routing authority.
+
+#### Scenario: Item id and item type are canonical routing inputs
+- **GIVEN** a catalog item with `id` and `type`
+- **WHEN** MetadataRouter routes the item
+- **THEN** the router uses item `id` as the canonical identifier
+- **AND** the router uses item `type` as the authoritative media type
+
+#### Scenario: Catalog-level fields are ignored for routing
+- **GIVEN** a catalog item with addon id, catalog id, catalog type, source name, genres, anime type, links, popularity, or trend fields
+- **WHEN** MetadataRouter routes the item
+- **THEN** those fields are retained only for trace, rendering, harvest, or diagnostics
+- **AND** none of those fields can select Kitsu, TMDB, or TVDB as the primary provider
+
+#### Scenario: Addon metadata is render-only for first paint
+- **GIVEN** a catalog item with name, poster, background, description, release info, runtime, rating, or genres
+- **WHEN** the catalog row renders
+- **THEN** those fields may render immediately
+- **AND** those fields do not affect provider routing
+
 ### Requirement: Metadata routing uses deterministic provider precedence
 The system SHALL route every metadata request to one primary metadata provider using deterministic precedence.
 
-#### Scenario: Anime prefix routes to Kitsu
-- **GIVEN** a metadata request whose normalized parent id starts with `kitsu:`, `mal:`, `anilist:`, or `anidb:`
+#### Scenario: Kitsu prefix routes directly to Kitsu
+- **GIVEN** a metadata request whose normalized parent id starts with `kitsu:`
 - **WHEN** MetadataRouter routes the request
 - **THEN** the primary provider is Kitsu
-- **AND** the route trace records an anime-prefix decision reason
+- **AND** the target Kitsu id is the parsed `kitsu:` id
+- **AND** AnimeIdentityIndex / Fribb is not consulted
+- **AND** the route trace records a direct Kitsu-prefix decision reason
 
-#### Scenario: Catalog anime hint routes plain IMDb anime to Kitsu
-- **GIVEN** a metadata request with a plain IMDb id such as `tt12343534`
-- **AND** the source context identifies the item as coming from an anime or Crunchyroll-style catalog source
+#### Scenario: MAL AniList and AniDB prefixes map to Kitsu
+- **GIVEN** a metadata request whose normalized parent id starts with `mal:`, `anilist:`, or `anidb:`
+- **AND** AnimeIdentityIndex / Fribb maps that id to a Kitsu id
 - **WHEN** MetadataRouter routes the request
 - **THEN** the primary provider is Kitsu
-- **AND** the route trace records a catalog-source anime hint decision reason
+- **AND** the target Kitsu id is the mapped Kitsu id
+- **AND** the route trace records an anime-prefix-mapped decision reason
 
-#### Scenario: Fribb or id mapping routes anime when catalog hint is absent
+#### Scenario: IMDb id mapping routes anime to Kitsu
 - **GIVEN** a metadata request without an anime prefix
-- **AND** the source context does not provide an anime catalog hint
-- **AND** IdMappingStore or Fribb resolves the normalized parent id to Kitsu
+- **AND** the normalized parent id is an IMDb id
+- **AND** IdMappingStore or AnimeIdentityIndex / Fribb resolves the normalized parent id to Kitsu
 - **WHEN** MetadataRouter routes the request
 - **THEN** the primary provider is Kitsu
 - **AND** the positive mapping is persisted with source evidence
 
+#### Scenario: Catalog labels do not route neutral ids to Kitsu
+- **GIVEN** a metadata request with a neutral IMDb id such as `tt12343534`
+- **AND** the source context includes anime words, Crunchyroll source names, anime genres, or anime catalog names
+- **AND** IdMappingStore and AnimeIdentityIndex / Fribb do not map the id to Kitsu
+- **WHEN** MetadataRouter routes the request
+- **THEN** the source context is retained only as trace/debug context
+- **AND** the router falls back by the per-item type
+
+#### Scenario: Provider-native TMDB id agrees with movie type
+- **GIVEN** a metadata request whose normalized parent id starts with `tmdb:`
+- **AND** the item type is `movie`
+- **WHEN** MetadataRouter routes the request
+- **THEN** the primary provider is TMDB
+- **AND** AnimeIdentityIndex / Fribb is not consulted
+
+#### Scenario: Provider-native TVDB id agrees with series type
+- **GIVEN** a metadata request whose normalized parent id starts with `tvdb:`
+- **AND** the item type is `series`
+- **WHEN** MetadataRouter routes the request
+- **THEN** the primary provider is TVDB
+- **AND** AnimeIdentityIndex / Fribb is not consulted
+
+#### Scenario: Provider-native prefix conflicts with item type
+- **GIVEN** a metadata request whose normalized parent id starts with `tmdb:` and item type is `series`
+- **OR** a metadata request whose normalized parent id starts with `tvdb:` and item type is `movie`
+- **WHEN** MetadataRouter routes the request
+- **THEN** the route trace records `ROUTING_ID_TYPE_CONFLICT`
+- **AND** the router does not use AnimeIdentityIndex / Fribb to guess a Kitsu route
+- **AND** the fallback route keeps the original normalized parent id as the target id
+- **AND** the route marks the target id as requiring downstream identity resolution before provider calls
+- **AND** the router falls back by explicit item-type policy
+
+#### Scenario: Static Fribb hit is persisted to IdMappingStore
+- **GIVEN** an IMDb id is absent from IdMappingStore
+- **AND** AnimeIdentityIndex / Fribb maps that IMDb id to Kitsu
+- **WHEN** MetadataRouter routes the request
+- **THEN** the router persists that mapping into IdMappingStore with source `FRIBB`
+- **AND** later requests can resolve through IdMappingStore before consulting AnimeIdentityIndex / Fribb
+
+#### Scenario: AnimeIdentityIndex rejects provider-native ids
+- **GIVEN** a TMDB or TVDB provider-native id
+- **WHEN** MetadataRouter routes the request
+- **THEN** AnimeIdentityIndex is not called with that id
+- **AND** provider-native routing or conflict handling decides the route
+
+#### Scenario: Negative mappings expire
+- **GIVEN** IdMappingStore records a negative mapping
+- **WHEN** 30 days have elapsed
+- **THEN** the negative mapping is expired
+- **AND** permanent LOCAL, FRIBB, and ROUTER_OBSERVED mappings are not expired by that TTL
+
+#### Scenario: IdMappingStore overwrite priority is deterministic
+- **GIVEN** multiple mappings exist for the same source id
+- **WHEN** IdMappingStore resolves that source id
+- **THEN** mappings are preferred in priority order LOCAL, ROUTER_OBSERVED, FRIBB, NEGATIVE
+- **AND** `IdMappingStore.persist()` does not allow a lower-priority mapping to overwrite a higher-priority mapping
+
 #### Scenario: Item type fallback routes live-action series to TVDB
-- **GIVEN** a metadata request without anime prefix, anime catalog hint, or Kitsu id mapping
+- **GIVEN** a metadata request without Kitsu prefix, mapped anime prefix, or neutral-id Kitsu mapping
 - **AND** the item type is `series`
 - **WHEN** MetadataRouter routes the request
 - **THEN** the primary provider is TVDB
 
 #### Scenario: Item type fallback routes live-action movie to TMDB
-- **GIVEN** a metadata request without anime prefix, anime catalog hint, or Kitsu id mapping
+- **GIVEN** a metadata request without Kitsu prefix, mapped anime prefix, or neutral-id Kitsu mapping
 - **AND** the item type is `movie`
 - **WHEN** MetadataRouter routes the request
 - **THEN** the primary provider is TMDB
@@ -95,6 +176,34 @@ The system SHALL execute primary metadata plans only through IntegrationRuntime-
 - **THEN** the plan references `kitsu.anime.core`
 - **AND** the referenced shape is active and runtime-covered by the IntegrationRuntime audit
 
+#### Scenario: Provider plan waits for unresolved provider-native conflict identity
+- **GIVEN** a MetadataRoute with `targetIdRequiresIdentityResolution`
+- **WHEN** ProviderPlanExecutor builds the plan
+- **THEN** the executor refuses to build provider API calls
+- **AND** identity resolution must convert the target to a provider-native id first
+- **AND** provider integration adapters or their identity helpers own that identity resolution before IntegrationRuntime execution
+- **AND** MetadataRouter and ProviderPlanExecutor do not perform provider-native identity conversion
+
+#### Scenario: Provider plan uses route media kind
+- **GIVEN** a MetadataRoute whose original request content type differs from its resolved route media kind
+- **WHEN** ProviderPlanExecutor builds the plan
+- **THEN** the executor selects provider behavior from `route.mediaKind`
+- **AND** the executor does not use the original request content type for plan selection
+- **AND** downstream resolver logic also uses `route.mediaKind` for provider behavior after routing
+
+#### Scenario: ContentType is not used for provider decisions after routing
+- **GIVEN** a MetadataRoute exists
+- **WHEN** downstream planning or resolver code selects provider behavior
+- **THEN** it uses `route.mediaKind`
+- **AND** it does not use the original request `ContentType`
+
+#### Scenario: TVDB translation is language-gated
+- **GIVEN** a MetadataRoute whose primary provider is TVDB
+- **AND** the requested language is the default or base language
+- **WHEN** ProviderPlanExecutor builds the plan
+- **THEN** `tvdb.series.translation` is not required for identity resolution
+- **AND** translation work is scheduled only when the requested language differs from the default or base language
+
 ### Requirement: Secondary resolvers run only at allowed depths
 The system SHALL run secondary resolvers according to request depth.
 
@@ -103,6 +212,19 @@ The system SHALL run secondary resolvers according to request depth.
 - **WHEN** ResolverOrchestrator evaluates secondary work
 - **THEN** addon metadata is sufficient for initial output
 - **AND** secondary network resolvers are not required
+
+#### Scenario: Initial preview render does not execute MetadataRouter
+- **GIVEN** a catalog row with many addon items
+- **WHEN** the row first renders
+- **THEN** the UI renders addon item metadata directly
+- **AND** MetadataRouter is not executed for every row item
+- **AND** routing is deferred until an item becomes visible, detail opens, playback starts, or enrichment is explicitly requested
+
+#### Scenario: MetadataRouter rejects preview requests
+- **GIVEN** a metadata request at `PREVIEW` depth
+- **WHEN** code calls MetadataRouter directly
+- **THEN** MetadataRouter rejects the request
+- **AND** callers must use the facade preview path that returns addon metadata without routing
 
 #### Scenario: Skip resolver does not run during detail core
 - **GIVEN** a metadata request at `DETAIL_CORE` depth
@@ -152,9 +274,21 @@ The system SHALL persist route and click-time addon display metadata at playback
 - **THEN** the entry records the normalized parent id
 - **AND** the entry records the selected primary provider route
 - **AND** click-time addon HomeDisplayMetadata is persisted for fallback rendering
+- **AND** the current routing policy version is persisted
 
-#### Scenario: Continue Watching reuses Kitsu route for Crunchyroll anime
-- **GIVEN** a Crunchyroll-style anime episode with a plain IMDb id was routed to Kitsu at playback start
+#### Scenario: Continue Watching reroutes stale policy version once
+- **GIVEN** a Continue Watching entry has a stored routing policy version older than the current routing policy version
+- **WHEN** Continue Watching prepares that item
+- **THEN** the item may be rerouted once
+- **AND** the stored route is updated with the current routing policy version
+
+#### Scenario: Routing rule changes require version bump
+- **GIVEN** routing precedence, AnimeIdentityIndex behavior, or IdMappingStore semantics change
+- **WHEN** the change is implemented
+- **THEN** the current routing policy version is bumped
+
+#### Scenario: Continue Watching reuses mapped Kitsu route for anime
+- **GIVEN** an anime episode with a plain IMDb id was routed to Kitsu at playback start through IdMappingStore or AnimeIdentityIndex / Fribb
 - **WHEN** Continue Watching renders that item later
 - **THEN** the stored Kitsu route is reused
 - **AND** the item is not re-routed to TVDB from the partial episode id
