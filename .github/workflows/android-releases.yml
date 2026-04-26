@@ -22,6 +22,9 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Initialize nested submodules
+        run: git submodule update --init --recursive
+
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
@@ -98,6 +101,9 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+
+      - name: Initialize nested submodules
+        run: git submodule update --init --recursive
 
       - name: Setup JDK
         uses: actions/setup-java@v4
