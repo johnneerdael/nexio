@@ -14,7 +14,6 @@ import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.first
 internal suspend fun overlayProviderLocalizedMetadataForHome(
     item: MetaPreview,
     fallbackContentId: String? = null,
-    tvMetadataRouter: ProviderMetadataRouter,
     metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     tmdbSettingsDataStore: TmdbSettingsDataStore,
     tmdbService: TmdbService,
@@ -38,10 +36,19 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
     onLog: (String, String?) -> Unit = { _, _ -> }
 ): MetaPreview {
     return try {
-        metadataRouterFacade.resolveHomeRequest(item = item, depth = MetadataDepth.PREVIEW)
         val enrichment = if (item.type.isHomeProviderTvContent()) {
-            val decision = tvMetadataRouter.fetchEnrichment(
-                TvMetadataRequest(
+            val decision = metadataRouterFacade.fetchTvEnrichment(
+                metadataRequest = MetadataRequest(
+                    contentId = item.id,
+                    contentType = item.type,
+                    sourceContext = MetadataSourceContext(
+                        itemType = item.apiType,
+                        addonMetadata = item.toHomeDisplayMetadata()
+                    ),
+                    language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
+                    depth = MetadataDepth.DETAIL_CORE
+                ),
+                tvRequest = TvMetadataRequest(
                     contentId = item.id,
                     fallbackContentId = fallbackContentId,
                     contentType = item.type,

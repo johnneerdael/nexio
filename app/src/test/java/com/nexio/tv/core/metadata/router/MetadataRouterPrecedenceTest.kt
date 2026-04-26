@@ -196,6 +196,60 @@ class MetadataRouterPrecedenceTest {
     }
 
     @Test
+    fun `mal prefix uses local mapping before fribb`() = runTest {
+        val animeIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.MAL, "21", "fribb-7442"))
+        )
+        val sourceId = ParsedMetadataId(AnimeIdScheme.MAL, "21", "mal:21")
+        val mappingStore = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = sourceId,
+                    provider = MetadataPrimaryProvider.KITSU,
+                    providerId = "local-7442",
+                    source = IdMappingSource.LOCAL,
+                    evidence = "manual override"
+                )
+            )
+        )
+        val router = router(animeIndex = animeIndex, mappingStore = mappingStore)
+
+        val route = router.route(request("mal:21", ContentType.SERIES))
+
+        assertEquals(MetadataPrimaryProvider.KITSU, route.provider)
+        assertEquals(MetadataMediaKind.ANIME, route.mediaKind)
+        assertEquals("kitsu:local-7442", route.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals(MetadataDecisionReason.ANIME_PREFIX_MAPPED_TO_KITSU, route.reason)
+        assertTrue("Fribb must not be consulted when durable mapping exists", animeIndex.lookups.isEmpty())
+    }
+
+    @Test
+    fun `anilist prefix uses router observed mapping before fribb`() = runTest {
+        val animeIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.ANILIST, "16498", "fribb-100"))
+        )
+        val sourceId = ParsedMetadataId(AnimeIdScheme.ANILIST, "16498", "anilist:16498")
+        val mappingStore = InMemoryIdMappingStore(
+            initialMappings = listOf(
+                IdMapping(
+                    sourceId = sourceId,
+                    provider = MetadataPrimaryProvider.KITSU,
+                    providerId = "observed-100",
+                    source = IdMappingSource.ROUTER_OBSERVED,
+                    evidence = "runtime discovery"
+                )
+            )
+        )
+        val router = router(animeIndex = animeIndex, mappingStore = mappingStore)
+
+        val route = router.route(request("anilist:16498", ContentType.SERIES))
+
+        assertEquals(MetadataPrimaryProvider.KITSU, route.provider)
+        assertEquals("kitsu:observed-100", route.targetIds[MetadataPrimaryProvider.KITSU])
+        assertTrue("Fribb must not be consulted when router-observed mapping exists", animeIndex.lookups.isEmpty())
+    }
+
+    @Test
     fun `router rejects preview depth`() {
         val router = router()
 
