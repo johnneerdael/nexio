@@ -1,23 +1,35 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
+import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRequestNormalizer
+import com.nexio.tv.core.metadata.router.MetadataRouter
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
+import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.flow.first
 
 internal suspend fun overlayProviderLocalizedMetadataForHome(
     item: MetaPreview,
     fallbackContentId: String? = null,
-    tvMetadataRouter: TvMetadataRouter,
+    tvMetadataRouter: ProviderMetadataRouter,
+    metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     tmdbSettingsDataStore: TmdbSettingsDataStore,
     tmdbService: TmdbService,
     tmdbMetadataService: TmdbMetadataService,
@@ -25,6 +37,7 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
     onLog: (String, String?) -> Unit = { _, _ -> }
 ): MetaPreview {
     return try {
+        metadataRouterFacade.resolveHomeRequest(item = item, depth = MetadataDepth.PREVIEW)
         val enrichment = if (item.type.isHomeProviderTvContent()) {
             val decision = tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(
@@ -54,6 +67,57 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
     } catch (_: Throwable) {
         item
     }
+}
+
+fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFacade =
+    MetadataRouterFacade(
+        router = MetadataRouter(
+            normalizer = MetadataRequestNormalizer(),
+            animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+            idMappingStore = InMemoryIdMappingStore()
+        ),
+        providerPlanExecutor = ProviderPlanExecutor(),
+        resolverOrchestrator = ResolverOrchestrator()
+    )
+
+internal suspend fun MetadataRouterFacade.resolveHomeRequest(
+    item: MetaPreview,
+    depth: MetadataDepth,
+    language: String? = null,
+    seasonNumber: Int? = null
+) {
+    runCatching {
+        resolveRequest(
+            MetadataRequest(
+                contentId = item.id,
+                contentType = item.type,
+                sourceContext = MetadataSourceContext(
+                    itemType = item.apiType,
+                    addonMetadata = item.toHomeDisplayMetadata()
+                ),
+                language = language,
+                seasonNumber = seasonNumber,
+                depth = depth
+            )
+        )
+    }
+}
+
+internal fun HomeViewModel.metadataRouterFacadeOrNull(): MetadataRouterFacade? =
+    runCatching { metadataRouterFacade }.getOrNull()
+
+internal suspend fun HomeViewModel.resolveHomeRequestIfAvailable(
+    item: MetaPreview,
+    depth: MetadataDepth,
+    language: String? = null,
+    seasonNumber: Int? = null
+) {
+    metadataRouterFacadeOrNull()?.resolveHomeRequest(
+        item = item,
+        depth = depth,
+        language = language,
+        seasonNumber = seasonNumber
+    )
 }
 
 private suspend fun resolveHomeProviderTmdbId(

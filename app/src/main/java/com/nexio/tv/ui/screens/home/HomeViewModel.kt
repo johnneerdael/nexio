@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
@@ -14,8 +15,8 @@ import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
-import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.KitsuCatalogPreferences
@@ -109,7 +110,8 @@ class HomeViewModel @Inject constructor(
     internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
-    internal val tvMetadataRouter: TvMetadataRouter,
+    internal val tvMetadataRouter: ProviderMetadataRouter,
+    internal val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,

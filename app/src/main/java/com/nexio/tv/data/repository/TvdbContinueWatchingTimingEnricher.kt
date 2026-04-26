@@ -1,24 +1,39 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
 import com.nexio.tv.core.tvdb.TvdbSeriesTiming
 import com.nexio.tv.domain.model.ContentType
 import javax.inject.Inject
 
 class TvdbContinueWatchingTimingEnricher @Inject constructor(
-    private val tvMetadataRouter: TvMetadataRouter?,
+    private val providerMetadataRouter: ProviderMetadataRouter?,
+    private val metadataRouterFacade: MetadataRouterFacade?,
     private val availabilityCalculator: TvdbAirAvailabilityCalculator
 ) {
+    constructor(
+        providerMetadataRouter: ProviderMetadataRouter?,
+        availabilityCalculator: TvdbAirAvailabilityCalculator
+    ) : this(
+        providerMetadataRouter = providerMetadataRouter,
+        metadataRouterFacade = null,
+        availabilityCalculator = availabilityCalculator
+    )
+
     constructor() : this(
-        tvMetadataRouter = null,
+        providerMetadataRouter = null,
+        metadataRouterFacade = null,
         availabilityCalculator = TvdbAirAvailabilityCalculator()
     )
 
     suspend fun enrich(entries: List<TrackingNextUpEntry>): List<TrackingNextUpEntry> {
-        val tvMetadataRouter = this.tvMetadataRouter ?: return entries
+        val providerMetadataRouter = this.providerMetadataRouter ?: return entries
         return entries.map { entry ->
             if (!entry.contentType.isSeriesLike()) {
                 return@map entry
@@ -31,8 +46,9 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
                     contentType = ContentType.SERIES,
                     seasonNumbers = listOf(entry.season)
                 )
-                val seriesDecision = tvMetadataRouter.fetchEnrichment(request)
-                val episodeDecision = tvMetadataRouter.fetchEpisodeEnrichment(request)
+                metadataRouterFacade?.resolveTimingSidecar(entry)
+                val seriesDecision = providerMetadataRouter.fetchEnrichment(request)
+                val episodeDecision = providerMetadataRouter.fetchEpisodeEnrichment(request)
                 val series = seriesDecision.value
                 val episodeAiredDate = episodeDecision.value
                     ?.get(entry.season to entry.episode)
@@ -60,6 +76,20 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
             }.onFailure {
                 Log.w(TAG, "exact_air_time_diagnostic reason=missing_timezone_policy contentId=${entry.contentId}")
             }.getOrElse { entry }
+        }
+    }
+
+    private suspend fun MetadataRouterFacade.resolveTimingSidecar(entry: TrackingNextUpEntry) {
+        runCatching {
+            resolveRequest(
+                MetadataRequest(
+                    contentId = entry.contentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = entry.contentType),
+                    seasonNumber = entry.season,
+                    depth = MetadataDepth.SEASON
+                )
+            )
         }
     }
 

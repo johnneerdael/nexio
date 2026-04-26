@@ -2,6 +2,9 @@ package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.domain.model.ContentType
@@ -58,6 +61,18 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
         ?.takeUnless { it == lookupContentId }
     val language = AppLocaleResolver.resolveTmdbLanguageTag(context)
 
+    runCatching {
+        metadataRouterFacade.resolveRequest(
+            MetadataRequest(
+                contentId = lookupContentId,
+                contentType = lookupContentType,
+                sourceContext = MetadataSourceContext(itemType = lookupContentType.toApiString()),
+                language = language,
+                depth = MetadataDepth.PLAYER
+            )
+        )
+    }
+
     val enrichment = tvMetadataRouter.fetchEnrichment(
         TvMetadataRequest(
             contentId = lookupContentId,
@@ -70,6 +85,18 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
         val season = currentSeason
         val episode = currentEpisode
         if (season != null && episode != null) {
+            runCatching {
+                metadataRouterFacade.resolveRequest(
+                    MetadataRequest(
+                        contentId = lookupContentId,
+                        contentType = lookupContentType,
+                        sourceContext = MetadataSourceContext(itemType = lookupContentType.toApiString()),
+                        language = language,
+                        seasonNumber = season,
+                        depth = MetadataDepth.SEASON
+                    )
+                )
+            }
             tvMetadataRouter.fetchEpisodeEnrichment(
                 TvMetadataRequest(
                     contentId = lookupContentId,
