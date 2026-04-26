@@ -5,6 +5,20 @@ on:
     tags:
       - 'v*'
       - 'beta-*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release channel to publish'
+        required: true
+        type: choice
+        default: beta
+        options:
+          - stable
+          - beta
+      release_tag:
+        description: 'Tag to use for stable publish (required when manually triggering stable)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -12,7 +26,7 @@ permissions:
 jobs:
   stable-release:
     name: Build and publish stable release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable')
     runs-on: ubuntu-latest
 
     steps:
@@ -72,6 +86,9 @@ jobs:
 
       - name: Prepare stable APK filename
         id: stable_asset
+        env:
+          INPUT_TAG: ${{ inputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
@@ -81,10 +98,16 @@ jobs:
             exit 1
           fi
 
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && { [ "$TAG" = "main" ] || [ -z "$TAG" ]; }; then
+            echo "Release tag is required for manual stable runs. Set workflow input release_tag." >&2
+            exit 1
+          fi
+
           mkdir -p app/build/outputs/apk/release
           cp "$APK_PATH" app/build/outputs/apk/release/nexio_stable.apk
           echo "path=app/build/outputs/apk/release/nexio_stable.apk" >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Publish/update stable release
         env:
@@ -102,7 +125,7 @@ jobs:
 
   beta-release:
     name: Build and publish beta release
-    if: startsWith(github.ref, 'refs/tags/beta-')
+    if: startsWith(github.ref, 'refs/tags/beta-') || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'beta')
     runs-on: ubuntu-latest
 
     steps:
