@@ -11,16 +11,16 @@ class MetadataCacheKeysTest {
     @Test
     fun `router decision key includes parent id source context and policy version`() {
         val key = cacheKeys.routerDecisionKey(
-            parentId = "tt0388629",
+            parentId = " tt123 ",
             sourceContext = MetadataSourceContext(
-                addonId = "cinemeta",
-                catalogId = "anime-series"
+                addonId = "crunchyroll",
+                catalogId = "anime-popular"
             ),
-            routingPolicyVersion = "router-v3"
+            routingPolicyVersion = "3"
         )
 
         assertEquals(
-            "metadata:router-decision:parent=tt0388629:addon=cinemeta:catalog=anime-series:routingPolicy=router-v3",
+            "router:v3:parent=tt123:addon=crunchyroll:catalog=anime-popular",
             key
         )
     }

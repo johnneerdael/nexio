@@ -17,8 +17,8 @@ class MetadataCacheKeys @Inject constructor() {
         sourceContext: MetadataSourceContext,
         routingPolicyVersion: String
     ): String =
-        "metadata:router-decision:parent=$parentId:addon=${sourceContext.addonId.keyPart()}" +
-            ":catalog=${sourceContext.catalogId.keyPart()}:routingPolicy=$routingPolicyVersion"
+        "router:v$routingPolicyVersion:parent=${parentId.trim()}" +
+            ":addon=${sourceContext.addonId.orEmpty()}:catalog=${sourceContext.catalogId.orEmpty()}"
 
     fun resolvedDocumentKey(
         route: MetadataRoute,
