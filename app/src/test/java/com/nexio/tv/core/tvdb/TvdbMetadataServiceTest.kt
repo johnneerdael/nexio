@@ -454,6 +454,87 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `fetch episode enrichment falls back to english translation when user locale missing`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord().copy(
+                            id = 3254641,
+                            name = "עולם רדיואקטיבי",
+                            overview = "Hebrew base overview"
+                        )
+                    )
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "nld", 0, 1, null, null)
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = emptyList())))
+        coEvery {
+            tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "nld")
+        } returns Response.error(404, "".toResponseBody("application/json".toMediaType()))
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = emptyList())))
+        coEvery {
+            tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "eng")
+        } returns Response.success(
+            TvdbTranslationResponse(
+                data = TvdbTranslationRecord(
+                    name = "Fightback",
+                    overview = "Tamar escapes from the Mossad and the IRGC.",
+                    language = "eng"
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "nl")
+
+        val episode = episodes[1 to 1]
+        assertNotNull(episode)
+        assertEquals("Fightback", episode?.title)
+        assertEquals("Tamar escapes from the Mossad and the IRGC.", episode?.overview)
+    }
+
+    @Test
+    fun `fetch episode enrichment skips english fallback when user locale already eng`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(episodeRecord().copy(id = 3254641, name = "עולם רדיואקטיבי", overview = "Hebrew"))
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = emptyList())))
+        coEvery {
+            tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "eng")
+        } returns Response.success(
+            TvdbTranslationResponse(data = TvdbTranslationRecord(name = "Fightback", overview = "English", language = "eng"))
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertEquals("Fightback", episodes[1 to 1]?.title)
+        coVerify(exactly = 1) { tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "eng") }
+        coVerify(exactly = 1) { tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null) }
+    }
+
+    @Test
     fun `fetch series translation overview hits TVDB even for english locale`() = runTest {
         val tvdbApi = mockk<TvdbApi>(relaxed = true)
         val service = tvdbService(tvdbApi)
