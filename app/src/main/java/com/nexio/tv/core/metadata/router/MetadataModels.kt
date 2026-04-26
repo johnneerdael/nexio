@@ -31,6 +31,70 @@ enum class ResolverType {
     ORGANIZATION_PERSON
 }
 
+enum class ResolvedField {
+    CANONICAL_ID,
+    TITLE,
+    OVERVIEW,
+    RELEASE_DATE,
+    RUNTIME,
+    GENRES,
+    AGE_RATING,
+    CAST,
+    CREW,
+    EPISODES,
+    POSTER,
+    BACKDROP,
+    LOGO,
+    RATING,
+    REVIEWS,
+    TRAILERS,
+    RECOMMENDATIONS,
+    TRACKING,
+    SKIP_SEGMENTS
+}
+
+enum class FieldOwner {
+    PRIMARY,
+    ARTWORK,
+    RATING,
+    REVIEWS,
+    TRAILERS,
+    RECOMMENDATIONS,
+    TRACKING,
+    SKIP_SEGMENTS,
+    ORGANIZATION_PERSON
+}
+
+data class FieldValue(
+    val value: Any,
+    val owner: FieldOwner
+)
+
+data class MetadataCandidate(
+    val provider: MetadataPrimaryProvider,
+    val resolverType: ResolverType? = null,
+    val fields: Map<ResolvedField, FieldValue>
+)
+
+data class IgnoredFieldOverwrite(
+    val field: ResolvedField,
+    val existingOwner: FieldOwner,
+    val attemptedOwner: FieldOwner,
+    val attemptedValue: Any
+)
+
+data class ResolvedMetadataDocument(
+    val canonicalId: String?,
+    val title: String?,
+    val overview: String?,
+    val poster: String?,
+    val backdrop: String?,
+    val logo: String?,
+    val rating: Any?,
+    val fieldOwners: Map<ResolvedField, FieldOwner>,
+    val ignoredOverwrites: List<IgnoredFieldOverwrite>
+)
+
 data class ResolverSchedule(
     val depth: MetadataDepth,
     val localResolvers: List<ResolverType>,
