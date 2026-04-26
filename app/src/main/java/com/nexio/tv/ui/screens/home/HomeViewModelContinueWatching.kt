@@ -148,6 +148,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 )
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
                     }
@@ -707,6 +709,8 @@ internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
                     traktUpNextItems = enrichedTraktItems
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
         }
