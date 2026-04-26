@@ -151,6 +151,12 @@ private val CLIENTS = listOf(
     )
 )
 
+internal fun lookupClientUserAgent(clientKey: String?): String? =
+    clientKey?.let { key -> CLIENTS.firstOrNull { it.key == key }?.userAgent }
+
+internal fun lookupClientUserAgentForTest(clientKey: String?): String? =
+    lookupClientUserAgent(clientKey)
+
 @Singleton
 class InAppYouTubeExtractor @Inject constructor() {
     private val gson = Gson()
@@ -364,10 +370,22 @@ class InAppYouTubeExtractor @Inject constructor() {
             progressiveUrl = bestProgressive?.url
         )
 
+        // The UA must match the client whose URL we'll actually play. If a manifest
+        // beat the progressive URL, the manifest's client wins; otherwise it's the
+        // progressive candidate's client. Adaptive video falls back last.
+        val resolvedClientKey = when {
+            combinedUrl != null && combinedUrl == bestManifest?.manifestUrl -> bestManifest.client
+            combinedUrl != null && combinedUrl == bestProgressive?.url -> bestProgressive.client
+            bestVideo != null -> bestVideo.client
+            else -> null
+        }
+        val resolvedUserAgent = lookupClientUserAgent(resolvedClientKey)
+
         val playbackSource = selectPreferredTrailerPlaybackSource(
             combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
             adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
-            adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) }
+            adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) },
+            userAgent = resolvedUserAgent
         ) ?: return null
 
         if (BuildConfig.DEBUG) {

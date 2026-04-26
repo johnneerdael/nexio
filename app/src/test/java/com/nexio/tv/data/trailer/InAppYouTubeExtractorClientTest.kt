@@ -47,4 +47,15 @@ class InAppYouTubeExtractorClientTest {
     fun `client list contains exactly ios then android`() {
         assertEquals(listOf("ios", "android"), CLIENTS_FOR_TEST.sortedBy { it.priority }.map { it.key })
     }
+
+    @Test
+    fun `lookupClientUserAgent returns null for unknown key`() {
+        assertEquals(null, lookupClientUserAgentForTest("does_not_exist"))
+    }
+
+    @Test
+    fun `lookupClientUserAgent returns iOS UA when key is ios`() {
+        val ios = CLIENTS_FOR_TEST.first { it.key == "ios" }
+        assertEquals(ios.userAgent, lookupClientUserAgentForTest("ios"))
+    }
 }
