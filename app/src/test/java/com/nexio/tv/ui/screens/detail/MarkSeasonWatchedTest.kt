@@ -28,6 +28,7 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -120,6 +121,7 @@ class MarkSeasonWatchedTest {
                 watchProgressRepository = watchProgressRepository
             )
             advanceUntilIdle()
+            clearMocks(tmdbMetadataService, answers = false, recordedCalls = true)
 
             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
             advanceUntilIdle()
@@ -157,6 +159,7 @@ class MarkSeasonWatchedTest {
                 watchProgressRepository = watchProgressRepository
             )
             advanceUntilIdle()
+            clearMocks(tmdbMetadataService, answers = false, recordedCalls = true)
 
             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
             advanceUntilIdle()

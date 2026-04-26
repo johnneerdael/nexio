@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import kotlinx.coroutines.test.runTest
@@ -152,6 +153,29 @@ class MetadataRouterFacadeTest {
         assertTrue(adapter.calls > 0)
     }
 
+    @Test
+    fun `facade season episode bridge returns provider plan episode metadata`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val result = facade(adapter).fetchTvSeasonEpisodes(
+            metadataRequest = MetadataRequest(
+                contentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 1,
+                depth = MetadataDepth.SEASON
+            ),
+            contentId = "tvdb:1399",
+            fallbackContentId = null,
+            seasonNumber = 1
+        )
+
+        assertEquals(TvProvider.TVDB, result.provider)
+        assertEquals(listOf(1), result.value?.map { it.episodeNumber })
+        assertEquals("2024-01-01", result.value?.single()?.airDate)
+        assertTrue(adapter.apiShapeIds.contains("tvdb.series.episodes.season_type"))
+    }
+
     private fun facade(
         vararg adapters: MetadataProviderAdapter,
         identityLookup: MetadataIdentityResolver.Lookup = object : MetadataIdentityResolver.Lookup {
@@ -183,6 +207,19 @@ class MetadataRouterFacadeTest {
         override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
             calls += 1
             apiShapeIds += step.apiShapeId
+            val episodeMetadata = if (step.role == ProviderPlanRole.SEASON) {
+                val seasonNumber = route.seasonNumber ?: 1
+                mapOf(
+                    (seasonNumber to 1) to TvEpisodeMetadata(
+                        seasonNumber = seasonNumber,
+                        episodeNumber = 1,
+                        title = "Runtime episode",
+                        airDate = "2024-01-01"
+                    )
+                )
+            } else {
+                emptyMap()
+            }
             return ProviderStepResult(
                 step = step,
                 candidate = MetadataCandidate(
@@ -190,7 +227,8 @@ class MetadataRouterFacadeTest {
                     fields = mapOf(
                         ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY)
                     )
-                )
+                ),
+                episodeMetadata = episodeMetadata
             )
         }
     }
