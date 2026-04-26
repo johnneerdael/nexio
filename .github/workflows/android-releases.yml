@@ -49,6 +49,28 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive media dovi_tool tools/frontiersimulator
 
+      - name: Prepare bundled FFmpeg prebuilts
+        run: |
+          set -euo pipefail
+
+          PREBUILT_DIR="${GITHUB_WORKSPACE}/media/libraries/decoder_ffmpeg/prebuilt/ffmpeg"
+          if [ ! -d "${PREBUILT_DIR}/android-libs" ]; then
+            echo "Bundled FFmpeg prebuilts not found at ${PREBUILT_DIR}" >&2
+            echo "Run ./scripts/build_ffmpeg_prebuilts.sh (or regenerate) and commit media/libraries/decoder_ffmpeg/prebuilt/ffmpeg" >&2
+            exit 1
+          fi
+
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for lib in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so libavfilter.so; do
+              if [ ! -f "${PREBUILT_DIR}/android-libs/${abi}/${lib}" ]; then
+                echo "Missing ${lib} for ${abi} in bundled prebuilts" >&2
+                exit 1
+              fi
+            done
+          done
+
+          echo "NEXIO_PREBUILT_FFMPEG_ROOT=${PREBUILT_DIR}" >> "$GITHUB_ENV"
+
       - name: Prepare signing key from secret
         env:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -146,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease; then
+          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"; then
             APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
             if [ -z "$APK_PATH" ]; then
               echo "Universal release APK not found after successful build." >&2
@@ -159,7 +181,9 @@ jobs:
           fi
 
           echo "Universal release build failed, retrying armv7..."
-          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a
+          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release \
+            -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a \
+            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
           APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "armv7 release APK not found after successful fallback build." >&2
@@ -259,6 +283,28 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive media dovi_tool tools/frontiersimulator
 
+      - name: Prepare bundled FFmpeg prebuilts
+        run: |
+          set -euo pipefail
+
+          PREBUILT_DIR="${GITHUB_WORKSPACE}/media/libraries/decoder_ffmpeg/prebuilt/ffmpeg"
+          if [ ! -d "${PREBUILT_DIR}/android-libs" ]; then
+            echo "Bundled FFmpeg prebuilts not found at ${PREBUILT_DIR}" >&2
+            echo "Run ./scripts/build_ffmpeg_prebuilts.sh (or regenerate) and commit media/libraries/decoder_ffmpeg/prebuilt/ffmpeg" >&2
+            exit 1
+          fi
+
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for lib in libavcodec.so libavformat.so libavutil.so libswresample.so libswscale.so libavfilter.so; do
+              if [ ! -f "${PREBUILT_DIR}/android-libs/${abi}/${lib}" ]; then
+                echo "Missing ${lib} for ${abi} in bundled prebuilts" >&2
+                exit 1
+              fi
+            done
+          done
+
+          echo "NEXIO_PREBUILT_FFMPEG_ROOT=${PREBUILT_DIR}" >> "$GITHUB_ENV"
+
       - name: Prepare signing key from secret
         env:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -297,7 +343,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease; then
+          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"; then
             APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
             if [ -z "$APK_PATH" ]; then
               echo "Universal release APK not found after successful build." >&2
@@ -310,7 +356,9 @@ jobs:
           fi
 
           echo "Universal release build failed, retrying armv7..."
-          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a
+          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release \
+            -PNEXIO_NATIVE_ABI_FILTER=armeabi-v7a \
+            -PNEXIO_PREBUILT_FFMPEG_ROOT="${NEXIO_PREBUILT_FFMPEG_ROOT}"
           APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "armv7 release APK not found after successful fallback build." >&2
