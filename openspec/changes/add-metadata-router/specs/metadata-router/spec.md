@@ -52,6 +52,7 @@ ProviderPlanExecutor SHALL not execute provider calls with unresolved provider-n
 #### Scenario: Route requires identity resolution
 - **WHEN** a route has `targetIdRequiresIdentityResolution`
 - **THEN** ProviderPlanExecutor refuses to build executable provider calls
+- **AND** MetadataRouterFacade returns the route with no executable provider plan
 - **AND** identity resolution remains owned by provider integration adapters or dedicated identity helpers
 
 ### Requirement: Downstream metadata behavior uses route media kind
