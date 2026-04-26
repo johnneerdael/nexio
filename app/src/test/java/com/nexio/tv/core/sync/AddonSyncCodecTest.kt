@@ -170,4 +170,40 @@ class AddonSyncCodecTest {
     fun `parseAddonInstallUrl rejects bare origin`() {
         parseAddonInstallUrl("https://torrentio.strem.fun/")
     }
+
+    @Test
+    fun `parseStoredAddonInstallUrl re-attaches manifest path on canonicalized URL`() {
+        // AddonPreferences stores URLs canonicalized by normalizeAddonInstallUrl,
+        // which strips /manifest.json. Runtime re-parsing (e.g. pushToRemote)
+        // must accept these without tripping the install-time strict invariant.
+        val canonical = "https://torrentio.strem.fun/debridoptions=nodownloadlinks%7Crealdebrid=ABC/"
+            .trimEnd('/')
+        // canonical = "https://torrentio.strem.fun/debridoptions=nodownloadlinks%7Crealdebrid=ABC"
+        val fromStored = parseStoredAddonInstallUrl(canonical)
+        val fromInstall = parseAddonInstallUrl("$canonical/manifest.json")
+
+        assertEquals(fromInstall.publicBaseUrl, fromStored.publicBaseUrl)
+        assertEquals(fromInstall.transportBaseUrl, fromStored.transportBaseUrl)
+        assertEquals(fromInstall.transportSecretRef, fromStored.transportSecretRef)
+        assertEquals(fromInstall.transportSecretPayload.suffix, fromStored.transportSecretPayload.suffix)
+    }
+
+    @Test
+    fun `parseStoredAddonInstallUrl preserves canonicalized URL that already has manifest path`() {
+        val withManifest = "https://torrentio.strem.fun/cfg/manifest.json"
+        val fromStored = parseStoredAddonInstallUrl(withManifest)
+        val fromInstall = parseAddonInstallUrl(withManifest)
+
+        assertEquals(fromInstall.transportSecretRef, fromStored.transportSecretRef)
+    }
+
+    @Test
+    fun `parseStoredAddonInstallUrl handles bare origin from a public manifest install`() {
+        // A public addon stored as bare origin must round-trip to the
+        // canonical /manifest.json form without throwing.
+        val parsed = parseStoredAddonInstallUrl("https://thepiratebay-plus.strem.fun")
+        assertEquals("https://thepiratebay-plus.strem.fun", parsed.publicBaseUrl)
+        assertEquals("/manifest.json", parsed.transportSecretPayload.suffix)
+        assertEquals("manifest", parsed.installKind)
+    }
 }
