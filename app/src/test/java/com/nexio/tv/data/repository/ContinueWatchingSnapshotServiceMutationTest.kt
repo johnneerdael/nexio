@@ -1,5 +1,10 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ActiveRailTracker
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.RailMediaIdentityResolver
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -172,6 +177,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 MetadataDiskCacheStore::class.java -> mockk<MetadataDiskCacheStore>(relaxed = true)
                 ContinueWatchingSnapshotStore::class.java -> snapshotStore
                 ContinueWatchingAirScheduler::class.java -> airScheduler
+                ProfileManager::class.java -> null
+                IntegrationOwnershipService::class.java -> null
+                ActiveRailTracker::class.java -> ActiveRailTracker()
+                RailMediaIdentityResolver::class.java -> RailMediaIdentityResolver()
+                MetadataRouterFacade::class.java -> null
                 else -> null
             }
         }.toTypedArray()

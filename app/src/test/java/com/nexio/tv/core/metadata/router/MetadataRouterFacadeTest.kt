@@ -56,6 +56,24 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
+    fun `route request records authority without executing provider plan`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+
+        val route = facade(adapter).routeRequest(
+            MetadataRequest(
+                contentId = "tvdb:123",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals("tvdb:123", route.parentId)
+        assertEquals(0, adapter.calls)
+    }
+
+    @Test
     fun `provider plan steps are executed via integration runtime adapters`() = runTest {
         val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
 
