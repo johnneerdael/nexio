@@ -11,6 +11,7 @@ import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
 import com.nexio.tv.core.tvdb.TvdbSeriesTiming
 import com.nexio.tv.domain.model.ContentType
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 
 class TvdbContinueWatchingTimingEnricher @Inject constructor(
     private val providerMetadataRouter: ProviderMetadataRouter?,
@@ -80,7 +81,7 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
     }
 
     private suspend fun MetadataRouterFacade.resolveTimingSidecar(entry: TrackingNextUpEntry) {
-        runCatching {
+        try {
             resolveRequest(
                 MetadataRequest(
                     contentId = entry.contentId,
@@ -90,6 +91,10 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
                     depth = MetadataDepth.SEASON
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
         }
     }
 

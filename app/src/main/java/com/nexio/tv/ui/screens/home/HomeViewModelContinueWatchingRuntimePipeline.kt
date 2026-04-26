@@ -11,6 +11,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.ui.navigation.continueWatchingRuntimeMinutes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 
@@ -38,7 +39,7 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     if (isSeriesType(contentType)) {
         val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
         if (season != null && episode != null) {
-            runCatching {
+            try {
                 metadataRouterFacadeOrNull()?.resolveRequest(
                     MetadataRequest(
                         contentId = contentId,
@@ -49,6 +50,10 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
                         depth = MetadataDepth.SEASON
                     )
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
             }
             val episodeRuntime = tvMetadataRouter.fetchEpisodeEnrichment(
                 TvMetadataRequest(
@@ -61,7 +66,7 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
             ).value?.get(season to episode)?.runtimeMinutes
             if (episodeRuntime != null && episodeRuntime > 0) return episodeRuntime
         } else {
-            runCatching {
+            try {
                 metadataRouterFacadeOrNull()?.resolveRequest(
                     MetadataRequest(
                         contentId = contentId,
@@ -71,6 +76,10 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
                         depth = MetadataDepth.DETAIL_CORE
                     )
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
             }
             val enrichment = tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import okhttp3.OkHttpClient
 import javax.inject.Inject
+import javax.inject.Named
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
@@ -51,6 +52,7 @@ class PlayerViewModel @Inject constructor(
     private val metadataRouterFacade: MetadataRouterFacade,
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val playbackActivityTracker: PlaybackActivityTracker,
+    @Named("playback")
     private val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {

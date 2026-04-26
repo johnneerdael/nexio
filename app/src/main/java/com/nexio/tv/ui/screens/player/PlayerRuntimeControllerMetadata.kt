@@ -11,6 +11,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.Stream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -61,17 +62,15 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
         ?.takeUnless { it == lookupContentId }
     val language = AppLocaleResolver.resolveTmdbLanguageTag(context)
 
-    runCatching {
-        metadataRouterFacade.resolveRequest(
-            MetadataRequest(
-                contentId = lookupContentId,
-                contentType = lookupContentType,
-                sourceContext = MetadataSourceContext(itemType = lookupContentType.toApiString()),
-                language = language,
-                depth = MetadataDepth.PLAYER
-            )
+    resolveMetadataFacadeSidecar(
+        MetadataRequest(
+            contentId = lookupContentId,
+            contentType = lookupContentType,
+            sourceContext = MetadataSourceContext(itemType = lookupContentType.toApiString()),
+            language = language,
+            depth = MetadataDepth.PLAYER
         )
-    }
+    )
 
     val enrichment = tvMetadataRouter.fetchEnrichment(
         TvMetadataRequest(
@@ -85,18 +84,16 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
         val season = currentSeason
         val episode = currentEpisode
         if (season != null && episode != null) {
-            runCatching {
-                metadataRouterFacade.resolveRequest(
-                    MetadataRequest(
-                        contentId = lookupContentId,
-                        contentType = lookupContentType,
-                        sourceContext = MetadataSourceContext(itemType = lookupContentType.toApiString()),
-                        language = language,
-                        seasonNumber = season,
-                        depth = MetadataDepth.SEASON
-                    )
+            resolveMetadataFacadeSidecar(
+                MetadataRequest(
+                    contentId = lookupContentId,
+                    contentType = lookupContentType,
+                    sourceContext = MetadataSourceContext(itemType = lookupContentType.toApiString()),
+                    language = language,
+                    seasonNumber = season,
+                    depth = MetadataDepth.SEASON
                 )
-            }
+            )
             tvMetadataRouter.fetchEpisodeEnrichment(
                 TvMetadataRequest(
                     contentId = lookupContentId,
@@ -120,6 +117,16 @@ internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetad
                 currentEpisodeMetadata = episodeMetadata
             )
         }
+    }
+}
+
+private suspend fun PlayerRuntimeController.resolveMetadataFacadeSidecar(request: MetadataRequest) {
+    try {
+        metadataRouterFacade.resolveRequest(request)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
     }
 }
 
