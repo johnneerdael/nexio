@@ -141,14 +141,39 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Lint and build armv7 release APK
-        run: ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
+      - name: Build release APK (prefer universal, fallback armv7)
+        id: stable_release_build
+        run: |
+          set -euo pipefail
+
+          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease; then
+            APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+            if [ -z "$APK_PATH" ]; then
+              echo "Universal release APK not found after successful build." >&2
+              exit 1
+            fi
+
+            echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+            echo "variant=universal" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Universal release build failed, retrying armv7..."
+          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "armv7 release APK not found after successful fallback build." >&2
+            exit 1
+          fi
+
+          echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+          echo "variant=armv7" >> "$GITHUB_OUTPUT"
 
       - name: Verify release APK signature
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          APK_PATH="${{ steps.stable_release_build.outputs.apk_path }}"
           if [ -z "$APK_PATH" ]; then
             echo "Stable APK artifact not found" >&2
             exit 1
@@ -178,7 +203,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          APK_PATH="${{ steps.stable_release_build.outputs.apk_path }}"
           if [ -z "$APK_PATH" ]; then
             echo "Stable APK artifact not found" >&2
             exit 1
@@ -267,14 +292,39 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Lint and build armv7 release APK
-        run: ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
+      - name: Build release APK (prefer universal, fallback armv7)
+        id: beta_release_build
+        run: |
+          set -euo pipefail
+
+          if ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease; then
+            APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+            if [ -z "$APK_PATH" ]; then
+              echo "Universal release APK not found after successful build." >&2
+              exit 1
+            fi
+
+            echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+            echo "variant=universal" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Universal release build failed, retrying armv7..."
+          ./gradlew :app:lintArmv7Release :app:assembleArmv7Release
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "armv7 release APK not found after successful fallback build." >&2
+            exit 1
+          fi
+
+          echo "apk_path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+          echo "variant=armv7" >> "$GITHUB_OUTPUT"
 
       - name: Verify beta APK signature
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          APK_PATH="${{ steps.beta_release_build.outputs.apk_path }}"
           if [ -z "$APK_PATH" ]; then
             echo "Beta APK artifact not found" >&2
             exit 1
@@ -301,7 +351,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK_PATH=$(find app/build/outputs/apk -type f -name "*armv7*release*.apk" | head -n 1)
+          APK_PATH="${{ steps.beta_release_build.outputs.apk_path }}"
           if [ -z "$APK_PATH" ]; then
             echo "Beta APK artifact not found" >&2
             exit 1
