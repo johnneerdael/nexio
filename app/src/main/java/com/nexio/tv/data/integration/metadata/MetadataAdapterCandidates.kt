@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.metadata
 
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
@@ -131,6 +132,71 @@ internal fun buildTvdbCoreLocalizedCandidate(
             extended?.image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+        }
+    )
+}
+
+internal fun buildTmdbLocalizedCandidate(
+    provider: MetadataPrimaryProvider,
+    policy: LocalizationPolicy,
+    requested: TmdbEnrichment?,
+    english: TmdbEnrichment?
+): MetadataCandidate {
+    val title = LocalizationResolver.selectField(
+        field = ResolvedField.TITLE,
+        policy = policy,
+        candidates = listOf(
+            LocalizedFieldCandidate(
+                field = ResolvedField.TITLE,
+                value = requested?.localizedTitle,
+                language = policy.requestedLanguage,
+                provider = provider,
+                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                fallbackRole = FallbackRole.LOCALIZED
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.TITLE,
+                value = english?.localizedTitle,
+                language = policy.fallbackLanguage,
+                provider = provider,
+                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                fallbackRole = FallbackRole.LANGUAGE_FALLBACK
+            )
+        )
+    )
+    val overview = LocalizationResolver.selectField(
+        field = ResolvedField.OVERVIEW,
+        policy = policy,
+        candidates = listOf(
+            LocalizedFieldCandidate(
+                field = ResolvedField.OVERVIEW,
+                value = requested?.description,
+                language = policy.requestedLanguage,
+                provider = provider,
+                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                fallbackRole = FallbackRole.LOCALIZED
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.OVERVIEW,
+                value = english?.description,
+                language = policy.fallbackLanguage,
+                provider = provider,
+                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                fallbackRole = FallbackRole.LANGUAGE_FALLBACK
+            )
+        )
+    )
+    val source = requested ?: english
+    return MetadataCandidate(
+        provider = provider,
+        fields = buildMap {
+            title?.value?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
+            overview?.value?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.poster?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.backdrop?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
         }
     )
 }

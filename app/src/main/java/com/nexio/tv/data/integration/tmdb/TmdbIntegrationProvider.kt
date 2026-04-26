@@ -24,6 +24,7 @@ import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.integration.metadata.LocalizationPolicy
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbCollectionResponse
 import com.nexio.tv.data.remote.api.TmdbCompanyDetailsResponse
@@ -306,7 +307,8 @@ class TmdbIntegrationProvider private constructor(
     suspend fun fetchMovieCore(
         movieId: Int,
         normalizedLanguage: String,
-        activePosterProvider: PosterRatingsUrlResolver.ActiveProvider?
+        activePosterProvider: PosterRatingsUrlResolver.ActiveProvider?,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): TmdbEnrichment? {
         val providerToken = posterProviderCacheToken(activePosterProvider)
         return runtime.get(
@@ -314,7 +316,7 @@ class TmdbIntegrationProvider private constructor(
                 provider = IntegrationProvider.TMDB,
                 apiShapeId = TmdbApiShapes.MOVIE_CORE,
                 operationKey = "tmdb.movie.core",
-                cacheKey = "tmdb:movie:$movieId:$normalizedLanguage:core:$providerToken",
+                cacheKey = "tmdb:movie:$movieId:$normalizedLanguage:core:$providerToken:policy:$localizationPolicyVersion",
                 codec = gsonCodec<TmdbEnrichment>(),
                 cachePolicy = IntegrationCachePolicy.CacheFirst(
                     ttlMs = 7L * 24L * 60L * 60L * 1000L,
