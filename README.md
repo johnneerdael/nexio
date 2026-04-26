@@ -145,6 +145,8 @@ If you want the fastest way to understand what makes NEXIO work best in practice
 - **Creator best-practices setup guide:** https://johnneerdael.github.io/nexio/start-here/
 - **Full features overview:** https://johnneerdael.github.io/nexio/features/
 - **Latest releases:** https://github.com/johnneerdael/nexio/releases
+- **Stable APK (latest):** https://github.com/johnneerdael/nexio/releases/latest/download/nexio_stable.apk
+- **Beta APK (latest prerelease):** https://github.com/johnneerdael/nexio/releases/download/beta/nexio_beta.apk
 
 ## Why the setup guide matters
 

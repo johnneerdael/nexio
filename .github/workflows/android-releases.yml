@@ -1,0 +1,110 @@
+name: Android Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'beta-*'
+
+permissions:
+  contents: write
+
+jobs:
+  stable-release:
+    name: Build and publish stable release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build universal release APK
+        run: ./gradlew :app:assembleUniversalRelease
+
+      - name: Prepare stable APK filename
+        id: stable_asset
+        run: |
+          set -euo pipefail
+
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Stable APK artifact not found" >&2
+            exit 1
+          fi
+
+          mkdir -p app/build/outputs/apk/release
+          cp "$APK_PATH" app/build/outputs/apk/release/nexio_stable.apk
+          echo "path=app/build/outputs/apk/release/nexio_stable.apk" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish/update stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.stable_asset.outputs.tag }}"
+          ASSET="${{ steps.stable_asset.outputs.path }}"
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" --title "Nexio ${TAG}" --generate-notes
+          fi
+
+  beta-release:
+    name: Build and publish beta release
+    if: startsWith(github.ref, 'refs/tags/beta-')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build universal release APK
+        run: ./gradlew :app:assembleUniversalRelease
+
+      - name: Prepare beta APK filename
+        id: beta_asset
+        run: |
+          set -euo pipefail
+
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Beta APK artifact not found" >&2
+            exit 1
+          fi
+
+          mkdir -p app/build/outputs/apk/release
+          cp "$APK_PATH" app/build/outputs/apk/release/nexio_beta.apk
+          echo "path=app/build/outputs/apk/release/nexio_beta.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Publish moving beta pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="beta"
+          ASSET="${{ steps.beta_asset.outputs.path }}"
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release delete "$TAG" --cleanup-tag --yes
+          fi
+
+          gh release create "$TAG" "$ASSET" --prerelease --title "Nexio Beta (${GITHUB_SHA:0:7})"
