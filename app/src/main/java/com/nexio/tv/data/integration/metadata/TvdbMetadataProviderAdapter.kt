@@ -20,12 +20,34 @@ class TvdbMetadataProviderAdapter @Inject constructor(
         val tvdbId = MetadataProviderTargetIds.tvdbInt(route.targetIds[MetadataPrimaryProvider.TVDB])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val language = route.language.orEmpty()
+        val policy = LocalizationPolicy.tvdb(language)
         val episodeMetadata = mutableMapOf<Pair<Int, Int>, com.nexio.tv.core.tvdb.TvEpisodeMetadata>()
         val candidate = when (step.apiShapeId) {
-            TvdbApiShapes.SERIES_EXTENDED ->
-                integrationProvider.fetchSeriesExtended(tvdbId).toMetadataCandidate(this.provider)
-            TvdbApiShapes.SERIES_TRANSLATION ->
-                integrationProvider.fetchSeriesTranslation(tvdbId, language).toMetadataCandidate(this.provider)
+            TvdbApiShapes.SERIES_EXTENDED -> {
+                val extended = integrationProvider.fetchSeriesExtended(tvdbId)
+                val english = integrationProvider.fetchSeriesTranslation(
+                    tvdbId = tvdbId,
+                    language = policy.fallbackLanguage.providerCode,
+                    localizationPolicyVersion = policy.policyVersion
+                )
+                val requested = if (policy.requestedIsFallback) {
+                    null
+                } else {
+                    integrationProvider.fetchSeriesTranslation(
+                        tvdbId = tvdbId,
+                        language = policy.requestedLanguage.providerCode,
+                        localizationPolicyVersion = policy.policyVersion
+                    )
+                }
+                buildTvdbCoreLocalizedCandidate(
+                    provider = this.provider,
+                    policy = policy,
+                    extended = extended,
+                    englishTranslation = english,
+                    requestedTranslation = requested
+                )
+            }
+            TvdbApiShapes.SERIES_TRANSLATION -> emptyCandidate(this.provider)
             TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE -> {
                 integrationProvider.fetchSeriesEpisodes(tvdbId, seasonType = "default", season = route.seasonNumber)
                 emptyCandidate(this.provider)

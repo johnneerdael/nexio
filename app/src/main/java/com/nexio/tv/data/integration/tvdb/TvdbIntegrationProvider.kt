@@ -33,6 +33,7 @@ import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import com.nexio.tv.data.integration.metadata.LocalizationPolicy
 import com.nexio.tv.data.integration.metadata.TvdbEpisodeLocalization
+import com.nexio.tv.data.integration.metadata.tvdbSeriesTranslationCacheKey
 import com.nexio.tv.data.remote.api.TvdbUpdatesResponse
 import com.nexio.tv.domain.model.ContentType
 import kotlinx.coroutines.CancellationException
@@ -279,14 +280,15 @@ class TvdbIntegrationProvider @Inject constructor(
 
     suspend fun fetchSeriesTranslation(
         tvdbId: Int,
-        language: String
+        language: String,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): TvdbTranslationRecord? {
         val authorization = tvdbAuthService.bearerToken() ?: return null
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
             operationKey = "tvdb.series.translation",
-            cacheKey = "tvdb:series:$tvdbId:translation:$language",
+            cacheKey = tvdbSeriesTranslationCacheKey(tvdbId, language, localizationPolicyVersion),
             codec = gsonCodec<TvdbTranslationRecord>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
