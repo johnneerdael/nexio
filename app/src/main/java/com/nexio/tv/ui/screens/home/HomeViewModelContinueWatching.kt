@@ -438,6 +438,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
                 watchProgressRepository.clearShowProgress(targetId)
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 Log.w(HomeViewModel.TAG, "Failed to clear show progress for $targetId", error)
             }
         }
@@ -467,9 +468,13 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
             )
             continueWatchingSnapshotService.ensureFresh(force = true)
         }.onFailure { error ->
+            if (error is CancellationException) throw error
             if (capturedProgress != null) {
                 runCatching { continueWatchingSnapshotService.reinsertResumeEntry(capturedProgress) }
-                    .onFailure { Log.w(HomeViewModel.TAG, "Failed to rollback removeResumeEntry", it) }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        Log.w(HomeViewModel.TAG, "Failed to rollback removeResumeEntry", it)
+                    }
             }
             Log.w(HomeViewModel.TAG, "Failed to remove continue watching progress for $contentId", error)
         }
@@ -538,17 +543,23 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
                 )
             }
             watchProgressRepository.markAsCompleted(progress)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
             Log.w(HomeViewModel.TAG, "Failed to mark continue-watching item as watched", error)
             if (episodeRef.isNotEmpty()) {
                 val rollback = listOfNotNull(capturedProgress)
                 runCatching { continueWatchingSnapshotService.rollbackEpisodes(rollback) }
-                    .onFailure { Log.w(HomeViewModel.TAG, "Failed to rollback applyEpisodesMarked", it) }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        Log.w(HomeViewModel.TAG, "Failed to rollback applyEpisodesMarked", it)
+                    }
             }
         } finally {
             runCatching {
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 Log.w(HomeViewModel.TAG, "Failed to refresh continue-watching snapshot after mark watched", error)
             }
         }
@@ -565,6 +576,7 @@ internal fun HomeViewModel.checkInContinueWatchingPipeline(item: ContinueWatchin
         runCatching {
             trackingScrobbleService.checkin(scrobbleItem)
         }.onFailure { error ->
+            if (error is CancellationException) throw error
             Log.w(HomeViewModel.TAG, "Failed tracking check-in for continue-watching item", error)
         }
     }
