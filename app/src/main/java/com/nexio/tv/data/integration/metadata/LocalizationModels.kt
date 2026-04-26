@@ -2,6 +2,7 @@ package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 
 internal enum class FallbackRole {
     LOCALIZED,
@@ -35,6 +36,26 @@ internal data class LocalizedFieldRejection(
     val language: NormalizedLanguage,
     val fallbackRole: FallbackRole,
     val reason: String
+)
+
+internal data class LocalizedEpisodeBundle(
+    val episodes: Map<Pair<Int, Int>, LocalizedEpisodeMetadata>,
+    val policy: LocalizationPolicy,
+    val perEpisodeTranslationFallbacksAttempted: Int,
+    val maxPerEpisodeTranslationFallbacksAllowed: Int,
+    val providerFallbackUsed: Boolean = false
+)
+
+internal data class LocalizedEpisodeMetadata(
+    val metadata: TvEpisodeMetadata,
+    val fieldSources: Map<String, LocalizedEpisodeFieldSource>
+)
+
+internal data class LocalizedEpisodeFieldSource(
+    val selectedLanguage: NormalizedLanguage,
+    val sourceShape: String,
+    val fallbackRole: FallbackRole,
+    val rejectedCandidates: List<LocalizedFieldRejection>
 )
 
 internal fun String?.cleanLocalizedValue(): String? =
