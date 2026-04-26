@@ -299,6 +299,21 @@ class ContinueWatchingSnapshotService @Inject constructor(
      */
     fun currentRawResumeItems(): List<WatchProgress> = rawSnapshotState.value.snapshot.resumeItems
 
+    suspend fun recordMetadataSnapshot(
+        itemKey: String,
+        metadataSnapshot: ContinueWatchingMetadataSnapshot
+    ) {
+        if (itemKey.isBlank()) return
+        refreshMutex.withLock {
+            val current = rawSnapshotState.value
+            val updated = current.snapshot.copy(
+                metadataSnapshotsByItemKey = current.snapshot.metadataSnapshotsByItemKey + (itemKey to metadataSnapshot),
+                updatedAtMs = System.currentTimeMillis()
+            )
+            updateSnapshot(updated, profileId = current.profileId)
+        }
+    }
+
     // ── Synchronous rawSnapshotState mutation helpers (Phase 3) ───────────────
 
     /**

@@ -1,15 +1,21 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
+import io.mockk.coJustRun
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -49,7 +55,7 @@ class HomeViewModelContinueWatchingTest {
         )
 
         val description = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 
@@ -90,7 +96,7 @@ class HomeViewModelContinueWatchingTest {
         )
 
         val description = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 
@@ -123,7 +129,7 @@ class HomeViewModelContinueWatchingTest {
         )
 
         val description = localizedContinueWatchingEpisodeDescription(
-            tvMetadataRouter = tvMetadataRouter,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             item = item
         )
 
@@ -134,6 +140,42 @@ class HomeViewModelContinueWatchingTest {
         coVerify(exactly = 0) {
             tmdbMetadataService.fetchEpisodeEnrichment(any(), any())
         }
+    }
+
+    @Test
+    fun `continue watching playback click persists route context and click-time metadata`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val snapshotService = mockk<ContinueWatchingSnapshotService>()
+        val snapshotSlot = slot<ContinueWatchingMetadataSnapshot>()
+        val item = ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tvdb:121361",
+                contentType = "series",
+                name = "Game of Thrones",
+                poster = "poster",
+                backdrop = "backdrop",
+                logo = "logo",
+                videoId = "tvdb:121361:1:1",
+                season = 1,
+                episode = 1,
+                episodeTitle = "Winter Is Coming",
+                position = 1_000L,
+                duration = 3_000L,
+                lastWatched = 42L
+            )
+        )
+        every { viewModel.metadataRouterFacade } returns defaultMetadataRouterFacadeForManualConstruction()
+        every { viewModel.continueWatchingSnapshotService } returns snapshotService
+        coJustRun { snapshotService.recordMetadataSnapshot("series:tvdb:121361", capture(snapshotSlot)) }
+
+        viewModel.recordContinueWatchingRouteContextForPlayback(item)
+
+        coVerify(exactly = 1) {
+            snapshotService.recordMetadataSnapshot("series:tvdb:121361", any())
+        }
+        assertEquals("tvdb:121361", snapshotSlot.captured.parentId)
+        assertEquals("Game of Thrones", snapshotSlot.captured.clickTimeDisplayMetadata.title)
+        assertEquals(ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION, snapshotSlot.captured.routingVersion)
     }
 
     private fun episodeEnrichment(overview: String?): TvEpisodeMetadata {

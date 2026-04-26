@@ -15,7 +15,6 @@ import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -73,7 +72,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
-    private val tvMetadataRouter: ProviderMetadataRouter,
     private val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
@@ -95,7 +93,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     ): MetaPreview {
         return overlayProviderLocalizedMetadataForHome(
             item = item,
-            tvMetadataRouter = tvMetadataRouter,
             metadataRouterFacade = metadataRouterFacade,
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = tmdbService,
