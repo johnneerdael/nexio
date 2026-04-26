@@ -96,6 +96,7 @@ fun TrailerPlayer(
     onRemoteKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean = { _, _, _ -> false },
     cropToFill: Boolean = false,
     overscanZoom: Float = 1f,
+    trailerUserAgent: String? = null,
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
@@ -155,12 +156,14 @@ fun TrailerPlayer(
         videoUrl: String,
         audioUrl: String?
     ): DefaultMediaSourceFactory {
+        val effectiveUa = trailerUserAgent?.takeIf { it.isNotBlank() }
+            ?: YOUTUBE_STABLE_WEB_USER_AGENT
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
-            DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+            DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory(userAgent = effectiveUa))
         } else {
             DefaultMediaSourceFactory(
                 DefaultHttpDataSource.Factory()
-                    .setUserAgent(YOUTUBE_STABLE_WEB_USER_AGENT)
+                    .setUserAgent(effectiveUa)
                     .setDefaultRequestProperties(buildStableYouTubeRequestHeaders())
                     .setAllowCrossProtocolRedirects(true)
             )
