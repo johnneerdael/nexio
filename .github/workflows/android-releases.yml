@@ -27,8 +27,34 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Build universal release APK
-        run: ./gradlew :app:assembleUniversalRelease
+      - name: Lint and build universal release APK
+        run: ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease
+
+      - name: Verify release APK signature
+        run: |
+          set -euo pipefail
+
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Stable APK artifact not found" >&2
+            exit 1
+          fi
+
+          APKSIGNER="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -n "$APKSIGNER" ]; then
+            APKSIGNER="$(find "$APKSIGNER/build-tools" -path '*/apksigner' -type f 2>/dev/null | sort -V | tail -n 1)"
+          fi
+
+          if [ -z "$APKSIGNER" ]; then
+            APKSIGNER="$(command -v apksigner || true)"
+          fi
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner not found in runner environment" >&2
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --print-certs "$APK_PATH"
 
       - name: Prepare stable APK filename
         id: stable_asset
@@ -77,8 +103,34 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Build universal release APK
-        run: ./gradlew :app:assembleUniversalRelease
+      - name: Lint and build universal release APK
+        run: ./gradlew :app:lintUniversalRelease :app:assembleUniversalRelease
+
+      - name: Verify beta APK signature
+        run: |
+          set -euo pipefail
+
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*universal*release*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Beta APK artifact not found" >&2
+            exit 1
+          fi
+
+          APKSIGNER="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -n "$APKSIGNER" ]; then
+            APKSIGNER="$(find "$APKSIGNER/build-tools" -path '*/apksigner' -type f 2>/dev/null | sort -V | tail -n 1)"
+          fi
+
+          if [ -z "$APKSIGNER" ]; then
+            APKSIGNER="$(command -v apksigner || true)"
+          fi
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner not found in runner environment" >&2
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --print-certs "$APK_PATH"
 
       - name: Prepare beta APK filename
         id: beta_asset
