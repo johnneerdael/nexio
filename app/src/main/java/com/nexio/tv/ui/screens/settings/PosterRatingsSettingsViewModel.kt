@@ -7,7 +7,6 @@ import coil.imageLoader
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
@@ -40,8 +39,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     private val profileManager: ProfileManager,
     private val integrationOwnershipService: IntegrationOwnershipService,
     private val metaRepository: MetaRepository,
-    private val catalogRepository: CatalogRepository,
-    private val tmdbMetadataService: TmdbMetadataService
+    private val catalogRepository: CatalogRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PosterRatingsSettingsUiState())
@@ -92,7 +90,6 @@ class PosterRatingsSettingsViewModel @Inject constructor(
                 homeCatalogSnapshotStore.clear(profileId = profileId)
                 metaRepository.clearCache()
                 catalogRepository.clearCache()
-                tmdbMetadataService.clearCache()
 
                 // Clear Coil image pixel caches
                 val imageLoader = appContext.imageLoader
