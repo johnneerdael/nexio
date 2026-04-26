@@ -31,7 +31,11 @@ class MetadataRouterFacade @Inject constructor(
         }
 
         val route = router.route(request)
-        val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
+        val plan = if (route.targetIdRequiresIdentityResolution) {
+            null
+        } else {
+            providerPlanExecutor.buildPlan(route = route, depth = request.depth)
+        }
 
         return MetadataFacadeResult(
             route = route,

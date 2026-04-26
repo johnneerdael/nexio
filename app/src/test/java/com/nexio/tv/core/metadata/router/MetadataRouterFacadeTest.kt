@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetadataRouterFacadeTest {
@@ -60,6 +61,23 @@ class MetadataRouterFacadeTest {
         assertEquals(MetadataDepth.PLAYER, result.plan?.depth)
         assertEquals(emptyList<ProviderPlanStep>(), result.plan?.steps)
         assertEquals(MetadataDepth.PLAYER, result.resolverSchedule.depth)
+    }
+
+    @Test
+    fun `provider-native conflict returns unresolved route without executable plan`() = runTest {
+        val result = facade().resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:1399",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TVDB, result.route?.provider)
+        assertTrue(result.route?.targetIdRequiresIdentityResolution == true)
+        assertNull(result.plan)
+        assertEquals(MetadataDepth.DETAIL_CORE, result.resolverSchedule.depth)
     }
 
     private fun facade(): MetadataRouterFacade =
