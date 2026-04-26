@@ -357,6 +357,7 @@ val generateRuntimeEventAuditSample by tasks.registering(Test::class) {
     testClassesDirs = sourceTest.get().testClassesDirs
     classpath = sourceTest.get().classpath
     outputs.file(runtimeEventAuditSampleFile)
+    systemProperty("integrationRuntimeAudit.sampleFile", runtimeEventAuditSampleFile.get().asFile.absolutePath)
     filter {
         includeTestsMatching("com.nexio.tv.core.integration.DefaultIntegrationRuntimeTest.generated runtime audit sample uses real phase names and network flags")
     }
