@@ -210,7 +210,9 @@ object FfmpegStreamMetadataProbe {
             // actual file (CF-cached preview, sample, empty stub). If we can't get
             // the real CDN URL, return null and let the caller skip the probe — the
             // gate handles that as PROBE_FAILED and walks fallback candidates.
-            val resolved = CometProxyUrlResolver.resolveBlocking(url, headers, addonHost)
+            val resolved = (CometProxyUrlResolver.resolveBlocking(url, headers, addonHost)
+                as? ProxyResolution.Redirected)
+                ?.url
                 ?.takeIf { it.isNotBlank() }
                 ?: return null
             return ProbeTarget(

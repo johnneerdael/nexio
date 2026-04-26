@@ -95,7 +95,7 @@ class FfmpegStreamMetadataProbeTest {
         val resolvedUrl = "https://43-4.download.real-debrid.com/d/TOKEN/file.mkv"
         var probedUrl: String? = null
         var probedHeadersBlob: String? = null
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolvedUrl }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected(resolvedUrl) }
         FfmpegStreamMetadataProbe.setBackendForTesting(
             object : FfmpegStreamMetadataBackend {
                 override fun probeStreamMetadataJson(
@@ -183,7 +183,7 @@ class FfmpegStreamMetadataProbeTest {
         // Resolver returns null → represents the case where Comet/CF answered
         // with 2xx-without-Location (or any non-3xx). Probe must not fall back
         // to probing the proxy URL — the proxy bytes lie.
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> null }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.ResolveFailed }
         FfmpegStreamMetadataProbe.setBackendForTesting(
             object : FfmpegStreamMetadataBackend {
                 override fun probeStreamMetadataJson(
@@ -207,7 +207,10 @@ class FfmpegStreamMetadataProbeTest {
     fun probeBlockingSkipsProbeWhenCometResolverReturnsBlank() {
         val cometUrl = "https://comet.feels.legal/cfg/playback/h/0/0/n/n"
         var backendCalls = 0
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> "   " }
+        // Blank-URL Redirected — old ResolveFailed path used `"   "` to verify the
+// resolver's null-handling at the call site; ProxyResolution.Redirected with a
+// blank URL exercises the same downstream isNotBlank() guard.
+CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected("   ") }
         FfmpegStreamMetadataProbe.setBackendForTesting(
             object : FfmpegStreamMetadataBackend {
                 override fun probeStreamMetadataJson(

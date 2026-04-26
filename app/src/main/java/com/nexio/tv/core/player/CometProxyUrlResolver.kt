@@ -21,14 +21,15 @@ import java.util.concurrent.TimeUnit
  * Outcome of a single redirect-disabled probe issued by [CometProxyUrlResolver].
  *
  * - [Redirected]    addon returned `3xx` with a usable `Location` header.
- * - [Placeholder]   addon returned `200 OK` with `Content-Type: video/*`,
- *                   served from the addon's own host. Treated as a captioned
- *                   "error video" placeholder; autoplay should skip it.
+ * - [Placeholder]   addon returned `200 OK` with a Content-Type starting with
+ *                   `video&#47;`, served from the addon's own host. Treated as
+ *                   a captioned "error video" placeholder; autoplay should
+ *                   skip it.
  * - [NotEligible]   URL did not pass [CometProxyUrlResolver.isCometProxy]
  *                   gates. Caller should treat the URL as opaque.
- * - [ResolveFailed] network error, non-`video/*` `200`, missing Content-Type,
- *                   `4xx`, or `5xx`. Caller should fall back to the original
- *                   URL.
+ * - [ResolveFailed] network error, non-video Content-Type on `200`, missing
+ *                   Content-Type, `4xx`, or `5xx`. Caller should fall back to
+ *                   the original URL.
  */
 sealed class ProxyResolution {
     data class Redirected(val url: String) : ProxyResolution()

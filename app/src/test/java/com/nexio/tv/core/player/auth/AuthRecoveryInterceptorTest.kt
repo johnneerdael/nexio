@@ -59,7 +59,7 @@ class AuthRecoveryInterceptorTest {
     @Test
     fun `gives up after exhausting maxAttemptsPerSession`() {
         val resolved = server.url("/cdn").toString()
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected(resolved) }
         runBlocking {
             CometProxyUrlResolver.resolve(
                 "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
@@ -88,7 +88,7 @@ class AuthRecoveryInterceptorTest {
         val resolved = server.url("/cdn").toString()
         var now = 1_000L
         CometProxyUrlResolver.setClockForTesting { now }
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected(resolved) }
         runBlocking { CometProxyUrlResolver.resolve(proxy, headers = emptyMap()) }
         // Force prior invalidate so the next one is rate-limited.
         CometProxyUrlResolver.invalidate(proxy)
@@ -112,7 +112,9 @@ class AuthRecoveryInterceptorTest {
         val resolvedSecond = server.url("/cdn/second").toString()
         val resolveCount = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
-            if (resolveCount.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+            ProxyResolution.Redirected(
+                if (resolveCount.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+            )
         }
         runBlocking {
             CometProxyUrlResolver.resolve(
@@ -162,11 +164,13 @@ class AuthRecoveryInterceptorTest {
         val urlC = server.url("/C").toString()
         val resolveCount = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
-            when (resolveCount.getAndIncrement()) {
-                0 -> urlA
-                1 -> urlB
-                else -> urlC
-            }
+            ProxyResolution.Redirected(
+                when (resolveCount.getAndIncrement()) {
+                    0 -> urlA
+                    1 -> urlB
+                    else -> urlC
+                }
+            )
         }
         val proxy = "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n"
         var clock = 1_000L
@@ -218,7 +222,9 @@ class AuthRecoveryInterceptorTest {
         val resolveResults = (1..10).map { server.url("/r$it").toString() }
         val resolveCount = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
-            resolveResults[resolveCount.getAndIncrement().coerceAtMost(resolveResults.lastIndex)]
+            ProxyResolution.Redirected(
+                resolveResults[resolveCount.getAndIncrement().coerceAtMost(resolveResults.lastIndex)]
+            )
         }
         var clock = 1_000L
         CometProxyUrlResolver.setClockForTesting { clock }
@@ -257,7 +263,7 @@ class AuthRecoveryInterceptorTest {
     @Test
     fun `resetSessionState replenishes the attempt budget`() {
         val resolved = server.url("/cdn").toString()
-        CometProxyUrlResolver.setTransportForTesting { _, _ -> resolved }
+        CometProxyUrlResolver.setTransportForTesting { _, _ -> ProxyResolution.Redirected(resolved) }
         runBlocking {
             CometProxyUrlResolver.resolve(
                 "https://comet.feels.legal/A/playback/x/0/0/n/n?torrent_name=t&name=n",
@@ -297,7 +303,9 @@ class AuthRecoveryInterceptorTest {
         val resolvedSecond = server.url("/cdn/second").toString()
         val resolveCount = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
-            if (resolveCount.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+            ProxyResolution.Redirected(
+                if (resolveCount.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+            )
         }
         runBlocking {
             CometProxyUrlResolver.resolve(
@@ -344,7 +352,7 @@ class AuthRecoveryInterceptorTest {
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
             val n = transportCalls.getAndIncrement()
             Thread.sleep(150)
-            if (n == 0) resolvedFirst else resolvedSecond
+            ProxyResolution.Redirected(if (n == 0) resolvedFirst else resolvedSecond)
         }
         runBlocking {
             CometProxyUrlResolver.resolve(
@@ -408,7 +416,9 @@ class AuthRecoveryInterceptorTest {
         val resolvedSecond = server.url("/cdn/second").toString()
         val resolveCalls = AtomicInteger(0)
         CometProxyUrlResolver.setTransportForTesting { _, _ ->
-            if (resolveCalls.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+            ProxyResolution.Redirected(
+                if (resolveCalls.getAndIncrement() == 0) resolvedFirst else resolvedSecond
+            )
         }
 
         val proxy = "https://comet.feels.legal/aBc/playback/abcd/0/0/n/n?torrent_name=x&name=y"

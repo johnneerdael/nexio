@@ -74,7 +74,8 @@ object StreamAutoPlaySelector {
         source: StreamAutoPlaySource,
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
-        preferredBingeGroup: String? = null
+        preferredBingeGroup: String? = null,
+        placeholderPredicate: (Stream) -> Boolean = { false }
     ): List<Stream> {
         if (streams.isEmpty()) return emptyList()
 
@@ -92,14 +93,16 @@ object StreamAutoPlaySelector {
         if (targetBingeGroup.isNotEmpty()) {
             val bingeGroupMatch = candidateStreams.firstOrNull { stream ->
                 normalizeBingeGroup(StreamBingeGroupResolver.resolve(stream)) == targetBingeGroup &&
-                    stream.getStreamUrl() != null
+                    stream.getStreamUrl() != null &&
+                    !placeholderPredicate(stream)
             }
             if (bingeGroupMatch != null) return listOf(bingeGroupMatch)
         }
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> emptyList()
-            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.filter { it.getStreamUrl() != null }
+            StreamAutoPlayMode.FIRST_STREAM ->
+                candidateStreams.filter { it.getStreamUrl() != null && !placeholderPredicate(it) }
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
  
@@ -139,6 +142,11 @@ object StreamAutoPlaySelector {
                         return@filter false
                     }
 
+                    // Must NOT be a known addon placeholder (200 served from
+                    // addon host). Filtering before any HEAD probe so we don't
+                    // waste a request on a guaranteed-bad candidate.
+                    if (placeholderPredicate(stream)) return@filter false
+
                     true
                 }
 
@@ -155,7 +163,8 @@ object StreamAutoPlaySelector {
         source: StreamAutoPlaySource,
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
-        preferredBingeGroup: String? = null
+        preferredBingeGroup: String? = null,
+        placeholderPredicate: (Stream) -> Boolean = { false }
     ): Stream? {
         val candidates = candidateAutoPlayStreams(
             streams = streams,
@@ -164,7 +173,8 @@ object StreamAutoPlaySelector {
             source = source,
             installedAddonNames = installedAddonNames,
             selectedAddons = selectedAddons,
-            preferredBingeGroup = preferredBingeGroup
+            preferredBingeGroup = preferredBingeGroup,
+            placeholderPredicate = placeholderPredicate
         )
         if (candidates.isEmpty()) return null
         if (mode != StreamAutoPlayMode.REGEX_MATCH) {
