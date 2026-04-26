@@ -780,6 +780,7 @@ class ProfileSettingsScopeContractTest {
         val simklLibrarySource = File("app/src/main/java/com/nexio/tv/data/repository/SimklLibraryService.kt").readText()
         val simklLibraryAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/simkl/SimklLibraryMutationAdapter.kt").readText()
         val simklRemoteSource = File("app/src/main/java/com/nexio/tv/data/repository/SimklTrackingRemoteDataSource.kt").readText()
+        val simklIntegrationSource = File("app/src/main/java/com/nexio/tv/data/integration/simkl/SimklIntegrationProvider.kt").readText()
 
         assertTrue(traktLibrarySource.contains("restoreSnapshotForProfile(activeProfileId())"))
         assertTrue(traktLibrarySource.contains("restoreSnapshotForProfile(profileId)"))
@@ -805,8 +806,10 @@ class ProfileSettingsScopeContractTest {
         assertTrue(simklLibraryAdapterSource.contains("profileId = profileId"))
 
         assertTrue(simklRemoteSource.contains("session: TrackingAuthSession? = null"))
-        assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthOwnerRequest(session, call)"))
-        assertTrue(simklRemoteSource.contains("simklAuthService.executeAuthorizedWriteRequest(session, call)"))
+        assertTrue(simklRemoteSource.contains("simklIntegrationProvider.getLastActivities(session)"))
+        assertTrue(simklRemoteSource.contains("simklIntegrationProvider.addToList(body = body, session = session)"))
+        assertTrue(simklIntegrationSource.contains("simklAuthService.executeAuthOwnerRequest(session, call)"))
+        assertTrue(simklIntegrationSource.contains("simklAuthService.executeAuthorizedWriteRequest(session, call)"))
     }
 
     @Test

@@ -295,8 +295,6 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var startupPerfTelemetryEnabled: Boolean = false
     @Volatile
-    private var diskFirstHomeStartupEnabled: Boolean = false
-    @Volatile
     private var startupPerfWindowOpen: Boolean = false
     private var startupWindowOpenedAtMs: Long = 0L
     private var startupDeferralGeneration: Long = 0L
@@ -386,11 +384,6 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
                 startupPerfTelemetryEnabled = enabled
-            }
-        }
-        lifecycleScope.launch {
-            debugSettingsDataStore.diskFirstHomeStartupEnabled.collect { enabled ->
-                diskFirstHomeStartupEnabled = enabled
             }
         }
         lifecycleScope.launch {
@@ -1173,7 +1166,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        startupSyncService.setStartupGateOpen(false)
         logStartupPerf("on_start")
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { idleScreensaverRepository.warmFromCache() }
@@ -1202,7 +1194,6 @@ class MainActivity : ComponentActivity() {
         deferredStartupWorkJob?.cancel()
         deferredBrowsableRequestJob?.cancel()
         startupPerfWindowJob?.cancel()
-        startupSyncService.setStartupGateOpen(false)
     }
 
     private fun scheduleDeferredStartupWork() {
@@ -1222,7 +1213,6 @@ class MainActivity : ComponentActivity() {
             if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
 
             logStartupPerf("deferred_startup_begin", "stable_frames=$reachedStableFrames")
-            startupSyncService.setStartupGateOpen(true)
             logStartupPerf("startup_sync_request_start")
             startupSyncService.requestSyncNow()
             logStartupPerf("startup_sync_request_end")
@@ -1231,10 +1221,6 @@ class MainActivity : ComponentActivity() {
             logStartupPerf("channel_sync_request_end", "reason=app_start_deferred")
             maybeLaunchPendingBrowsableChannelRequest()
             launch {
-                if (diskFirstHomeStartupEnabled) {
-                    logStartupPerf("tracking_refresh_deferred", "reason=disk_first_startup_gate")
-                    return@launch
-                }
                 logStartupPerf("tracking_refresh_start")
                 runCatching { trackingProgressService.refreshNow() }
                     .onFailure { error ->

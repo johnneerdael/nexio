@@ -445,8 +445,7 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
 
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
-        val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
-        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = true).collectLatest { snapshot ->
             val capturedGeneration = homeProfileGeneration
             val hydratedSnapshot = applyTomatoesOverridesToTraktSnapshot(
                 snapshot,
@@ -485,9 +484,7 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
             persistedTraktDiscoverySnapshot = hydratedSnapshot
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_discovery")
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("trakt_discovery")
-            }
+            runSerializedHomeRefreshIfNeeded("trakt_discovery")
         }
     }
 }
@@ -503,25 +500,17 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
                 !shouldSuppressProfileSwitchRefresh("trakt_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                if (shouldDeferStartupNetworkWork()) {
-                    startupRefreshPending = true
-                    logStartupPerf("catalog_refresh_deferred", "reason=trakt_pref_change")
-                } else {
-                    traktDiscoveryService.ensureFresh(force = false)
-                }
+                traktDiscoveryService.ensureFresh(force = false)
             }
             startupRefreshPending = true
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("trakt_pref_change")
-            }
+            runSerializedHomeRefreshIfNeeded("trakt_pref_change")
         }
     }
 }
 
 internal fun HomeViewModel.observeSimklDiscoveryPipeline() {
     viewModelScope.launch {
-        val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
-        simklDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+        simklDiscoveryService.observeSnapshot(autoRefreshOnStart = true).collectLatest { snapshot ->
             val capturedGeneration = homeProfileGeneration
             if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
                 Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
@@ -541,13 +530,11 @@ internal fun HomeViewModel.observeSimklDiscoveryPipeline() {
             persistedSimklDiscoverySnapshot = snapshot
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_discovery")
-            if (!shouldDeferStartupNetworkWork()) {
-                runCatching { renewSimklSyntheticSnapshotPipeline(snapshot) }
-                    .onFailure { error ->
-                        Log.w(HomeViewModel.TAG, "Failed to renew SIMKL synthetic snapshot after discovery update", error)
-                    }
-                runSerializedHomeRefreshIfNeeded("simkl_discovery")
-            }
+            runCatching { renewSimklSyntheticSnapshotPipeline(snapshot) }
+                .onFailure { error ->
+                    Log.w(HomeViewModel.TAG, "Failed to renew SIMKL synthetic snapshot after discovery update", error)
+                }
+            runSerializedHomeRefreshIfNeeded("simkl_discovery")
         }
     }
 }
@@ -562,28 +549,20 @@ internal fun HomeViewModel.observeSimklCatalogPreferencesPipeline() {
                 !shouldSuppressProfileSwitchRefresh("simkl_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                if (shouldDeferStartupNetworkWork()) {
-                    startupRefreshPending = true
-                    logStartupPerf("catalog_refresh_deferred", "reason=simkl_pref_change")
-                } else {
-                    runCatching { simklDiscoveryService.ensureFresh(force = false) }
-                        .onFailure { error ->
-                            Log.w(HomeViewModel.TAG, "Failed to refresh SIMKL discovery after settings change", error)
-                        }
-                }
+                runCatching { simklDiscoveryService.ensureFresh(force = false) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to refresh SIMKL discovery after settings change", error)
+                    }
             }
             startupRefreshPending = true
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("simkl_pref_change")
-            }
+            runSerializedHomeRefreshIfNeeded("simkl_pref_change")
         }
     }
 }
 
 internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
-        val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
-        mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+        mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = true).collectLatest { snapshot ->
             val capturedGeneration = homeProfileGeneration
             val hydratedSnapshot = applyTomatoesOverridesToMDBListSnapshot(
                 snapshot,
@@ -611,9 +590,7 @@ internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
             )
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_mdblist_discovery")
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("mdblist_discovery")
-            }
+            runSerializedHomeRefreshIfNeeded("mdblist_discovery")
         }
     }
 }
@@ -628,15 +605,10 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
                     !shouldSuppressProfileSwitchRefresh("mdblist_settings_change") &&
                     isNonPlaybackHomeWorkAllowed()
                 ) {
-                    if (shouldDeferStartupNetworkWork()) {
-                        startupRefreshPending = true
-                        logStartupPerf("catalog_refresh_deferred", "reason=mdblist_settings_change")
-                    } else {
-                        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
-                            .onFailure { error ->
-                                Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
-                            }
-                    }
+                    runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
+                        .onFailure { error ->
+                            Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
+                        }
                 } else if ((!settings.enabled || settings.apiKey.isBlank()) &&
                     !shouldBlockProfileSwitchDiskSnapshotRefresh("mdblist_settings_disabled")
                 ) {
@@ -644,9 +616,7 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
                     persistedMDBListDiscoverySnapshot = mdbListDiscoverySnapshot
                     startupRefreshPending = true
                     applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_mdblist_settings_disabled")
-                    if (!shouldDeferStartupNetworkWork()) {
-                        runSerializedHomeRefreshIfNeeded("mdblist_settings_disabled")
-                    }
+                    runSerializedHomeRefreshIfNeeded("mdblist_settings_disabled")
                 }
             }
     }
@@ -662,17 +632,10 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
                 !shouldSuppressProfileSwitchRefresh("mdblist_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                if (shouldDeferStartupNetworkWork()) {
-                    startupRefreshPending = true
-                    logStartupPerf("catalog_refresh_deferred", "reason=mdblist_pref_change")
-                } else {
-                    mdbListDiscoveryService.ensureFresh(force = false)
-                }
+                mdbListDiscoveryService.ensureFresh(force = false)
             }
             startupRefreshPending = true
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("mdblist_pref_change")
-            }
+            runSerializedHomeRefreshIfNeeded("mdblist_pref_change")
         }
     }
 }
@@ -690,13 +653,11 @@ internal fun HomeViewModel.observeKitsuDiscoveryPipeline() {
             kitsuDiscoverySnapshot = snapshot
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_kitsu_discovery")
-            if (!shouldDeferStartupNetworkWork()) {
-                runCatching { renewKitsuSyntheticSnapshotPipeline(snapshot) }
-                    .onFailure { error ->
-                        Log.w(HomeViewModel.TAG, "Failed to renew Kitsu synthetic snapshot after discovery update", error)
-                    }
-                runSerializedHomeRefreshIfNeeded("kitsu_discovery")
-            }
+            runCatching { renewKitsuSyntheticSnapshotPipeline(snapshot) }
+                .onFailure { error ->
+                    Log.w(HomeViewModel.TAG, "Failed to renew Kitsu synthetic snapshot after discovery update", error)
+                }
+            runSerializedHomeRefreshIfNeeded("kitsu_discovery")
         }
     }
 }
@@ -713,20 +674,13 @@ internal fun HomeViewModel.observeKitsuCatalogPreferencesPipeline() {
                 !shouldSuppressProfileSwitchRefresh("kitsu_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                if (shouldDeferStartupNetworkWork()) {
-                    startupRefreshPending = true
-                    logStartupPerf("catalog_refresh_deferred", "reason=kitsu_pref_change")
-                } else {
-                    runCatching { kitsuDiscoveryService.refreshCatalogs(prefs, force = false) }
-                        .onFailure { error ->
-                            Log.w(HomeViewModel.TAG, "Failed to refresh Kitsu discovery after settings change", error)
-                        }
-                }
+                runCatching { kitsuDiscoveryService.refreshCatalogs(prefs, force = false) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to refresh Kitsu discovery after settings change", error)
+                    }
             }
             startupRefreshPending = true
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("kitsu_pref_change")
-            }
+            runSerializedHomeRefreshIfNeeded("kitsu_pref_change")
         }
     }
 }
@@ -748,13 +702,11 @@ internal fun HomeViewModel.observeTmdbDiscoveryPipeline() {
             tmdbDiscoverySnapshot = snapshot
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_tmdb_discovery")
-            if (!shouldDeferStartupNetworkWork()) {
-                runCatching { renewTmdbSyntheticSnapshotPipeline(snapshot) }
-                    .onFailure { error ->
-                        Log.w(HomeViewModel.TAG, "Failed to renew TMDB synthetic snapshot after discovery update", error)
-                    }
-                runSerializedHomeRefreshIfNeeded("tmdb_discovery")
-            }
+            runCatching { renewTmdbSyntheticSnapshotPipeline(snapshot) }
+                .onFailure { error ->
+                    Log.w(HomeViewModel.TAG, "Failed to renew TMDB synthetic snapshot after discovery update", error)
+                }
+            runSerializedHomeRefreshIfNeeded("tmdb_discovery")
         }
     }
 }
@@ -772,20 +724,13 @@ internal fun HomeViewModel.observeTmdbCatalogPreferencesPipeline() {
                 !shouldSuppressProfileSwitchRefresh("tmdb_pref_change") &&
                 isNonPlaybackHomeWorkAllowed()
             ) {
-                if (shouldDeferStartupNetworkWork()) {
-                    startupRefreshPending = true
-                    logStartupPerf("catalog_refresh_deferred", "reason=tmdb_pref_change")
-                } else {
-                    runCatching { tmdbDiscoveryService.refreshCatalogs(prefs, force = false) }
-                        .onFailure { error ->
-                            Log.w(HomeViewModel.TAG, "Failed to refresh TMDB discovery after settings change", error)
-                        }
-                }
+                runCatching { tmdbDiscoveryService.refreshCatalogs(prefs, force = false) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to refresh TMDB discovery after settings change", error)
+                    }
             }
             startupRefreshPending = true
-            if (!shouldDeferStartupNetworkWork()) {
-                runSerializedHomeRefreshIfNeeded("tmdb_pref_change")
-            }
+            runSerializedHomeRefreshIfNeeded("tmdb_pref_change")
         }
     }
 }
@@ -881,9 +826,6 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
                 installedAddonsObserved = true
                 addonsCache = addons
                 applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_installed_addons")
-                if (diskFirstHomeStartupEnabled) {
-                    openStartupDeferralWindowIfNeeded("installed_addons")
-                }
                 val blockNetworkRefresh = shouldBlockProfileSwitchDiskSnapshotRefresh("observe_installed_addons")
                 loadAllCatalogsPipeline(addons, allowNetworkRefresh = !blockNetworkRefresh)
             }
@@ -2006,7 +1948,6 @@ internal fun HomeViewModel.loadCatalogPipeline(
 ) {
     val loadJob = viewModelScope.launch {
         var hasCountedCompletion = false
-        val withStartupGate = shouldDeferStartupNetworkWork()
         suspend fun runCatalogLoad() {
             if (generation != catalogLoadGeneration) return
             if (!isNonPlaybackHomeWorkAllowed()) {
@@ -2035,7 +1976,7 @@ internal fun HomeViewModel.loadCatalogPipeline(
                 skip = 0,
                 skipStep = skipStep,
                 supportsSkip = supportsSkip,
-                allowNetworkRefresh = allowNetworkRefresh && !shouldDeferStartupNetworkWork()
+                allowNetworkRefresh = allowNetworkRefresh
             ).collect { result ->
                 if (generation != catalogLoadGeneration) return@collect
                 when (result) {
@@ -2054,12 +1995,6 @@ internal fun HomeViewModel.loadCatalogPipeline(
                             HomeViewModel.TAG,
                             "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size} pending=$pendingCatalogLoads"
                         )
-                        if (withStartupGate) {
-                            logStartupPerf(
-                                "catalog_cache_applied",
-                                "catalogKey=$key items=${result.data.items.size}"
-                            )
-                        }
                         if (pendingCatalogLoads == 0) {
                             catalogsLoadInProgress = false
                         }
@@ -2085,16 +2020,8 @@ internal fun HomeViewModel.loadCatalogPipeline(
                 }
             }
         }
-        if (withStartupGate) {
-            startupCatalogLoadSemaphore.withPermit {
-                catalogLoadSemaphore.withPermit {
-                    runCatalogLoad()
-                }
-            }
-        } else {
-            catalogLoadSemaphore.withPermit {
-                runCatalogLoad()
-            }
+        catalogLoadSemaphore.withPermit {
+            runCatalogLoad()
         }
     }
     registerCatalogLoadJob(loadJob)
@@ -2531,19 +2458,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
     if (shouldKeepVisibleContent) {
         _uiState.update { it.copy(isLoading = true, error = null) }
-        return
-    }
-
-    if (
-        diskFirstHomeStartupEnabled &&
-        expectedConfiguredOrderKeys.isNotEmpty() &&
-        !candidateSnapshotComplete &&
-        !hasTransientLoadingRows
-    ) {
-        val hasVisibleContent = hasRenderableHomeContent(_uiState.value)
-        if (!hasVisibleContent) {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-        }
         return
     }
 

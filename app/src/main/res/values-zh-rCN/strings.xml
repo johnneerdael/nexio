@@ -850,8 +850,6 @@
     <string name="playback_logging_stream_subtitle">向 logcat 发送详细的流获取时序和过滤诊断信息。</string>
     <string name="playback_logging_startup_perf_title">启用启动帧遥测</string>
     <string name="playback_logging_startup_perf_subtitle">向 logcat 发送启动里程碑和慢帧时序诊断信息，用于首帧渲染分析。</string>
-    <string name="playback_logging_disk_first_home_startup_title">启用磁盘优先主页启动模式</string>
-    <string name="playback_logging_disk_first_home_startup_subtitle">启动时将繁重的主页刷新工作延迟 20 秒，优先使用磁盘缓存内容。</string>
     <string name="audio_lang_original">原始语言</string>
     <string name="audio_iec_packer_channel_layout_title">IEC 打包器 PCM 声道</string>
     <string name="audio_iec_packer_channel_layout_sub">设置在直通禁用或不支持时使用的 Kodi 风格最大 PCM 扬声器布局。</string>

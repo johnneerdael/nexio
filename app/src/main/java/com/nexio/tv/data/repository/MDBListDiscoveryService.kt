@@ -74,15 +74,8 @@ class MDBListDiscoveryService @Inject constructor(
     private val lastRefreshByProfile = mutableMapOf<Int, Long>()
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
-    private val startupRefreshGateMs = 20_000L
     @Volatile
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
-    @Volatile
-    private var diskFirstHomeStartupEnabled: Boolean = false
-    @Volatile
-    private var startupRefreshGateUntilElapsedMs: Long = 0L
-    @Volatile
-    private var startupGateInitialized: Boolean = false
 
     private fun snapshotForProfile(profileId: Int): MDBListDiscoverySnapshot =
         profileSnapshots.value[profileId] ?: MDBListDiscoverySnapshot()
@@ -97,14 +90,6 @@ class MDBListDiscoveryService @Inject constructor(
             snapshotStore.read(profileId = profileId)?.let { persisted ->
                 setProfileSnapshot(profileId, persisted)
                 lastRefreshByProfile[profileId] = persisted.updatedAtMs
-            }
-        }
-        scope.launch {
-            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
-            applyStartupRefreshGate(enabled, "init")
-            startupGateInitialized = true
-            debugSettingsDataStore.diskFirstHomeStartupEnabled.collect { updated ->
-                applyStartupRefreshGate(updated, "toggle_change")
             }
         }
     }
@@ -122,11 +107,6 @@ class MDBListDiscoveryService @Inject constructor(
                     }
                     if (autoRefreshOnStart && !hadPersistedSnapshot) {
                         scope.launch {
-                            ensureStartupGateInitialized()
-                            if (isStartupRefreshGated()) {
-                                Log.d("MDBListDiscovery", "Auto-refresh deferred by startup gate")
-                                return@launch
-                            }
                             runCatching { ensureFresh(force = false, profileId = profileId) }
                                 .onFailure { error ->
                                     Log.w("MDBListDiscovery", "Failed to refresh MDBList discovery snapshot", error)
@@ -137,9 +117,7 @@ class MDBListDiscoveryService @Inject constructor(
         }
     }
 
-    /** Bypasses the startup refresh gate. Only call from explicit UI actions. */
     suspend fun priorityFetch() {
-        startupRefreshGateUntilElapsedMs = 0L
         ensureFresh(force = true)
     }
 
@@ -147,11 +125,6 @@ class MDBListDiscoveryService @Inject constructor(
         force: Boolean,
         profileId: Int = profileManager.activeProfileId.value
     ) = withContext(Dispatchers.IO) {
-        ensureStartupGateInitialized()
-        if (isStartupRefreshGated()) {
-            Log.d("MDBListDiscovery", "ensureFresh deferred by startup gate")
-            return@withContext
-        }
         val settings = mdbListSettingsDataStore.settings.first()
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val apiKey = settings.apiKey.trim()
@@ -450,29 +423,6 @@ class MDBListDiscoveryService @Inject constructor(
         } catch (_: Exception) {
             null
         }
-    }
-
-    private suspend fun ensureStartupGateInitialized() {
-        if (startupGateInitialized) return
-        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
-        applyStartupRefreshGate(enabled, "lazy_init")
-        startupGateInitialized = true
-    }
-
-    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
-        diskFirstHomeStartupEnabled = enabled
-        if (enabled) {
-            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
-            Log.d("MDBListDiscovery", "Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
-        } else {
-            startupRefreshGateUntilElapsedMs = 0L
-            Log.d("MDBListDiscovery", "Startup refresh gate disabled reason=$reason")
-        }
-    }
-
-    private fun isStartupRefreshGated(): Boolean {
-        if (!diskFirstHomeStartupEnabled) return false
-        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private fun parseListOptions(array: JSONArray, isPersonal: Boolean): List<MDBListListOption> {

@@ -145,9 +145,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         internal const val CONTINUE_WATCHING_ENRICHMENT_CONCURRENCY = 2
-        private const val STARTUP_CATALOG_LOAD_CONCURRENCY = 1
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
-        internal const val STARTUP_NETWORK_DEFERRAL_WINDOW_MS = 20_000L
         internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 750L
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
@@ -202,7 +200,6 @@ class HomeViewModel @Inject constructor(
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null
     internal var hasRenderedFirstCatalog = false
-    internal val startupCatalogLoadSemaphore = Semaphore(STARTUP_CATALOG_LOAD_CONCURRENCY)
     internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
     internal var pendingCatalogLoads = 0
     internal val activeCatalogLoadJobs = mutableSetOf<Job>()
@@ -330,15 +327,6 @@ class HomeViewModel @Inject constructor(
     internal var lastForegroundRefreshMs: Long = 0L
     @Volatile
     internal var startupPerfTelemetryEnabled: Boolean = false
-    @Volatile
-    internal var diskFirstHomeStartupEnabled: Boolean = false
-    @Volatile
-    internal var startupWindowOpenUntilMs: Long = 0L
-    @Volatile
-    internal var isStartupDeferredRefreshAllowed: Boolean = true
-    @Volatile
-    internal var startupDeferralCompleted: Boolean = false
-    internal var startupDeferralWindowJob: Job? = null
     internal var deferredStartupRefreshJob: Job? = null
     internal var pendingSerializedHomeRefreshReason: String? = null
     internal val syntheticCatalogStoreMutex = Mutex()
@@ -377,7 +365,6 @@ class HomeViewModel @Inject constructor(
     init {
         observeStartupPerfTelemetry()
         observePlaybackWorkGate()
-        observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
         observeProfileSwitches()
         observeTrackingProviderState()
@@ -437,23 +424,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collectLatest { enabled ->
                 startupPerfTelemetryEnabled = enabled
-            }
-        }
-    }
-
-    private fun observeDiskFirstHomeStartupToggle() {
-        viewModelScope.launch {
-            debugSettingsDataStore.diskFirstHomeStartupEnabled.collectLatest { enabled ->
-                diskFirstHomeStartupEnabled = enabled
-                if (!enabled) {
-                    isStartupDeferredRefreshAllowed = true
-                    startupDeferralCompleted = false
-                    startupWindowOpenUntilMs = 0L
-                    startupDeferralWindowJob?.cancel()
-                    return@collectLatest
-                }
-                startupDeferralCompleted = false
-                openStartupDeferralWindowIfNeeded("toggle_enabled")
             }
         }
     }
@@ -704,44 +674,14 @@ class HomeViewModel @Inject constructor(
     private fun loadMoreCatalogItems(catalogId: String, addonId: String, type: String) =
         loadMoreCatalogItemsPipeline(catalogId, addonId, type)
 
-    internal fun openStartupDeferralWindowIfNeeded(reason: String) {
-        if (!diskFirstHomeStartupEnabled) return
-        if (startupDeferralCompleted) return
-        if (syntheticHomeCatalogStore.read(profileId = profileManager.activeProfileId.value) == null) {
-            startupDeferralCompleted = true
-            isStartupDeferredRefreshAllowed = true
-            logStartupPerf("disk_first_startup_window_skipped", "reason=$reason cause=no_snapshot")
-            return
-        }
-        val now = SystemClock.elapsedRealtime()
-        if (startupWindowOpenUntilMs > now) return
-        startupWindowOpenUntilMs = now + STARTUP_NETWORK_DEFERRAL_WINDOW_MS
-        isStartupDeferredRefreshAllowed = false
-        logStartupPerf("disk_first_startup_window_open", "reason=$reason")
-        startupDeferralWindowJob?.cancel()
-        startupDeferralWindowJob = viewModelScope.launch {
-            delay(STARTUP_NETWORK_DEFERRAL_WINDOW_MS)
-            isStartupDeferredRefreshAllowed = true
-            startupDeferralCompleted = true
-            logStartupPerf("disk_first_startup_window_closed")
-            runDeferredStartupRefreshIfNeeded("window_closed")
-        }
-    }
-
-    internal fun shouldDeferStartupNetworkWork(): Boolean {
-        if (!diskFirstHomeStartupEnabled) return false
-        return !isStartupDeferredRefreshAllowed && SystemClock.elapsedRealtime() < startupWindowOpenUntilMs
-    }
-
     internal fun effectiveCatalogLoadConcurrency(): Int {
-        return if (shouldDeferStartupNetworkWork()) STARTUP_CATALOG_LOAD_CONCURRENCY else MAX_CATALOG_LOAD_CONCURRENCY
+        return MAX_CATALOG_LOAD_CONCURRENCY
     }
 
     internal fun runDeferredStartupRefreshIfNeeded(reason: String) {
         if (shouldSuppressProfileSwitchRefresh(reason)) return
         if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
         if (!isNonPlaybackHomeWorkAllowed()) return
-        if (!diskFirstHomeStartupEnabled || shouldDeferStartupNetworkWork()) return
         runSerializedHomeRefreshIfNeeded(reason)
     }
 
@@ -754,7 +694,6 @@ class HomeViewModel @Inject constructor(
             Log.d(TAG, "Skipping serialized home refresh during active playback reason=$reason")
             return
         }
-        if (shouldDeferStartupNetworkWork()) return
         if (deferredStartupRefreshJob?.isActive == true) {
             Log.d(TAG, "Serialized home refresh already running; queueing reason=$reason")
             pendingSerializedHomeRefreshReason = reason
@@ -858,15 +797,7 @@ class HomeViewModel @Inject constructor(
     }
 
     internal fun shouldSuppressIncrementalHomeSnapshotPublish(): Boolean {
-        if (!diskFirstHomeStartupEnabled) return false
-        if (!hasPersistedCatalogSnapshot) return false
-        val hasVisibleContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
-            _uiState.value.heroItems.isNotEmpty()
-        if (!hasVisibleContent) return false
-        return restoredCatalogSnapshotActive ||
-            startupRefreshPending ||
-            syntheticSnapshotBatchActive ||
-            deferredStartupRefreshJob?.isActive == true
+        return false
     }
 
     internal fun logStartupPerf(event: String, details: String? = null) {
@@ -975,7 +906,6 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         posterStatusReconcileJob?.cancel()
-        startupDeferralWindowJob?.cancel()
         deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()
         trailerPreviewJob?.cancel()

@@ -11,14 +11,6 @@ internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
         accountSyncRefreshNotifier.events.collect {
             clearProfileSwitchDiskSnapshotMode("account_sync")
             startupRefreshPending = true
-            if (diskFirstHomeStartupEnabled) {
-                openStartupDeferralWindowIfNeeded("account_sync")
-            }
-
-            if (shouldDeferStartupNetworkWork()) {
-                logStartupPerf("catalog_refresh_deferred", "reason=account_sync")
-                return@collect
-            }
             runSerializedHomeRefreshIfNeeded("account_sync")
         }
     }
@@ -28,9 +20,6 @@ internal fun HomeViewModel.onForegroundPipeline() {
     viewModelScope.launch {
         if (shouldSuppressProfileSwitchRefresh("foreground")) return@launch
         clearProfileSwitchDiskSnapshotMode("foreground")
-        if (diskFirstHomeStartupEnabled) {
-            openStartupDeferralWindowIfNeeded("home_foreground")
-        }
 
         val now = System.currentTimeMillis()
         if (now - lastForegroundRefreshMs < FOREGROUND_REFRESH_THROTTLE_MS) {
@@ -39,10 +28,6 @@ internal fun HomeViewModel.onForegroundPipeline() {
         lastForegroundRefreshMs = now
         startupRefreshPending = true
 
-        if (shouldDeferStartupNetworkWork()) {
-            logStartupPerf("catalog_refresh_deferred", "reason=foreground_window")
-            return@launch
-        }
         runSerializedHomeRefreshIfNeeded("foreground")
     }
 }

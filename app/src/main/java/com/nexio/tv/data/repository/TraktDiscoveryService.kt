@@ -148,15 +148,8 @@ class TraktDiscoveryService @Inject constructor(
     private val minRefreshIntervalMs = 30_000L
     private val fallbackRefreshIntervalMs = 6L * 60 * 60 * 1_000L
     private val maxItemsPerRail = 20
-    private val startupRefreshGateMs = 20_000L
     @Volatile
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
-    @Volatile
-    private var diskFirstHomeStartupEnabled: Boolean = false
-    @Volatile
-    private var startupRefreshGateUntilElapsedMs: Long = 0L
-    @Volatile
-    private var startupGateInitialized: Boolean = false
 
     private fun snapshotForProfile(profileId: Int): TraktDiscoverySnapshot =
         profileSnapshots.value[profileId] ?: TraktDiscoverySnapshot()
@@ -179,14 +172,6 @@ class TraktDiscoveryService @Inject constructor(
                 setRawProfileSnapshot(profileId, persisted)
                 setProfileSnapshot(profileId, persisted)
                 lastRefreshByProfile[profileId] = persisted.updatedAtMs
-            }
-        }
-        scope.launch {
-            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
-            applyStartupRefreshGate(enabled, "init")
-            startupGateInitialized = true
-            debugSettingsDataStore.diskFirstHomeStartupEnabled.collect { updated ->
-                applyStartupRefreshGate(updated, "toggle_change")
             }
         }
         scope.launch {
@@ -237,11 +222,6 @@ class TraktDiscoveryService @Inject constructor(
                     }
                     if (autoRefreshOnStart && !hadPersistedSnapshot) {
                         scope.launch {
-                            ensureStartupGateInitialized()
-                            if (isStartupRefreshGated()) {
-                                Log.d("TraktDiscovery", "Auto-refresh deferred by startup gate")
-                                return@launch
-                            }
                             runCatching { ensureFresh(force = false, profileId = profileId) }
                                 .onFailure { error ->
                                     Log.w("TraktDiscovery", "Failed to refresh Trakt discovery snapshot", error)
@@ -252,9 +232,7 @@ class TraktDiscoveryService @Inject constructor(
         }
     }
 
-    /** Bypasses the startup refresh gate. Only call from explicit UI actions. */
     suspend fun priorityFetch() {
-        startupRefreshGateUntilElapsedMs = 0L
         ensureFresh(force = true)
     }
 
@@ -262,11 +240,6 @@ class TraktDiscoveryService @Inject constructor(
         force: Boolean,
         profileId: Int = profileManager.activeProfileId.value
     ) = withContext(Dispatchers.IO) {
-        ensureStartupGateInitialized()
-        if (isStartupRefreshGated()) {
-            Log.d("TraktDiscovery", "ensureFresh deferred by startup gate")
-            return@withContext
-        }
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) {
             setRawProfileSnapshot(profileId, TraktDiscoverySnapshot())
             setProfileSnapshot(profileId, TraktDiscoverySnapshot())
@@ -399,29 +372,6 @@ class TraktDiscoveryService @Inject constructor(
         }.onFailure { error ->
             Log.w("TraktDiscoveryService", "Failed to enqueue recommendation dismissal: ${error.message}")
         }
-    }
-
-    private suspend fun ensureStartupGateInitialized() {
-        if (startupGateInitialized) return
-        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
-        applyStartupRefreshGate(enabled, "lazy_init")
-        startupGateInitialized = true
-    }
-
-    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
-        diskFirstHomeStartupEnabled = enabled
-        if (enabled) {
-            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
-            Log.d("TraktDiscovery", "Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
-        } else {
-            startupRefreshGateUntilElapsedMs = 0L
-            Log.d("TraktDiscovery", "Startup refresh gate disabled reason=$reason")
-        }
-    }
-
-    private fun isStartupRefreshGated(): Boolean {
-        if (!diskFirstHomeStartupEnabled) return false
-        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private suspend fun hasActivitiesChanged(): Boolean {
