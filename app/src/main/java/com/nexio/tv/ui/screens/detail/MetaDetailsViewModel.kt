@@ -876,6 +876,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentType = tmdbContentType
                 )
             }.getOrElse {
+                if (it is CancellationException) throw it
                 Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
                 emptyList()
             }
@@ -1074,6 +1075,7 @@ class MetaDetailsViewModel @Inject constructor(
                 contentType = tmdbContentType
             )
         }.getOrElse {
+            if (it is CancellationException) throw it
             Log.w(TAG, "Failed to load TMDB reviews for ${meta.id}: ${it.message}")
             emptyList()
         }
@@ -1120,6 +1122,7 @@ class MetaDetailsViewModel @Inject constructor(
                 limit = TRAKT_REVIEWS_PAGE_SIZE
             )
         }.getOrElse {
+            if (it is CancellationException) throw it
             Log.w(
                 TAG,
                 "Failed to load Trakt reviews for $metaIdForLogs with id=${query.pathId} endpoint=$endpointLabel page=$page: ${it.message}"
@@ -1197,7 +1200,10 @@ class MetaDetailsViewModel @Inject constructor(
         tmdbCandidates.forEach { numericTmdbId ->
             val imdb = runCatching {
                 tmdbService.tmdbToImdb(numericTmdbId, tmdbLookupType)
-            }.getOrNull()
+            }.getOrElse {
+                if (it is CancellationException) throw it
+                null
+            }
             imdb?.takeIf { it.isNotBlank() }?.let { ordered.add(it) }
         }
 
@@ -1221,6 +1227,7 @@ class MetaDetailsViewModel @Inject constructor(
                     collectionId = collectionId
                 )
             }.getOrElse {
+                if (it is CancellationException) throw it
                 Log.w(TAG, "Failed to load collection $collectionId: ${it.message}")
                 emptyList()
             }
@@ -1240,7 +1247,10 @@ class MetaDetailsViewModel @Inject constructor(
                 fallbackItemId = itemId,
                 fallbackItemType = itemType
             )
-        }.getOrNull()
+        }.getOrElse {
+            if (it is CancellationException) throw it
+            null
+        }
 
         _uiState.update { state ->
             state.copy(
@@ -1961,7 +1971,10 @@ class MetaDetailsViewModel @Inject constructor(
             val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
             val tmdbId = if (isTvContent) null else runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-            }.getOrNull()
+            }.getOrElse {
+                if (it is CancellationException) throw it
+                null
+            }
             debugLog(
                 TAG,
                 "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId isTvContent=$isTvContent fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
@@ -2183,6 +2196,7 @@ class MetaDetailsViewModel @Inject constructor(
                 }
                 showMessage(message)
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 showMessage(
                     message = error.message ?: "Failed to update library",
                     isError = true
@@ -2207,6 +2221,7 @@ class MetaDetailsViewModel @Inject constructor(
                     )
                 }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 _uiState.update {
                     it.copy(
                         pickerPending = false,
@@ -2255,6 +2270,7 @@ class MetaDetailsViewModel @Inject constructor(
                 }
                 showMessage(context.getString(R.string.detail_lists_updated))
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 _uiState.update {
                     it.copy(
                         pickerPending = false,
@@ -2293,6 +2309,7 @@ class MetaDetailsViewModel @Inject constructor(
                     showMessage(context.getString(R.string.detail_movie_marked_watched))
                 }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 showMessage(
                     message = error.message ?: "Failed to update watched status",
                     isError = true
@@ -2327,6 +2344,7 @@ class MetaDetailsViewModel @Inject constructor(
                     showMessage(context.getString(R.string.detail_episode_marked_watched))
                 }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 showMessage(
                     message = error.message ?: "Failed to update episode watched status",
                     isError = true
@@ -2487,6 +2505,7 @@ class MetaDetailsViewModel @Inject constructor(
                     watchProgressRepository.removeFromHistory(progressContentId, seasonNumber, episodeNumber)
                     unmarked++
                 }.onFailure { error ->
+                    if (error is CancellationException) throw error
                     Log.w(TAG, "Failed to unmark S${video.season}E${video.episode}: ${error.message}")
                     clearEpisodeWatchOverride(setOf(episodeKey))
                 }
@@ -2534,6 +2553,7 @@ class MetaDetailsViewModel @Inject constructor(
                     watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, ep, progressContentId))
                     marked++
                 }.onFailure { error ->
+                    if (error is CancellationException) throw error
                     Log.w(TAG, "Failed to mark S${ep.season}E${ep.episode} as watched: ${error.message}")
                     clearEpisodeWatchOverride(setOf(episodeKey))
                 }
@@ -2679,7 +2699,10 @@ class MetaDetailsViewModel @Inject constructor(
             val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
             val tmdbId = if (isTvContent) null else runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-            }.getOrNull()
+            }.getOrElse {
+                if (it is CancellationException) throw it
+                null
+            }
 
             val trailerResult = trailerService.resolveTrailer(
                 title = meta.name,
@@ -3044,6 +3067,7 @@ class MetaDetailsViewModel @Inject constructor(
                 showMessage(context.getString(R.string.cw_action_clear_progress))
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 // Roll back the optimistic removal on Trakt failure.
                 if (captured != null) {
                     continueWatchingSnapshotService.reinsertResumeEntry(captured)
@@ -3209,6 +3233,7 @@ class MetaDetailsViewModel @Inject constructor(
                     showMessage(message = context.getString(R.string.error_tracking_check_in_failed), isError = true)
                 }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 showMessage(
                     message = error.message ?: context.getString(R.string.error_tracking_check_in_failed),
                     isError = true
