@@ -50,9 +50,15 @@ object FfmpegStreamMetadataProbe {
     private const val ANALYZE_DURATION_US = 10_000
     private const val READ_WRITE_TIMEOUT_US = 5_000_000
 
-    // The bundled FFmpeg network probe path is shared with DV/AFR probing and is not safe to
-    // enter concurrently on every Android build.
-    private val nativeProbeLock = Any()
+    // Protects the in-memory probe cache (LinkedHashMap — not thread-safe) and
+    // testing-hook mutations of [backend]. The native ffprobe / libavformat
+    // call (`backend.probeStreamMetadataJson`) is intentionally NOT held under
+    // this lock — concurrent ffprobe invocations are allowed so probe-fanout
+    // (primary + fallback candidates) actually runs in parallel rather than
+    // serializing through a single critical section. The FFmpeg fork on the
+    // playback target builds its libavformat contexts per-call and tolerates
+    // concurrent entry from multiple Java threads.
+    private val cacheLock = Any()
     private val cache = object : LinkedHashMap<ProbeKey, FfmpegStreamMetadataProbeResult>(
         MAX_CACHE_ENTRIES,
         0.75f,
@@ -74,14 +80,14 @@ object FfmpegStreamMetadataProbe {
     }
 
     internal fun setBackendForTesting(testBackend: FfmpegStreamMetadataBackend) {
-        synchronized(nativeProbeLock) {
+        synchronized(cacheLock) {
             backend = testBackend
             cache.clear()
         }
     }
 
     internal fun resetForTesting() {
-        synchronized(nativeProbeLock) {
+        synchronized(cacheLock) {
             backend = DefaultFfmpegStreamMetadataBackend
             cache.clear()
         }
@@ -111,8 +117,9 @@ object FfmpegStreamMetadataProbe {
         headers: Map<String, String> = emptyMap()
     ): FfmpegStreamMetadataProbeResult? = withContext(Dispatchers.IO) {
         val headerBlob = headers.toProbeHeaderBlob()
+        // No cache, no lock — concurrent ffprobe is allowed.
         val rawJson = runCatching {
-            synchronized(nativeProbeLock) { backend.probeStreamMetadataJson(url, headerBlob) }
+            backend.probeStreamMetadataJson(url, headerBlob)
         }.getOrNull() ?: return@withContext null
         runCatching { parse(rawJson) }.getOrNull()
     }
@@ -150,54 +157,68 @@ object FfmpegStreamMetadataProbe {
         }
         return runCatching {
             val key = ProbeKey(url = probeUrl, requestHeadersBlob = headerBlob)
-            synchronized(nativeProbeLock) {
-                cache[key]?.let { cached ->
-                    if (diagnosticsEnabled) {
-                        Log.i(
-                            TAG,
-                            "FFMPEG_PROBE_CACHE_HIT elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                                "url=$probeUrl streams=${cached.streams.size}"
-                        )
-                    }
-                    return cached
-                }
-                val rawJson = backend.probeStreamMetadataJson(probeUrl, headerBlob)
-                if (diagnosticsEnabled) {
-                    logChunked(
-                        prefix = "FFMPEG_PROBE_RAW_RESPONSE elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$probeUrl bytes=${rawJson?.length ?: 0}",
-                        value = rawJson ?: "<null>"
-                    )
-                }
-                val parsed = rawJson?.let(::parse)
-                if (parsed == null || parsed.streams.isEmpty()) {
-                    Log.w(
-                        TAG,
-                        "FFmpeg stream metadata probe returned no streams " +
-                            "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$probeUrl"
-                    )
-                    return null
-                }
+
+            // 1. Cache lookup under the cacheLock (LinkedHashMap is not
+            //    thread-safe). Released immediately so probes don't queue here.
+            val cached = synchronized(cacheLock) { cache[key] }
+            if (cached != null) {
                 if (diagnosticsEnabled) {
                     Log.i(
                         TAG,
-                        "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$probeUrl streams=${parsed.streams.size}"
-                    )
-                    val subtitleSummary = parsed.streams
-                        .filter { stream -> stream.normalizedCodecType() == "subtitle" }
-                        .joinToString(prefix = "[", postfix = "]") { stream ->
-                            stream.codecName.normalizedCodecName().ifBlank { "<blank>" }
-                        }
-                    Log.i(
-                        TAG,
-                        "FFMPEG_PROBE_SUBTITLE_SUMMARY elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$probeUrl hasEmbeddedAssSsa=${parsed.hasEmbeddedAssSsaSubtitleStream} " +
-                            "subtitleCodecs=$subtitleSummary"
+                        "FFMPEG_PROBE_CACHE_HIT elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                            "url=$probeUrl streams=${cached.streams.size}"
                     )
                 }
-                parsed.also { cache[key] = it }
+                return@runCatching cached
             }
+
+            // 2. Native ffprobe call — runs WITHOUT the cache lock so
+            //    concurrent probes against different URLs actually run in
+            //    parallel rather than serializing through one critical
+            //    section. The FFmpeg fork on this build is reentrant from
+            //    multiple Java threads.
+            val rawJson = backend.probeStreamMetadataJson(probeUrl, headerBlob)
+            if (diagnosticsEnabled) {
+                logChunked(
+                    prefix = "FFMPEG_PROBE_RAW_RESPONSE elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                        "url=$probeUrl bytes=${rawJson?.length ?: 0}",
+                    value = rawJson ?: "<null>"
+                )
+            }
+            val parsed = rawJson?.let(::parse)
+            if (parsed == null || parsed.streams.isEmpty()) {
+                Log.w(
+                    TAG,
+                    "FFmpeg stream metadata probe returned no streams " +
+                        "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$probeUrl"
+                )
+                return@runCatching null
+            }
+            if (diagnosticsEnabled) {
+                Log.i(
+                    TAG,
+                    "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                        "url=$probeUrl streams=${parsed.streams.size}"
+                )
+                val subtitleSummary = parsed.streams
+                    .filter { stream -> stream.normalizedCodecType() == "subtitle" }
+                    .joinToString(prefix = "[", postfix = "]") { stream ->
+                        stream.codecName.normalizedCodecName().ifBlank { "<blank>" }
+                    }
+                Log.i(
+                    TAG,
+                    "FFMPEG_PROBE_SUBTITLE_SUMMARY elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                        "url=$probeUrl hasEmbeddedAssSsa=${parsed.hasEmbeddedAssSsaSubtitleStream} " +
+                        "subtitleCodecs=$subtitleSummary"
+                )
+            }
+
+            // 3. Cache write under the cacheLock. If two concurrent probes
+            //    raced on the same URL the second writer simply overwrites
+            //    with an equivalent value — both holders return their own
+            //    parsed result.
+            synchronized(cacheLock) { cache[key] = parsed }
+            parsed
         }.getOrElse { error ->
             Log.w(
                 TAG,
