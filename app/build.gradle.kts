@@ -26,6 +26,14 @@ fun resolveProperty(dev: Properties, local: Properties, key: String, fallback: S
         ?: fallback
 }
 
+fun resolveCredentialProperty(dev: Properties, local: Properties, key: String, fallback: String = ""): String {
+    return providers.gradleProperty(key).orNull?.trim()?.takeIf { it.isNotBlank() }
+        ?: System.getenv(key)?.trim()?.takeIf { it.isNotBlank() }
+        ?: dev.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
+        ?: local.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
+        ?: fallback
+}
+
 fun cmakePath(path: String): String {
     val normalized = path.trim()
     if (normalized.isBlank()) return ""
@@ -101,11 +109,30 @@ val doviEnableRealLink = parseBooleanProperty(
 val doviStaticLibPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_STATIC_LIB")
 val doviIncludeDirPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_INCLUDE_DIR")
 val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_PREBUILT_ROOT")
-val useMedia3Source = parseBooleanProperty(
+    val useMedia3Source = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "USE_MEDIA3_SOURCE", "true")
 )
 val playPublishTaskRequested = gradle.startParameter.taskNames.any { taskName ->
     taskName.endsWith("bundlePlayRelease") || taskName.endsWith(":app:bundlePlayRelease")
+}
+
+val releaseKeystoreFile = resolveCredentialProperty(devProperties, localProperties, "KEYSTORE_FILE", "../nexio.jks")
+val releaseKeystoreAlias = resolveCredentialProperty(devProperties, localProperties, "KEY_ALIAS", "nexio")
+val releaseKeystorePassword = resolveCredentialProperty(devProperties, localProperties, "KEYSTORE_PASSWORD")
+val releaseKeyPassword = resolveCredentialProperty(devProperties, localProperties, "KEY_PASSWORD", releaseKeystorePassword)
+val releaseKeystore = file(releaseKeystoreFile)
+
+if (releaseKeystoreAlias.isBlank()) {
+    throw GradleException("Release signing key alias is empty. Set KEY_ALIAS.")
+}
+if (releaseKeystorePassword.isBlank()) {
+    throw GradleException("Release keystore password is empty. Set KEYSTORE_PASSWORD.")
+}
+if (releaseKeyPassword.isBlank()) {
+    throw GradleException("Release key password is empty. Set KEY_PASSWORD.")
+}
+if (!releaseKeystore.exists()) {
+    throw GradleException("Release keystore not found at ${releaseKeystore.absolutePath}. Set KEYSTORE_FILE or provide a KEYSTORE_BASE64-backed file.")
 }
 
 val animeIdMapOutput = layout.projectDirectory.file("src/main/assets/anime/anime-id-map.json")
@@ -482,10 +509,10 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = "nexio"
-            keyPassword = "gP^EJa&xPLCk89"
-            storeFile = file("../nexio.jks")
-            storePassword = "gP^EJa&xPLCk89"
+            keyAlias = releaseKeystoreAlias
+            keyPassword = releaseKeyPassword
+            storeFile = releaseKeystore
+            storePassword = releaseKeystorePassword
         }
     }
 
