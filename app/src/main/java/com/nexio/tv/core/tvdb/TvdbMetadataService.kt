@@ -331,7 +331,6 @@ class TvdbMetadataService @Inject constructor(
         seriesId: Int,
         language: String
     ): String? {
-        if (language == "eng") return null
         return runCatching {
             tvdbApi.getSeriesTranslation(
                 authorization = authorization,

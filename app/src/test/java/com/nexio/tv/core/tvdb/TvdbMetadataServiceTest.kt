@@ -454,6 +454,33 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `fetch series translation overview hits TVDB even for english locale`() = runTest {
+        val tvdbApi = mockk<TvdbApi>(relaxed = true)
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
+        } returns Response.success(
+            TvdbSeriesExtendedResponse(
+                data = fullSeriesRecord().copy(overview = "Hebrew base overview")
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "eng")
+        } returns Response.success(
+            TvdbTranslationResponse(
+                data = TvdbTranslationRecord(name = "Game of Thrones", overview = "English overview", language = "eng")
+            )
+        )
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
+
+        assertEquals("English overview", enrichment?.description)
+        coVerify(exactly = 1) { tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "eng") }
+    }
+
+    @Test
     fun `fetch season episodes reads cache before TVDB network`() = runTest {
         val tvdbApi = mockk<TvdbApi>(relaxed = true)
         val authService = mockk<TvdbAuthService>()
