@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -34,10 +35,10 @@ data class TrackingWatchingNowState(
 )
 
 interface TrackingScrobbleService {
-    suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null)
-    suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null)
-    suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null)
-    suspend fun checkin(item: TrackingScrobbleItem, message: String? = null, ownerProfileId: Int? = null): Boolean
+    suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext)
+    suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext)
+    suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext)
+    suspend fun checkin(item: TrackingScrobbleItem, message: String? = null, owner: PlaybackOwnerContext): Boolean
     fun observeWatchingNowState(): Flow<TrackingWatchingNowState>
 }
 
@@ -49,59 +50,59 @@ class DefaultTrackingScrobbleService @Inject constructor(
     private val trackingProviderStateService: TrackingProviderStateService
 ) : TrackingScrobbleService {
 
-    override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int?) {
-        val providerState = providerState(ownerProfileId)
+    override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
+        val providerState = providerState(owner)
         when (providerState.effectiveProvider) {
             TrackingProvider.SIMKL -> {
                 if (!providerState.simklAuthenticated) return
-                simklScrobbleService.scrobbleStart(item, progressPercent, ownerProfileId)
+                simklScrobbleService.scrobbleStart(item, progressPercent, owner.ownerProfileId)
             }
             TrackingProvider.TRAKT -> {
                 if (!providerState.traktAuthenticated) return
-                toTraktItem(item)?.let { traktScrobbleService.scrobbleStart(it, progressPercent, ownerProfileId) }
+                toTraktItem(item)?.let { traktScrobbleService.scrobbleStart(it, progressPercent, owner.ownerProfileId) }
             }
         }
     }
 
-    override suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int?) {
-        val providerState = providerState(ownerProfileId)
+    override suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
+        val providerState = providerState(owner)
         when (providerState.effectiveProvider) {
             TrackingProvider.SIMKL -> {
                 if (!providerState.simklAuthenticated) return
-                simklScrobbleService.scrobbleStop(item, progressPercent, ownerProfileId)
+                simklScrobbleService.scrobbleStop(item, progressPercent, owner.ownerProfileId)
             }
             TrackingProvider.TRAKT -> {
                 if (!providerState.traktAuthenticated) return
-                toTraktItem(item)?.let { traktScrobbleService.scrobbleStop(it, progressPercent, ownerProfileId) }
+                toTraktItem(item)?.let { traktScrobbleService.scrobbleStop(it, progressPercent, owner.ownerProfileId) }
             }
         }
     }
 
-    override suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int?) {
-        val providerState = providerState(ownerProfileId)
+    override suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
+        val providerState = providerState(owner)
         when (providerState.effectiveProvider) {
             TrackingProvider.SIMKL -> {
                 if (!providerState.simklAuthenticated) return
-                simklScrobbleService.scrobblePause(item, progressPercent, ownerProfileId)
+                simklScrobbleService.scrobblePause(item, progressPercent, owner.ownerProfileId)
             }
             TrackingProvider.TRAKT -> {
                 if (!providerState.traktAuthenticated) return
-                toTraktItem(item)?.let { traktScrobbleService.scrobblePause(it, progressPercent, ownerProfileId) }
+                toTraktItem(item)?.let { traktScrobbleService.scrobblePause(it, progressPercent, owner.ownerProfileId) }
             }
         }
     }
 
-    override suspend fun checkin(item: TrackingScrobbleItem, message: String?, ownerProfileId: Int?): Boolean {
-        val providerState = providerState(ownerProfileId)
+    override suspend fun checkin(item: TrackingScrobbleItem, message: String?, owner: PlaybackOwnerContext): Boolean {
+        val providerState = providerState(owner)
         return when (providerState.effectiveProvider) {
             TrackingProvider.SIMKL -> {
                 if (!providerState.simklAuthenticated) return false
-                simklScrobbleService.checkin(item, message, ownerProfileId)
+                simklScrobbleService.checkin(item, message, owner.ownerProfileId)
             }
             TrackingProvider.TRAKT -> {
                 if (!providerState.traktAuthenticated) return false
                 val traktItem = toTraktItem(item) ?: return false
-                traktScrobbleService.checkin(traktItem, message, ownerProfileId)
+                traktScrobbleService.checkin(traktItem, message, owner.ownerProfileId)
             }
         }
     }
@@ -161,7 +162,6 @@ class DefaultTrackingScrobbleService @Inject constructor(
         is TrackingScrobbleItem.Episode -> contentId
     }
 
-    private suspend fun providerState(ownerProfileId: Int?): EffectiveTrackingProviderState =
-        ownerProfileId?.let { trackingProviderStateService.currentState(it) }
-            ?: trackingProviderStateService.currentState()
+    private suspend fun providerState(owner: PlaybackOwnerContext): EffectiveTrackingProviderState =
+        trackingProviderStateService.currentState(owner.ownerProfileId)
 }
