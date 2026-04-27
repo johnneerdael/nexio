@@ -1,5 +1,13 @@
 package com.nexio.tv.core.integration
 
+import com.nexio.tv.core.trace.FileRuntimeTraceSink
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.RuntimeTraceContext
+import com.nexio.tv.core.trace.RuntimeTraceContextElement
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
+import com.nexio.tv.core.trace.TraceHash
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,14 +21,136 @@ class DefaultIntegrationRuntime @Inject constructor(
     private val singleFlight: IntegrationSingleFlight,
     private val playbackGate: IntegrationPlaybackGate,
     private val registry: IntegrationPolicyRegistry,
-    private val auditSink: IntegrationAuditSink
+    private val auditSink: IntegrationAuditSink,
+    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
 ) : IntegrationRuntime {
+
+    private val nextOpId = AtomicLong(0L)
+    private val nextSeq = AtomicLong(0L)
+
+    private fun newOperationId(): String = "op_${nextOpId.incrementAndGet()}"
+
+    private fun buildTraceContext(
+        operationId: String,
+        provider: IntegrationProvider,
+        apiShapeId: String?,
+        operationKey: String,
+        cacheKey: String?,
+        workClass: IntegrationWorkClass,
+        scope: IntegrationScope,
+        profileId: Int?
+    ): RuntimeTraceContext {
+        val sessionId = (traceSink as? FileRuntimeTraceSink)?.sessionId ?: "noop"
+        val profileHash = profileId?.let { TraceHash.of(sessionId, it.toString()) }
+        return RuntimeTraceContext(
+            traceSessionId = sessionId,
+            runtimeOperationId = operationId,
+            provider = provider,
+            apiShapeId = apiShapeId ?: "",
+            operationKey = operationKey,
+            cacheKey = cacheKey,
+            workClass = workClass,
+            scope = scope,
+            profileHash = profileHash,
+            accountProvider = null,
+            credentialHash = null
+        )
+    }
+
+    private fun emitTrace(
+        eventType: String,
+        ctx: RuntimeTraceContext,
+        extra: Map<String, Any?> = emptyMap()
+    ) {
+        if (traceSink === NoopRuntimeTraceSink) return
+        val payload = mapOf(
+            "runtimeOperationId" to ctx.runtimeOperationId,
+            "provider" to ctx.provider.name,
+            "apiShapeId" to ctx.apiShapeId,
+            "operationKey" to ctx.operationKey,
+            "cacheKey" to ctx.cacheKey,
+            "workClass" to ctx.workClass.name,
+            "scope" to ctx.scope.auditName,
+            "profileHash" to ctx.profileHash
+        ) + extra
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = ctx.traceSessionId,
+                sequence = nextSeq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = eventType,
+                payload = payload
+            )
+        )
+    }
+
+    private fun outcomeName(result: IntegrationCallResult<*>): String = when (result) {
+        is IntegrationCallResult.Success -> "SUCCESS"
+        is IntegrationCallResult.HttpError -> "HTTP_ERROR"
+        is IntegrationCallResult.NetworkError -> "NETWORK_ERROR"
+        IntegrationCallResult.Missing -> "MISSING"
+    }
+
+    private fun outcomeName(result: IntegrationFetchResult<*>): String = when (result) {
+        is IntegrationFetchResult.Updated<*> -> "SUCCESS"
+        is IntegrationFetchResult.Fresh<*> -> "FRESH"
+        is IntegrationFetchResult.Stale<*> -> "STALE"
+        IntegrationFetchResult.Missing -> "MISSING"
+    }
 
     override suspend fun <T> get(
         spec: IntegrationSpec<T>,
         options: IntegrationFetchOptions
     ): IntegrationFetchResult<T> {
         val traceId = traceId(spec.operationKey)
+        val operationId = newOperationId()
+        val traceContext = buildTraceContext(
+            operationId = operationId,
+            provider = spec.provider,
+            apiShapeId = spec.apiShapeId,
+            operationKey = spec.operationKey,
+            cacheKey = spec.cacheKey,
+            workClass = spec.workClass,
+            scope = spec.scope,
+            profileId = spec.profileContext?.profileId
+        )
+        emitTrace("runtime.operation_start", traceContext)
+        val tracedStartedAt = System.currentTimeMillis()
+        return withContext(RuntimeTraceContextElement(traceContext)) {
+            try {
+                val result = getInternal(spec, options, traceId)
+                emitTrace(
+                    "runtime.operation_finish",
+                    traceContext,
+                    mapOf(
+                        "durationMs" to (System.currentTimeMillis() - tracedStartedAt),
+                        "outcome" to outcomeName(result)
+                    )
+                )
+                result
+            } catch (t: Throwable) {
+                if (t !is CancellationException) {
+                    emitTrace(
+                        "runtime.operation_failed",
+                        traceContext,
+                        mapOf(
+                            "durationMs" to (System.currentTimeMillis() - tracedStartedAt),
+                            "error" to t.message
+                        )
+                    )
+                }
+                throw t
+            }
+        }
+    }
+
+    private suspend fun <T> getInternal(
+        spec: IntegrationSpec<T>,
+        options: IntegrationFetchOptions,
+        traceId: String
+    ): IntegrationFetchResult<T> {
         record(
             spec = spec,
             traceId = traceId,
@@ -36,6 +166,48 @@ class DefaultIntegrationRuntime @Inject constructor(
 
     override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> {
         val traceId = traceId(spec.operationKey)
+        val operationId = newOperationId()
+        val traceContext = buildTraceContext(
+            operationId = operationId,
+            provider = spec.provider,
+            apiShapeId = spec.apiShapeId,
+            operationKey = spec.operationKey,
+            cacheKey = null,
+            workClass = spec.workClass,
+            scope = spec.scope,
+            profileId = spec.profileContext?.profileId
+        )
+        emitTrace("runtime.operation_start", traceContext)
+        val tracedStartedAt = System.currentTimeMillis()
+        return withContext(RuntimeTraceContextElement(traceContext)) {
+            try {
+                val result = callInternal(spec, traceId)
+                emitTrace(
+                    "runtime.operation_finish",
+                    traceContext,
+                    mapOf(
+                        "durationMs" to (System.currentTimeMillis() - tracedStartedAt),
+                        "outcome" to outcomeName(result)
+                    )
+                )
+                result
+            } catch (t: Throwable) {
+                if (t !is CancellationException) {
+                    emitTrace(
+                        "runtime.operation_failed",
+                        traceContext,
+                        mapOf(
+                            "durationMs" to (System.currentTimeMillis() - tracedStartedAt),
+                            "error" to t.message
+                        )
+                    )
+                }
+                throw t
+            }
+        }
+    }
+
+    private suspend fun <T> callInternal(spec: IntegrationCallSpec<T>, traceId: String): IntegrationCallResult<T> {
         record(
             spec = spec,
             traceId = traceId,
@@ -110,6 +282,48 @@ class DefaultIntegrationRuntime @Inject constructor(
 
     override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? {
         val traceId = traceId(spec.operationKey)
+        val operationId = newOperationId()
+        val traceContext = buildTraceContext(
+            operationId = operationId,
+            provider = spec.provider,
+            apiShapeId = spec.apiShapeId,
+            operationKey = spec.operationKey,
+            cacheKey = null,
+            workClass = spec.workClass,
+            scope = spec.scope,
+            profileId = spec.profileContext?.profileId
+        )
+        emitTrace("runtime.operation_start", traceContext)
+        val tracedStartedAt = System.currentTimeMillis()
+        return withContext(RuntimeTraceContextElement(traceContext)) {
+            try {
+                val handle = openInternal(spec, traceId)
+                emitTrace(
+                    "runtime.operation_finish",
+                    traceContext,
+                    mapOf(
+                        "durationMs" to (System.currentTimeMillis() - tracedStartedAt),
+                        "outcome" to if (handle != null) "OPENED" else "MISSING"
+                    )
+                )
+                handle
+            } catch (t: Throwable) {
+                if (t !is CancellationException) {
+                    emitTrace(
+                        "runtime.operation_failed",
+                        traceContext,
+                        mapOf(
+                            "durationMs" to (System.currentTimeMillis() - tracedStartedAt),
+                            "error" to t.message
+                        )
+                    )
+                }
+                throw t
+            }
+        }
+    }
+
+    private suspend fun <T> openInternal(spec: IntegrationStreamSpec<T>, traceId: String): IntegrationStreamHandle<T>? {
         record(
             spec = spec,
             traceId = traceId,
