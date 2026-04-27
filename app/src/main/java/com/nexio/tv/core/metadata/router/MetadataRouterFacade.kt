@@ -61,7 +61,8 @@ class MetadataRouterFacade @Inject constructor(
             resolverSchedule = resolverSchedule,
             resolvedDocument = resolvedDocument,
             displayMetadata = displayMetadata,
-            trace = runResult.trace
+            trace = runResult.trace,
+            providerRunResult = runResult
         )
     }
 

@@ -9,6 +9,7 @@ import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataCandidate
 import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
 import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
@@ -147,6 +148,12 @@ class MetadataAuditRunner private constructor(
         if (identityResolution != null) trace.onIdentityResolution(identityResolution)
         val providerPlanEvent = result.plan?.toAuditEvent(item)
         if (providerPlanEvent != null) trace.onProviderPlan(providerPlanEvent)
+        result.providerRunResult
+            ?.stepResults
+            .orEmpty()
+            .flatMap { it.localizationPayloads }
+            .toLocalizationEvent(itemId = item.id, provider = result.route?.provider)
+            ?.let(trace::onLocalization)
         val cwSnapshot = if (scenario.continueWatching || scenario.staleRoutingVersion) {
             ContinueWatchingSnapshotEvent(
                 contentId = item.id,
@@ -378,6 +385,38 @@ class MetadataAuditRunner private constructor(
             else -> null
         }
 
+    private fun List<MetadataLocalizationPayloadTrace>.toLocalizationEvent(
+        itemId: String,
+        provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider?
+    ): LocalizationEvent? {
+        if (isEmpty() || provider == null) return null
+        val requested = first()
+        val fallback = firstOrNull { !it.executedNetwork && it.language != requested.language } ?: requested
+        return LocalizationEvent(
+            itemId = itemId,
+            provider = provider,
+            requestedLanguage = requested.language,
+            fallbackLanguage = fallback.language,
+            policyVersion = requested.policyVersion,
+            providerFallbackAllowedForMissingLocalizedFields = false,
+            payloads = map { payload ->
+                LocalizationPayloadReport(
+                    apiShapeId = payload.apiShapeId,
+                    language = payload.language,
+                    cacheKey = payload.cacheKey,
+                    cacheDecision = payload.cacheDecision?.let(CacheDecision::valueOf),
+                    executedNetwork = payload.executedNetwork,
+                    source = "PRODUCTION_ADAPTER"
+                )
+            },
+            perEpisodeTranslationFallbacksAttempted = count {
+                it.apiShapeId == "tvdb.episode.translation"
+            },
+            maxPerEpisodeTranslationFallbacksAllowed = if (provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB) 8 else 0,
+            providerFallbackUsed = false
+        )
+    }
+
     companion object {
         private const val METADATA_AUDIT_SCHEMA_VERSION = 1
 
@@ -596,14 +635,12 @@ private class AuditMetadataProviderAdapter(
                 reason = cachePolicy.name
             )
         )
-        trace?.onLocalization(
-            localizationEvent(
-                route = route,
-                step = step,
-                cacheKey = "$cacheKey:policy:2",
-                decision = decision,
-                executedNetwork = networkExecuted
-            )
+        val localizationPayloads = localizationPayloads(
+            route = route,
+            step = step,
+            cacheKey = "$cacheKey:policy:2",
+            decision = decision,
+            executedNetwork = networkExecuted
         )
         scenario.premiumArtworkProvider?.let { artworkProvider ->
             val apiShapeId = when (artworkProvider) {
@@ -646,51 +683,56 @@ private class AuditMetadataProviderAdapter(
                     ResolvedField.TITLE to FieldValue("Runtime ${route.provider.name} title", FieldOwner.PRIMARY),
                     ResolvedField.POSTER to FieldValue("https://example.test/${route.provider.name.lowercase()}-poster.jpg", FieldOwner.PRIMARY)
                 )
-            )
+            ),
+            localizationPayloads = localizationPayloads
         )
     }
 
-    private fun localizationEvent(
+    private fun localizationPayloads(
         route: MetadataRoute,
         step: ProviderPlanStep,
         cacheKey: String,
         decision: CacheDecision,
         executedNetwork: Boolean
-    ): LocalizationEvent {
+    ): List<MetadataLocalizationPayloadTrace> {
         val requested = requestedLanguage(route)
         val fallback = fallbackLanguage(route.provider)
-        return LocalizationEvent(
-            itemId = itemId,
-            provider = route.provider,
-            requestedLanguage = requested,
-            fallbackLanguage = fallback,
-            policyVersion = 2,
-            providerFallbackAllowedForMissingLocalizedFields = false,
-            payloads = listOfNotNull(
-                LocalizationPayloadReport(
-                    apiShapeId = step.apiShapeId,
-                    language = requested,
-                    cacheKey = cacheKey,
-                    cacheDecision = decision,
-                    executedNetwork = executedNetwork
-                ),
-                if (requested == fallback) {
-                    null
-                } else {
-                    LocalizationPayloadReport(
-                        apiShapeId = step.apiShapeId,
-                        language = fallback,
-                        cacheKey = "$cacheKey:fallback:$fallback",
-                        cacheDecision = CacheDecision.HIT,
-                        executedNetwork = false
-                    )
-                }
+        val apiShapeId = localizationApiShape(route.provider, step.apiShapeId)
+        return listOfNotNull(
+            MetadataLocalizationPayloadTrace(
+                provider = route.provider,
+                apiShapeId = apiShapeId,
+                language = requested,
+                cacheKey = cacheKey,
+                cacheDecision = decision.name,
+                executedNetwork = executedNetwork,
+                policyVersion = 2
             ),
-            perEpisodeTranslationFallbacksAttempted = if (step.apiShapeId.contains("episode", ignoreCase = true)) 1 else 0,
-            maxPerEpisodeTranslationFallbacksAllowed = if (route.provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB) 8 else 0,
-            providerFallbackUsed = false
+            if (requested == fallback) {
+                null
+            } else {
+                MetadataLocalizationPayloadTrace(
+                    provider = route.provider,
+                    apiShapeId = apiShapeId,
+                    language = fallback,
+                    cacheKey = "$cacheKey:fallback:$fallback",
+                    cacheDecision = CacheDecision.HIT.name,
+                    executedNetwork = false,
+                    policyVersion = 2
+                )
+            }
         )
     }
+
+    private fun localizationApiShape(
+        provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider,
+        stepApiShapeId: String
+    ): String =
+        when (provider) {
+            com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB ->
+                if (stepApiShapeId == "tvdb.series.extended") "tvdb.series.translation" else stepApiShapeId
+            else -> stepApiShapeId
+        }
 
     private fun requestedLanguage(route: MetadataRoute): String =
         when (route.provider) {

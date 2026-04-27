@@ -26,7 +26,8 @@ data class MetadataResolutionResult(
     val resolverSchedule: ResolverSchedule,
     val resolvedDocument: ResolvedMetadataDocument,
     val displayMetadata: HomeDisplayMetadata,
-    val trace: List<MetadataRouteTrace>
+    val trace: List<MetadataRouteTrace>,
+    val providerRunResult: ProviderPlanRunResult? = null
 )
 
 sealed class MetadataRouteFailure(message: String) : RuntimeException(message) {
