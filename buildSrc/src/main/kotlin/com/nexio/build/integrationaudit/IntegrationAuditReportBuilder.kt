@@ -756,7 +756,7 @@ fun extractIntegrationAuditSpecs(
                         ?.takeUnless { it == "null" }
                 val rawApiShapeId = extractAuditStringArgument(window, "apiShapeId")
                 val operationKey = extractAuditStringArgument(window, "operationKey")
-                if (rawApiShapeId == "apiShapeId" && operationKey == "operationKey") {
+                if (rawApiShapeId == "apiShapeId") {
                     return@mapNotNull null
                 }
                 val apiShapeId = rawApiShapeId?.let { raw ->
