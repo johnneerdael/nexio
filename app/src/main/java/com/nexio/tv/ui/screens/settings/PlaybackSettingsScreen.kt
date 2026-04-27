@@ -430,6 +430,7 @@ internal fun PlaybackSettingsContent(
                     debridViewModel.refreshPublicCollectorDashboardLink()
                     showCollectorDashboardDialog = true
                 },
+                onOpenRuntimeTrace = { /* TODO: nav to RuntimeTraceSettingsScreen */ },
             )
         }
 

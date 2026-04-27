@@ -177,6 +177,7 @@ internal fun PlaybackSettingsSections(
     shadowAutoplayDataCollectionEnabled: Boolean,
     onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
     onShowCollectorDashboardQr: () -> Unit,
+    onOpenRuntimeTrace: () -> Unit,
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
     var afrExpanded by rememberSaveable { mutableStateOf(false) }
@@ -628,6 +629,15 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.debrid_data_collection_analyse_subtitle),
                     value = stringResource(R.string.debrid_data_collection_view_qr_action),
                     onClick = onShowCollectorDashboardQr
+                )
+            }
+
+            item(key = "troubleshooting_runtime_trace") {
+                SettingsActionRow(
+                    title = "Runtime & Metadata Trace",
+                    subtitle = "Capture runtime + HTTP events for support diagnostics",
+                    value = "Open",
+                    onClick = onOpenRuntimeTrace
                 )
             }
         }
