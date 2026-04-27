@@ -1017,23 +1017,53 @@ internal fun detectAudioTierCandidates(
     val hasAc3 = normalized.any { it == "dd" || it.contains("ac3") }
     val hasDts = normalized.any { it == "dts" }
 
+    // Source-format-aware Atmos disambiguation. Explicit container co-tags (truehd / ddp)
+    // override the release-type heuristic — title metadata is more reliable than the
+    // release classifier for rare cross-source cases (e.g. "BluRay.Atmos.DDP+5.1").
+    val isLosslessReleaseType = releaseType == ShadowReleaseType.REMUX ||
+        releaseType == ShadowReleaseType.BLURAY_ENCODE
+
     return buildList {
-        if (hasAtmos && hasTrueHd) {
-            add(ShadowAudioTier.TRUEHD_ATMOS)
+        when {
+            // Explicit TrueHD co-tag (or both co-tags present — TrueHD wins because it
+            // implies the higher-quality source).
+            hasAtmos && hasTrueHd -> {
+                add(ShadowAudioTier.TRUEHD_ATMOS)
+                add(ShadowAudioTier.TRUEHD)
+            }
+            // Explicit DDP co-tag.
+            hasAtmos && hasDdp -> {
+                add(ShadowAudioTier.DDP_ATMOS)
+                add(ShadowAudioTier.DDP)
+            }
+            // Atmos with no container co-tag — disambiguate by release type.
+            hasAtmos && isLosslessReleaseType -> {
+                add(ShadowAudioTier.TRUEHD_ATMOS)
+                add(ShadowAudioTier.TRUEHD)
+            }
+            hasAtmos -> {
+                // Default for WEB-DL / WEBRIP / encodes / unknown — DDP base is the
+                // most-permissive assumption and matches streaming-source reality.
+                add(ShadowAudioTier.DDP_ATMOS)
+                add(ShadowAudioTier.DDP)
+            }
         }
-        if (hasAtmos && hasDdp) {
-            add(ShadowAudioTier.DDP_ATMOS)
+
+        // DTS family — full backward-compat chain.
+        if (hasDtsX) {
+            add(ShadowAudioTier.DTSX)
+            add(ShadowAudioTier.DTSHD)
+            add(ShadowAudioTier.DTS)
+        } else if (hasDtsHd) {
+            add(ShadowAudioTier.DTSHD)
+            add(ShadowAudioTier.DTS)
         }
-        if (hasAtmos && !hasTrueHd && !hasDdp) {
-            add(ShadowAudioTier.DDP_ATMOS)
-            add(ShadowAudioTier.TRUEHD_ATMOS)
-        }
-        if (hasDtsX) add(ShadowAudioTier.DTSX)
-        if (hasTrueHd) add(ShadowAudioTier.TRUEHD)
-        if (hasDtsHd) add(ShadowAudioTier.DTSHD)
-        if (hasDdp) add(ShadowAudioTier.DDP)
+
+        // Non-Atmos lossless / lossy formats — no speculative fallback below their tier.
+        if (hasTrueHd && !hasAtmos) add(ShadowAudioTier.TRUEHD)
+        if (hasDdp && !hasAtmos) add(ShadowAudioTier.DDP)
         if (hasAc3) add(ShadowAudioTier.AC3)
-        if (hasDts) add(ShadowAudioTier.DTS)
+        if (hasDts && !hasDtsHd && !hasDtsX) add(ShadowAudioTier.DTS)
     }.distinct()
 }
 
