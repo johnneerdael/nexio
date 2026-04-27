@@ -88,7 +88,7 @@ object ProfileBoundaryEnforcer {
             )
         }
         val key = cacheKey.orEmpty()
-        if (key.isNotBlank() && !key.contains("profile:$profileId")) {
+        if (key.isBlank() || !profileOwnershipTokenPattern(profileId).containsMatchIn(key)) {
             throw ProfileBoundaryException(
                 ProfileBoundaryViolation.PROFILE_CACHE_KEY_MISSING_PROFILE_ID,
                 "Profile cache key must include profile:$profileId: $key"
@@ -141,6 +141,12 @@ object ProfileBoundaryEnforcer {
             ProfileBoundaryViolation.ACCOUNT_SCOPE_CONTEXT_MISSING_ACCOUNT,
             "Account scope requires account ref for provider=$provider"
         )
+        if (account.provider != provider) {
+            throw ProfileBoundaryException(
+                ProfileBoundaryViolation.ACCOUNT_SCOPE_CONTEXT_MISSING_ACCOUNT,
+                "Account scope context provider=${account.provider} does not match request provider=$provider"
+            )
+        }
         if (account.credentialHash != credentialHash) {
             throw ProfileBoundaryException(
                 ProfileBoundaryViolation.ACCOUNT_SCOPE_CREDENTIAL_MISMATCH,
@@ -161,4 +167,7 @@ object ProfileBoundaryEnforcer {
 
     private val PROFILE_KEY_PATTERN = Regex("""(^|:)profile(:|-|\d)""")
     private val IMAGE_LANGUAGE_PATTERN = Regex("""imageLang:([^:]+)""", RegexOption.IGNORE_CASE)
+
+    private fun profileOwnershipTokenPattern(profileId: Int): Regex =
+        Regex("""(^|:)profile:${Regex.escape(profileId.toString())}(:|$)""")
 }
