@@ -5,6 +5,7 @@ import com.nexio.tv.core.integration.IntegrationCacheOwnershipFactory
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationFetchOptions
+import com.nexio.tv.core.integration.IntegrationFetchResult
 import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
@@ -14,6 +15,9 @@ import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.integration.gsonCodec
 import com.nexio.tv.core.integration.valueOrNull
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
+import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -33,6 +37,7 @@ import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import com.nexio.tv.data.integration.metadata.LocalizationPolicy
 import com.nexio.tv.data.integration.metadata.LocalizedEpisodeBundle
+import com.nexio.tv.data.integration.metadata.LocalizedPayloadFetch
 import com.nexio.tv.data.integration.metadata.TvdbEpisodeLocalization
 import com.nexio.tv.data.integration.metadata.tvdbSeriesTranslationCacheKey
 import com.nexio.tv.data.remote.api.TvdbUpdatesResponse
@@ -305,12 +310,35 @@ class TvdbIntegrationProvider @Inject constructor(
         tvdbId: Int,
         language: String,
         localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
-    ): TvdbTranslationRecord? {
-        val authorization = tvdbAuthService.bearerToken() ?: return null
+    ): TvdbTranslationRecord? =
+        fetchSeriesTranslationWithTrace(
+            tvdbId = tvdbId,
+            language = language,
+            fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+            localizationPolicyVersion = localizationPolicyVersion
+        ).value
+
+    internal suspend fun fetchSeriesTranslationWithTrace(
+        tvdbId: Int,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
+    ): LocalizedPayloadFetch<TvdbTranslationRecord> {
+        val authorization = tvdbAuthService.bearerToken()
+        if (authorization == null) {
+            return null.toTvdbTranslationPayloadFetch(
+                tvdbId = tvdbId,
+                language = language,
+                fallbackRole = fallbackRole,
+                localizationPolicyVersion = localizationPolicyVersion,
+                cacheDecision = "MISS_NETWORK_SUPPRESSED",
+                executedNetwork = false
+            )
+        }
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
-            operationKey = "tvdb.series.translation",
+            operationKey = "tvdb.series.translation:$tvdbId:$language:policy:$localizationPolicyVersion",
             cacheKey = tvdbSeriesTranslationCacheKey(tvdbId, language, localizationPolicyVersion),
             codec = gsonCodec<TvdbTranslationRecord>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -337,7 +365,15 @@ class TvdbIntegrationProvider @Inject constructor(
                 }
             }
         )
-        return runtime.get(spec).valueOrNull()
+        val result = runtime.get(spec)
+        return result.valueOrNull().toTvdbTranslationPayloadFetch(
+            tvdbId = tvdbId,
+            language = language,
+            fallbackRole = fallbackRole,
+            localizationPolicyVersion = localizationPolicyVersion,
+            cacheDecision = result.cacheDecisionName(),
+            executedNetwork = result.executedNetwork()
+        )
     }
 
     suspend fun fetchSeriesEpisodesTranslated(
@@ -347,12 +383,44 @@ class TvdbIntegrationProvider @Inject constructor(
         page: Int = 0,
         season: Int? = null,
         localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
-    ): TvdbSeriesEpisodesData? {
-        val authorization = tvdbAuthService.bearerToken() ?: return null
+    ): TvdbSeriesEpisodesData? =
+        fetchSeriesEpisodesTranslatedWithTrace(
+            tvdbId = tvdbId,
+            seasonType = seasonType,
+            language = language,
+            fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+            page = page,
+            season = season,
+            localizationPolicyVersion = localizationPolicyVersion
+        ).value
+
+    private suspend fun fetchSeriesEpisodesTranslatedWithTrace(
+        tvdbId: Int,
+        seasonType: String,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        page: Int = 0,
+        season: Int? = null,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
+    ): LocalizedPayloadFetch<TvdbSeriesEpisodesData> {
+        val authorization = tvdbAuthService.bearerToken()
+        if (authorization == null) {
+            return null.toTvdbEpisodesPayloadFetch(
+                tvdbId = tvdbId,
+                seasonType = seasonType,
+                language = language,
+                fallbackRole = fallbackRole,
+                page = page,
+                season = season,
+                localizationPolicyVersion = localizationPolicyVersion,
+                cacheDecision = "MISS_NETWORK_SUPPRESSED",
+                executedNetwork = false
+            )
+        }
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
-            operationKey = "tvdb.series.episodes.language",
+            operationKey = "tvdb.series.episodes.language:$tvdbId:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
             cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
             codec = gsonCodec<TvdbSeriesEpisodesData>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -382,7 +450,18 @@ class TvdbIntegrationProvider @Inject constructor(
                 }
             }
         )
-        return runtime.get(spec).valueOrNull()
+        val result = runtime.get(spec)
+        return result.valueOrNull().toTvdbEpisodesPayloadFetch(
+            tvdbId = tvdbId,
+            seasonType = seasonType,
+            language = language,
+            fallbackRole = fallbackRole,
+            page = page,
+            season = season,
+            localizationPolicyVersion = localizationPolicyVersion,
+            cacheDecision = result.cacheDecisionName(),
+            executedNetwork = result.executedNetwork()
+        )
     }
 
     suspend fun fetchLocalizedSeasonEpisodeMetadata(
@@ -405,19 +484,25 @@ class TvdbIntegrationProvider @Inject constructor(
         season: Int? = null
     ): LocalizedEpisodeBundle {
         val policy = LocalizationPolicy.tvdb(requestedLanguage)
-        val englishEpisodes = fetchSeriesEpisodesTranslated(
+        val payloads = mutableListOf<MetadataLocalizationPayloadTrace>()
+        val english = fetchSeriesEpisodesTranslatedWithTrace(
             tvdbId = tvdbId,
             seasonType = seasonType,
             language = policy.fallbackLanguage.providerCode,
+            fallbackRole = MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
             season = season,
             localizationPolicyVersion = policy.policyVersion
-        )?.episodes.orEmpty()
+        )
+        payloads += english.trace
+        val englishEpisodes = english.value?.episodes.orEmpty()
         if (englishEpisodes.isEmpty()) {
             return TvdbEpisodeLocalization.mergeEnglishBaseBundle(
                 policy = policy,
                 englishEpisodes = emptyList(),
                 localizedSeasonEpisodes = emptyList(),
                 perEpisodeTranslations = emptyMap()
+            ).copy(
+                localizationPayloads = payloads
             )
         }
 
@@ -427,24 +512,30 @@ class TvdbIntegrationProvider @Inject constructor(
                 englishEpisodes = englishEpisodes,
                 localizedSeasonEpisodes = emptyList(),
                 perEpisodeTranslations = emptyMap()
+            ).copy(
+                localizationPayloads = payloads
             )
         }
 
-        val localizedEpisodes = fetchSeriesEpisodesTranslated(
+        val localized = fetchSeriesEpisodesTranslatedWithTrace(
             tvdbId = tvdbId,
             seasonType = seasonType,
             language = policy.requestedLanguage.providerCode,
+            fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
             season = season,
             localizationPolicyVersion = policy.policyVersion
-        )?.episodes.orEmpty()
+        )
+        payloads += localized.trace
+        val localizedEpisodes = localized.value?.episodes.orEmpty()
         val perEpisodeTranslations = TvdbEpisodeLocalization
             .idsMissingLocalizedFields(policy, englishEpisodes, localizedEpisodes)
             .associateWith { episodeId ->
-                fetchEpisodeTranslation(
+                fetchEpisodeTranslationWithTrace(
                     episodeId = episodeId,
                     language = policy.requestedLanguage.providerCode,
+                    fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
                     localizationPolicyVersion = policy.policyVersion
-                )
+                ).also { payloads += it.trace }.value
             }
             .mapNotNull { (episodeId, translation) ->
                 translation?.let { episodeId to it }
@@ -456,6 +547,8 @@ class TvdbIntegrationProvider @Inject constructor(
             englishEpisodes = englishEpisodes,
             localizedSeasonEpisodes = localizedEpisodes,
             perEpisodeTranslations = perEpisodeTranslations
+        ).copy(
+            localizationPayloads = payloads
         )
     }
 
@@ -463,12 +556,35 @@ class TvdbIntegrationProvider @Inject constructor(
         episodeId: Int,
         language: String,
         localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
-    ): TvdbTranslationRecord? {
-        val authorization = tvdbAuthService.bearerToken() ?: return null
+    ): TvdbTranslationRecord? =
+        fetchEpisodeTranslationWithTrace(
+            episodeId = episodeId,
+            language = language,
+            fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+            localizationPolicyVersion = localizationPolicyVersion
+        ).value
+
+    private suspend fun fetchEpisodeTranslationWithTrace(
+        episodeId: Int,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
+    ): LocalizedPayloadFetch<TvdbTranslationRecord> {
+        val authorization = tvdbAuthService.bearerToken()
+        if (authorization == null) {
+            return null.toTvdbEpisodeTranslationPayloadFetch(
+                episodeId = episodeId,
+                language = language,
+                fallbackRole = fallbackRole,
+                localizationPolicyVersion = localizationPolicyVersion,
+                cacheDecision = "MISS_NETWORK_SUPPRESSED",
+                executedNetwork = false
+            )
+        }
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TVDB,
             apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
-            operationKey = "tvdb.episode.translation",
+            operationKey = "tvdb.episode.translation:$episodeId:$language:policy:$localizationPolicyVersion",
             cacheKey = "tvdb:episode:$episodeId:translation:$language:policy:$localizationPolicyVersion",
             codec = gsonCodec<TvdbTranslationRecord>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -495,7 +611,15 @@ class TvdbIntegrationProvider @Inject constructor(
                 }
             }
         )
-        return runtime.get(spec).valueOrNull()
+        val result = runtime.get(spec)
+        return result.valueOrNull().toTvdbEpisodeTranslationPayloadFetch(
+            episodeId = episodeId,
+            language = language,
+            fallbackRole = fallbackRole,
+            localizationPolicyVersion = localizationPolicyVersion,
+            cacheDecision = result.cacheDecisionName(),
+            executedNetwork = result.executedNetwork()
+        )
     }
 
     suspend fun searchByRemoteId(remoteId: String): TvdbRemoteIdSearchResponse? {
@@ -644,4 +768,84 @@ class TvdbIntegrationProvider @Inject constructor(
         return response.body()?.let { IntegrationLoadResult.Success(it) }
             ?: IntegrationLoadResult.HttpError(404, reason = "tvdb_body_missing")
     }
+
+    private fun IntegrationFetchResult<*>.cacheDecisionName(): String =
+        when (this) {
+            is IntegrationFetchResult.Fresh -> "HIT"
+            is IntegrationFetchResult.Updated -> "MISS_THEN_NETWORK"
+            is IntegrationFetchResult.Stale -> "STALE_HIT"
+            IntegrationFetchResult.Missing -> "MISS_NETWORK_SUPPRESSED"
+        }
+
+    private fun IntegrationFetchResult<*>.executedNetwork(): Boolean =
+        this is IntegrationFetchResult.Updated
+
+    private fun TvdbTranslationRecord?.toTvdbTranslationPayloadFetch(
+        tvdbId: Int,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        localizationPolicyVersion: Int,
+        cacheDecision: String,
+        executedNetwork: Boolean
+    ): LocalizedPayloadFetch<TvdbTranslationRecord> =
+        LocalizedPayloadFetch(
+            value = this,
+            trace = MetadataLocalizationPayloadTrace(
+                provider = MetadataPrimaryProvider.TVDB,
+                apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
+                language = language,
+                fallbackRole = fallbackRole,
+                cacheKey = tvdbSeriesTranslationCacheKey(tvdbId, language, localizationPolicyVersion),
+                cacheDecision = cacheDecision,
+                executedNetwork = executedNetwork,
+                policyVersion = localizationPolicyVersion
+            )
+        )
+
+    private fun TvdbSeriesEpisodesData?.toTvdbEpisodesPayloadFetch(
+        tvdbId: Int,
+        seasonType: String,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        page: Int,
+        season: Int?,
+        localizationPolicyVersion: Int,
+        cacheDecision: String,
+        executedNetwork: Boolean
+    ): LocalizedPayloadFetch<TvdbSeriesEpisodesData> =
+        LocalizedPayloadFetch(
+            value = this,
+            trace = MetadataLocalizationPayloadTrace(
+                provider = MetadataPrimaryProvider.TVDB,
+                apiShapeId = TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
+                language = language,
+                fallbackRole = fallbackRole,
+                cacheKey = "tvdb:series:$tvdbId:episodes:$seasonType:$language:season:${season ?: "all"}:page:$page:policy:$localizationPolicyVersion",
+                cacheDecision = cacheDecision,
+                executedNetwork = executedNetwork,
+                policyVersion = localizationPolicyVersion
+            )
+        )
+
+    private fun TvdbTranslationRecord?.toTvdbEpisodeTranslationPayloadFetch(
+        episodeId: Int,
+        language: String,
+        fallbackRole: MetadataLocalizationFallbackRole,
+        localizationPolicyVersion: Int,
+        cacheDecision: String,
+        executedNetwork: Boolean
+    ): LocalizedPayloadFetch<TvdbTranslationRecord> =
+        LocalizedPayloadFetch(
+            value = this,
+            trace = MetadataLocalizationPayloadTrace(
+                provider = MetadataPrimaryProvider.TVDB,
+                apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
+                language = language,
+                fallbackRole = fallbackRole,
+                cacheKey = "tvdb:episode:$episodeId:translation:$language:policy:$localizationPolicyVersion",
+                cacheDecision = cacheDecision,
+                executedNetwork = executedNetwork,
+                policyVersion = localizationPolicyVersion
+            )
+        )
 }

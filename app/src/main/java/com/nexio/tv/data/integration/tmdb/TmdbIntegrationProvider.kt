@@ -315,7 +315,7 @@ class TmdbIntegrationProvider private constructor(
             IntegrationSpec(
                 provider = IntegrationProvider.TMDB,
                 apiShapeId = TmdbApiShapes.MOVIE_CORE,
-                operationKey = "tmdb.movie.core",
+                operationKey = "tmdb.movie.core:$movieId:$normalizedLanguage:policy:$localizationPolicyVersion",
                 cacheKey = "tmdb:movie:$movieId:$normalizedLanguage:core:$providerToken:policy:$localizationPolicyVersion",
                 codec = gsonCodec<TmdbEnrichment>(),
                 cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -351,7 +351,7 @@ class TmdbIntegrationProvider private constructor(
             IntegrationSpec(
                 provider = IntegrationProvider.TMDB,
                 apiShapeId = TmdbApiShapes.TV_CORE,
-                operationKey = "tmdb.tv.core",
+                operationKey = "tmdb.tv.core:$tvId:$normalizedLanguage:policy:$localizationPolicyVersion",
                 cacheKey = "tmdb:tv:$tvId:$normalizedLanguage:core:$providerToken:policy:$localizationPolicyVersion",
                 codec = gsonCodec<TmdbEnrichment>(),
                 cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -388,7 +388,7 @@ class TmdbIntegrationProvider private constructor(
             IntegrationSpec(
                 provider = IntegrationProvider.TMDB,
                 apiShapeId = TmdbApiShapes.SEASON_EPISODES,
-                operationKey = "tmdb.season.episodes",
+                operationKey = "tmdb.season.episodes:$tvId:$seasonNumber:$normalizedLanguage:policy:$localizationPolicyVersion",
                 cacheKey = "tmdb:tv:$tvId:season:$seasonNumber:episodes:$normalizedLanguage:policy:$localizationPolicyVersion",
                 codec = gsonCodec<TmdbSeasonResponse>(),
                 cachePolicy = IntegrationCachePolicy.CacheFirst(24L * 60L * 60L * 1000L, 7L * 24L * 60L * 60L * 1000L),

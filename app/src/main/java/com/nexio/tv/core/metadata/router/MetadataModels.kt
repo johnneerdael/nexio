@@ -98,6 +98,7 @@ data class MetadataLocalizationPayloadTrace(
     val provider: MetadataPrimaryProvider,
     val apiShapeId: String,
     val language: String,
+    val fallbackRole: MetadataLocalizationFallbackRole,
     val cacheKey: String,
     val cacheDecision: String?,
     val executedNetwork: Boolean,

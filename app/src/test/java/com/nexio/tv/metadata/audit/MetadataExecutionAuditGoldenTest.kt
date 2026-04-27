@@ -197,6 +197,8 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals("nld", tvdb.requestedLanguage)
         assertEquals("eng", tvdb.fallbackLanguage)
         assertFalse(tvdb.providerFallbackUsed)
+        assertTrue(tvdb.payloads.any { it.language == "nld" && it.fallbackRole == "LOCALIZED" })
+        assertTrue(tvdb.payloads.any { it.language == "eng" && it.fallbackRole == "LANGUAGE_FALLBACK" })
 
         assertEquals(MetadataPrimaryProvider.TMDB, tmdb.provider)
         assertEquals("nl-NL", tmdb.requestedLanguage)
@@ -213,6 +215,7 @@ class MetadataExecutionAuditGoldenTest {
             assertTrue(localization.payloads.isNotEmpty())
             assertTrue(localization.payloads.all { it.source == "PRODUCTION_ADAPTER" })
             assertTrue(localization.payloads.all { it.cacheKey.contains("policy:2") })
+            assertTrue(localization.payloads.any { it.fallbackRole == "LOCALIZED" })
             assertTrue(localization.payloads.any { it.language == localization.fallbackLanguage && !it.executedNetwork })
         }
     }
