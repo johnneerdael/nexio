@@ -44,6 +44,9 @@ data class TrackingNextUpEntry(
 interface TrackingProgressService {
     fun observeAllProgress(): Flow<List<WatchProgress>>
     fun observeRemoteSnapshotLoaded(): Flow<Boolean>
+    @Deprecated(
+        message = "Profile-boundary: use ContinueWatchingSnapshotService.observeContinueWatching(profileId) for profile-scoped CW. This method routes by active tracking provider only and is consumed internally by ContinueWatchingSnapshotService."
+    )
     fun observeContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>>
     fun observeSyntheticContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>>
     fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>>
@@ -120,6 +123,7 @@ class DefaultTrackingProgressService @Inject constructor(
             }
         }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun observeContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>> =
         trackingProviderStateService.state.flatMapLatest { state ->
             if (!state.canReadEffectiveProvider) {
