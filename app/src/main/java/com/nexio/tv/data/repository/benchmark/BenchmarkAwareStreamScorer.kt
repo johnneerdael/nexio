@@ -579,7 +579,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         )
         val hdrTier = hdrPolicy.effectiveHdrTier
         val hdrSupportTier = hdrPolicy.hdrSupportTier
-        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, device)
+        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, device, releaseType)
         val audioTier = audioDecision.effectiveTier
         val audioSupportTier = audioDecision.supportStatus
         val codecPoints = config.contentRewards.codec.getValue(codecTier)
@@ -936,7 +936,7 @@ private data class ShadowHdrScoringPolicy(
     val additionalPenalty: Int = 0
 )
 
-private data class ShadowAudioScoringDecision(
+internal data class ShadowAudioScoringDecision(
     val effectiveTier: ShadowAudioTier,
     val supported: Boolean,
     val supportStatus: String
@@ -974,11 +974,12 @@ private fun ShadowContentScoreBreakdown.total(): Int {
         lowQuality4kPenalty
 }
 
-private fun resolveAudioScoringDecision(
+internal fun resolveAudioScoringDecision(
     tags: List<String>,
-    device: DeviceCapabilitySnapshot?
+    device: DeviceCapabilitySnapshot?,
+    releaseType: ShadowReleaseType
 ): ShadowAudioScoringDecision {
-    val candidates = detectAudioTierCandidates(tags)
+    val candidates = detectAudioTierCandidates(tags, releaseType)
     if (candidates.isEmpty()) {
         return ShadowAudioScoringDecision(
             effectiveTier = ShadowAudioTier.OTHER,
@@ -1003,7 +1004,10 @@ private fun resolveAudioScoringDecision(
     )
 }
 
-private fun detectAudioTierCandidates(tags: List<String>): List<ShadowAudioTier> {
+internal fun detectAudioTierCandidates(
+    tags: List<String>,
+    releaseType: ShadowReleaseType
+): List<ShadowAudioTier> {
     val normalized = tags.map { it.lowercase(Locale.US) }
     val hasAtmos = normalized.any { it.contains("atmos") }
     val hasTrueHd = normalized.any { it.contains("truehd") }
