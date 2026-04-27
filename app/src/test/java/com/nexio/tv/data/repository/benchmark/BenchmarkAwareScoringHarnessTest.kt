@@ -207,7 +207,9 @@ class BenchmarkAwareScoringHarnessTest {
                 dtsSupported = false,
                 dtsPassthrough = false,
                 dtshdSupported = false,
-                dtshdPassthrough = false
+                dtshdPassthrough = false,
+                atmosSupported = false,
+                atmosPassthrough = false
             )
         )
 

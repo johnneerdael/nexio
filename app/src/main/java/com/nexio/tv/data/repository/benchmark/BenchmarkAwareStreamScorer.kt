@@ -1073,11 +1073,11 @@ private fun audioTierSupported(
 ): Boolean {
     val output = device?.audioOutput ?: return true
     return when (tier) {
-        ShadowAudioTier.TRUEHD_ATMOS -> output.truehd.passthroughLikely
+        ShadowAudioTier.TRUEHD_ATMOS -> output.atmos.passthroughLikely
         ShadowAudioTier.DTSX -> output.dtsx.passthroughLikely
         ShadowAudioTier.TRUEHD -> output.truehd.passthroughLikely
         ShadowAudioTier.DTSHD -> output.dtshd.passthroughLikely
-        ShadowAudioTier.DDP_ATMOS -> output.atmos.passthroughLikely || output.eac3.passthroughLikely
+        ShadowAudioTier.DDP_ATMOS -> output.atmos.passthroughLikely
         ShadowAudioTier.DDP -> output.eac3.passthroughLikely
         ShadowAudioTier.AC3 -> output.ac3.passthroughLikely
         ShadowAudioTier.DTS -> output.dts.passthroughLikely
