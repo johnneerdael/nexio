@@ -50,18 +50,7 @@ class MDBListIntegrationProvider @Inject constructor(
                 profileId = profileId,
                 operation = "mdblist.get_raw"
             ) {
-                runCatching {
-                    mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
-                }.fold(
-                    onSuccess = { response ->
-                        if (!response.isSuccessful) {
-                            IntegrationCallResult.HttpError(response.code())
-                        } else {
-                            IntegrationCallResult.Success(response.body()?.string().orEmpty())
-                        }
-                    },
-                    onFailure = { error -> IntegrationCallResult.NetworkError(error) }
-                )
+                getRawWithinRuntimeLoad(relativeUrl = relativeUrl, apiKey = apiKey)
             }
         )
 
@@ -78,20 +67,38 @@ class MDBListIntegrationProvider @Inject constructor(
                 profileId = profileId,
                 operation = "mdblist.get_raw_with_query"
             ) {
-                runCatching {
-                    mdbListApi.getRawWithQuery(relativeUrl = relativeUrl, query = query)
-                }.fold(
-                    onSuccess = { response ->
-                        if (!response.isSuccessful) {
-                            IntegrationCallResult.HttpError(response.code())
-                        } else {
-                            IntegrationCallResult.Success(response.body()?.string().orEmpty())
-                        }
-                    },
-                    onFailure = { error -> IntegrationCallResult.NetworkError(error) }
-                )
+                getRawWithQueryWithinRuntimeLoad(relativeUrl = relativeUrl, query = query)
             }
         )
+
+    private suspend fun getRawWithinRuntimeLoad(
+        relativeUrl: String,
+        apiKey: String
+    ): IntegrationCallResult<String> =
+        runCatching {
+            mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
+        }.fold(
+            onSuccess = ::rawStringResult,
+            onFailure = { error -> IntegrationCallResult.NetworkError(error) }
+        )
+
+    private suspend fun getRawWithQueryWithinRuntimeLoad(
+        relativeUrl: String,
+        query: Map<String, String>
+    ): IntegrationCallResult<String> =
+        runCatching {
+            mdbListApi.getRawWithQuery(relativeUrl = relativeUrl, query = query)
+        }.fold(
+            onSuccess = ::rawStringResult,
+            onFailure = { error -> IntegrationCallResult.NetworkError(error) }
+        )
+
+    private fun rawStringResult(response: retrofit2.Response<okhttp3.ResponseBody>): IntegrationCallResult<String> =
+        if (!response.isSuccessful) {
+            IntegrationCallResult.HttpError(response.code())
+        } else {
+            IntegrationCallResult.Success(response.body()?.string().orEmpty())
+        }
 
     private fun accountCallSpec(
         relativeUrl: String,
