@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.metadata
 
+import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.metadata.router.FieldOwner
@@ -246,15 +247,61 @@ internal fun selectKitsuTitle(
     canonicalTitle: String?,
     romanizedTitle: String?
 ): String? {
+    return selectKitsuTitleField(
+        policy = policy,
+        titles = titles,
+        canonicalTitle = canonicalTitle,
+        romanizedTitle = romanizedTitle
+    )?.value
+}
+
+internal fun selectKitsuTitleField(
+    policy: LocalizationPolicy,
+    titles: Map<String, String?>,
+    canonicalTitle: String?,
+    romanizedTitle: String?
+): SelectedLocalizedField? {
     val requestedCode = policy.requestedLanguage.providerCode
-    val requested = titles[requestedCode]
-        ?: titles[requestedCode.replace("-", "_")]
-        ?: titles[requestedCode.replace("_", "-")]
-    val english = titles["en"] ?: titles["en_us"] ?: titles["en-US"] ?: titles["en_jp"]
-    return requested.cleanLocalizedValue()
-        ?: english.cleanLocalizedValue()
-        ?: canonicalTitle.cleanLocalizedValue()
-        ?: romanizedTitle.cleanLocalizedValue()
+    return LocalizationResolver.selectField(
+        field = ResolvedField.TITLE,
+        policy = policy,
+        candidates = listOf(
+            LocalizedFieldCandidate(
+                field = ResolvedField.TITLE,
+                value = titles[requestedCode]
+                    ?: titles[requestedCode.replace("-", "_")]
+                    ?: titles[requestedCode.replace("_", "-")],
+                language = policy.requestedLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.LOCALIZED
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.TITLE,
+                value = titles["en"] ?: titles["en_us"] ?: titles["en-US"] ?: titles["en_jp"],
+                language = policy.fallbackLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.LANGUAGE_FALLBACK
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.TITLE,
+                value = canonicalTitle,
+                language = policy.fallbackLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.CANONICAL
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.TITLE,
+                value = romanizedTitle,
+                language = policy.fallbackLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.CANONICAL
+            )
+        )
+    )
 }
 
 internal fun selectKitsuSynopsis(
