@@ -19,7 +19,7 @@ data class HomeDisplayMetadata(
 )
 
 fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
-    val display = HomeDisplayMetadata(
+    return HomeDisplayMetadata(
         title = name,
         logo = logo,
         description = description,
@@ -33,23 +33,6 @@ fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
         posterProviderTag = posterProviderTag,
         backdrop = background
     )
-    com.nexio.tv.core.trace.FirstPaintTracer.recordHomePreview(
-        contentId = id,
-        itemType = apiType,
-        fieldsUsed = collectFirstPaintFieldsUsed(display)
-    )
-    return display
-}
-
-private fun collectFirstPaintFieldsUsed(d: HomeDisplayMetadata): Set<String> {
-    val fields = mutableSetOf<String>()
-    if (!d.title.isNullOrBlank()) fields += "title"
-    if (!d.poster.isNullOrBlank()) fields += "poster"
-    if (!d.backdrop.isNullOrBlank()) fields += "background"
-    if (!d.description.isNullOrBlank()) fields += "description"
-    if (!d.releaseInfo.isNullOrBlank()) fields += "releaseInfo"
-    if (!d.logo.isNullOrBlank()) fields += "logo"
-    return fields
 }
 
 fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
