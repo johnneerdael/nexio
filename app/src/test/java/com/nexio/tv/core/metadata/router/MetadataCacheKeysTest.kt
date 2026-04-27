@@ -179,13 +179,13 @@ class MetadataCacheKeysTest {
             provider = "TVDB",
             apiShapeId = "tvdb.series.episodes.language",
             contentId = "tvdb:399838",
-            language = "nld",
+            language = " NLD ",
             policyVersion = 2,
             qualifiers = listOf("seasonType:default", "season:1")
         )
 
         assertEquals(
-            "metadata:TVDB:tvdb.series.episodes.language:tvdb:399838:seasonType:default:season:1:lang:nld:policy:2",
+            "metadata:TVDB:tvdb.series.episodes.language:tvdb:399838:season:1:seasonType:default:lang:nld:policy:2",
             key
         )
         assertFalse(key.contains("profile:"))

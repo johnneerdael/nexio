@@ -1,10 +1,12 @@
 package com.nexio.tv.core.image
 
+import java.util.Locale
+
 object ArtworkImageCacheKeys {
     private const val NATIVE_PROVIDER = "native"
     private const val RPDB_PROVIDER = "rpdb"
     private const val TOP_POSTERS_PROVIDER = "top_posters"
-    private const val POSTER_CACHE_TYPE = "poster_v2"
+    private const val POSTER_CACHE_TYPE = "poster"
 
     fun poster(itemId: String, providerTag: String?): String =
         build(itemId, resolvePosterProvider(providerTag, posterUrl = null), POSTER_CACHE_TYPE)
@@ -22,7 +24,7 @@ object ArtworkImageCacheKeys {
         build(itemId, NATIVE_PROVIDER, "thumbnail")
 
     private fun resolvePosterProvider(providerTag: String?, posterUrl: String?): String {
-        providerTag?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        providerTag?.trim()?.takeIf { it.isNotBlank() }?.let { return it.lowercase(Locale.ROOT) }
         val normalizedUrl = posterUrl?.trim().orEmpty()
         return when {
             normalizedUrl.startsWith("https://api.ratingposterdb.com/") -> RPDB_PROVIDER
