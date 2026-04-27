@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
 import com.nexio.tv.core.metadata.router.MetadataRoute
@@ -22,13 +23,30 @@ class TvdbMetadataProviderAdapter @Inject constructor(
         val language = route.language.orEmpty()
         val policy = LocalizationPolicy.tvdb(language)
         val episodeMetadata = mutableMapOf<Pair<Int, Int>, com.nexio.tv.core.tvdb.TvEpisodeMetadata>()
+        val localizationPayloads = mutableListOf<MetadataLocalizationPayloadTrace>()
         val candidate = when (step.apiShapeId) {
             TvdbApiShapes.SERIES_EXTENDED -> {
-                val extended = integrationProvider.fetchSeriesExtended(tvdbId)
+                val extended = integrationProvider.fetchSeriesExtendedCached(
+                    tvdbId = tvdbId,
+                    localizationPolicyVersion = policy.policyVersion
+                )
                 val english = integrationProvider.fetchSeriesTranslation(
                     tvdbId = tvdbId,
                     language = policy.fallbackLanguage.providerCode,
                     localizationPolicyVersion = policy.policyVersion
+                )
+                localizationPayloads += MetadataLocalizationPayloadTrace(
+                    provider = this.provider,
+                    apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
+                    language = policy.fallbackLanguage.providerCode,
+                    cacheKey = tvdbSeriesTranslationCacheKey(
+                        tvdbId = tvdbId,
+                        language = policy.fallbackLanguage.providerCode,
+                        policyVersion = policy.policyVersion
+                    ),
+                    cacheDecision = null,
+                    executedNetwork = false,
+                    policyVersion = policy.policyVersion
                 )
                 val requested = if (policy.requestedIsFallback) {
                     null
@@ -37,7 +55,21 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                         tvdbId = tvdbId,
                         language = policy.requestedLanguage.providerCode,
                         localizationPolicyVersion = policy.policyVersion
-                    )
+                    ).also {
+                        localizationPayloads += MetadataLocalizationPayloadTrace(
+                            provider = this.provider,
+                            apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
+                            language = policy.requestedLanguage.providerCode,
+                            cacheKey = tvdbSeriesTranslationCacheKey(
+                                tvdbId = tvdbId,
+                                language = policy.requestedLanguage.providerCode,
+                                policyVersion = policy.policyVersion
+                            ),
+                            cacheDecision = null,
+                            executedNetwork = false,
+                            policyVersion = policy.policyVersion
+                        )
+                    }
                 }
                 buildTvdbCoreLocalizedCandidate(
                     provider = this.provider,
@@ -58,7 +90,12 @@ class TvdbMetadataProviderAdapter @Inject constructor(
             }
             else -> emptyCandidate(this.provider)
         }
-        return ProviderStepResult(step = step, candidate = candidate, episodeMetadata = episodeMetadata)
+        return ProviderStepResult(
+            step = step,
+            candidate = candidate,
+            episodeMetadata = episodeMetadata,
+            localizationPayloads = localizationPayloads
+        )
     }
 
     private companion object {
