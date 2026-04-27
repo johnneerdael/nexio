@@ -559,6 +559,12 @@ android {
             versionNameSuffix = "-profileable"
             matchingFallbacks += listOf("release")
         }
+        create("releaseEarlyAccess") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".earlyaccess"
+            versionNameSuffix = "-earlyaccess"
+            matchingFallbacks += listOf("release")
+        }
     }
 
     testOptions {
