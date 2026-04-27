@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import java.util.UUID
 import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -103,7 +104,7 @@ data class SubtitleStyleSettings(
  * internal constants in com.nexio.tv.core.player.SubtitleBurnInProtection.
  */
 data class BurnInProtectionSettings(
-    val enabled: Boolean = true,
+    val enabled: Boolean = true
 )
 
 /**
@@ -573,8 +574,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val subtitleOutlineEnabledKey = booleanPreferencesKey("subtitle_outline_enabled")
     private val subtitleOutlineColorKey = intPreferencesKey("subtitle_outline_color")
     private val subtitleOutlineWidthKey = intPreferencesKey("subtitle_outline_width")
-    private val burnInProtectionEnabledKey = booleanPreferencesKey("burn_in_protection_enabled")
-    private val burnInProtectionUserSaltKey = stringPreferencesKey("burn_in_protection_user_salt")
+    private val burnInProtectionEnabledKey = booleanPreferencesKey("subtitle_burn_in_protection_enabled")
+    private val burnInProtectionUserSaltKey = stringPreferencesKey("subtitle_burn_in_protection_user_salt")
 
     // Buffer settings keys
     private val minBufferMsKey = intPreferencesKey("min_buffer_ms")
@@ -1536,14 +1537,16 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun getOrCreateBurnInProtectionUserSalt(): String {
         val existing = store().data.first()[burnInProtectionUserSaltKey]
         if (!existing.isNullOrBlank()) return existing
-        val newSalt = java.util.UUID.randomUUID().toString()
+        var committed = UUID.randomUUID().toString()
         store().edit { prefs ->
-            // Re-check inside the edit to avoid a race generating two salts.
-            if (prefs[burnInProtectionUserSaltKey].isNullOrBlank()) {
-                prefs[burnInProtectionUserSaltKey] = newSalt
+            val current = prefs[burnInProtectionUserSaltKey]
+            if (!current.isNullOrBlank()) {
+                committed = current
+            } else {
+                prefs[burnInProtectionUserSaltKey] = committed
             }
         }
-        return store().data.first()[burnInProtectionUserSaltKey] ?: newSalt
+        return committed
     }
 
     // Buffer settings functions
