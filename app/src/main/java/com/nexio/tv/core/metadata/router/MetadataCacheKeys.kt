@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.IntegrationKeyFactory
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,14 +28,20 @@ class MetadataCacheKeys @Inject constructor() {
         require(language.isNotBlank()) { "language must not be blank" }
         require(policyVersion > 0) { "policyVersion must be positive" }
 
+        val normalizedLanguage = language.trim().lowercase(Locale.ROOT)
+        val deterministicQualifiers = qualifiers
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .sorted()
+
         return IntegrationKeyFactory.build(
             "metadata",
             provider,
             apiShapeId,
             contentId,
-            *qualifiers.toTypedArray(),
+            *deterministicQualifiers.toTypedArray(),
             "lang",
-            language,
+            normalizedLanguage,
             "policy",
             policyVersion.toString()
         )
