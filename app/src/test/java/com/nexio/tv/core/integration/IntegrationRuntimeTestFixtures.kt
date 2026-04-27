@@ -205,6 +205,15 @@ fun realRuntimeFixture(): RealRuntimeFixture {
     )
 }
 
+class RecordingTraceSink : com.nexio.tv.core.trace.RuntimeTraceSink {
+    val events = mutableListOf<com.nexio.tv.core.trace.TraceEventEnvelope<*>>()
+    override fun emit(event: com.nexio.tv.core.trace.TraceEventEnvelope<*>) {
+        events += event
+    }
+    override fun eventsWritten(): Long = events.size.toLong()
+    override fun eventsDropped(): Long = 0L
+}
+
 class InMemoryIntegrationProviderBackoffDao : IntegrationProviderBackoffDao {
     private val values = linkedMapOf<String, IntegrationProviderBackoffEntity>()
 
