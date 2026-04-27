@@ -17,6 +17,7 @@ import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -97,6 +98,15 @@ data class SubtitleStyleSettings(
 )
 
 /**
+ * Subtitle OLED burn-in protection settings. Only the master toggle is user-facing;
+ * all other tunables (zone count, spread, jitter, alpha cap, off-white color) are
+ * internal constants in com.nexio.tv.core.player.SubtitleBurnInProtection.
+ */
+data class BurnInProtectionSettings(
+    val enabled: Boolean = true,
+)
+
+/**
  * Data class representing buffer settings
  */
 data class BufferSettings(
@@ -161,6 +171,7 @@ data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
     val preferredExternalPlayerPackageName: String? = null,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
+    val burnInProtection: BurnInProtectionSettings = BurnInProtectionSettings(),
     val bufferSettings: BufferSettings = BufferSettings(),
     // Audio settings
     val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
@@ -562,6 +573,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val subtitleOutlineEnabledKey = booleanPreferencesKey("subtitle_outline_enabled")
     private val subtitleOutlineColorKey = intPreferencesKey("subtitle_outline_color")
     private val subtitleOutlineWidthKey = intPreferencesKey("subtitle_outline_width")
+    private val burnInProtectionEnabledKey = booleanPreferencesKey("burn_in_protection_enabled")
+    private val burnInProtectionUserSaltKey = stringPreferencesKey("burn_in_protection_user_salt")
 
     // Buffer settings keys
     private val minBufferMsKey = intPreferencesKey("min_buffer_ms")
@@ -894,6 +907,9 @@ class PlayerSettingsDataStore @Inject constructor(
                     outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
                     outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
                     outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
+                ),
+                burnInProtection = BurnInProtectionSettings(
+                    enabled = prefs[burnInProtectionEnabledKey] ?: true,
                 ),
                 bufferSettings = BufferSettings(
                     minBufferMs = prefs[minBufferMsKey] ?: BufferSettings.DEFAULT_MIN_BUFFER_MS,
@@ -1505,6 +1521,29 @@ class PlayerSettingsDataStore @Inject constructor(
         store().edit { prefs ->
             prefs[subtitleOutlineWidthKey] = width.coerceIn(1, 5)
         }
+    }
+
+    suspend fun setBurnInProtectionEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[burnInProtectionEnabledKey] = enabled
+        }
+    }
+
+    /**
+     * Returns the persisted per-install random salt used to decorrelate burn-in zone
+     * selection across users. Generates and persists the salt on first read.
+     */
+    suspend fun getOrCreateBurnInProtectionUserSalt(): String {
+        val existing = store().data.first()[burnInProtectionUserSaltKey]
+        if (!existing.isNullOrBlank()) return existing
+        val newSalt = java.util.UUID.randomUUID().toString()
+        store().edit { prefs ->
+            // Re-check inside the edit to avoid a race generating two salts.
+            if (prefs[burnInProtectionUserSaltKey].isNullOrBlank()) {
+                prefs[burnInProtectionUserSaltKey] = newSalt
+            }
+        }
+        return store().data.first()[burnInProtectionUserSaltKey] ?: newSalt
     }
 
     // Buffer settings functions
