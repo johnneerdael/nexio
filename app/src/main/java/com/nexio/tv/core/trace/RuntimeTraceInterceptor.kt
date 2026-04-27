@@ -9,7 +9,8 @@ class RuntimeTraceInterceptor(
     private val sink: RuntimeTraceSink,
     private val redactor: TraceRedactor,
     private val modeProvider: TraceModeProvider,
-    private val unscopedGuard: UnscopedNetworkPolicyGuard
+    private val unscopedGuard: UnscopedNetworkPolicyGuard,
+    private val isInternalBuild: Boolean = false
 ) : Interceptor {
     private val seq = AtomicLong(0L)
 
@@ -75,7 +76,40 @@ class RuntimeTraceInterceptor(
             ctx.traceSessionId
         )
 
+        if (mode.includesHttpBodies && isInternalBuild) {
+            captureBodySample(ctx, response)
+        }
+
         return response
+    }
+
+    private fun captureBodySample(ctx: RuntimeTraceContext, response: Response) {
+        val contentType = response.body?.contentType()
+        val subtype = contentType?.subtype?.lowercase()
+        val isTextual = subtype != null && (
+            subtype == "json" || subtype == "xml" || subtype == "html" || subtype == "plain" ||
+                subtype.endsWith("+json") || subtype.endsWith("+xml")
+            )
+        if (!isTextual) return
+
+        val maxBytes = 64L * 1024L
+        val contentLength = response.body?.contentLength() ?: -1L
+        if (contentLength > maxBytes) return  // exceeds cap → never log raw
+        val sampleBody = response.peekBody(maxBytes).string()
+        val redacted = redactor.redactJsonBody(sampleBody)
+
+        emit(
+            "trace.body_sample",
+            mapOf(
+                "runtimeOperationId" to ctx.runtimeOperationId,
+                "provider" to ctx.provider.name,
+                "apiShapeId" to ctx.apiShapeId,
+                "contentType" to contentType.toString(),
+                "byteCount" to contentLength,
+                "body" to redacted
+            ),
+            ctx.traceSessionId
+        )
     }
 
     private fun Headers.asMap(): Map<String, String> =

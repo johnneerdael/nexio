@@ -121,4 +121,99 @@ class RuntimeTraceInterceptorTest {
         assertTrue("OFF mode must not emit any trace events", sink.events.isEmpty())
         server.shutdown()
     }
+
+    @Test
+    fun `body mode in internal build emits redacted JSON sample`() {
+        val server = MockWebServer().apply {
+            enqueue(MockResponse()
+                .setResponseCode(200)
+                .addHeader("Content-Type", "application/json")
+                .setBody("""{"access_token":"SECRET","ok":true}"""))
+        }
+        server.start()
+        val sink = RecordingTraceSink()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(RuntimeTraceInterceptor(
+                sink = sink,
+                redactor = TraceRedactor(),
+                modeProvider = fixedMode(TraceMode.INCLUDE_HTTP_BODIES_INTERNAL_ONLY),
+                unscopedGuard = UnscopedNetworkPolicyGuard(sink, sessionId = { "s1" }, isInternalBuild = true),
+                isInternalBuild = true
+            ))
+            .build()
+
+        val request = Request.Builder()
+            .url(server.url("/echo"))
+            .tag(RuntimeTraceContext::class.java, ctx())
+            .build()
+        client.newCall(request).execute().close()
+
+        val sample = sink.events.firstOrNull { it.eventType == "trace.body_sample" }
+        assertTrue("expected trace.body_sample, got: ${sink.events.map { it.eventType }}", sample != null)
+        val payload = sample!!.payload as Map<*, *>
+        val body = payload["body"] as String
+        assertFalse("body must redact access_token: $body", body.contains("SECRET"))
+        assertTrue("body must keep harmless fields: $body", body.contains("\"ok\":true"))
+
+        server.shutdown()
+    }
+
+    @Test
+    fun `body mode in release build does not emit body sample`() {
+        val server = MockWebServer().apply {
+            enqueue(MockResponse()
+                .setResponseCode(200)
+                .addHeader("Content-Type", "application/json")
+                .setBody("""{"k":"v"}"""))
+        }
+        server.start()
+        val sink = RecordingTraceSink()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(RuntimeTraceInterceptor(
+                sink = sink,
+                redactor = TraceRedactor(),
+                modeProvider = fixedMode(TraceMode.INCLUDE_HTTP_BODIES_INTERNAL_ONLY),
+                unscopedGuard = UnscopedNetworkPolicyGuard(sink, sessionId = { "s1" }, isInternalBuild = false),
+                isInternalBuild = false  // release build
+            ))
+            .build()
+        val request = Request.Builder().url(server.url("/x")).tag(RuntimeTraceContext::class.java, ctx()).build()
+        client.newCall(request).execute().close()
+
+        val types = sink.events.map { it.eventType }
+        assertFalse("release build must not emit trace.body_sample (got $types)", types.contains("trace.body_sample"))
+        // http.request/response still emitted (mode includes summary)
+        assertTrue(types.contains("http.request"))
+        assertTrue(types.contains("http.response"))
+
+        server.shutdown()
+    }
+
+    @Test
+    fun `binary content type does not emit body sample even in body mode`() {
+        val server = MockWebServer().apply {
+            enqueue(MockResponse()
+                .setResponseCode(200)
+                .addHeader("Content-Type", "image/png")
+                .setBody("PNGBYTES"))
+        }
+        server.start()
+        val sink = RecordingTraceSink()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(RuntimeTraceInterceptor(
+                sink = sink,
+                redactor = TraceRedactor(),
+                modeProvider = fixedMode(TraceMode.INCLUDE_HTTP_BODIES_INTERNAL_ONLY),
+                unscopedGuard = UnscopedNetworkPolicyGuard(sink, sessionId = { "s1" }, isInternalBuild = true),
+                isInternalBuild = true
+            ))
+            .build()
+        val request = Request.Builder().url(server.url("/img.png")).tag(RuntimeTraceContext::class.java, ctx()).build()
+        client.newCall(request).execute().close()
+
+        val types = sink.events.map { it.eventType }
+        assertFalse("binary content type must not emit body sample (got $types)", types.contains("trace.body_sample"))
+
+        server.shutdown()
+    }
 }
