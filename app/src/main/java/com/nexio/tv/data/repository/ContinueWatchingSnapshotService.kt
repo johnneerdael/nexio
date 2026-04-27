@@ -2,7 +2,10 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.integration.ActiveRailTracker
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
+import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
@@ -230,7 +233,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         )
                         return@collectLatest
                     }
-                    updateSnapshot(snapshot, profileId = emission.profileId)
+                    updateSnapshot(
+                        snapshot = snapshot,
+                        profileId = emission.profileId,
+                        resultSession = activeProfileSession()
+                    )
                 }
         }
     }
@@ -319,7 +326,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 metadataSnapshotsByItemKey = current.snapshot.metadataSnapshotsByItemKey + (itemKey to metadataSnapshot),
                 updatedAtMs = System.currentTimeMillis()
             )
-            updateSnapshot(updated, profileId = current.profileId)
+            updateSnapshot(
+                snapshot = updated,
+                profileId = current.profileId,
+                resultSession = sessionForProfile(current.profileId)
+            )
         }
     }
 
@@ -840,19 +851,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private suspend fun persistRawSnapshot(
         snapshot: ContinueWatchingSnapshot,
-        profileId: Int = activeProfileId()
+        profileId: Int = activeProfileId(),
+        resultSession: ActiveProfileSession = sessionForProfile(profileId)
     ): Boolean {
         val normalized = sanitizeSnapshot(snapshot)
         val hydrated = hydrateSnapshotMetadata(
             snapshot = normalized,
             fallbackMetadata = rawSnapshotState.value.snapshot.displayMetadataByItemKey
         )
-        syncContinueWatchingRail(hydrated, profileId)
-        snapshotStore.write(hydrated, profileId = profileId)
-        if (!isActiveProfile(profileId)) {
-            Log.d("ContinueWatching", "Skipping stale continue watching publish for profile=$profileId")
+        if (!canPublishProfileWrite(resultSession)) {
             return false
         }
+        syncContinueWatchingRail(hydrated, profileId)
+        snapshotStore.write(hydrated, profileId = profileId)
         val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = hydrated)
         rawSnapshotState.value = owned
         activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
@@ -922,9 +933,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private suspend fun updateSnapshot(
         snapshot: ContinueWatchingSnapshot,
-        profileId: Int = activeProfileId()
+        profileId: Int = activeProfileId(),
+        resultSession: ActiveProfileSession = sessionForProfile(profileId)
     ) {
-        val published = persistRawSnapshot(snapshot, profileId = profileId)
+        val published = persistRawSnapshot(
+            snapshot = snapshot,
+            profileId = profileId,
+            resultSession = resultSession
+        )
         if (published) {
             scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
         }
@@ -932,12 +948,46 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
 
+    private fun activeProfileSession(): ActiveProfileSession =
+        runCatching { profileManager?.activeProfileSession?.value }.getOrNull()
+            ?: ActiveProfileSession(
+                profileId = activeProfileId(),
+                sessionId = "legacy-profile:${activeProfileId()}",
+                sessionOrdinal = 1L,
+                startedAtMs = 1L
+            )
+
+    private fun sessionForProfile(profileId: Int): ActiveProfileSession {
+        val active = activeProfileSession()
+        return if (active.profileId == profileId) {
+            active
+        } else {
+            ActiveProfileSession(
+                profileId = profileId,
+                sessionId = "detached-profile:$profileId:${System.nanoTime()}",
+                sessionOrdinal = active.sessionOrdinal,
+                startedAtMs = System.currentTimeMillis().coerceAtLeast(1L)
+            )
+        }
+    }
+
+    private fun canPublishProfileWrite(resultSession: ActiveProfileSession): Boolean {
+        return try {
+            ProfileBoundaryEnforcer.assertCanWriteProfileState(
+                resultSession = resultSession,
+                activeSession = activeProfileSession()
+            )
+            true
+        } catch (exception: ProfileBoundaryException) {
+            Log.d("ContinueWatching", "Skipping stale continue watching publish: ${exception.message}")
+            false
+        }
+    }
+
     private fun parseYear(value: String?): Int? =
         Regex("(\\d{4})").find(value.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     private fun activeProfileIdFlow(): Flow<Int> = profileManager?.activeProfileId ?: flowOf(1)
-
-    private fun isActiveProfile(profileId: Int): Boolean = activeProfileId() == profileId
 
     private fun markProfileAwaitingLiveReset(profileId: Int) {
         synchronized(liveProfileGateLock) {

@@ -2,6 +2,7 @@ package com.nexio.tv.core.profile
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.local.ProfileDataStore
@@ -27,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,6 +64,9 @@ class ProfileManager(
 
     private val _activeProfileId = MutableStateFlow(1)
     val activeProfileId: StateFlow<Int> = _activeProfileId.asStateFlow()
+    private var nextSessionOrdinal = 1L
+    private val _activeProfileSession = MutableStateFlow(newProfileSession(profileId = 1))
+    val activeProfileSession: StateFlow<ActiveProfileSession> = _activeProfileSession.asStateFlow()
 
     val profiles: StateFlow<List<UserProfile>> = dataStore.profilesList
         .stateIn(
@@ -74,6 +79,9 @@ class ProfileManager(
             dataStore.activeProfileId.collect { id ->
                 val previousId = _activeProfileId.value
                 _activeProfileId.value = id
+                if (previousId != id) {
+                    _activeProfileSession.value = newProfileSession(id)
+                }
                 AppLocaleResolver.setActiveProfileId(context, id)
                 if (previousId != id) {
                     _profileSwitched.emit(id)
@@ -95,10 +103,19 @@ class ProfileManager(
             if (_activeProfileId.value == id) return
             AppLocaleResolver.setActiveProfileId(context, id)
             _activeProfileId.value = id
+            _activeProfileSession.value = newProfileSession(id)
             dataStore.setActiveProfile(id)
             _profileSwitched.emit(id)
         }
     }
+
+    private fun newProfileSession(profileId: Int): ActiveProfileSession =
+        ActiveProfileSession(
+            profileId = profileId,
+            sessionId = "profile:$profileId:${UUID.randomUUID()}",
+            sessionOrdinal = nextSessionOrdinal++,
+            startedAtMs = System.currentTimeMillis().coerceAtLeast(1L)
+        )
 
     suspend fun createProfile(
         name: String,
