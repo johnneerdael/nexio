@@ -123,6 +123,7 @@ import android.text.format.DateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
 
 internal const val EXTERNAL_SUBTITLE_OVERLAY_TAG = "external-subtitle-overlay"
@@ -231,6 +232,7 @@ fun PlayerScreen(
     val skipIntroFocusRequester = remember { FocusRequester() }
     var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
+    val rebufferScope = rememberCoroutineScope()
     val playNextOwnsSegmentCta = PlayerSegmentCtaPolicy.shouldReplaceSkipButtonWithPlayNext(
         activeInterval = uiState.activeSkipInterval,
         hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null,
@@ -575,6 +577,29 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 assSsaRenderOverlayProvider = viewModel::setAssSsaRenderOverlayViewProvider
             )
+        }
+
+        // Mid-playback rebuffer timeout: only active when buffering after first frame
+        // (showLoadingOverlay is true before first frame; false during mid-stream rebuffers)
+        val isMidStreamBuffering = uiState.isBuffering && !uiState.showLoadingOverlay
+        DisposableEffect(isMidStreamBuffering) {
+            if (!isMidStreamBuffering) return@DisposableEffect onDispose {}
+            var controller: LoadingTimeoutController? = null
+            controller = LoadingTimeoutController(
+                phase = LoadingPhase.MidStream,
+                onEvent = { event ->
+                    when (event) {
+                        LoadingTimeoutEvent.Retry -> {
+                            viewModel.onEvent(PlayerEvent.OnRetry)
+                            controller?.start()
+                        }
+                        LoadingTimeoutEvent.Error -> viewModel.surfaceLoadingTimeout()
+                    }
+                },
+                scope = rebufferScope
+            )
+            controller.start()
+            onDispose { controller.cancel() }
         }
 
         LoadingOverlay(

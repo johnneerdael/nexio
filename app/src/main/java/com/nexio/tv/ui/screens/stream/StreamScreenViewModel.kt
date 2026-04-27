@@ -238,6 +238,18 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
+    /** Called by the loading timeout controller after both retry attempts are exhausted. */
+    fun surfaceTimeoutError() {
+        cancelActiveStreamSearch()
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                showDirectAutoPlayOverlay = false,
+                error = context.getString(R.string.stream_loading_timeout)
+            )
+        }
+    }
+
     fun cancelActiveStreamSearch() {
         activeStreamSearchRequestId?.let(streamRepository::cancelActiveStreamRequests)
         activeStreamSearchRequestId = null

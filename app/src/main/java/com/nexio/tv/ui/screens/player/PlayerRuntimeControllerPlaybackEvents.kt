@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.R
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
@@ -900,6 +901,15 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 playerSettingsDataStore.setSubtitleOutlineWidth(defaults.outlineWidth)
                 playerSettingsDataStore.setSubtitleVerticalOffset(defaults.verticalOffset)
                 playerSettingsDataStore.setSubtitleBackgroundColor(defaults.backgroundColor)
+            }
+        }
+        PlayerEvent.OnLoadingTimedOut -> {
+            releasePlayer()
+            _uiState.update {
+                it.copy(
+                    showLoadingOverlay = false,
+                    error = context.getString(R.string.player_loading_timeout)
+                )
             }
         }
         PlayerEvent.OnToggleAspectRatio -> {

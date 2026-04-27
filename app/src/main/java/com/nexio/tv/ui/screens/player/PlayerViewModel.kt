@@ -138,6 +138,11 @@ class PlayerViewModel @Inject constructor(
         controller.onEvent(event)
     }
 
+    /** Called by the loading timeout controller after both retry attempts are exhausted. */
+    fun surfaceLoadingTimeout() {
+        controller.onEvent(PlayerEvent.OnLoadingTimedOut)
+    }
+
     override fun onCleared() {
         controller.onCleared()
         super.onCleared()

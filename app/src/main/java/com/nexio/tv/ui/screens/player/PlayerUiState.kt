@@ -220,6 +220,7 @@ sealed class PlayerEvent {
     data class OnSetSubtitleVerticalOffset(val offset: Int) : PlayerEvent()
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()
+    data object OnLoadingTimedOut : PlayerEvent()
 }
 
 data class DisplayModeInfo(

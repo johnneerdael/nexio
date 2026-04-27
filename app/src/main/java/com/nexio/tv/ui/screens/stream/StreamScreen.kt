@@ -94,6 +94,9 @@ import com.nexio.tv.ui.components.StreamsSkeletonList
 import com.nexio.tv.ui.components.InlineIconText
 import com.nexio.tv.ui.components.streamBadgeKinds
 import com.nexio.tv.ui.screens.player.LoadingOverlay
+import com.nexio.tv.ui.screens.player.LoadingPhase
+import com.nexio.tv.ui.screens.player.LoadingTimeoutController
+import com.nexio.tv.ui.screens.player.LoadingTimeoutEvent
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -130,6 +133,7 @@ fun StreamScreen(
     var pendingPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
     var directAutoPlayResolveInFlight by rememberSaveable { mutableStateOf(false) }
     val autoPlayScope = rememberCoroutineScope()
+    val loadingScope = rememberCoroutineScope()
 
     fun routePlayback(playbackInfo: StreamPlaybackInfo) {
         when (playerPreference) {
@@ -241,6 +245,24 @@ fun StreamScreen(
         )
 
         if (uiState.showDirectAutoPlayOverlay || uiState.isDeterministicAutoplay) {
+            DisposableEffect(Unit) {
+                var controller: LoadingTimeoutController? = null
+                controller = LoadingTimeoutController(
+                    phase = LoadingPhase.Initial,
+                    onEvent = { event ->
+                        when (event) {
+                            LoadingTimeoutEvent.Retry -> {
+                                viewModel.onEvent(StreamScreenEvent.OnRetry)
+                                controller?.start()
+                            }
+                            LoadingTimeoutEvent.Error -> viewModel.surfaceTimeoutError()
+                        }
+                    },
+                    scope = loadingScope
+                )
+                controller.start()
+                onDispose { controller.cancel() }
+            }
             LoadingOverlay(
                 visible = true,
                 backdropUrl = uiState.backdrop ?: uiState.poster,
