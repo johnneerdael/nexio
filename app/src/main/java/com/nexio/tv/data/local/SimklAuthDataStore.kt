@@ -74,10 +74,16 @@ class SimklAuthDataStore @Inject constructor(
 
     suspend fun saveAccessToken(
         accessToken: String,
-        profileId: Int = profileManager.activeProfileId.value
+        profileId: Int = profileManager.activeProfileId.value,
+        clearAccountIdentity: Boolean = false
     ) {
         store(profileId).edit { preferences ->
             preferences[accessTokenKey] = accessToken
+            if (clearAccountIdentity) {
+                preferences.remove(usernameKey)
+                preferences.remove(accountIdKey)
+                preferences.remove(accountTypeKey)
+            }
         }
     }
 

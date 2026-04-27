@@ -1,8 +1,11 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.integration.IntegrationCacheOwnership
+import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.RecordingIntegrationRuntime
 import com.nexio.tv.core.integration.byteArrayRuntimeFixture
+import com.nexio.tv.core.integration.credentialHash
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -36,11 +39,31 @@ class MDBListRuntimeRoutingTest {
         val api = mockk<MDBListApi>()
         val provider = MDBListIntegrationProvider(runtime, api)
 
-        provider.getRaw(relativeUrl = "lists/top", apiKey = "mdb-key")
+        provider.getRaw(relativeUrl = "lists/top", apiKey = "mdb-key", profileId = 7)
 
         assertEquals(1, runtime.callSpecs.size)
+        assertMDBListAccountCallSpec(runtime.callSpecs.single(), profileId = 7, apiKey = "mdb-key")
         coVerify(exactly = 0) {
             api.getRaw(any(), any())
+        }
+    }
+
+    @Test
+    fun `raw discovery query request is account scoped when profile id is supplied`() = runTest {
+        val runtime = RecordingIntegrationRuntime(successValue = """[]""")
+        val api = mockk<MDBListApi>()
+        val provider = MDBListIntegrationProvider(runtime, api)
+
+        provider.getRawWithQuery(
+            relativeUrl = "lists/42/items",
+            query = mapOf("apikey" to "mdb-key", "limit" to "20"),
+            profileId = 7
+        )
+
+        assertEquals(1, runtime.callSpecs.size)
+        assertMDBListAccountCallSpec(runtime.callSpecs.single(), profileId = 7, apiKey = "mdb-key")
+        coVerify(exactly = 0) {
+            api.getRawWithQuery(any(), any())
         }
     }
 
@@ -179,4 +202,23 @@ class MDBListRuntimeRoutingTest {
             trailerYtIds = emptyList()
         )
     }
+}
+
+private fun assertMDBListAccountCallSpec(
+    spec: com.nexio.tv.core.integration.IntegrationCallSpec<*>,
+    profileId: Int,
+    apiKey: String
+) {
+    val expectedCredentialHash = credentialHash(IntegrationProvider.MDBLIST, apiKey)
+    val scope = spec.scope as? IntegrationScope.Account
+    assertTrue("Expected MDBList account scope, got ${spec.scope}", scope != null)
+    requireNotNull(scope)
+    assertEquals(profileId, scope.profileId)
+    assertEquals(IntegrationProvider.MDBLIST, scope.provider)
+    assertEquals(expectedCredentialHash, scope.credentialHash)
+    assertTrue(spec.operationKey.contains("profile:$profileId"))
+    assertTrue(spec.operationKey.contains("provider:MDBLIST"))
+    assertTrue(spec.operationKey.contains("credential:$expectedCredentialHash"))
+    assertEquals(profileId, spec.profileContext?.profileId)
+    assertEquals(expectedCredentialHash, spec.profileContext?.account(IntegrationProvider.MDBLIST)?.credentialHash)
 }

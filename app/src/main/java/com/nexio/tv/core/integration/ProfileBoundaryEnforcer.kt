@@ -137,6 +137,12 @@ object ProfileBoundaryEnforcer {
                 "Account scope requires credentialHash"
             )
         }
+        validateAccountOwnershipKey(
+            profileId = profileId,
+            provider = accountProvider,
+            credentialHash = credentialHash,
+            cacheKey = cacheKey
+        )
         val account = profileContext?.account(provider) ?: throw ProfileBoundaryException(
             ProfileBoundaryViolation.ACCOUNT_SCOPE_CONTEXT_MISSING_ACCOUNT,
             "Account scope requires account ref for provider=$provider"
@@ -161,6 +167,23 @@ object ProfileBoundaryEnforcer {
             throw ProfileBoundaryException(
                 ProfileBoundaryViolation.ACCOUNT_SCOPE_CONTEXT_MISSING_ACCOUNT,
                 "Legacy account scope cannot be used for profile-bound cache key: $key"
+            )
+        }
+    }
+
+    private fun validateAccountOwnershipKey(
+        profileId: Int,
+        provider: IntegrationProvider,
+        credentialHash: String,
+        cacheKey: String?
+    ) {
+        val key = cacheKey.orEmpty()
+        val missingAccountTokens = !key.contains("provider:${provider.name}") ||
+            !key.contains("credential:$credentialHash")
+        if (missingAccountTokens) {
+            throw ProfileBoundaryException(
+                ProfileBoundaryViolation.PROFILE_CACHE_KEY_MISSING_PROFILE_ID,
+                "Account key must include profile:$profileId, provider:${provider.name}, and credential:$credentialHash: $key"
             )
         }
     }

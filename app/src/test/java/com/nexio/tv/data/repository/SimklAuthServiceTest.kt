@@ -57,7 +57,7 @@ class SimklAuthServiceTest {
             )
         }
         coEvery {
-            simklAuthIntegrationProvider.getUserSettings(any())
+            simklAuthIntegrationProvider.getUserSettings(any(), any())
         } returns Response.success(
             SimklUserSettingsResponseDto(
                 user = SimklUserDto(name = "profile-two-user"),

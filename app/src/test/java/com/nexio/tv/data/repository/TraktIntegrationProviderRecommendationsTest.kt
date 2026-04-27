@@ -43,7 +43,7 @@ class TraktIntegrationProviderRecommendationsTest {
         val provider = TraktIntegrationProvider(
             runtime = runtime,
             traktApi = traktApi,
-            traktAuthService = authServiceForProfile(0)
+            traktAuthService = authServiceForProfile(1)
         )
 
         provider.getLastActivities()
@@ -71,7 +71,7 @@ class TraktIntegrationProviderRecommendationsTest {
         val provider = TraktIntegrationProvider(
             runtime = runtime,
             traktApi = traktApi,
-            traktAuthService = authServiceForProfile(0)
+            traktAuthService = authServiceForProfile(1)
         )
 
         val recommendations = provider.fetchRecommendations(
@@ -79,7 +79,10 @@ class TraktIntegrationProviderRecommendationsTest {
             limit = 20
         )
 
-        assertEquals(listOf("profile:0:trakt:recommendations:movies:limit:20"), runtime.keys)
+        assertEquals(
+            listOf("profile:1:provider:TRAKT:credential:trakt-test-1:trakt:recommendations:movies:limit:20"),
+            runtime.keys
+        )
         assertEquals(1, recommendations?.size)
         assertNotNull(recommendations?.firstOrNull()?.movie)
         assertEquals("Fight Club", recommendations?.firstOrNull()?.movie?.title)
@@ -105,7 +108,7 @@ class TraktIntegrationProviderRecommendationsTest {
         val provider = TraktIntegrationProvider(
             runtime = runtime,
             traktApi = traktApi,
-            traktAuthService = authServiceForProfile(0)
+            traktAuthService = authServiceForProfile(1)
         )
 
         provider.fetchTrendingMovies(limit = 20)
@@ -115,10 +118,10 @@ class TraktIntegrationProviderRecommendationsTest {
 
         assertEquals(
             listOf(
-                "profile:0:trakt:trending:movies:limit:20",
-                "profile:0:trakt:trending:shows:limit:20",
-                "profile:0:trakt:popular:movies:limit:20",
-                "profile:0:trakt:popular:shows:limit:20"
+                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:trending:movies:limit:20",
+                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:trending:shows:limit:20",
+                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:popular:movies:limit:20",
+                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:popular:shows:limit:20"
             ),
             runtime.keys
         )
@@ -149,11 +152,18 @@ class TraktIntegrationProviderRecommendationsTest {
         every { authService.currentAuthSession() } answers {
             TrackingAuthSession(TrackingProvider.TRAKT, profileId)
         }
+        coEvery { authService.accountScopedSession(any()) } answers {
+            (invocation.args[0] as TrackingAuthSession).copy(credentialHash = "trakt-test-$profileId")
+        }
+        coEvery { authService.accountScopedSession() } answers {
+            TrackingAuthSession(TrackingProvider.TRAKT, profileId, credentialHash = "trakt-test-$profileId")
+        }
         every { authService.currentTraktProfileId() } answers { profileId }
         coEvery {
             authService.executeAuthorizedRequestWithinRuntimeCall<List<TraktRecommendationItemDto>>(any(), any())
         } coAnswers {
-            secondArg<suspend (String) -> Response<List<TraktRecommendationItemDto>>>().invoke("Bearer token")
+            @Suppress("UNCHECKED_CAST")
+            (invocation.args[1] as suspend (String) -> Response<List<TraktRecommendationItemDto>>).invoke("Bearer token")
         }
         coEvery {
             traktApi.getRecommendations(any(), any(), any(), any(), any())
@@ -207,6 +217,12 @@ class TraktIntegrationProviderRecommendationsTest {
         every { authService.currentAuthSession() } answers {
             TrackingAuthSession(TrackingProvider.TRAKT, profileId)
         }
+        coEvery { authService.accountScopedSession(any()) } answers {
+            (invocation.args[0] as TrackingAuthSession).copy(credentialHash = "trakt-test-$profileId")
+        }
+        coEvery { authService.accountScopedSession() } answers {
+            TrackingAuthSession(TrackingProvider.TRAKT, profileId, credentialHash = "trakt-test-$profileId")
+        }
         coEvery {
             authService.executeAuthorizedRequestWithinRuntimeCall<List<TraktRecommendationItemDto>>(any(), any())
         } returns Response.success(emptyList())
@@ -222,7 +238,11 @@ class TraktIntegrationProviderRecommendationsTest {
 
         coVerify(exactly = 1) {
             authService.executeAuthorizedRequestWithinRuntimeCall(
-                TrackingAuthSession(TrackingProvider.TRAKT, 1),
+                TrackingAuthSession(
+                    provider = TrackingProvider.TRAKT,
+                    profileId = 1,
+                    credentialHash = "trakt-test-1"
+                ),
                 any<suspend (String) -> Response<List<TraktRecommendationItemDto>>>()
             )
         }
@@ -231,7 +251,16 @@ class TraktIntegrationProviderRecommendationsTest {
 
 private fun authServiceForProfile(profileId: Int): TraktAuthService =
     mockk<TraktAuthService>(relaxed = true) {
-        every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, profileId)
+        val session = TrackingAuthSession(
+            provider = TrackingProvider.TRAKT,
+            profileId = profileId,
+            credentialHash = "trakt-test-$profileId"
+        )
+        every { currentAuthSession() } returns session
+        coEvery { accountScopedSession(any()) } answers {
+            (invocation.args[0] as TrackingAuthSession).copy(credentialHash = "trakt-test-$profileId")
+        }
+        coEvery { accountScopedSession() } returns session
         every { currentTraktProfileId() } returns profileId
     }
 

@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.RecordingIntegrationRuntime
 import com.nexio.tv.data.integration.simkl.SimklIntegrationProvider
@@ -41,7 +42,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
@@ -68,7 +69,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = transport
         )
@@ -92,7 +93,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
@@ -102,6 +103,7 @@ class SimklIntegrationProviderDiscoveryTest {
         assertSame(response, result)
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(IntegrationProvider.SIMKL, runtime.callSpecs.single().provider)
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 1, credentialHash = "simkl-test-1")
     }
 
     @Test
@@ -119,7 +121,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
@@ -129,6 +131,7 @@ class SimklIntegrationProviderDiscoveryTest {
         assertSame(response, result)
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(IntegrationProvider.SIMKL, runtime.callSpecs.single().provider)
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 1, credentialHash = "simkl-test-1")
     }
 
     @Test
@@ -140,7 +143,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
@@ -150,6 +153,7 @@ class SimklIntegrationProviderDiscoveryTest {
         assertSame(response, result)
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(IntegrationProvider.SIMKL, runtime.callSpecs.single().provider)
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 1, credentialHash = "simkl-test-1")
     }
 
     @Test
@@ -161,7 +165,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
@@ -171,6 +175,7 @@ class SimklIntegrationProviderDiscoveryTest {
         assertSame(response, result)
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(IntegrationProvider.SIMKL, runtime.callSpecs.single().provider)
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 1, credentialHash = "simkl-test-1")
     }
 
     @Test
@@ -182,7 +187,7 @@ class SimklIntegrationProviderDiscoveryTest {
         val provider = SimklIntegrationProvider(
             runtime = runtime,
             simklApi = mockk<SimklApi>(relaxed = true),
-            simklAuthService = mockk<SimklAuthService>(relaxed = true),
+            simklAuthService = simklAuthServiceMock(),
             moshi = Moshi.Builder().build(),
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
@@ -194,13 +199,14 @@ class SimklIntegrationProviderDiscoveryTest {
         assertSame(response, result)
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(IntegrationProvider.SIMKL, runtime.callSpecs.single().provider)
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 1, credentialHash = "simkl-test-1")
     }
 
     @Test
     fun `getLastActivities runtime call uses default authorized request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklLastActivitiesResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklLastActivitiesResponseDto())
         val provider = SimklIntegrationProvider(
             runtime = runtime,
@@ -210,8 +216,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklLastActivitiesResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklLastActivitiesResponseDto>).invoke("Bearer token")
         }
         coEvery { api.getLastActivities("Bearer token") } returns response
 
@@ -220,7 +226,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.getLastActivities("Bearer token") }
     }
 
@@ -228,7 +234,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `addToList runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklAddToListResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklAddToListResponseDto(result = "ok"))
         val body = SimklAddToListRequestDto(to = "completed")
         val provider = SimklIntegrationProvider(
@@ -239,8 +245,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklAddToListResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklAddToListResponseDto>).invoke("Bearer token")
         }
         coEvery { api.addToList("Bearer token", body) } returns response
 
@@ -249,7 +255,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.addToList("Bearer token", body) }
     }
 
@@ -257,7 +263,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `addToList runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklAddToListResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<SimklAddToListResponseDto>(503, "Service unavailable".toResponseBody())
         val body = SimklAddToListRequestDto(to = "completed")
         val provider = SimklIntegrationProvider(
@@ -268,8 +274,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklAddToListResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklAddToListResponseDto>).invoke("Bearer token")
         }
         coEvery { api.addToList("Bearer token", body) } returns response
 
@@ -278,7 +284,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.addToList("Bearer token", body) }
     }
 
@@ -286,7 +292,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `scrobbleStart runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklScrobbleResponseDto(action = "start"))
         val body = SimklScrobbleRequestDto(progress = 45.0f)
         val provider = SimklIntegrationProvider(
@@ -297,8 +303,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.scrobbleStart("Bearer token", body) } returns response
 
@@ -307,7 +313,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.scrobbleStart("Bearer token", body) }
     }
 
@@ -315,7 +321,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `scrobbleStart runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<SimklScrobbleResponseDto>(503, "Service unavailable".toResponseBody())
         val body = SimklScrobbleRequestDto(progress = 45.0f)
         val provider = SimklIntegrationProvider(
@@ -326,8 +332,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.scrobbleStart("Bearer token", body) } returns response
 
@@ -336,7 +342,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.scrobbleStart("Bearer token", body) }
     }
 
@@ -344,7 +350,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `checkin runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklScrobbleResponseDto(action = "checkin"))
         val body = SimklScrobbleRequestDto(progress = 52.0f)
         val provider = SimklIntegrationProvider(
@@ -355,8 +361,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.checkin("Bearer token", body) } returns response
 
@@ -365,7 +371,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.checkin("Bearer token", body) }
     }
 
@@ -373,7 +379,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `checkin runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<SimklScrobbleResponseDto>(503, "Service unavailable".toResponseBody())
         val body = SimklScrobbleRequestDto(progress = 52.0f)
         val provider = SimklIntegrationProvider(
@@ -384,8 +390,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.checkin("Bearer token", body) } returns response
 
@@ -394,7 +400,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.checkin("Bearer token", body) }
     }
 
@@ -402,7 +408,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `scrobbleStop runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklScrobbleResponseDto(action = "stop"))
         val body = SimklScrobbleRequestDto(progress = 45.0f)
         val provider = SimklIntegrationProvider(
@@ -413,8 +419,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.scrobbleStop("Bearer token", body) } returns response
 
@@ -423,7 +429,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.scrobbleStop("Bearer token", body) }
     }
 
@@ -431,7 +437,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `scrobbleStop runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<SimklScrobbleResponseDto>(503, "Service unavailable".toResponseBody())
         val body = SimklScrobbleRequestDto(progress = 45.0f)
         val provider = SimklIntegrationProvider(
@@ -442,8 +448,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.scrobbleStop("Bearer token", body) } returns response
 
@@ -452,7 +458,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.scrobbleStop("Bearer token", body) }
     }
 
@@ -460,7 +466,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `scrobblePause runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklScrobbleResponseDto(action = "pause"))
         val body = SimklScrobbleRequestDto(progress = 45.0f)
         val provider = SimklIntegrationProvider(
@@ -471,8 +477,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.scrobblePause("Bearer token", body) } returns response
 
@@ -481,7 +487,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.scrobblePause("Bearer token", body) }
     }
 
@@ -489,7 +495,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `scrobblePause runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklScrobbleResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<SimklScrobbleResponseDto>(503, "Service unavailable".toResponseBody())
         val body = SimklScrobbleRequestDto(progress = 45.0f)
         val provider = SimklIntegrationProvider(
@@ -500,8 +506,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<SimklScrobbleResponseDto>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklScrobbleResponseDto>).invoke("Bearer token")
         }
         coEvery { api.scrobblePause("Bearer token", body) } returns response
 
@@ -510,7 +516,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<SimklScrobbleResponseDto>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.scrobblePause("Bearer token", body) }
     }
 
@@ -518,7 +524,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `addHistory runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<Unit>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(Unit)
         val body = SimklHistoryAddRequestDto()
         val provider = SimklIntegrationProvider(
@@ -529,8 +535,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<Unit>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<Unit>).invoke("Bearer token")
         }
         coEvery { api.addHistory("Bearer token", body) } returns response
 
@@ -539,7 +545,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.addHistory("Bearer token", body) }
     }
 
@@ -547,7 +553,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `addHistory runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<Unit>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<Unit>(503, "Service unavailable".toResponseBody())
         val body = SimklHistoryAddRequestDto()
         val provider = SimklIntegrationProvider(
@@ -558,8 +564,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<Unit>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<Unit>).invoke("Bearer token")
         }
         coEvery { api.addHistory("Bearer token", body) } returns response
 
@@ -568,7 +574,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.addHistory("Bearer token", body) }
     }
 
@@ -576,7 +582,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `removeFromHistoryAndLists runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<Unit>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(Unit)
         val body = SimklHistoryRemoveRequestDto()
         val provider = SimklIntegrationProvider(
@@ -587,8 +593,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<Unit>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<Unit>).invoke("Bearer token")
         }
         coEvery { api.removeFromHistoryAndLists("Bearer token", body) } returns response
 
@@ -597,7 +603,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.removeFromHistoryAndLists("Bearer token", body) }
     }
 
@@ -605,7 +611,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `removeFromHistoryAndLists runtime call preserves non-success write response`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<Unit>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.error<Unit>(503, "Service unavailable".toResponseBody())
         val body = SimklHistoryRemoveRequestDto()
         val provider = SimklIntegrationProvider(
@@ -616,8 +622,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<Unit>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<Unit>).invoke("Bearer token")
         }
         coEvery { api.removeFromHistoryAndLists("Bearer token", body) } returns response
 
@@ -626,7 +632,7 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.removeFromHistoryAndLists("Bearer token", body) }
     }
 
@@ -634,7 +640,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `addToList runtime call uses session authorized write request when provided`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklAddToListResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklAddToListResponseDto(result = "ok"))
         val body = SimklAddToListRequestDto(to = "completed")
         val session = TrackingAuthSession(provider = TrackingProvider.SIMKL, profileId = 17)
@@ -647,9 +653,12 @@ class SimklIntegrationProviderDiscoveryTest {
         )
 
         coEvery {
-            authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(session, any())
+            authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(
+                match { it.profileId == 17 && it.credentialHash == "simkl-test-17" },
+                any()
+            )
         } coAnswers {
-            secondArg<suspend (String) -> Response<SimklAddToListResponseDto>>().invoke("Bearer token")
+            (invocation.args[1] as suspend (String) -> Response<SimklAddToListResponseDto>).invoke("Bearer token")
         }
         coEvery { api.addToList("Bearer token", body) } returns response
 
@@ -658,8 +667,12 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 17, credentialHash = "simkl-test-17")
         coVerify(exactly = 1) {
-            authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(session, any())
+            authService.executeAuthorizedWriteRequest<SimklAddToListResponseDto>(
+                match { it.profileId == 17 && it.credentialHash == "simkl-test-17" },
+                any()
+            )
         }
         coVerify(exactly = 1) { api.addToList("Bearer token", body) }
     }
@@ -668,7 +681,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `getLastActivities runtime call uses session authorized request when provided`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<SimklLastActivitiesResponseDto>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(SimklLastActivitiesResponseDto())
         val session = TrackingAuthSession(provider = TrackingProvider.SIMKL, profileId = 42)
         val provider = SimklIntegrationProvider(
@@ -679,8 +692,13 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(session, any()) } coAnswers {
-            secondArg<suspend (String) -> Response<SimklLastActivitiesResponseDto>>().invoke("Bearer token")
+        coEvery {
+            authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(
+                match { it.profileId == 42 && it.credentialHash == "simkl-test-42" },
+                any()
+            )
+        } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<SimklLastActivitiesResponseDto>).invoke("Bearer token")
         }
         coEvery { api.getLastActivities("Bearer token") } returns response
 
@@ -689,7 +707,13 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(session, any()) }
+        assertSimklAccountCallSpec(runtime.callSpecs.single(), profileId = 42, credentialHash = "simkl-test-42")
+        coVerify(exactly = 1) {
+            authService.executeAuthOwnerRequest<SimklLastActivitiesResponseDto>(
+                match { it.profileId == 42 && it.credentialHash == "simkl-test-42" },
+                any()
+            )
+        }
         coVerify(exactly = 1) { api.getLastActivities("Bearer token") }
     }
 
@@ -697,7 +721,7 @@ class SimklIntegrationProviderDiscoveryTest {
     fun `getPlayback runtime call uses default authorized request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<List<SimklPlaybackItemDto>>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(listOf(SimklPlaybackItemDto(id = 5L)))
         val provider = SimklIntegrationProvider(
             runtime = runtime,
@@ -707,8 +731,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthOwnerRequest<List<SimklPlaybackItemDto>>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<List<SimklPlaybackItemDto>>>().invoke("Bearer token")
+        coEvery { authService.executeAuthOwnerRequest<List<SimklPlaybackItemDto>>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<List<SimklPlaybackItemDto>>).invoke("Bearer token")
         }
         coEvery { api.getPlayback("Bearer token", "episodes") } returns response
 
@@ -717,15 +741,15 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthOwnerRequest<List<SimklPlaybackItemDto>>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthOwnerRequest<List<SimklPlaybackItemDto>>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.getPlayback("Bearer token", "episodes") }
     }
 
     @Test
-    fun `deletePlayback runtime call uses default authorized request`() = runTest {
+    fun `deletePlayback runtime call uses default authorized write request`() = runTest {
         val runtime = RecordingIntegrationRuntime<Response<Unit>>()
         val api = mockk<SimklApi>()
-        val authService = mockk<SimklAuthService>()
+        val authService = simklAuthServiceMock()
         val response = Response.success(Unit)
         val provider = SimklIntegrationProvider(
             runtime = runtime,
@@ -735,8 +759,8 @@ class SimklIntegrationProviderDiscoveryTest {
             transport = mockk<SimklDiscoveryTransport>(relaxed = true)
         )
 
-        coEvery { authService.executeAuthOwnerRequest<Unit>(any()) } coAnswers {
-            firstArg<suspend (String) -> Response<Unit>>().invoke("Bearer token")
+        coEvery { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) } coAnswers {
+            (invocation.args[1] as suspend (String) -> Response<Unit>).invoke("Bearer token")
         }
         coEvery { api.deletePlayback("Bearer token", 13L) } returns response
 
@@ -745,7 +769,40 @@ class SimklIntegrationProviderDiscoveryTest {
 
         assertTrue(result is IntegrationCallResult.Success)
         assertSame(response, (result as IntegrationCallResult.Success).value)
-        coVerify(exactly = 1) { authService.executeAuthOwnerRequest<Unit>(any()) }
+        coVerify(exactly = 1) { authService.executeAuthorizedWriteRequest<Unit>(any<TrackingAuthSession>(), any()) }
         coVerify(exactly = 1) { api.deletePlayback("Bearer token", 13L) }
     }
+}
+
+private fun simklAuthServiceMock(profileId: Int = 1): SimklAuthService =
+    mockk {
+        val session = TrackingAuthSession(
+            provider = TrackingProvider.SIMKL,
+            profileId = profileId,
+            credentialHash = "simkl-test-$profileId"
+        )
+        every { currentAuthSession() } returns session
+        coEvery { accountScopedSession(any()) } answers {
+            val requested = invocation.args[0] as TrackingAuthSession
+            requested.copy(credentialHash = "simkl-test-${requested.profileId}")
+        }
+        coEvery { accountScopedSession() } returns session
+    }
+
+private fun assertSimklAccountCallSpec(
+    spec: com.nexio.tv.core.integration.IntegrationCallSpec<*>,
+    profileId: Int,
+    credentialHash: String
+) {
+    val scope = spec.scope as? IntegrationScope.Account
+    assertTrue("Expected SIMKL account scope, got ${spec.scope}", scope != null)
+    requireNotNull(scope)
+    assertEquals(profileId, scope.profileId)
+    assertEquals(IntegrationProvider.SIMKL, scope.provider)
+    assertEquals(credentialHash, scope.credentialHash)
+    assertTrue(spec.operationKey.contains("profile:$profileId"))
+    assertTrue(spec.operationKey.contains("provider:SIMKL"))
+    assertTrue(spec.operationKey.contains("credential:$credentialHash"))
+    assertEquals(profileId, spec.profileContext?.profileId)
+    assertEquals(credentialHash, spec.profileContext?.account(IntegrationProvider.SIMKL)?.credentialHash)
 }

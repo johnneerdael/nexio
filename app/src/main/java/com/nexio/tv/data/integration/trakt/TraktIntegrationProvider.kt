@@ -10,6 +10,8 @@ import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.TraktApiShapes
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.ProfileExecutionContext
+import com.nexio.tv.core.integration.ProviderAccountRef
 import com.nexio.tv.core.integration.gsonCodec
 import com.nexio.tv.core.integration.valueOrNull
 import com.nexio.tv.data.remote.api.TraktApi
@@ -54,6 +56,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.domain.model.TrackingProvider
 import javax.inject.Inject
 import javax.inject.Singleton
 import retrofit2.Response
@@ -107,15 +110,18 @@ class TraktIntegrationProvider @Inject constructor(
     suspend fun refreshToken(
         session: TrackingAuthSession,
         body: TraktRefreshTokenRequestDto
-    ): Response<TraktTokenResponseDto>? =
-        executeRawResponseCall(
+    ): Response<TraktTokenResponseDto>? {
+        val ownerSession = traktAuthService.accountScopedSession(session)
+        return executeRawResponseCall(
             apiShapeId = "trakt.token_refresh",
-            operationKey = "trakt.token.refresh",
+            operationKey = accountOperationKey(ownerSession, "trakt.token.refresh"),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(session.profileId)
+            scope = accountScope(ownerSession),
+            profileContext = profileContext(ownerSession)
         ) {
             traktApi.refreshToken(body)
         }
+    }
 
     suspend fun refreshTokenWithinRuntimeCall(
         session: TrackingAuthSession,
@@ -126,15 +132,18 @@ class TraktIntegrationProvider @Inject constructor(
     suspend fun revokeToken(
         session: TrackingAuthSession,
         body: TraktRevokeRequestDto
-    ): Response<Unit>? =
-        executeRawResponseCall(
+    ): Response<Unit>? {
+        val ownerSession = traktAuthService.accountScopedSession(session)
+        return executeRawResponseCall(
             apiShapeId = "trakt.token_revoke",
-            operationKey = "trakt.token.revoke",
+            operationKey = accountOperationKey(ownerSession, "trakt.token.revoke"),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(session.profileId)
+            scope = accountScope(ownerSession),
+            profileContext = profileContext(ownerSession)
         ) {
             traktApi.revokeToken(body)
         }
+    }
 
     suspend fun getUserSettings(
         session: TrackingAuthSession
@@ -711,20 +720,20 @@ class TraktIntegrationProvider @Inject constructor(
         startDate: String,
         days: Int
     ): List<TraktCalendarEpisodeItemDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.CALENDAR_SHOWS,
-            operationKey = "trakt.calendar.shows",
-            cacheKey = profileCacheKey(profileId, "trakt:calendar:shows:start:$startDate:days:$days"),
+            operationKey = accountOperationKey(session, "trakt.calendar.shows"),
+            cacheKey = accountCacheKey(session, "trakt:calendar:shows:start:$startDate:days:$days"),
             codec = gsonCodec<List<TraktCalendarEpisodeItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getMyShowsCalendar(
@@ -747,20 +756,20 @@ class TraktIntegrationProvider @Inject constructor(
     }
 
     suspend fun fetchTrendingMovies(limit: Int): List<TraktTrendingMovieItemDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.TRENDING_MOVIES,
-            operationKey = "trakt.trending.movies",
-            cacheKey = profileCacheKey(profileId, "trakt:trending:movies:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.trending.movies"),
+            cacheKey = accountCacheKey(session, "trakt:trending:movies:limit:$limit"),
             codec = gsonCodec<List<TraktTrendingMovieItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getTrendingMovies(
@@ -785,20 +794,20 @@ class TraktIntegrationProvider @Inject constructor(
     }
 
     suspend fun fetchTrendingShows(limit: Int): List<TraktTrendingShowItemDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.TRENDING_SHOWS,
-            operationKey = "trakt.trending.shows",
-            cacheKey = profileCacheKey(profileId, "trakt:trending:shows:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.trending.shows"),
+            cacheKey = accountCacheKey(session, "trakt:trending:shows:limit:$limit"),
             codec = gsonCodec<List<TraktTrendingShowItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getTrendingShows(
@@ -823,20 +832,20 @@ class TraktIntegrationProvider @Inject constructor(
     }
 
     suspend fun fetchPopularMovies(limit: Int): List<TraktMovieDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_MOVIES,
-            operationKey = "trakt.popular.movies",
-            cacheKey = profileCacheKey(profileId, "trakt:popular:movies:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.popular.movies"),
+            cacheKey = accountCacheKey(session, "trakt:popular:movies:limit:$limit"),
             codec = gsonCodec<List<TraktMovieDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularMovies(
@@ -861,20 +870,20 @@ class TraktIntegrationProvider @Inject constructor(
     }
 
     suspend fun fetchPopularShows(limit: Int): List<TraktShowDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_SHOWS,
-            operationKey = "trakt.popular.shows",
-            cacheKey = profileCacheKey(profileId, "trakt:popular:shows:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.popular.shows"),
+            cacheKey = accountCacheKey(session, "trakt:popular:shows:limit:$limit"),
             codec = gsonCodec<List<TraktShowDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularShows(
@@ -902,20 +911,20 @@ class TraktIntegrationProvider @Inject constructor(
         type: String,
         limit: Int
     ): List<TraktRecommendationItemDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = if (type == "shows") TraktApiShapes.RECOMMENDED_SHOWS else TraktApiShapes.RECOMMENDED_MOVIES,
-            operationKey = "trakt.recommendations.$type",
-            cacheKey = profileCacheKey(profileId, "trakt:recommendations:$type:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.recommendations.$type"),
+            cacheKey = accountCacheKey(session, "trakt:recommendations:$type:limit:$limit"),
             codec = gsonCodec<List<TraktRecommendationItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getRecommendations(
@@ -944,20 +953,20 @@ class TraktIntegrationProvider @Inject constructor(
         page: Int,
         limit: Int
     ): List<TraktPopularListItemDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = "trakt.popular.lists",
-            operationKey = "trakt.popular.lists",
-            cacheKey = profileCacheKey(profileId, "trakt:popular:lists:page:$page:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.popular.lists"),
+            cacheKey = accountCacheKey(session, "trakt:popular:lists:page:$page:limit:$limit"),
             codec = gsonCodec<List<TraktPopularListItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularLists(
@@ -982,20 +991,20 @@ class TraktIntegrationProvider @Inject constructor(
     suspend fun fetchUserLists(
         id: String
     ): List<TraktListSummaryDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = "trakt.user.lists",
-            operationKey = "trakt.user.lists",
-            cacheKey = profileCacheKey(profileId, "trakt:user:lists:$id"),
+            operationKey = accountOperationKey(session, "trakt.user.lists"),
+            cacheKey = accountCacheKey(session, "trakt:user:lists:$id"),
             codec = gsonCodec<List<TraktListSummaryDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getUserLists(
@@ -1021,20 +1030,20 @@ class TraktIntegrationProvider @Inject constructor(
         listId: String,
         type: String
     ): List<TraktListItemDto>? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = "trakt.user.list_items",
-            operationKey = "trakt.user.list_items.$type",
-            cacheKey = profileCacheKey(profileId, "trakt:user:list-items:$id:$listId:$type"),
+            operationKey = accountOperationKey(session, "trakt.user.list_items.$type"),
+            cacheKey = accountCacheKey(session, "trakt:user:list-items:$id:$listId:$type"),
             codec = gsonCodec<List<TraktListItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getUserListItems(
@@ -1074,20 +1083,20 @@ class TraktIntegrationProvider @Inject constructor(
         page: Int,
         limit: Int
     ): TraktCommentsPage? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.MOVIE_COMMENTS,
-            operationKey = "trakt.movie.comments",
-            cacheKey = profileCacheKey(profileId, "trakt:reviews:movie:$pathId:page:$page:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.movie.comments"),
+            cacheKey = accountCacheKey(session, "trakt:reviews:movie:$pathId:page:$page:limit:$limit"),
             codec = gsonCodec<TraktCommentsPage>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getMovieComments(
@@ -1126,20 +1135,20 @@ class TraktIntegrationProvider @Inject constructor(
         page: Int,
         limit: Int
     ): TraktCommentsPage? {
-        val session = traktAuthService.currentAuthSession()
-        val profileId = session.profileId
+        val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.SHOW_COMMENTS,
-            operationKey = "trakt.show.comments",
-            cacheKey = profileCacheKey(profileId, "trakt:reviews:show:$pathId:page:$page:limit:$limit"),
+            operationKey = accountOperationKey(session, "trakt.show.comments"),
+            cacheKey = accountCacheKey(session, "trakt:reviews:show:$pathId:page:$page:limit:$limit"),
             codec = gsonCodec<TraktCommentsPage>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = IntegrationScope.Profile(profileId),
+            scope = accountScope(session),
+            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getShowComments(
@@ -1179,14 +1188,15 @@ class TraktIntegrationProvider @Inject constructor(
         request: suspend (String) -> Response<ResponseBody>,
         mapSuccess: (Response<ResponseBody>) -> IntegrationCallResult<ResultBody>
     ): IntegrationCallResult<ResultBody> {
-        val session = traktAuthService.currentAuthSession()
+        val session = traktAuthService.accountScopedSession()
         return runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TRAKT,
                 apiShapeId = apiShapeId,
-                operationKey = operationKey,
+                operationKey = accountOperationKey(session, operationKey),
                 workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
-                scope = IntegrationScope.Profile(session.profileId)
+                scope = accountScope(session),
+                profileContext = profileContext(session)
             ) {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     request(authorization)
@@ -1206,7 +1216,7 @@ class TraktIntegrationProvider @Inject constructor(
         request: suspend (String) -> Response<T>
     ): Response<T>? =
         executeAuthorizedResponseCall(
-            session = traktAuthService.currentAuthSession(),
+            session = traktAuthService.accountScopedSession(),
             apiShapeId = apiShapeId,
             operationKey = operationKey,
             workClass = workClass,
@@ -1219,27 +1229,31 @@ class TraktIntegrationProvider @Inject constructor(
         operationKey: String,
         workClass: IntegrationWorkClass,
         request: suspend (String) -> Response<T>
-    ): Response<T>? =
-        runtime.call(
+    ): Response<T>? {
+        val ownerSession = traktAuthService.accountScopedSession(session)
+        return runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.TRAKT,
                 apiShapeId = apiShapeId,
-                operationKey = operationKey,
+                operationKey = accountOperationKey(ownerSession, operationKey),
                 workClass = workClass,
-                scope = IntegrationScope.Profile(session.profileId)
+                scope = accountScope(ownerSession),
+                profileContext = profileContext(ownerSession)
             ) {
-                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
+                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(ownerSession) { authorization ->
                     request(authorization)
                 } ?: return@IntegrationCallSpec IntegrationCallResult.Missing
                 IntegrationCallResult.Success(response)
             }
         ).valueOrNull()
+    }
 
     private suspend fun <T> executeRawResponseCall(
         apiShapeId: String,
         operationKey: String,
         workClass: IntegrationWorkClass,
         scope: IntegrationScope,
+        profileContext: ProfileExecutionContext? = null,
         request: suspend () -> Response<T>
     ): Response<T>? =
         runtime.call(
@@ -1248,7 +1262,8 @@ class TraktIntegrationProvider @Inject constructor(
                 apiShapeId = apiShapeId,
                 operationKey = operationKey,
                 workClass = workClass,
-                scope = scope
+                scope = scope,
+                profileContext = profileContext
             ) {
                 IntegrationCallResult.Success(request())
             }
@@ -1257,6 +1272,36 @@ class TraktIntegrationProvider @Inject constructor(
     private fun <T : Any> T?.toCallResult(): IntegrationCallResult<T> =
         this?.let { IntegrationCallResult.Success(it) } ?: IntegrationCallResult.Missing
 
-    private fun profileCacheKey(profileId: Int, logicalKey: String): String =
-        "profile:$profileId:$logicalKey"
+    private fun accountCacheKey(session: TrackingAuthSession, logicalKey: String): String =
+        "profile:${session.profileId}:provider:TRAKT:credential:${credentialHash(session)}:$logicalKey"
+
+    private fun accountScope(session: TrackingAuthSession): IntegrationScope.Account =
+        IntegrationScope.Account(
+            profileId = session.profileId,
+            provider = IntegrationProvider.TRAKT,
+            credentialHash = credentialHash(session)
+        )
+
+    private fun profileContext(session: TrackingAuthSession): ProfileExecutionContext =
+        ProfileExecutionContext(
+            profileId = session.profileId,
+            sessionId = "trakt:${session.profileId}",
+            displayLanguage = "en",
+            region = "global",
+            accounts = mapOf(
+                IntegrationProvider.TRAKT to ProviderAccountRef(
+                    provider = IntegrationProvider.TRAKT,
+                    credentialHash = credentialHash(session),
+                    accountIdHash = session.accountIdHash
+                )
+            )
+        )
+
+    private fun accountOperationKey(session: TrackingAuthSession, operationKey: String): String =
+        "profile:${session.profileId}:provider:TRAKT:credential:${credentialHash(session)}:operation:$operationKey"
+
+    private fun credentialHash(session: TrackingAuthSession): String {
+        require(session.provider == TrackingProvider.TRAKT) { "Expected TRAKT session, got ${session.provider}" }
+        return session.credentialHash?.takeIf { it.isNotBlank() } ?: "trakt:profile:${session.profileId}"
+    }
 }
