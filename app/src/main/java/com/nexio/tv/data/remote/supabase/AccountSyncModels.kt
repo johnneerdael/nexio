@@ -230,7 +230,7 @@ data class AccountSettingsPayload(
 
 @Serializable
 data class AppearanceSettings(
-    val theme: String = "WHITE",
+    val theme: String = "CRIMSON",
     val font: String = "INTER",
     val localeTag: String = "system"
 )

@@ -137,7 +137,7 @@ fun HeroCarousel(
 
         // Indicator dots — pre-compute colors + shape to avoid reallocation per dot
         val focusRing = rememberBreathingFocusRing()
-        val dotColorFocusedInactive = remember(focusRing) { focusRing.copy(alpha = 0.4f) }
+        val dotColorFocusedInactive = focusRing.copy(alpha = 0.4f)
         val dotColorUnfocusedInactive = remember { Color.White.copy(alpha = 0.3f) }
         val dotShape = remember { RoundedCornerShape(3.dp) }
         Row(
