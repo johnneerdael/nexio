@@ -1,5 +1,7 @@
 package com.nexio.tv.core.integration
 
+import com.nexio.tv.core.profile.ProfileSettingsSnapshot
+
 data class ActiveProfileSession(
     val profileId: Int,
     val sessionId: String,
@@ -19,7 +21,8 @@ data class ProfileExecutionContext(
     val sessionId: String,
     val displayLanguage: String,
     val region: String,
-    val accounts: Map<IntegrationProvider, ProviderAccountRef> = emptyMap()
+    val accounts: Map<IntegrationProvider, ProviderAccountRef> = emptyMap(),
+    val settings: ProfileSettingsSnapshot? = null
 ) {
     init {
         require(profileId > 0) { "ProfileExecutionContext.profileId must be positive" }
@@ -29,6 +32,10 @@ data class ProfileExecutionContext(
     }
 
     fun account(provider: IntegrationProvider): ProviderAccountRef? = accounts[provider]
+
+    val traktAccount: ProviderAccountRef? get() = accounts[IntegrationProvider.TRAKT]
+    val simklAccount: ProviderAccountRef? get() = accounts[IntegrationProvider.SIMKL]
+    val mdblistAccount: ProviderAccountRef? get() = accounts[IntegrationProvider.MDBLIST]
 }
 
 data class ProviderAccountRef(
