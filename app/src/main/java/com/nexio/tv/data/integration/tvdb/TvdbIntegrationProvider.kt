@@ -187,6 +187,28 @@ class TvdbIntegrationProvider @Inject constructor(
         }?.data
     }
 
+    suspend fun fetchSeriesExtendedCached(
+        tvdbId: Int,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
+    ): TvdbSeriesExtendedRecord? {
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TVDB,
+            apiShapeId = TvdbApiShapes.SERIES_EXTENDED,
+            operationKey = "tvdb.series.extended",
+            cacheKey = "tvdb:series:$tvdbId:extended:policy:$localizationPolicyVersion",
+            codec = gsonCodec<TvdbSeriesExtendedRecord>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = 7L * 24L * 60L * 60L * 1000L,
+                staleAfterExpiryMs = 30L * 24L * 60L * 60L * 1000L
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            load = {
+                fetchSeriesExtendedWithinRuntimeLoad(tvdbId = tvdbId)
+            }
+        )
+        return runtime.get(spec).valueOrNull()
+    }
+
     internal suspend fun fetchSeriesExtendedWithinRuntimeLoad(
         tvdbId: Int,
         meta: String? = null,

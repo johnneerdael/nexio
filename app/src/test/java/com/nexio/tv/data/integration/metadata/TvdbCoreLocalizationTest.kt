@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
@@ -53,6 +54,34 @@ class TvdbCoreLocalizationTest {
 
         assertEquals("English title", selected.fields.getValue(ResolvedField.TITLE).value)
         assertEquals("English overview", selected.fields.getValue(ResolvedField.OVERVIEW).value)
+    }
+
+    @Test
+    fun `tvdb core localized candidate preserves language fallback trace`() {
+        val policy = LocalizationPolicy.tvdb("nl")
+        val selected = buildTvdbCoreLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            policy = policy,
+            extended = TvdbSeriesExtendedRecord(
+                id = 81189,
+                name = "Original title",
+                overview = "Original overview"
+            ),
+            englishTranslation = TvdbTranslationRecord(
+                name = "English title",
+                overview = "English overview"
+            ),
+            requestedTranslation = TvdbTranslationRecord(
+                name = "Nederlandse titel",
+                overview = "N/A"
+            )
+        )
+
+        val overviewTrace = selected.localization.getValue(ResolvedField.OVERVIEW)
+        assertEquals("eng", overviewTrace.selectedLanguage)
+        assertEquals(MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK, overviewTrace.fallbackRole)
+        assertEquals("tvdb.series.translation", overviewTrace.sourceApiShapeId)
+        assertEquals("nld", overviewTrace.rejectedCandidates.single().language)
     }
 
     @Test

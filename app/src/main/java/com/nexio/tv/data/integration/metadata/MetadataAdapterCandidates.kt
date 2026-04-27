@@ -5,6 +5,9 @@ import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataCandidate
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFieldTrace
+import com.nexio.tv.core.metadata.router.MetadataLocalizationRejectedCandidate
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tmdb.TmdbEnrichment
@@ -75,6 +78,33 @@ internal fun tvdbSeriesTranslationCacheKey(
     policyVersion: Int
 ): String = "tvdb:series:$tvdbId:translation:$language:policy:$policyVersion"
 
+internal fun SelectedLocalizedField.toMetadataTrace(): MetadataLocalizationFieldTrace =
+    MetadataLocalizationFieldTrace(
+        field = field,
+        selectedProvider = provider,
+        selectedLanguage = language.providerCode,
+        fallbackRole = fallbackRole.toMetadataRole(),
+        sourceApiShapeId = sourceShape,
+        rejectedCandidates = rejectedCandidates.map { it.toMetadataRejection() }
+    )
+
+private fun LocalizedFieldRejection.toMetadataRejection(): MetadataLocalizationRejectedCandidate =
+    MetadataLocalizationRejectedCandidate(
+        provider = provider,
+        language = language.providerCode,
+        fallbackRole = fallbackRole.toMetadataRole(),
+        reason = reason
+    )
+
+private fun FallbackRole.toMetadataRole(): MetadataLocalizationFallbackRole =
+    when (this) {
+        FallbackRole.LOCALIZED -> MetadataLocalizationFallbackRole.LOCALIZED
+        FallbackRole.LANGUAGE_FALLBACK -> MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK
+        FallbackRole.CANONICAL -> MetadataLocalizationFallbackRole.CANONICAL
+        FallbackRole.ADDON_FALLBACK -> MetadataLocalizationFallbackRole.ADDON_FALLBACK
+        FallbackRole.PROVIDER_FALLBACK -> MetadataLocalizationFallbackRole.PROVIDER_FALLBACK
+    }
+
 internal fun buildTvdbCoreLocalizedCandidate(
     provider: MetadataPrimaryProvider,
     policy: LocalizationPolicy,
@@ -132,6 +162,10 @@ internal fun buildTvdbCoreLocalizedCandidate(
             extended?.image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+        },
+        localization = buildMap {
+            title?.let { put(ResolvedField.TITLE, it.toMetadataTrace()) }
+            overview?.let { put(ResolvedField.OVERVIEW, it.toMetadataTrace()) }
         }
     )
 }
