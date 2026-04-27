@@ -51,15 +51,6 @@ import com.nexio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 
-private val PANEL_TEXT_COLORS = listOf(
-    Color.White,
-    Color(0xFFD9D9D9),
-    Color(0xFFFFD700),
-    Color(0xFF00E5FF),
-    Color(0xFFFF5C5C),
-    Color(0xFF00FF88)
-)
-
 private val PANEL_OUTLINE_COLORS = listOf(
     Color.Black,
     Color.White,
@@ -156,22 +147,6 @@ internal fun SubtitleStyleSidePanel(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SubtitleStyleSection(
-                    title = stringResource(R.string.subtitle_style_text_color),
-                    modifier = Modifier
-                        .width(StyleCardWidth)
-                        .height(StyleCardHeight)
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PANEL_TEXT_COLORS.forEach { color ->
-                            SubtitleStyleColorChip(
-                                color = color,
-                                isSelected = subtitleStyle.textColor == color.toArgb(),
-                                onClick = { onEvent(PlayerEvent.OnSetSubtitleTextColor(color.toArgb())) }
-                            )
-                        }
-                    }
-                }
                 SubtitleStyleSection(
                     title = stringResource(R.string.subtitle_style_outline),
                     centerContent = false,

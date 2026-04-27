@@ -277,10 +277,6 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleBold(bold)
     }
 
-    suspend fun setSubtitleTextColor(color: Int) {
-        playerSettingsDataStore.setSubtitleTextColor(color)
-    }
-
     suspend fun setSubtitleBackgroundColor(color: Int) {
         playerSettingsDataStore.setSubtitleBackgroundColor(color)
     }
@@ -303,6 +299,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setAddonSubtitleStartupMode(mode: AddonSubtitleStartupMode) {
         playerSettingsDataStore.setAddonSubtitleStartupMode(mode)
+    }
+
+    suspend fun setBurnInProtectionEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setBurnInProtectionEnabled(enabled)
     }
 
     // Buffer settings functions

@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import android.net.Uri
 import android.util.Log
 import com.nexio.tv.core.player.AndroidFrameRateSettings
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
@@ -243,7 +244,18 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     loadingOverlayEnabled = settings.loadingOverlayEnabled,
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
-                    osdClockEnabled = settings.osdClockEnabled
+                    osdClockEnabled = settings.osdClockEnabled,
+                    // Preserve any previously-resolved deltas; only the enable flag flips here.
+                    // Color (off-white) and alpha cap apply immediately because applySubtitleStyle
+                    // reads burnInProtection.enabled directly. Zone deltas (vertical/horizontal
+                    // position) are recomputed at playback session start in
+                    // PlayerRuntimeControllerInitialization, so position rotation takes effect on
+                    // the next stream — acceptable v1 trade-off.
+                    burnInProtection = if (settings.burnInProtection.enabled) {
+                        state.burnInProtection.copy(enabled = true)
+                    } else {
+                        BurnInProtectionState.DISABLED
+                    },
                 )
             }
             bufferLogsEnabled = settings.enableBufferLogs

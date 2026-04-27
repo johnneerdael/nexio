@@ -12,12 +12,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.runtime.Composable
@@ -36,18 +37,6 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
-
-private val subtitleColors = listOf(
-    Color.White,
-    Color(0xFFD9D9D9),
-    Color.Yellow,
-    Color.Cyan,
-    Color.Green,
-    Color.Magenta,
-    Color(0xFFFF6B6B),
-    Color(0xFFFFA500),
-    Color(0xFF90EE90)
-)
 
 private val subtitleBackgroundColors = listOf(
     Color.Transparent,
@@ -69,13 +58,13 @@ internal fun LazyListScope.subtitleSettingsItems(
     onShowLanguageDialog: () -> Unit,
     onShowSecondaryLanguageDialog: () -> Unit,
     onShowSubtitleStartupModeDialog: () -> Unit,
-    onShowTextColorDialog: () -> Unit,
     onShowBackgroundColorDialog: () -> Unit,
     onShowOutlineColorDialog: () -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
+    onSetBurnInProtectionEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -86,6 +75,18 @@ internal fun LazyListScope.subtitleSettingsItems(
             style = MaterialTheme.typography.titleMedium,
             color = NexioColors.TextSecondary,
             modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
+        )
+    }
+
+    item(key = "subtitle_burn_in_protection") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Shield,
+            title = stringResource(R.string.subtitle_burn_in_protection_title),
+            subtitle = stringResource(R.string.subtitle_burn_in_protection_subtitle),
+            isChecked = playerSettings.burnInProtection.enabled,
+            onCheckedChange = onSetBurnInProtectionEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -179,17 +180,6 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item(key = "subtitle_text_color") {
-        ColorSettingsItem(
-            icon = Icons.Default.Palette,
-            title = stringResource(R.string.sub_text_color),
-            currentColor = Color(playerSettings.subtitleStyle.textColor),
-            onClick = onShowTextColorDialog,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
     item(key = "subtitle_background_color") {
         ColorSettingsItem(
             icon = Icons.Default.Palette,
@@ -234,20 +224,17 @@ internal fun SubtitleSettingsDialogs(
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
     showSubtitleStartupModeDialog: Boolean,
-    showTextColorDialog: Boolean,
     showBackgroundColorDialog: Boolean,
     showOutlineColorDialog: Boolean,
     playerSettings: PlayerSettings,
     onSetPreferredLanguage: (String?) -> Unit,
     onSetSecondaryLanguage: (String?) -> Unit,
     onSetAddonSubtitleStartupMode: (AddonSubtitleStartupMode) -> Unit,
-    onSetTextColor: (Color) -> Unit,
     onSetBackgroundColor: (Color) -> Unit,
     onSetOutlineColor: (Color) -> Unit,
     onDismissLanguageDialog: () -> Unit,
     onDismissSecondaryLanguageDialog: () -> Unit,
     onDismissSubtitleStartupModeDialog: () -> Unit,
-    onDismissTextColorDialog: () -> Unit,
     onDismissBackgroundColorDialog: () -> Unit,
     onDismissOutlineColorDialog: () -> Unit
 ) {
@@ -287,19 +274,6 @@ internal fun SubtitleSettingsDialogs(
                 onDismissSubtitleStartupModeDialog()
             },
             onDismiss = onDismissSubtitleStartupModeDialog
-        )
-    }
-
-    if (showTextColorDialog) {
-        ColorSelectionDialog(
-            title = stringResource(R.string.sub_text_color),
-            colors = subtitleColors,
-            selectedColor = Color(playerSettings.subtitleStyle.textColor),
-            onColorSelected = {
-                onSetTextColor(it)
-                onDismissTextColorDialog()
-            },
-            onDismiss = onDismissTextColorDialog
         )
     }
 

@@ -45,8 +45,11 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
+import com.nexio.tv.core.player.BurnInProtectionState
+import com.nexio.tv.core.player.buildMediaSeedKey
 import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.player.auth.PlaybackErrorClassifier
+import com.nexio.tv.core.player.computeBurnInProtectionState
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
@@ -111,6 +114,25 @@ internal fun PlayerRuntimeController.resetAssSsaPipelineDecisionForStream(stream
     assSsaPipelineOverrideForCurrentStream = reset.overrideForCurrentStream
     assSsaPipelineSwitchInFlight = reset.switchInFlight
     assSsaPipelineFallbackHandledForCurrentStream = reset.fallbackHandled
+}
+
+private suspend fun PlayerRuntimeController.resolveBurnInProtectionState(
+    enabled: Boolean,
+): BurnInProtectionState {
+    if (!enabled) return BurnInProtectionState.DISABLED
+    val salt = playerSettingsDataStore.getOrCreateBurnInProtectionUserSalt()
+    val seed = buildMediaSeedKey(
+        contentId = contentId,
+        season = currentSeason,
+        episode = currentEpisode,
+        streamUrl = currentStreamUrl,
+    )
+    return computeBurnInProtectionState(
+        enabled = true,
+        mediaSeedKey = seed,
+        userSalt = salt,
+        nowMs = System.currentTimeMillis(),
+    )
 }
 
 internal data class AssSsaPipelineOverlayDecision(
@@ -704,6 +726,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             activePlayerUsesAssSsaRenderer = useAssSsaPipeline
             assSsaPipelineSwitchInFlight = false
             _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
+
+            scope.launch {
+                if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
+                val resolved = resolveBurnInProtectionState(playerSettings.burnInProtection.enabled)
+                if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
+                _uiState.update { it.copy(burnInProtection = resolved) }
+            }
 
             _exoPlayer?.apply {
                 
