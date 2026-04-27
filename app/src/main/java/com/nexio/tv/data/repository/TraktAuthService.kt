@@ -106,14 +106,17 @@ class TraktAuthService @Inject constructor(
     }
 
     suspend fun getCurrentAuthState(): TraktAuthState =
-        getCurrentAuthState(currentAuthSession())
+        getAuthState(currentAuthSession())
+
+    suspend fun getAuthState(session: TrackingAuthSession): TraktAuthState =
+        getCurrentAuthState(session)
 
     private suspend fun getCurrentAuthState(session: TrackingAuthSession): TraktAuthState =
         traktAuthDataStore.stateForProfile(session.profileId).first()
 
     suspend fun accountScopedSession(session: TrackingAuthSession = currentAuthSession()): TrackingAuthSession {
         if (!session.credentialHash.isNullOrBlank()) return session
-        val state = getCurrentAuthState(session)
+        val state = getAuthState(session)
         val credentialMaterial = state.refreshToken?.takeIf { it.isNotBlank() }
             ?: state.accessToken?.takeIf { it.isNotBlank() }
             ?: state.userSlug?.takeIf { it.isNotBlank() }
@@ -168,7 +171,7 @@ class TraktAuthService @Inject constructor(
         }
 
         val session = currentAuthSession()
-        val state = getCurrentAuthState(session)
+        val state = getAuthState(session)
         val profileId = session.profileId
         val deviceCode = state.deviceCode
         if (deviceCode.isNullOrBlank()) {
@@ -238,7 +241,7 @@ class TraktAuthService @Inject constructor(
 
         return tokenRefreshMutex.withLock {
             val profileId = session.profileId
-            val state = getCurrentAuthState(session)
+            val state = getAuthState(session)
             val refreshToken = state.refreshToken ?: return@withLock false
             if (!force && !isTokenExpiredOrExpiring(state)) {
                 trace("refreshTokenIfNeeded: token still valid, skip refresh")
@@ -310,7 +313,7 @@ class TraktAuthService @Inject constructor(
 
     suspend fun revokeAndLogout(profileId: Int? = null) {
         val session = profileId?.let { TrackingAuthSession(TrackingProvider.TRAKT, it) } ?: currentAuthSession()
-        val state = getCurrentAuthState(session)
+        val state = getAuthState(session)
         if (hasRequiredCredentials()) {
             state.accessToken?.let { accessToken ->
                 runCatching {
@@ -422,7 +425,7 @@ class TraktAuthService @Inject constructor(
                 )
                 if (refreshed) {
                     trace("authorized request: 401 for $target, retrying after token refresh")
-                    token = getCurrentAuthState(session).accessToken ?: return response
+                    token = getAuthState(session).accessToken ?: return response
                     retriedAuth = true
                     response.closeErrorBody()
                     continue
@@ -470,10 +473,10 @@ class TraktAuthService @Inject constructor(
         session: TrackingAuthSession,
         withinRuntimeCall: Boolean = false
     ): String? {
-        val state = getCurrentAuthState(session)
+        val state = getAuthState(session)
         if (state.accessToken.isNullOrBlank()) return null
         if (refreshTokenIfNeeded(session, force = false, withinRuntimeCall = withinRuntimeCall)) {
-            return getCurrentAuthState(session).accessToken
+            return getAuthState(session).accessToken
         }
         return null
     }

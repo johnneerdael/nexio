@@ -10,6 +10,8 @@ class TraktRepositoryAuthGateway @Inject constructor(
 
     suspend fun getCurrentAuthState(): TraktAuthState = authService.getCurrentAuthState()
 
+    suspend fun getAuthState(session: TrackingAuthSession): TraktAuthState = authService.getAuthState(session)
+
     suspend fun currentAuthSession(): TrackingAuthSession = authService.currentAuthSession()
 
     fun currentTraktProfileId(): Int = authService.currentTraktProfileId()

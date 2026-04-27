@@ -14,25 +14,26 @@ class TraktMutationOutboxWorker(
     private val mutex = Mutex()
     private var fairnessState = TraktMutationFairnessState()
 
-    suspend fun snapshot(): TraktMutationOutboxSnapshot = store.read()
+    suspend fun snapshot(profileId: Int? = null): TraktMutationOutboxSnapshot =
+        if (profileId == null) store.read() else store.read(profileId)
 
     suspend fun enqueue(envelope: TraktMutationEnvelope): TraktMutationEnvelope = mutex.withLock {
         val nowMs = timeProvider()
         val updated = policy.enqueue(
-            snapshot = store.read(),
+            snapshot = store.read(envelope.profileId),
             envelope = envelope,
             nowMs = nowMs
         )
-        store.write(updated)
+        store.write(updated, envelope.profileId)
         updated.items.first { it.id == envelope.id }
     }
 
-    suspend fun recoverExpiredLeases(): Int = mutex.withLock {
+    suspend fun recoverExpiredLeases(profileId: Int? = null): Int = mutex.withLock {
         val nowMs = timeProvider()
-        val before = store.read()
+        val before = if (profileId == null) store.read() else store.read(profileId)
         val after = policy.recoverExpiredLeases(before, nowMs)
         if (before == after) return@withLock 0
-        store.write(after)
+        if (profileId == null) store.write(after) else store.write(after, profileId)
         before.items.count { item ->
             item.state == TraktMutationLifecycleState.LEASED &&
                 item.leaseExpiresAtMs != null &&
@@ -40,9 +41,12 @@ class TraktMutationOutboxWorker(
         }
     }
 
-    suspend fun leaseNextReady(): TraktMutationLease? = mutex.withLock {
+    suspend fun leaseNextReady(profileId: Int? = null): TraktMutationLease? = mutex.withLock {
         val nowMs = timeProvider()
-        val recovered = policy.recoverExpiredLeases(store.read(), nowMs)
+        val recovered = policy.recoverExpiredLeases(
+            if (profileId == null) store.read() else store.read(profileId),
+            nowMs
+        )
         val selection = policy.leaseNextReady(
             snapshot = recovered,
             nowMs = nowMs,
@@ -51,26 +55,27 @@ class TraktMutationOutboxWorker(
             leaseTokenFactory = leaseTokenFactory
         )
         if (selection == null) {
-            store.write(recovered)
+            if (profileId == null) store.write(recovered) else store.write(recovered, profileId)
             return@withLock null
         }
         fairnessState = selection.lease.fairnessState
-        store.write(selection.snapshot)
+        if (profileId == null) store.write(selection.snapshot) else store.write(selection.snapshot, profileId)
         selection.lease
     }
 
     suspend fun settle(
+        profileId: Int,
         leaseToken: String,
         settlement: TraktMutationSettlement
     ): TraktMutationEnvelope? = mutex.withLock {
         val nowMs = timeProvider()
         val result = policy.settleLease(
-            snapshot = store.read(),
+            snapshot = store.read(profileId),
             leaseToken = leaseToken,
             settlement = settlement,
             nowMs = nowMs
         )
-        store.write(result.snapshot)
+        store.write(result.snapshot, profileId)
         result.settledEnvelope
     }
 

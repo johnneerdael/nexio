@@ -98,6 +98,28 @@ class TraktMutationOutboxStoreTest {
     }
 
     @Test
+    fun `explicit profile reads and writes stay in that profile store`() = runTest {
+        val profileOnePrefs = InMemorySharedPreferences()
+        val profileTwoPrefs = InMemorySharedPreferences()
+        val store = TraktMutationOutboxStore(
+            context = mockContext(
+                "trakt_mutation_outbox" to profileOnePrefs,
+                "trakt_mutation_outbox_p2" to profileTwoPrefs
+            )
+        )
+        val profileTwoSnapshot = TraktMutationOutboxSnapshot(
+            items = listOf(sampleEnvelope(id = "queued-profile-2", profileId = 2)),
+            updatedAtMs = 1_000L
+        )
+
+        store.write(profileTwoSnapshot, profileId = 2)
+
+        assertTrue(store.read(profileId = 1).items.isEmpty())
+        assertEquals("queued-profile-2", store.read(profileId = 2).items.single().id)
+        assertEquals(2, store.read(profileId = 2).items.single().profileId)
+    }
+
+    @Test
     fun `legacy persisted mutation defaults to profile one`() = runTest {
         val prefs = InMemorySharedPreferences()
         prefs.edit().putString(
@@ -285,6 +307,14 @@ class TraktMutationOutboxStoreTest {
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
         return mockk(relaxed = true) {
             every { getSharedPreferences("trakt_mutation_outbox", Context.MODE_PRIVATE) } returns prefs
+        }
+    }
+
+    private fun mockContext(vararg prefsByName: Pair<String, InMemorySharedPreferences>): Context {
+        return mockk(relaxed = true) {
+            prefsByName.forEach { (name, prefs) ->
+                every { getSharedPreferences(name, Context.MODE_PRIVATE) } returns prefs
+            }
         }
     }
 

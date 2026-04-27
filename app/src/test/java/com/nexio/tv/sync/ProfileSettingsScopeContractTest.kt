@@ -417,7 +417,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(metadataSource.contains("return \"${'$'}META_PREFIX${'$'}itemKey::${'$'}languageTag::${'$'}providerToken\""))
         assertTrue(metadataSource.contains("return \"${'$'}TMDB_PREFIX${'$'}tmdbKey::${'$'}languageTag::${'$'}providerToken\""))
         assertTrue(metadataSource.contains("return \"${'$'}TVDB_PREFIX${'$'}seriesId::${'$'}{recordKind.trim().lowercase()}::${'$'}languageTag::${'$'}providerToken\""))
-        assertTrue(artworkSource.contains("\"${'$'}{itemId}_${'$'}{provider}_${'$'}{type}\""))
+        assertTrue(artworkSource.contains("\"artwork:${'$'}provider:${'$'}type:${'$'}itemId:imageLang:en:policy:1\""))
         assertTrue(!artworkSource.contains("languageTag"))
         assertTrue(!artworkSource.contains("profileId"))
     }
@@ -470,7 +470,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(simklSource.contains("profileBoundary.authRoute(route, TrackingProvider.SIMKL).profileId"))
         assertTrue(simklSource.contains("ProfileModeRoute.InvalidProfileRoute -> error(\"Invalid active profile id ${'$'}{route.profileId}\")"))
         assertTrue(simklSource.contains("simklAuthDataStore.clearAuth(currentAuthSession().profileId)"))
-        assertTrue(simklSource.contains("simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)"))
+        assertTrue(simklSource.contains("simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId"))
     }
 
     @Test
@@ -486,7 +486,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(traktSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
         assertTrue(traktSource.contains("executeAuthOwnerRequest("))
         assertTrue(traktSource.contains("session: TrackingAuthSession"))
-        assertTrue(simklSource.contains("private fun currentAuthSession(): TrackingAuthSession"))
+        assertTrue(simklSource.contains("fun currentAuthSession(): TrackingAuthSession"))
         assertTrue(simklSource.contains("getCurrentAuthState(session: TrackingAuthSession)"))
         assertTrue(simklSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
         assertTrue(simklSource.contains("executeAuthOwnerRequest("))
@@ -808,8 +808,9 @@ class ProfileSettingsScopeContractTest {
         assertTrue(simklRemoteSource.contains("session: TrackingAuthSession? = null"))
         assertTrue(simklRemoteSource.contains("simklIntegrationProvider.getLastActivities(session)"))
         assertTrue(simklRemoteSource.contains("simklIntegrationProvider.addToList(body = body, session = session)"))
-        assertTrue(simklIntegrationSource.contains("simklAuthService.executeAuthOwnerRequest(session, call)"))
-        assertTrue(simklIntegrationSource.contains("simklAuthService.executeAuthorizedWriteRequest(session, call)"))
+        assertTrue(simklIntegrationSource.contains("simklAuthService.executeAuthOwnerRequest("))
+        assertTrue(simklIntegrationSource.contains("session = ownerSession"))
+        assertTrue(simklIntegrationSource.contains("simklAuthService.executeAuthorizedWriteRequest("))
     }
 
     @Test
@@ -820,7 +821,8 @@ class ProfileSettingsScopeContractTest {
         val historyAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt").readText()
         val seasonAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktSeasonMarkMutationAdapter.kt").readText()
 
-        assertTrue(scrobbleServiceSource.contains("val session = traktAuthService.currentAuthSession()"))
+        assertTrue(scrobbleServiceSource.contains("val session = authSession(ownerProfileId)"))
+        assertTrue(scrobbleServiceSource.contains("?: traktAuthService.currentAuthSession()"))
         assertTrue(scrobbleAdapterSource.contains("profileId: Int = 1"))
         assertTrue(scrobbleAdapterSource.contains("profileId = profileId"))
         assertTrue(historyAdapterSource.contains("profileId: Int = 1"))

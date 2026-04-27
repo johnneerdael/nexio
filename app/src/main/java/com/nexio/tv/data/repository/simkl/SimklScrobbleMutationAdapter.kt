@@ -7,6 +7,7 @@ import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleRequestDto
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
 import com.nexio.tv.data.repository.SimklProgressService
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
@@ -14,6 +15,7 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -34,12 +36,13 @@ class SimklScrobbleMutationAdapter @Inject constructor(
     override suspend fun applyOptimistic(envelope: TraktMutationEnvelope) = Unit
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+        val session = TrackingAuthSession(TrackingProvider.SIMKL, envelope.profileId)
         val response = when (envelope.mutationKind) {
-            MUTATION_KIND_CHECKIN -> remote.checkin(envelope.buildRequestBody())
+            MUTATION_KIND_CHECKIN -> remote.checkin(envelope.buildRequestBody(), session)
             MUTATION_KIND_SCROBBLE -> when (envelope.scrobbleAction()) {
-                "start" -> remote.scrobbleStart(envelope.buildRequestBody())
-                "pause" -> remote.scrobblePause(envelope.buildRequestBody())
-                else -> remote.scrobbleStop(envelope.buildRequestBody())
+                "start" -> remote.scrobbleStart(envelope.buildRequestBody(), session)
+                "pause" -> remote.scrobblePause(envelope.buildRequestBody(), session)
+                else -> remote.scrobbleStop(envelope.buildRequestBody(), session)
             }
             else -> null
         } ?: return TraktMutationExecutionResult.Failure(httpStatusCode = 400, reason = "Unsupported SIMKL scrobble mutation ${envelope.mutationKind}")
@@ -107,7 +110,8 @@ class SimklScrobbleMutationAdapter @Inject constructor(
             action: String,
             progressPercent: Float,
             rollbackState: TraktWatchingNowStateController.Snapshot,
-            optimisticVersion: Long
+            optimisticVersion: Long,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 populateItem(item)
@@ -115,6 +119,7 @@ class SimklScrobbleMutationAdapter @Inject constructor(
                 addProperty(PAYLOAD_PROGRESS, progressPercent.coerceIn(0f, 100f))
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_SCROBBLE,
                 priority = TraktMutationPriorityBucket.SCROBBLE,
@@ -128,13 +133,15 @@ class SimklScrobbleMutationAdapter @Inject constructor(
             item: TrackingScrobbleItem,
             message: String?,
             rollbackState: TraktWatchingNowStateController.Snapshot,
-            optimisticVersion: Long
+            optimisticVersion: Long,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 populateItem(item)
                 message?.let { addProperty(PAYLOAD_MESSAGE, it) }
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_CHECKIN,
                 priority = TraktMutationPriorityBucket.SCROBBLE,

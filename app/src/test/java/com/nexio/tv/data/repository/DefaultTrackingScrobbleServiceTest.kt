@@ -18,17 +18,16 @@ class DefaultTrackingScrobbleServiceTest {
         traktAuthenticated: Boolean = provider == com.nexio.tv.domain.model.TrackingProvider.TRAKT,
         simklAuthenticated: Boolean = provider == com.nexio.tv.domain.model.TrackingProvider.SIMKL
     ) = mockk<com.nexio.tv.data.repository.TrackingProviderStateService> {
-        coEvery { currentState() } returns com.nexio.tv.data.repository.EffectiveTrackingProviderState(
+        val effectiveState = com.nexio.tv.data.repository.EffectiveTrackingProviderState(
             effectiveProvider = provider,
             traktAuthenticated = traktAuthenticated,
             simklAuthenticated = simklAuthenticated
         )
+        coEvery { currentState() } returns effectiveState
+        coEvery { currentState(any()) } returns effectiveState
+        every { currentProfileId() } returns 1
         every { state } returns flowOf(
-            com.nexio.tv.data.repository.EffectiveTrackingProviderState(
-                effectiveProvider = provider,
-                traktAuthenticated = traktAuthenticated,
-                simklAuthenticated = simklAuthenticated
-            )
+            effectiveState
         )
     }
 
@@ -37,7 +36,7 @@ class DefaultTrackingScrobbleServiceTest {
         val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>()
         val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>(relaxed = true)
         val itemSlot = slot<com.nexio.tv.data.repository.TraktScrobbleItem>()
-        coEvery { traktService.checkin(capture(itemSlot), any()) } returns true
+        coEvery { traktService.checkin(capture(itemSlot), any(), any()) } returns true
 
         val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(traktService, simklService, trackingProviderStateService())
         val result = service.checkin(
@@ -76,14 +75,14 @@ class DefaultTrackingScrobbleServiceTest {
         )
 
         assertFalse(result)
-        coVerify(exactly = 0) { traktService.checkin(any(), any()) }
+        coVerify(exactly = 0) { traktService.checkin(any(), any(), any()) }
     }
 
     @Test
     fun `simkl provider routes generic checkin to simkl service`() = runTest {
         val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>(relaxed = true)
         val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>()
-        coEvery { simklService.checkin(any(), any()) } returns true
+        coEvery { simklService.checkin(any(), any(), any()) } returns true
         val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(
             traktService,
             simklService,
@@ -99,8 +98,8 @@ class DefaultTrackingScrobbleServiceTest {
         )
 
         assertEquals(true, result)
-        coVerify(exactly = 1) { simklService.checkin(any(), any()) }
-        coVerify(exactly = 0) { traktService.checkin(any(), any()) }
+        coVerify(exactly = 1) { simklService.checkin(any(), any(), any()) }
+        coVerify(exactly = 0) { traktService.checkin(any(), any(), any()) }
     }
 
     @Test
@@ -126,8 +125,8 @@ class DefaultTrackingScrobbleServiceTest {
             progressPercent = 12f
         )
 
-        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any()) }
-        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any()) }
+        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any()) }
+        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any()) }
     }
 
     @Test
@@ -153,6 +152,66 @@ class DefaultTrackingScrobbleServiceTest {
         )
 
         assertFalse(result)
-        coVerify(exactly = 0) { traktService.checkin(any(), any()) }
+        coVerify(exactly = 0) { traktService.checkin(any(), any(), any()) }
+    }
+
+    @Test
+    fun `trakt scrobble start uses owner profile state and delegates owner profile`() = runTest {
+        val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>()
+        val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>(relaxed = true)
+        coEvery { traktService.scrobbleStart(any(), any(), any()) } returns Unit
+        val stateService = trackingProviderStateService(
+            provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+            traktAuthenticated = true
+        )
+        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(
+            traktService,
+            simklService,
+            stateService
+        )
+
+        service.scrobbleStart(
+            com.nexio.tv.data.repository.TrackingScrobbleItem.Movie(
+                contentId = "tt1375666",
+                title = "Inception",
+                year = 2010
+            ),
+            progressPercent = 12f,
+            ownerProfileId = 2
+        )
+
+        coVerify(exactly = 1) { stateService.currentState(2) }
+        coVerify(exactly = 1) { traktService.scrobbleStart(any(), 12f, 2) }
+        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any(), any()) }
+    }
+
+    @Test
+    fun `simkl scrobble start uses owner profile state and delegates owner profile`() = runTest {
+        val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>(relaxed = true)
+        val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>()
+        coEvery { simklService.scrobbleStart(any(), any(), any()) } returns Unit
+        val stateService = trackingProviderStateService(
+            provider = com.nexio.tv.domain.model.TrackingProvider.SIMKL,
+            simklAuthenticated = true
+        )
+        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(
+            traktService,
+            simklService,
+            stateService
+        )
+
+        service.scrobbleStart(
+            com.nexio.tv.data.repository.TrackingScrobbleItem.Movie(
+                contentId = "tt1375666",
+                title = "Inception",
+                year = 2010
+            ),
+            progressPercent = 12f,
+            ownerProfileId = 2
+        )
+
+        coVerify(exactly = 1) { stateService.currentState(2) }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f, 2) }
+        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any()) }
     }
 }

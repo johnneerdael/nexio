@@ -50,22 +50,15 @@ class TraktMutationOutboxStore private constructor(
     private val gson = Gson()
     private val mutex = Mutex()
 
-    private val profileManager: ProfileManager
-        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+    private fun activeStoreProfileId(): Int =
+        injectedProfileManager?.activeProfileId?.value ?: activeProfileId()
 
-    private fun injectedPrefsName(): String =
-        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+    private fun prefsName(profileId: Int): String =
+        profilePrefsName(BASE_PREFS_NAME, profileId.coerceAtLeast(1))
 
-    private fun prefsName(): String =
-        if (injectedProfileManager != null) {
-            injectedPrefsName()
-        } else {
-            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
-        }
-
-    suspend fun read(): TraktMutationOutboxSnapshot {
+    suspend fun read(profileId: Int = activeStoreProfileId()): TraktMutationOutboxSnapshot {
         return mutex.withLock {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() }
                 ?: return@withLock TraktMutationOutboxSnapshot()
             val root = runCatching {
@@ -78,9 +71,9 @@ class TraktMutationOutboxStore private constructor(
         }
     }
 
-    suspend fun write(snapshot: TraktMutationOutboxSnapshot) {
+    suspend fun write(snapshot: TraktMutationOutboxSnapshot, profileId: Int = activeStoreProfileId()) {
         mutex.withLock {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty(JSON_SCHEMA_VERSION, SCHEMA_VERSION)
                 add(JSON_SNAPSHOT, snapshot.toJson())
@@ -91,9 +84,9 @@ class TraktMutationOutboxStore private constructor(
         }
     }
 
-    suspend fun clear() {
+    suspend fun clear(profileId: Int = activeStoreProfileId()) {
         mutex.withLock {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
         }
     }

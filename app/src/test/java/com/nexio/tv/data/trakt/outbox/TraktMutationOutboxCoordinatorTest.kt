@@ -82,6 +82,43 @@ class TraktMutationOutboxCoordinatorTest {
     }
 
     @Test
+    fun `coordinator settles persisted mutation in envelope profile store`() = runTest {
+        val profileOnePrefs = InMemorySharedPreferences()
+        val profileTwoPrefs = InMemorySharedPreferences()
+        val store = TraktMutationOutboxStore(
+            context = mockContext(
+                "trakt_mutation_outbox" to profileOnePrefs,
+                "trakt_mutation_outbox_p2" to profileTwoPrefs
+            )
+        )
+        val envelope = sampleEnvelope().copy(id = "persisted-profile-two", profileId = 2)
+        store.write(
+            TraktMutationOutboxSnapshot(items = listOf(envelope)),
+            profileId = 2
+        )
+        val adapter = RecordingAdapter(
+            adapterKey = "progress",
+            executionResult = TraktMutationExecutionResult.Success(httpStatusCode = 201)
+        )
+        val worker = TraktMutationOutboxWorker(
+            store = store,
+            policy = TraktMutationOutboxPolicy()
+        )
+
+        val coordinator = TraktMutationOutboxCoordinator(
+            worker = worker,
+            adapters = setOf(adapter)
+        )
+
+        val settled = awaitTerminalState(coordinator, envelope.id, profileId = 2)
+
+        assertTrue(coordinator.snapshot(profileId = 1).items.isEmpty())
+        assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
+        assertEquals(2, settled.profileId)
+        assertEquals(listOf(envelope.id), adapter.reconciled)
+    }
+
+    @Test
     fun `coordinator resumes persisted SIMKL queued mutations on startup`() = runTest {
         val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
         val envelope = TraktMutationEnvelope(
@@ -274,10 +311,11 @@ class TraktMutationOutboxCoordinatorTest {
     private suspend fun awaitTerminalState(
         coordinator: TraktMutationOutboxCoordinator,
         envelopeId: String,
+        profileId: Int = 1,
         maxPolls: Int = 500
     ): TraktMutationEnvelope {
         repeat(maxPolls) {
-            val item = coordinator.snapshot().items.firstOrNull { it.id == envelopeId }
+            val item = coordinator.snapshot(profileId).items.firstOrNull { it.id == envelopeId }
                 ?: error("Missing envelope $envelopeId")
             if (item.state == TraktMutationLifecycleState.SUCCEEDED ||
                 item.state == TraktMutationLifecycleState.TERMINAL_FAILED
@@ -318,6 +356,14 @@ class TraktMutationOutboxCoordinatorTest {
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
         return mockk(relaxed = true) {
             every { getSharedPreferences("trakt_mutation_outbox", Context.MODE_PRIVATE) } returns prefs
+        }
+    }
+
+    private fun mockContext(vararg prefsByName: Pair<String, InMemorySharedPreferences>): Context {
+        return mockk(relaxed = true) {
+            prefsByName.forEach { (name, prefs) ->
+                every { getSharedPreferences(name, Context.MODE_PRIVATE) } returns prefs
+            }
         }
     }
 

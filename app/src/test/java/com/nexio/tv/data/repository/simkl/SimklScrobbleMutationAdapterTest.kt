@@ -3,13 +3,16 @@ package com.nexio.tv.data.repository.simkl
 import com.nexio.tv.data.remote.dto.simkl.SimklScrobbleResponseDto
 import com.nexio.tv.data.repository.SimklProgressService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,18 +73,22 @@ class SimklScrobbleMutationAdapterTest {
         val progressService = mockk<SimklProgressService>(relaxed = true)
         val controller = TraktWatchingNowStateController()
         val adapter = SimklScrobbleMutationAdapter(remote, progressService, controller)
+        val session = slot<TrackingAuthSession>()
         val envelope = SimklScrobbleMutationAdapter.buildCheckinEnvelope(
             item = movieItem("Arrival"),
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
-            optimisticVersion = 1L
+            optimisticVersion = 1L,
+            profileId = 2
         )
 
-        coEvery { remote.checkin(any()) } returns Response.success(SimklScrobbleResponseDto(action = "checkin"))
+        coEvery { remote.checkin(any(), capture(session)) } returns Response.success(SimklScrobbleResponseDto(action = "checkin"))
 
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Success)
+        assertEquals(TrackingProvider.SIMKL, session.captured.provider)
+        assertEquals(2, session.captured.profileId)
         coVerify(exactly = 0) { progressService.refreshNow() }
     }
 
