@@ -89,11 +89,31 @@ object RuntimeTraceModule {
     @Singleton
     fun provideTraceMetadataEvents(
         sink: RuntimeTraceSink,
-        manager: TraceSessionManager
-    ): TraceMetadataEvents = TraceMetadataEvents(
-        sink = sink,
-        sessionId = { manager.activeSession()?.traceSessionId }
-    )
+        manager: TraceSessionManager,
+        profileManager: com.nexio.tv.core.profile.ProfileManager
+    ): TraceMetadataEvents {
+        val events = TraceMetadataEvents(
+            sink = sink,
+            sessionId = { manager.activeSession()?.traceSessionId }
+        )
+        // Side-effect: wire FirstPaintTracer so MetaPreview.toHomeDisplayMetadata()
+        // emits `metadata.first_paint` from the canonical addon-preview boundary.
+        com.nexio.tv.core.trace.FirstPaintTracer.install(
+            events = events,
+            profileHashProvider = {
+                val sessionId = manager.activeSession()?.traceSessionId
+                if (sessionId == null) {
+                    null
+                } else {
+                    com.nexio.tv.core.trace.TraceHash.of(
+                        sessionId,
+                        profileManager.activeProfileId.value.toString()
+                    )
+                }
+            }
+        )
+        return events
+    }
 
     @Provides
     @Singleton

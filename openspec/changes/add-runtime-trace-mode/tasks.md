@@ -30,11 +30,11 @@
 
 ## 4. Metadata events (Phase 4)
 
-- [ ] `metadata.first_paint` from `MetadataRequestNormalizer`. _(DEFERRED — no addon-preview UI path exists yet; helper added but not wired.)_
+- [x] `metadata.first_paint` from `MetaPreview.toHomeDisplayMetadata()`.
 - [x] `metadata.route_decision` from `MetadataRouter`.
 - [x] `metadata.identity_resolution` from identity resolvers.
 - [x] `metadata.provider_plan` from `ProviderPlanRunner`.
-- [ ] `metadata.localization_plan` from `LocalizationResolver`. _(DEFERRED — TVDB/Kitsu provider-adapter orchestration site not identified.)_
+- [-] `metadata.localization_plan` — REMOVED. Helper deleted; localization-policy emission deferred to a separate change that owns the TVDB/Kitsu adapter orchestration site.
 - [x] `metadata.resolver_schedule` from `ResolverOrchestrator`.
 - [x] `metadata.field_selected` from `FieldResolver`.
 - [x] `profile.boundary_check` from `ProfileBoundaryEnforcer`.
