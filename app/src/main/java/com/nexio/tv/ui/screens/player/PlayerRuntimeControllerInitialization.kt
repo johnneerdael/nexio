@@ -212,6 +212,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
     val playbackSessionId = playbackSessionGuard.beginPlaybackSession()
 
+    // Cold-start parity with stream-switch: replenish the per-session
+    // recovery budget and capture the egress IP baseline so 401/410/5xx
+    // mid-stream get the same retry treatment as switched streams.
+    authRecoveryInterceptor.resetSessionState()
+    scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
+
     scope.launch {
         try {
             autoSubtitleSelected = false
@@ -1226,8 +1232,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
                 }
                 val initialMediaSource = withContext(Dispatchers.IO) {
+                    // Resolve addon proxy URLs to the underlying CDN URL
+                    // before handing them to ExoPlayer so AuthRecoveryInterceptor
+                    // can recover via the populated reverseCache. Stream-switch
+                    // already does this; cold-start was the gap that left first-
+                    // stream playback unable to recover from transient gateway
+                    // errors at the addon host.
+                    val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(currentAddonBaseUrl)
+                    val playableUrl = prepareMediaSourceUrl(url, headers, addonHost)
                     mediaSourceFactory.createMediaSource(
-                        url = url,
+                        url = playableUrl,
                         headers = headers,
                         subtitleConfigurations = startupSubtitleConfigurations
                     )
