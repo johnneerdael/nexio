@@ -1,42 +1,126 @@
 package com.nexio.tv.core.integration
 
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
+import com.nexio.tv.core.trace.TraceHash
+import java.util.concurrent.atomic.AtomicLong
+
 object ProfileBoundaryEnforcer {
+    @Volatile
+    private var traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
+
+    @Volatile
+    private var traceSessionId: () -> String? = { null }
+
+    private val traceSeq = AtomicLong(0L)
+
+    /**
+     * Installs a sink/session-id pair for `profile.boundary_check` emissions.
+     *
+     * Called as a side-effect from `RuntimeTraceModule.provideRuntimeTraceSink` so the
+     * Hilt graph wires the production sink at app start. Tests may swap directly.
+     */
+    @JvmStatic
+    fun installTraceSink(sink: RuntimeTraceSink, sessionId: () -> String?) {
+        this.traceSink = sink
+        this.traceSessionId = sessionId
+    }
+
     fun validateRequest(
         provider: IntegrationProvider,
         scope: IntegrationScope,
         cacheKey: String?,
         profileContext: ProfileExecutionContext?
     ) {
-        rejectGlobalScopeForAuthenticatedProvider(provider, scope, profileContext)
-        when (scope) {
-            IntegrationScope.Global,
-            IntegrationScope.GlobalContent -> validateGlobalCacheKey(cacheKey)
+        try {
+            rejectGlobalScopeForAuthenticatedProvider(provider, scope, profileContext)
+            when (scope) {
+                IntegrationScope.Global,
+                IntegrationScope.GlobalContent -> validateGlobalCacheKey(cacheKey)
 
-            is IntegrationScope.ProviderConfig -> validateGlobalCacheKey(cacheKey)
+                is IntegrationScope.ProviderConfig -> validateGlobalCacheKey(cacheKey)
 
-            is IntegrationScope.GlobalLocalizedContent -> validateGlobalCacheKey(cacheKey)
+                is IntegrationScope.GlobalLocalizedContent -> validateGlobalCacheKey(cacheKey)
 
-            IntegrationScope.GlobalEnglishImage -> validateImageCacheKey(cacheKey)
+                IntegrationScope.GlobalEnglishImage -> validateImageCacheKey(cacheKey)
 
-            is IntegrationScope.Profile -> validateLegacyProfileScope(
-                profileId = scope.profileId,
-                cacheKey = cacheKey,
-                profileContext = profileContext
-            )
+                is IntegrationScope.Profile -> validateLegacyProfileScope(
+                    profileId = scope.profileId,
+                    cacheKey = cacheKey,
+                    profileContext = profileContext
+                )
 
-            is IntegrationScope.ProfileLocal -> validateProfileScope(
-                profileId = scope.profileId,
-                cacheKey = cacheKey,
-                profileContext = profileContext
-            )
+                is IntegrationScope.ProfileLocal -> validateProfileScope(
+                    profileId = scope.profileId,
+                    cacheKey = cacheKey,
+                    profileContext = profileContext
+                )
 
-            is IntegrationScope.Account -> validateAccountScope(
+                is IntegrationScope.Account -> validateAccountScope(
+                    provider = provider,
+                    scope = scope,
+                    cacheKey = cacheKey,
+                    profileContext = profileContext
+                )
+            }
+            emitBoundaryCheck(provider, scope, cacheKey, profileContext, verdict = "PASS")
+        } catch (e: ProfileBoundaryException) {
+            emitBoundaryCheck(
                 provider = provider,
                 scope = scope,
                 cacheKey = cacheKey,
-                profileContext = profileContext
+                profileContext = profileContext,
+                verdict = "FAIL",
+                violation = e.violation,
+                message = e.message
             )
+            throw e
         }
+    }
+
+    private fun emitBoundaryCheck(
+        provider: IntegrationProvider,
+        scope: IntegrationScope,
+        cacheKey: String?,
+        profileContext: ProfileExecutionContext?,
+        verdict: String,
+        violation: ProfileBoundaryViolation? = null,
+        message: String? = null
+    ) {
+        if (traceSink === NoopRuntimeTraceSink) return
+        val sid = traceSessionId() ?: return
+        val profileHash = profileContext?.profileId?.let { TraceHash.of(sid, it.toString()) }
+        val account = profileContext?.account(provider)
+        val credentialHash = account?.credentialHash?.let { TraceHash.of(sid, it) }
+        val keyContainsProfile = cacheKey?.contains("profile:") ?: false
+        val keyContainsCredential = cacheKey?.contains("credential:") ?: false
+
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = traceSeq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "profile.boundary_check",
+                payload = mapOf(
+                    "provider" to provider.name,
+                    "scope" to scope.auditName,
+                    "profileHash" to profileHash,
+                    "credentialTraceHash" to credentialHash,
+                    // Enforcer has no ProfileManager handle; reuse context's profile hash as
+                    // the "active" stand-in per the runtime-trace-mode plan task 26.
+                    "activeProfileHash" to profileHash,
+                    "cacheKey" to cacheKey,
+                    "cacheKeyContainsProfile" to keyContainsProfile,
+                    "cacheKeyContainsCredentialHash" to keyContainsCredential,
+                    "verdict" to verdict,
+                    "violation" to violation?.name,
+                    "message" to message
+                )
+            )
+        )
     }
 
     fun assertCanWriteProfileState(
