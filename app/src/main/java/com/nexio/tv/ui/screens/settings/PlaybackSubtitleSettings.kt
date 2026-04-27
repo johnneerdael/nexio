@@ -37,18 +37,6 @@ import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
-private val subtitleColors = listOf(
-    Color.White,
-    Color(0xFFD9D9D9),
-    Color.Yellow,
-    Color.Cyan,
-    Color.Green,
-    Color.Magenta,
-    Color(0xFFFF6B6B),
-    Color(0xFFFFA500),
-    Color(0xFF90EE90)
-)
-
 private val subtitleBackgroundColors = listOf(
     Color.Transparent,
     Color.Black,
