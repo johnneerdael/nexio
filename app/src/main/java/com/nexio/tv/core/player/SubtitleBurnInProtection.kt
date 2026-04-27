@@ -33,7 +33,7 @@ internal fun computeBurnInProtectionState(
     val stepPercent = SUBTITLE_BURN_IN_ZONE_SPREAD_PERCENT / (SUBTITLE_BURN_IN_ZONE_COUNT - 1)
     val verticalDeltaPercent = (zoneIndex - centerOffset) * stepPercent
 
-    val horizontalIndex = Math.floorMod(hash / 7, SUBTITLE_BURN_IN_HORIZONTAL_SLOT_COUNT)
+    val horizontalIndex = Math.floorMod("$seedKey:h".hashCode(), SUBTITLE_BURN_IN_HORIZONTAL_SLOT_COUNT)
     val horizontalCenter = (SUBTITLE_BURN_IN_HORIZONTAL_SLOT_COUNT - 1) / 2f
     val horizontalStep = SUBTITLE_BURN_IN_HORIZONTAL_JITTER_PX / horizontalCenter
     val horizontalOffsetPx = (horizontalIndex - horizontalCenter) * horizontalStep

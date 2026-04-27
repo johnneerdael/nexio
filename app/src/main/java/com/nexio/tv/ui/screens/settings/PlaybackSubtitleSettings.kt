@@ -12,12 +12,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.runtime.Composable
@@ -79,7 +80,7 @@ internal fun LazyListScope.subtitleSettingsItems(
 
     item(key = "subtitle_burn_in_protection") {
         ToggleSettingsItem(
-            icon = Icons.Default.ClosedCaption,
+            icon = Icons.Default.Shield,
             title = stringResource(R.string.subtitle_burn_in_protection_title),
             subtitle = stringResource(R.string.subtitle_burn_in_protection_subtitle),
             isChecked = playerSettings.burnInProtection.enabled,

@@ -245,10 +245,12 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
                     osdClockEnabled = settings.osdClockEnabled,
-                    // Preserve any previously-resolved deltas; only the enable flag flips
-                    // here. Per-stream deltas are recomputed at playback session start in
-                    // PlayerRuntimeControllerInitialization. Toggling on mid-stream takes
-                    // full effect on the next stream — acceptable v1 trade-off.
+                    // Preserve any previously-resolved deltas; only the enable flag flips here.
+                    // Color (off-white) and alpha cap apply immediately because applySubtitleStyle
+                    // reads burnInProtection.enabled directly. Zone deltas (vertical/horizontal
+                    // position) are recomputed at playback session start in
+                    // PlayerRuntimeControllerInitialization, so position rotation takes effect on
+                    // the next stream — acceptable v1 trade-off.
                     burnInProtection = if (settings.burnInProtection.enabled) {
                         state.burnInProtection.copy(enabled = true)
                     } else {
