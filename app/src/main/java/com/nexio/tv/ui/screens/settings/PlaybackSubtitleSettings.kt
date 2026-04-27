@@ -41,10 +41,10 @@ import com.nexio.tv.ui.theme.NexioColors
 
 private val subtitleBackgroundColors = listOf(
     Color.Transparent,
-    Color.Black,
+    Color(0xBF000000),     // was Color.Black
     Color(0x80000000),
-    Color(0xFF1A1A1A),
-    Color(0xFF2D2D2D)
+    Color(0xBF1A1A1A),     // was Color(0xFF1A1A1A)
+    Color(0xBF2D2D2D)      // was Color(0xFF2D2D2D)
 )
 
 private val subtitleOutlineColors = listOf(
