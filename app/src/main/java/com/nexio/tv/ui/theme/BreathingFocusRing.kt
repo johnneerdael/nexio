@@ -1,6 +1,6 @@
 package com.nexio.tv.ui.theme
 
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,7 +22,7 @@ fun rememberBreathingFocusRing(base: Color = NexioColors.FocusRing): Color {
         initialValue = MIN_ALPHA,
         targetValue = MAX_ALPHA,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = BREATHING_PERIOD_MS, easing = LinearEasing),
+            animation = tween(durationMillis = BREATHING_PERIOD_MS, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "focusRingAlpha"
