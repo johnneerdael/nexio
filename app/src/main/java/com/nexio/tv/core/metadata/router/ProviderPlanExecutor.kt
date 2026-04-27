@@ -3,8 +3,6 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -91,16 +89,6 @@ class ProviderPlanExecutor @Inject constructor() {
                 role = ProviderPlanRole.PRIMARY_CORE
             )
         )
-        val needsTranslation = tvdbTranslationSupported(route.language)
-
-        if (depth in tvdbCoreTranslationDepths && needsTranslation) {
-            steps += step(
-                apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
-                provider = MetadataPrimaryProvider.TVDB,
-                role = ProviderPlanRole.PRIMARY_CORE,
-                required = false
-            )
-        }
 
         if (depth == MetadataDepth.SEASON) {
             steps += step(
@@ -108,14 +96,6 @@ class ProviderPlanExecutor @Inject constructor() {
                 provider = MetadataPrimaryProvider.TVDB,
                 role = ProviderPlanRole.SEASON
             )
-            if (needsTranslation) {
-                steps += step(
-                    apiShapeId = TvdbApiShapes.EPISODE_TRANSLATION,
-                    provider = MetadataPrimaryProvider.TVDB,
-                    role = ProviderPlanRole.SEASON,
-                    required = false
-                )
-            }
         }
 
         return steps
@@ -156,25 +136,7 @@ class ProviderPlanExecutor @Inject constructor() {
         }
     }
 
-    private fun tvdbTranslationSupported(language: String?): Boolean {
-        val normalized = language
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.replace('_', '-')
-            ?.lowercase(Locale.US)
-            ?: return false
-
-        if (normalized.substringBefore('-') == "en") return false
-
-        return TvdbLanguageMapper.normalize(normalized) != "eng"
-    }
-
     private companion object {
-        val tvdbCoreTranslationDepths = setOf(
-            MetadataDepth.DETAIL_CORE,
-            MetadataDepth.DETAIL_MEDIA,
-            MetadataDepth.DETAIL_SECONDARY
-        )
         val unsupportedDepths = setOf(MetadataDepth.PREVIEW)
     }
 
