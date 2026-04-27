@@ -541,21 +541,6 @@ class AuthRecoveryInterceptorTest {
     }
 
     @Test
-    fun `5xx with no proxy mapping is returned unchanged without retry`() {
-        server.enqueue(MockResponse().setResponseCode(502))
-        val unknown = server.url("/orphan").toString()
-        val client = OkHttpClient.Builder()
-            .addInterceptor(AuthRecoveryInterceptor()).build()
-
-        val response = client.newCall(Request.Builder().url(unknown).build()).execute()
-        response.use { assertEquals(502, it.code) }
-
-        val attempts = AuthRecoveryTracker.snapshot()
-        assertEquals(1, attempts.size)
-        assertEquals(AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN, attempts.first().outcome)
-    }
-
-    @Test
     fun `escalates to re-resolve when same-URL 502 retry also returns 502`() {
         val staleResolved = server.url("/cdn/stale").toString()
         val freshResolved = server.url("/cdn/fresh").toString()
@@ -740,6 +725,65 @@ class AuthRecoveryInterceptorTest {
         assertTrue(
             "expected GAVE_UP for budget-exhausted second request, got $outcomes",
             AuthRecoveryTracker.Outcome.GAVE_UP in outcomes
+        )
+    }
+
+    @Test
+    fun `transient 502 retries the same URL even when proxy is unknown`() {
+        // Reproduces the production failure where ExoPlayer hits an addon URL
+        // directly (e.g., torrentio.strem.fun) because cold-start playback
+        // bypassed proxy resolution. The interceptor must phase-1 retry on
+        // transient 5xx regardless of whether the URL has a proxy mapping.
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val attempt = hits.incrementAndGet()
+                return if (attempt == 1) MockResponse().setResponseCode(502)
+                else MockResponse().setResponseCode(200).setBody("ok")
+            }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+        val orphanUrl = server.url("/orphan").toString()
+
+        val response = client.newCall(Request.Builder().url(orphanUrl).build()).execute()
+        response.use { assertEquals(200, it.code) }
+
+        assertEquals("expected exactly one same-URL retry", 2, hits.get())
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected TRANSIENT_RETRIED for non-proxied 502 phase-1 recovery, got $outcomes",
+            AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED in outcomes
+        )
+    }
+
+    @Test
+    fun `transient 502 records NO_PROXY_KNOWN only after phase-1 retry also fails`() {
+        // When phase-1 same-URL retry doesn't help and the URL has no proxy
+        // mapping, there's nowhere to escalate to — record NO_PROXY_KNOWN
+        // post-phase-1 (not before) so we still attempt the cheap retry.
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                hits.incrementAndGet()
+                return MockResponse().setResponseCode(502)
+            }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+        val orphanUrl = server.url("/orphan").toString()
+
+        val response = client.newCall(Request.Builder().url(orphanUrl).build()).execute()
+        response.use { assertEquals(502, it.code) }
+
+        // Phase-1 retry MUST have executed (hits == 2) before NO_PROXY_KNOWN
+        // was recorded. The hit count is the proof that the early-bail moved
+        // from before phase-1 to after phase-1.
+        assertEquals("expected one initial + one phase-1 retry", 2, hits.get())
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected NO_PROXY_KNOWN after phase-1 also fails, got $outcomes",
+            AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN in outcomes
         )
     }
 }

@@ -105,19 +105,22 @@ class AuthRecoveryInterceptor(
 
         val originalUrl = rewritten.url.toString()
         val proxyUrl = CometProxyUrlResolver.proxyUrlFor(originalUrl)
-        if (proxyUrl == null) {
-            AuthRecoveryTracker.record(originalUrl, response.code, AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN)
-            return response
-        }
 
-        // Transient 5xx: phase-1 same-URL retry first. Real-Debrid edge load
-        // balancers usually route the second attempt to a healthy edge while
-        // the signed URL itself is still valid, so a re-resolve is overkill
-        // for the first failure. The auth bucket skips phase-1 because
-        // auth-failure URLs are *known* dead — re-issuing won't help.
+        // Transient 5xx: phase-1 same-URL retry runs whether or not we know
+        // the upstream proxy. Re-issuing the same request after a short
+        // backoff is cheap and rescues most gateway flaps (502/503/504),
+        // including failures from non-Comet-proxied URLs (addon hosts that
+        // ExoPlayer is fetching directly because resolution was skipped).
+        // Phase-2 re-resolve still requires a known proxy — it has nowhere
+        // to go without one — so NO_PROXY_KNOWN is recorded only after
+        // phase-1 has been given its turn.
         if (isTransient) {
             if (attemptsRemaining.decrementAndGet() < 0) {
-                AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
+                AuthRecoveryTracker.record(
+                    proxyUrl ?: originalUrl,
+                    response.code,
+                    AuthRecoveryTracker.Outcome.GAVE_UP
+                )
                 return response
             }
             response.close()
@@ -129,17 +132,33 @@ class AuthRecoveryInterceptor(
             )
             val phase1 = chain.proceed(rewritten)
             if (phase1.isSuccessful) {
-                AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED)
+                AuthRecoveryTracker.record(
+                    proxyUrl ?: originalUrl,
+                    response.code,
+                    AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED
+                )
                 return phase1
             }
-            // Phase-1 retry failed. If it's another recoverable code,
-            // escalate to phase-2 (re-resolve). If it's anything else, give
-            // up — the response itself is the user-facing answer.
+            // Phase-1 retry failed. If it's another recoverable code AND we
+            // have a proxy URL, escalate to phase-2 (re-resolve). Otherwise
+            // surface the response — same-URL retry already had its turn.
             val phase1Code = phase1.code
             val phase1Recoverable = AuthFailureCodes.matches(phase1Code) ||
                 TransientFailureCodes.matches(phase1Code)
             if (!phase1Recoverable) {
-                AuthRecoveryTracker.record(proxyUrl, phase1Code, AuthRecoveryTracker.Outcome.GAVE_UP)
+                AuthRecoveryTracker.record(
+                    proxyUrl ?: originalUrl,
+                    phase1Code,
+                    AuthRecoveryTracker.Outcome.GAVE_UP
+                )
+                return phase1
+            }
+            if (proxyUrl == null) {
+                AuthRecoveryTracker.record(
+                    originalUrl,
+                    phase1Code,
+                    AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN
+                )
                 return phase1
             }
             return runReResolveRecovery(
@@ -152,7 +171,16 @@ class AuthRecoveryInterceptor(
             )
         }
 
-        // Auth path (401/403/410): no phase-1, jump straight to re-resolve.
+        // Auth path (401/403/410): no phase-1 — re-issuing a known-dead URL
+        // won't help. Requires a proxy URL to re-resolve.
+        if (proxyUrl == null) {
+            AuthRecoveryTracker.record(
+                originalUrl,
+                response.code,
+                AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN
+            )
+            return response
+        }
         if (attemptsRemaining.decrementAndGet() < 0) {
             AuthRecoveryTracker.record(proxyUrl, response.code, AuthRecoveryTracker.Outcome.GAVE_UP)
             return response
