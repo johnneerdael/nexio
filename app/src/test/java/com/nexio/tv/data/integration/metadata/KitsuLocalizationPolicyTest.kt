@@ -56,9 +56,24 @@ class KitsuLocalizationPolicyTest {
         assertEquals(
             "Fallback description",
             selectKitsuSynopsis(
+                policy = LocalizationPolicy.kitsu("nl-NL"),
                 synopsis = "No synopsis available.",
                 description = "Fallback description"
             )
         )
+    }
+
+    @Test
+    fun `kitsu synopsis fallback returns selected field trace`() {
+        val selected = selectKitsuSynopsisField(
+            policy = LocalizationPolicy.kitsu("nl-NL"),
+            synopsis = "No synopsis available.",
+            description = "Canonical synopsis"
+        )
+
+        assertEquals("Canonical synopsis", selected?.value)
+        assertEquals("en", selected?.language?.providerCode)
+        assertEquals(FallbackRole.CANONICAL, selected?.fallbackRole)
+        assertEquals("missing_or_placeholder", selected?.rejectedCandidates?.first()?.reason)
     }
 }
