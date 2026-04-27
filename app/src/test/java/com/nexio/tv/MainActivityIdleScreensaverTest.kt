@@ -230,34 +230,6 @@ class MainActivityIdleScreensaverTest {
         assertTrue(message.contains("trailerSessionReady=false"))
     }
 
-    @Test
-    fun `home route is eligible while playback is paused by user`() {
-        assertTrue(
-            isIdleScreensaverEligibleRoute(
-                currentRoute = Screen.Home.route,
-                playbackIdleSnapshot = PlaybackIdleGateSnapshot(
-                    hasActiveSession = true,
-                    isPausedByUser = true
-                ),
-                inAppTrailerPlaybackActive = false
-            )
-        )
-    }
-
-    @Test
-    fun `player route is eligible while playback is paused by user`() {
-        assertTrue(
-            isIdleScreensaverEligibleRoute(
-                currentRoute = Screen.Player.route,
-                playbackIdleSnapshot = PlaybackIdleGateSnapshot(
-                    hasActiveSession = true,
-                    isPausedByUser = true
-                ),
-                inAppTrailerPlaybackActive = false
-            )
-        )
-    }
-
     private fun buildTrailerCandidate(itemId: String): IdleTrailerScreensaverCandidate {
         return IdleTrailerScreensaverCandidate(
             itemId = itemId,

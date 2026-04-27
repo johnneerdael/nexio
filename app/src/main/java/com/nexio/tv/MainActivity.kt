@@ -1473,7 +1473,7 @@ internal fun isIdleScreensaverEligibleRoute(
         return false
     }
     if (route == Screen.Player.route) {
-        return playbackIdleSnapshot.hasActiveSession
+        return playbackIdleSnapshot.hasActiveSession && playbackIdleSnapshot.isPausedByUser
     }
     if (
         (route == Screen.Home.route || route == Screen.Detail.route) &&
