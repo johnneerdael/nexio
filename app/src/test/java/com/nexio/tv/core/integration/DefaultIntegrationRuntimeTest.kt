@@ -66,7 +66,7 @@ class DefaultIntegrationRuntimeTest {
         fixture.playbackGate.setPlaybackActive(false)
         fixture.backoffManager.noteHttpFailure(
             provider = IntegrationProvider.TMDB,
-            scope = IntegrationScope.Global,
+            scope = IntegrationScope.GlobalContent,
             statusCode = 429,
             retryAfterMs = 60_000L,
             reason = "sample rate limited"
@@ -241,7 +241,7 @@ class DefaultIntegrationRuntimeTest {
         val fixture = realRuntimeFixture()
         fixture.backoffManager.noteHttpFailure(
             provider = IntegrationProvider.TMDB,
-            scope = IntegrationScope.Global,
+            scope = IntegrationScope.GlobalContent,
             statusCode = 429,
             retryAfterMs = 60_000L,
             reason = "rate limited"
@@ -296,7 +296,7 @@ class DefaultIntegrationRuntimeTest {
             )
         )
 
-        val entry = fixture.backoffDao.get("TMDB", "global")
+        val entry = fixture.backoffDao.get("TMDB", "global:content")
         assertEquals(IntegrationFetchResult.Missing, result)
         assertEquals(503, entry?.statusCode)
         assertEquals("timeout", entry?.reason)
@@ -324,7 +324,7 @@ class DefaultIntegrationRuntimeTest {
             assertEquals("cancelled", exception.message)
         }
 
-        assertEquals(null, fixture.backoffDao.get("TMDB", "global"))
+        assertEquals(null, fixture.backoffDao.get("TMDB", "global:content"))
     }
 
     @Test

@@ -10,7 +10,8 @@ data class IntegrationSpec<T>(
     val cachePolicy: IntegrationCachePolicy = IntegrationCachePolicy.Disabled,
     val ownership: IntegrationCacheOwnership = IntegrationCacheOwnership.None,
     val workClass: IntegrationWorkClass,
-    val scope: IntegrationScope = IntegrationScope.Global,
+    val scope: IntegrationScope = IntegrationScope.GlobalContent,
+    val profileContext: ProfileExecutionContext? = null,
     val load: suspend () -> IntegrationLoadResult<T>
 ) {
     init {
@@ -20,6 +21,7 @@ data class IntegrationSpec<T>(
         if (cachePolicy is IntegrationCachePolicy.CacheFirst) {
             require(!cacheKey.isNullOrBlank()) { "CacheFirst IntegrationSpec.cacheKey must not be blank" }
         }
+        ProfileBoundaryEnforcer.validateRequest(provider, scope, cacheKey, profileContext)
     }
 
     val requiredCacheKey: String

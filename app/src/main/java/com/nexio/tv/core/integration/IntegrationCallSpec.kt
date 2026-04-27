@@ -6,12 +6,14 @@ data class IntegrationCallSpec<T>(
     val operationKey: String,
     val headerPolicyId: String = IntegrationHeaderPolicies.defaultFor(provider, apiShapeId),
     val workClass: IntegrationWorkClass,
-    val scope: IntegrationScope = IntegrationScope.Global,
+    val scope: IntegrationScope = IntegrationScope.GlobalContent,
+    val profileContext: ProfileExecutionContext? = null,
     val call: suspend () -> IntegrationCallResult<T>
 ) {
     init {
         require(apiShapeId.isNotBlank()) { "IntegrationCallSpec.apiShapeId must not be blank" }
         require(operationKey.isNotBlank()) { "IntegrationCallSpec.operationKey must not be blank" }
         require(headerPolicyId.isNotBlank()) { "IntegrationCallSpec.headerPolicyId must not be blank" }
+        ProfileBoundaryEnforcer.validateRequest(provider, scope, operationKey, profileContext)
     }
 }

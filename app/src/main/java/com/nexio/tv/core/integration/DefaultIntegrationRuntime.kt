@@ -473,6 +473,12 @@ class DefaultIntegrationRuntime @Inject constructor(
             cacheKeyHash = cacheKey?.stableHash(),
             cacheKeyTemplate = cacheKey,
             scopeKeyHash = scope.storageKey.stableHash(),
+            scopeName = scope.auditName,
+            profileId = scope.profileIdOrNull(),
+            accountProvider = (scope as? IntegrationScope.Account)?.provider?.name,
+            credentialHash = (scope as? IntegrationScope.Account)?.credentialHash,
+            language = (scope as? IntegrationScope.GlobalLocalizedContent)?.language,
+            imageLanguage = if (scope == IntegrationScope.GlobalEnglishImage) "en" else null,
             workClass = workClass,
             cachePolicy = cachePolicy,
             codec = codec,
@@ -496,6 +502,14 @@ class DefaultIntegrationRuntime @Inject constructor(
             is IntegrationCachePolicy.ObserveOnly -> "ObserveOnly"
             is IntegrationCachePolicy.CacheFirst -> "CacheFirst"
             IntegrationCachePolicy.Mutation -> "Mutation"
+        }
+
+    private fun IntegrationScope.profileIdOrNull(): Int? =
+        when (this) {
+            is IntegrationScope.Profile -> profileId
+            is IntegrationScope.ProfileLocal -> profileId
+            is IntegrationScope.Account -> profileId
+            else -> null
         }
 
     private fun String.stableHash(): String =

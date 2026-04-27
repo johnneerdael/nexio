@@ -1,0 +1,19 @@
+package com.nexio.tv.core.integration
+
+enum class ProfileBoundaryViolation {
+    PROFILE_BOUND_SCOPE_MISSING_CONTEXT,
+    PROFILE_SCOPE_CONTEXT_MISMATCH,
+    ACCOUNT_SCOPE_MISSING_CREDENTIAL_HASH,
+    ACCOUNT_SCOPE_CONTEXT_MISSING_ACCOUNT,
+    ACCOUNT_SCOPE_CREDENTIAL_MISMATCH,
+    GLOBAL_CACHE_KEY_CONTAINS_PROFILE_ID,
+    PROFILE_CACHE_KEY_MISSING_PROFILE_ID,
+    IMAGE_CACHE_KEY_LANGUAGE_NOT_ENGLISH,
+    IMAGE_SCOPE_USES_DISPLAY_LANGUAGE,
+    STALE_SESSION_WRITE_REJECTED
+}
+
+class ProfileBoundaryException(
+    val violation: ProfileBoundaryViolation,
+    message: String
+) : IllegalArgumentException(message)

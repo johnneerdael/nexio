@@ -1,5 +1,6 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.integration.IntegrationKeyFactory
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -11,6 +12,33 @@ class MetadataCacheKeys @Inject constructor() {
         operationKey: String
     ): String =
         "metadata:provider:${provider.name.lowercase()}:shape=$apiShapeId:operation=$operationKey"
+
+    fun localized(
+        provider: String,
+        apiShapeId: String,
+        contentId: String,
+        language: String,
+        policyVersion: Int,
+        qualifiers: List<String> = emptyList()
+    ): String {
+        require(provider.isNotBlank()) { "provider must not be blank" }
+        require(apiShapeId.isNotBlank()) { "apiShapeId must not be blank" }
+        require(contentId.isNotBlank()) { "contentId must not be blank" }
+        require(language.isNotBlank()) { "language must not be blank" }
+        require(policyVersion > 0) { "policyVersion must be positive" }
+
+        return IntegrationKeyFactory.build(
+            "metadata",
+            provider,
+            apiShapeId,
+            contentId,
+            *qualifiers.toTypedArray(),
+            "lang",
+            language,
+            "policy",
+            policyVersion.toString()
+        )
+    }
 
     fun routerDecisionKey(
         parentId: String,
