@@ -50,6 +50,18 @@ object ProfileBoundaryEnforcer {
         }
     }
 
+    fun assertCanWriteProfileState(
+        resultSession: ActiveProfileSession,
+        activeSession: ActiveProfileSession
+    ) {
+        assertCanWriteProfileState(
+            resultProfileId = resultSession.profileId,
+            resultSessionId = resultSession.sessionId,
+            activeProfileId = activeSession.profileId,
+            activeSessionId = activeSession.sessionId
+        )
+    }
+
     private fun validateGlobalCacheKey(cacheKey: String?) {
         val key = cacheKey.orEmpty()
         if (PROFILE_KEY_PATTERN.containsMatchIn(key)) {

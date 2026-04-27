@@ -287,12 +287,23 @@ class ProfileBoundaryEnforcerTest {
 
     @Test
     fun `stale profile state write is rejected`() {
+        val result = ActiveProfileSession(
+            profileId = 2,
+            sessionId = "old-session",
+            sessionOrdinal = 3L,
+            startedAtMs = 1_000L
+        )
+        val active = ActiveProfileSession(
+            profileId = 2,
+            sessionId = "new-session",
+            sessionOrdinal = 4L,
+            startedAtMs = 2_000L
+        )
+
         val exception = org.junit.Assert.assertThrows(ProfileBoundaryException::class.java) {
             ProfileBoundaryEnforcer.assertCanWriteProfileState(
-                resultProfileId = 2,
-                resultSessionId = "old-session",
-                activeProfileId = 2,
-                activeSessionId = "new-session"
+                resultSession = result,
+                activeSession = active
             )
         }
 

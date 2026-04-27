@@ -401,4 +401,33 @@ class ProfileManagerTest {
         assertEquals(listOf(aliceId), emitted)
         job.cancel()
     }
+
+    @Test
+    fun `active profile session changes when active profile changes`() = runTest {
+        val manager = makeManager()
+        manager.createProfile("Alice", "#E53935")
+        val aliceId = manager.profiles.first { profiles -> profiles.size == 2 }
+            .first { profile -> profile.id != 1 }
+            .id
+        val initial = manager.activeProfileSession.value
+
+        manager.setActiveProfile(aliceId)
+        val switched = manager.activeProfileSession.first { it.profileId == aliceId }
+
+        assertEquals(aliceId, switched.profileId)
+        assertTrue(switched.sessionId.isNotBlank())
+        assertTrue(switched.startedAtMs >= initial.startedAtMs)
+        assertTrue(switched.sessionOrdinal > initial.sessionOrdinal)
+        assertTrue(switched.sessionId != initial.sessionId)
+    }
+
+    @Test
+    fun `active profile session does not change for no-op profile switch`() = runTest {
+        val manager = makeManager()
+        val initial = manager.activeProfileSession.value
+
+        manager.setActiveProfile(1)
+
+        assertEquals(initial, manager.activeProfileSession.value)
+    }
 }

@@ -1,5 +1,19 @@
 package com.nexio.tv.core.integration
 
+data class ActiveProfileSession(
+    val profileId: Int,
+    val sessionId: String,
+    val sessionOrdinal: Long,
+    val startedAtMs: Long
+) {
+    init {
+        require(profileId > 0) { "ActiveProfileSession.profileId must be positive" }
+        require(sessionId.isNotBlank()) { "ActiveProfileSession.sessionId must not be blank" }
+        require(sessionOrdinal > 0L) { "ActiveProfileSession.sessionOrdinal must be positive" }
+        require(startedAtMs > 0L) { "ActiveProfileSession.startedAtMs must be positive" }
+    }
+}
+
 data class ProfileExecutionContext(
     val profileId: Int,
     val sessionId: String,
