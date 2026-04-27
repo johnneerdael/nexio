@@ -1,10 +1,21 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class FieldResolver @Inject constructor() {
+class FieldResolver @Inject constructor(
+    private val traceEvents: TraceMetadataEvents
+) {
+    constructor() : this(
+        TraceMetadataEvents(
+            sink = NoopRuntimeTraceSink,
+            sessionId = { null }
+        )
+    )
+
     fun resolve(
         primary: MetadataCandidate,
         secondary: List<MetadataCandidate>
@@ -13,10 +24,13 @@ class FieldResolver @Inject constructor() {
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
         val localization = linkedMapOf<ResolvedField, MetadataLocalizationFieldTrace>()
         val ignoredOverwrites = mutableListOf<IgnoredFieldOverwrite>()
+        val rejectedByField = linkedMapOf<ResolvedField, MutableList<Map<String, Any?>>>()
+        val sourceProviderByField = linkedMapOf<ResolvedField, MetadataPrimaryProvider>()
 
         primary.fields.forEach { (field, fieldValue) ->
             fields[field] = fieldValue.value
             owners[field] = FieldOwner.PRIMARY
+            sourceProviderByField[field] = primary.provider
             primary.localization[field]?.let { localization[field] = it }
         }
 
@@ -26,6 +40,7 @@ class FieldResolver @Inject constructor() {
                 if (existingOwner == null) {
                     fields[field] = fieldValue.value
                     owners[field] = fieldValue.owner
+                    sourceProviderByField[field] = candidate.provider
                     candidate.localization[field]?.let { localization[field] = it }
                 } else {
                     ignoredOverwrites += IgnoredFieldOverwrite(
@@ -34,8 +49,37 @@ class FieldResolver @Inject constructor() {
                         attemptedOwner = fieldValue.owner,
                         attemptedValue = fieldValue.value
                     )
+                    rejectedByField.getOrPut(field) { mutableListOf() }.add(
+                        mapOf(
+                            "provider" to candidate.provider.name,
+                            "reason" to "primary already filled the field"
+                        )
+                    )
                 }
             }
+        }
+
+        fields.forEach { (field, value) ->
+            val owner = owners[field] ?: FieldOwner.PRIMARY
+            val selectedProvider = (sourceProviderByField[field] ?: primary.provider).name
+            val sourceRole = owner.name
+            val rule = if (owner == FieldOwner.PRIMARY) {
+                "primary always wins"
+            } else {
+                "secondary fills missing field"
+            }
+            val valueStr = value.toString()
+            val preview = if (valueStr.length > 80) valueStr.substring(0, 80) + "…" else valueStr
+
+            traceEvents.emitFieldSelected(
+                contentId = primary.provider.name,
+                field = field.name,
+                selectedProvider = selectedProvider,
+                sourceRole = sourceRole,
+                valuePreview = preview,
+                ownershipRule = rule,
+                rejectedCandidates = rejectedByField[field] ?: emptyList()
+            )
         }
 
         return ResolvedMetadataDocument(
