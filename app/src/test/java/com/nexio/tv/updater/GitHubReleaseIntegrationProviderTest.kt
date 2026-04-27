@@ -68,7 +68,7 @@ class GitHubReleaseIntegrationProviderTest {
         val spec = specSlot.captured
         assertEquals(IntegrationProvider.GITHUB, spec.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, spec.workClass)
-        assertEquals(IntegrationScope.Account("github:owner:repo"), spec.scope)
+        assertEquals(IntegrationScope.ProviderConfig("github:owner:repo"), spec.scope)
 
         coVerify(exactly = 1) {
             runtime.call(any<IntegrationCallSpec<GitHubReleaseDto>>())
@@ -166,7 +166,7 @@ class GitHubReleaseIntegrationProviderTest {
         val spec = specSlot.captured
         assertEquals(IntegrationProvider.GITHUB, spec.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, spec.workClass)
-        assertEquals(IntegrationScope.Account("github:owner:repo"), spec.scope)
+        assertEquals(IntegrationScope.ProviderConfig("github:owner:repo"), spec.scope)
 
         coVerify(exactly = 1) {
             runtime.call(any<IntegrationCallSpec<GitHubReleaseDto>>())

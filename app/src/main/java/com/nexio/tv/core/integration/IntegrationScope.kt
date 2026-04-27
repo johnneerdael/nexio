@@ -40,6 +40,16 @@ sealed class IntegrationScope(
         isProfileBound = false
     )
 
+    data class ProviderConfig(val key: String) : IntegrationScope(
+        storageKey = "provider-config:${key.trim()}",
+        auditName = "ProviderConfig",
+        isProfileBound = false
+    ) {
+        init {
+            require(key.isNotBlank()) { "ProviderConfig.key must not be blank" }
+        }
+    }
+
     data class Profile(val profileId: Int) : IntegrationScope(
         storageKey = "profile:$profileId",
         auditName = "Profile",
@@ -73,6 +83,10 @@ sealed class IntegrationScope(
             this.providerAccountId = null
         }
 
+        @Deprecated(
+            message = "Use ProviderConfig for global provider configuration or Account(profileId, provider, credentialHash) for profile-owned account state.",
+            level = DeprecationLevel.ERROR
+        )
         constructor(providerAccountId: String) : super(
             storageKey = "account:${providerAccountId.trim()}",
             auditName = "Account",

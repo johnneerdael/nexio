@@ -51,7 +51,7 @@ class GitHubAssetDownloadIntegrationProviderTest {
         assertEquals("apk", String(stream.inputStream.readBytes()))
         assertEquals(IntegrationProvider.GITHUB, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.Account("github:asset"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("github:asset"), specSlot.captured.scope)
         handle.close()
     }
 

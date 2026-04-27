@@ -60,7 +60,7 @@ class CustomImdbRatingsIntegrationProviderTest {
         assertEquals(IntegrationProvider.CUSTOM_IMDB, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
         assertEquals(
-            IntegrationScope.Account("custom-imdb:https://ratings.example.com"),
+            IntegrationScope.ProviderConfig("custom-imdb:https://ratings.example.com"),
             specSlot.captured.scope
         )
         coVerify(exactly = 1) { runtime.call(any<IntegrationCallSpec<CustomImdbPayload>>()) }

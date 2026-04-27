@@ -69,7 +69,7 @@ class SubtitleRepositoryAddonRoutingTest {
         assertSame(runtimeResult, result)
         assertEquals(IntegrationProvider.ADDON, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.Account("addon:${addon.id}"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("addon:${addon.id}"), specSlot.captured.scope)
         coVerify(exactly = 1) {
             runtime.call(any<IntegrationCallSpec<SubtitleResponseDto>>())
             addonApi.getSubtitles(subtitleUrl)

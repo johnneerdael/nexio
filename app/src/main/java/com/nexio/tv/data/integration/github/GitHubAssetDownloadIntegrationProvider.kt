@@ -27,7 +27,7 @@ class GitHubAssetDownloadIntegrationProvider @Inject constructor(
             IntegrationStreamSpec(
                 provider = IntegrationProvider.GITHUB,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("github:asset"),
+                scope = IntegrationScope.ProviderConfig("github:asset"),
                 apiShapeId = GitHubApiShapes.ASSET_DOWNLOAD,
                 operationKey = "github.asset.openDownload",
                 open = {

@@ -54,7 +54,7 @@ class YouTubeTrailerIntegrationProviderTest {
         )
         assertEquals(IntegrationProvider.YOUTUBE_TRAILER, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.Account("youtube:trailer"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("youtube:trailer"), specSlot.captured.scope)
     }
 
     @Test

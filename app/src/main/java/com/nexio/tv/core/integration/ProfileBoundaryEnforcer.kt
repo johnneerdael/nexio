@@ -11,6 +11,8 @@ object ProfileBoundaryEnforcer {
             IntegrationScope.Global,
             IntegrationScope.GlobalContent -> validateGlobalCacheKey(cacheKey)
 
+            is IntegrationScope.ProviderConfig -> validateGlobalCacheKey(cacheKey)
+
             is IntegrationScope.GlobalLocalizedContent -> validateGlobalCacheKey(cacheKey)
 
             IntegrationScope.GlobalEnglishImage -> validateImageCacheKey(cacheKey)

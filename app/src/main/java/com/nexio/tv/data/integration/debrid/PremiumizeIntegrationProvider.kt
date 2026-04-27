@@ -180,5 +180,5 @@ class PremiumizeIntegrationProvider @Inject constructor(
     }
 
     private fun accountScope(apiKey: String): IntegrationScope =
-        IntegrationScope.Account("premiumize:${apiKey.hashCode()}")
+        IntegrationScope.ProviderConfig("premiumize:${apiKey.hashCode()}")
 }

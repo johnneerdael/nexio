@@ -26,7 +26,7 @@ class GitHubReleaseIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.GITHUB,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("github:$owner:$repo"),
+                scope = IntegrationScope.ProviderConfig("github:$owner:$repo"),
                 apiShapeId = GitHubApiShapes.LATEST_RELEASE,
                 operationKey = "github.release.fetchLatestRelease",
                 call = {
