@@ -249,6 +249,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         )
                     } else {
                         hasSeenAuthenticatedSession = true
+                        @Suppress("DEPRECATION")
                         combine(
                             trackingProgressService.observeRemoteSnapshotLoaded(),
                             watchProgressRepository.allProgress,
