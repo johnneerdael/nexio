@@ -26,6 +26,7 @@ class JsonlTraceWriter(
             return
         }
         out.write(line)
+        out.flush()
         written.addAndGet(lineBytes)
     }
 
