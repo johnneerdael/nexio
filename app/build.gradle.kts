@@ -407,11 +407,7 @@ tasks.register<Test>("generateTraceValidatorAudit") {
     testClassesDirs = sourceTest.get().testClassesDirs
     classpath = sourceTest.get().classpath
     filter {
-        // Phase 7 will replace this with TraceBundleGoldenTest. Until then,
-        // run the validator + bundle exporter unit tests as the audit signal.
-        includeTestsMatching("com.nexio.tv.core.trace.RuntimeTraceValidatorTest")
-        includeTestsMatching("com.nexio.tv.core.trace.TraceBundleExporterTest")
-        includeTestsMatching("com.nexio.tv.core.trace.TraceValidationRulesTest")
+        includeTestsMatching("com.nexio.tv.core.trace.TraceBundleGoldenTest")
     }
 }
 
