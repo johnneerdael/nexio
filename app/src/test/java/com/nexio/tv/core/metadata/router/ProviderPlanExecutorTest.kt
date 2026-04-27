@@ -165,7 +165,7 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
-    fun `TVDB DETAIL_CORE with non-default language includes optional series translation`() {
+    fun `TVDB DETAIL_CORE with non-default language does not plan standalone series translation no-op`() {
         val plan = executor.buildPlan(
             route = route(
                 provider = MetadataPrimaryProvider.TVDB,
@@ -176,10 +176,10 @@ class ProviderPlanExecutorTest {
         )
 
         assertEquals(
-            listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_TRANSLATION),
+            listOf(TvdbApiShapes.SERIES_EXTENDED),
             plan.apiShapeIds()
         )
-        assertFalse(plan.step(TvdbApiShapes.SERIES_TRANSLATION).required)
+        assertFalse(plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
         assertAllShapesCovered(plan)
     }
 
@@ -240,7 +240,7 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
-    fun `TVDB deeper detail depths with non-default language include optional series translation`() {
+    fun `TVDB deeper detail depths with non-default language do not plan standalone series translation`() {
         listOf(MetadataDepth.DETAIL_MEDIA, MetadataDepth.DETAIL_SECONDARY).forEach { depth ->
             val plan = executor.buildPlan(
                 route = route(
@@ -253,16 +253,16 @@ class ProviderPlanExecutorTest {
 
             assertEquals(
                 "depth=$depth",
-                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.SERIES_TRANSLATION),
+                listOf(TvdbApiShapes.SERIES_EXTENDED),
                 plan.apiShapeIds()
             )
-            assertFalse("depth=$depth", plan.step(TvdbApiShapes.SERIES_TRANSLATION).required)
+            assertFalse("depth=$depth", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
             assertAllShapesCovered(plan)
         }
     }
 
     @Test
-    fun `TVDB SEASON with localized language fetches english base then localized episode shapes`() {
+    fun `TVDB SEASON with localized language does not plan standalone episode translation no-op`() {
         val plan = executor.buildPlan(
             route = route(
                 provider = MetadataPrimaryProvider.TVDB,
@@ -277,13 +277,13 @@ class ProviderPlanExecutorTest {
         assertEquals(
             listOf(
                 TvdbApiShapes.SERIES_EXTENDED,
-                TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
-                TvdbApiShapes.EPISODE_TRANSLATION
+                TvdbApiShapes.SERIES_EPISODES_LANGUAGE
             ),
             plan.apiShapeIds()
         )
         assertTrue(plan.step(TvdbApiShapes.SERIES_EPISODES_LANGUAGE).required)
-        assertFalse(plan.step(TvdbApiShapes.EPISODE_TRANSLATION).required)
+        assertFalse(plan.apiShapeIds().contains(TvdbApiShapes.EPISODE_TRANSLATION))
+        assertFalse(plan.apiShapeIds().contains(TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE))
         assertAllShapesCovered(plan)
     }
 

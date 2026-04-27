@@ -47,11 +47,6 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                     requestedTranslation = requested
                 )
             }
-            TvdbApiShapes.SERIES_TRANSLATION -> emptyCandidate(this.provider)
-            TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE -> {
-                integrationProvider.fetchSeriesEpisodes(tvdbId, seasonType = "default", season = route.seasonNumber)
-                emptyCandidate(this.provider)
-            }
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE -> {
                 episodeMetadata += integrationProvider.fetchLocalizedSeasonEpisodeBundle(
                     tvdbId = tvdbId,
@@ -61,7 +56,6 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                 ).episodes.mapValues { it.value.metadata }
                 emptyCandidate(this.provider)
             }
-            TvdbApiShapes.EPISODE_TRANSLATION -> emptyCandidate(this.provider)
             else -> emptyCandidate(this.provider)
         }
         return ProviderStepResult(step = step, candidate = candidate, episodeMetadata = episodeMetadata)
@@ -70,10 +64,7 @@ class TvdbMetadataProviderAdapter @Inject constructor(
     private companion object {
         val tvdbShapes = setOf(
             TvdbApiShapes.SERIES_EXTENDED,
-            TvdbApiShapes.SERIES_TRANSLATION,
-            TvdbApiShapes.SERIES_EPISODES_SEASON_TYPE,
-            TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
-            TvdbApiShapes.EPISODE_TRANSLATION
+            TvdbApiShapes.SERIES_EPISODES_LANGUAGE
         )
     }
 }
