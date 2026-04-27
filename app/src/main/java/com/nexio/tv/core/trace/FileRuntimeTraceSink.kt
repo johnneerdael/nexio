@@ -7,6 +7,10 @@ class FileRuntimeTraceSink(
 ) : RuntimeTraceSink {
     @Volatile private var written: Long = 0L
 
+    private val ringBuffer = ArrayDeque<TraceEventEnvelope<*>>()
+    private val ringLock = Any()
+    private val ringCapacity = 100
+
     override fun emit(event: TraceEventEnvelope<*>) {
         require(event.traceSessionId == sessionId) {
             "FileRuntimeTraceSink session mismatch: expected=$sessionId got=${event.traceSessionId}"
@@ -14,10 +18,16 @@ class FileRuntimeTraceSink(
         val priority = priorityFor(event.eventType)
         writer.append(event, priority)
         written++
+        synchronized(ringLock) {
+            if (ringBuffer.size >= ringCapacity) ringBuffer.removeFirst()
+            ringBuffer.addLast(event)
+        }
     }
 
     override fun eventsWritten(): Long = written
     override fun eventsDropped(): Long = writer.droppedCount()
+
+    fun recent(): List<TraceEventEnvelope<*>> = synchronized(ringLock) { ringBuffer.toList() }
 
     fun close() = writer.close()
 
