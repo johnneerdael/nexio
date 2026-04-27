@@ -35,6 +35,7 @@ import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
+import com.nexio.tv.data.local.clampSubtitleBackgroundAlpha
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -284,7 +285,7 @@ internal fun SubtitleSettingsDialogs(
             selectedColor = Color(playerSettings.subtitleStyle.backgroundColor),
             showTransparentOption = true,
             onColorSelected = {
-                onSetBackgroundColor(it)
+                onSetBackgroundColor(Color(clampSubtitleBackgroundAlpha(it.toArgb())))
                 onDismissBackgroundColorDialog()
             },
             onDismiss = onDismissBackgroundColorDialog

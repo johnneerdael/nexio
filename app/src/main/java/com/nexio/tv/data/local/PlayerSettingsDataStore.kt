@@ -901,7 +901,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     size = prefs[subtitleSizeKey] ?: 100,
                     verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
                     bold = prefs[subtitleBoldKey] ?: false,
-                    backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
+                    backgroundColor = clampSubtitleBackgroundAlpha(prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb()),
                     outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
                     outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
                     outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
@@ -1493,7 +1493,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setSubtitleBackgroundColor(color: Int) {
         store().edit { prefs ->
-            prefs[subtitleBackgroundColorKey] = color
+            prefs[subtitleBackgroundColorKey] = clampSubtitleBackgroundAlpha(color)
         }
     }
 
