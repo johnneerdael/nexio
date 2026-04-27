@@ -331,7 +331,6 @@
   <string name="sub_vertical_offset">Vertikaler Versatz</string>
   <string name="sub_bold">Fett</string>
   <string name="sub_bold_sub">Verwende für Untertitel eine fette Schriftart</string>
-  <string name="sub_text_color">Textfarbe</string>
   <string name="sub_bg_color">Hintergrundfarbe</string>
   <string name="sub_outline">Umriss</string>
   <string name="sub_outline_sub">Füge zur besseren Lesbarkeit einen Umriss um den Untertiteltext hinzu</string>
@@ -633,7 +632,6 @@
   <string name="subtitle_no_builtin">Keine integrierten Untertitel verfügbar</string>
   <string name="subtitle_loading_addon">Untertitel werden von Add-ons geladen\u2026</string>
   <string name="subtitle_no_addon">Keine Add-on-Untertitel verfügbar</string>
-  <string name="subtitle_text_color">Textfarbe</string>
   <string name="subtitle_outline_color">Umrissfarbe</string>
   <string name="subtitle_reset_defaults">Auf Standard zurücksetzen</string>
   <string name="subtitle_tab_addons">Add-ons</string>
@@ -663,7 +661,6 @@
   <string name="subtitle_style_reset">Zurücksetzen</string>
   <string name="subtitle_style_font_size">Schriftgröße</string>
   <string name="subtitle_style_bold">Fett</string>
-  <string name="subtitle_style_text_color">Textfarbe</string>
   <string name="subtitle_style_outline">Umriss</string>
   <string name="subtitle_style_bottom_offset">Abstand nach unten</string>
   <string name="subtitle_style_defaults">Standard</string>

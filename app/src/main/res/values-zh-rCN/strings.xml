@@ -331,7 +331,6 @@
   <string name="sub_vertical_offset">垂直偏移</string>
   <string name="sub_bold">粗体</string>
   <string name="sub_bold_sub">为字幕使用粗体</string>
-  <string name="sub_text_color">文本颜色</string>
   <string name="sub_bg_color">背景颜色</string>
   <string name="sub_outline">描边</string>
   <string name="sub_outline_sub">为字幕文本添加轮廓以提高可读性</string>
@@ -633,7 +632,6 @@
   <string name="subtitle_no_builtin">没有可用的内置字幕</string>
   <string name="subtitle_loading_addon">正在从插件加载字幕\u2026</string>
   <string name="subtitle_no_addon">没有可用的插件字幕</string>
-  <string name="subtitle_text_color">文本颜色</string>
   <string name="subtitle_outline_color">描边颜色</string>
   <string name="subtitle_reset_defaults">恢复默认设置</string>
   <string name="subtitle_tab_addons">插件</string>
@@ -663,7 +661,6 @@
   <string name="subtitle_style_reset">重置</string>
   <string name="subtitle_style_font_size">字体大小</string>
   <string name="subtitle_style_bold">粗体</string>
-  <string name="subtitle_style_text_color">文本颜色</string>
   <string name="subtitle_style_outline">描边</string>
   <string name="subtitle_style_bottom_offset">底部边距</string>
   <string name="subtitle_style_defaults">默认值</string>

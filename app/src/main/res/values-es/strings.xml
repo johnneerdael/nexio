@@ -142,7 +142,6 @@
   <string name="sub_vertical_offset">Desplazamiento vertical</string>
   <string name="sub_bold">Negrita</string>
   <string name="sub_bold_sub">Usa fuente en negrita para los subtítulos</string>
-  <string name="sub_text_color">Color del texto</string>
   <string name="sub_bg_color">Color de fondo</string>
   <string name="sub_outline">Contorno</string>
   <string name="sub_outline_sub">Añade contorno alrededor del texto del subtítulo para una mejor visibilidad</string>
@@ -405,7 +404,6 @@
   <string name="subtitle_no_builtin">No hay subtítulos integrados disponibles</string>
   <string name="subtitle_loading_addon">Cargando subtítulos de los complementos\u2026</string>
   <string name="subtitle_no_addon">No hay subtítulos de complemento disponibles</string>
-  <string name="subtitle_text_color">Color del texto</string>
   <string name="subtitle_outline_color">Color del contorno</string>
   <string name="subtitle_reset_defaults">Restablecer valores predeterminados</string>
   <string name="subtitle_tab_builtin">Integrados</string>
@@ -779,7 +777,6 @@
   <string name="subtitle_off">Desactivado</string>
   <string name="subtitle_style_font_size">Tamaño de la fuente</string>
   <string name="subtitle_style_bold">Negrita</string>
-  <string name="subtitle_style_text_color">Color del texto</string>
   <string name="subtitle_style_outline">Contorno</string>
   <string name="subtitle_style_bottom_offset">Margen inferior</string>
   <string name="subtitle_style_defaults">Predeterminado</string>

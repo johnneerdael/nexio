@@ -144,7 +144,6 @@
   <string name="sub_vertical_offset">Décalage vertical</string>
   <string name="sub_bold">Gras</string>
   <string name="sub_bold_sub">Utiliser une police en gras pour les sous-titres</string>
-  <string name="sub_text_color">Couleur du texte</string>
   <string name="sub_bg_color">Couleur de fond</string>
   <string name="sub_outline">Contour</string>
   <string name="sub_outline_sub">Ajouter un contour autour du texte des sous-titres pour une meilleure lisibilité</string>
@@ -417,7 +416,6 @@
   <string name="subtitle_no_builtin">Aucun sous-titre intégré disponible</string>
   <string name="subtitle_loading_addon">Chargement des sous-titres depuis les addons\u2026</string>
   <string name="subtitle_no_addon">Aucun sous-titre d\'addon disponible</string>
-  <string name="subtitle_text_color">Couleur du texte</string>
   <string name="subtitle_outline_color">Couleur du contour</string>
   <string name="subtitle_reset_defaults">Réinitialiser</string>
   <string name="subtitle_tab_builtin">Intégrés</string>
@@ -780,7 +778,6 @@
   <string name="subtitle_off">Désactivé</string>
   <string name="subtitle_style_font_size">Taille de la police</string>
   <string name="subtitle_style_bold">Gras</string>
-  <string name="subtitle_style_text_color">Couleur du texte</string>
   <string name="subtitle_style_outline">Contour</string>
   <string name="subtitle_style_bottom_offset">Marge inférieure</string>
   <string name="subtitle_style_defaults">Par défaut</string>
