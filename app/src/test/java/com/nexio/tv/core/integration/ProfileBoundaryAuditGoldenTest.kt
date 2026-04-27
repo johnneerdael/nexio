@@ -137,9 +137,14 @@ class ProfileBoundaryAuditGoldenTest {
                 scope = "GlobalLocalizedContent",
                 provider = "TMDB",
                 profileId = null,
+                activeProfileId = null,
+                targetProfileId = null,
                 cacheKey = globalMetadataKey,
                 profileIdInCacheKey = false,
                 credentialHashInCacheKey = false,
+                credentialTraceHash = null,
+                sessionHash = null,
+                writeTarget = "GlobalCache",
                 language = "nl",
                 imageLanguage = null,
                 networkExecuted = false,
@@ -151,9 +156,14 @@ class ProfileBoundaryAuditGoldenTest {
                 scope = "GlobalEnglishImage",
                 provider = "TMDB",
                 profileId = null,
+                activeProfileId = null,
+                targetProfileId = null,
                 cacheKey = imageKey,
                 profileIdInCacheKey = false,
                 credentialHashInCacheKey = false,
+                credentialTraceHash = null,
+                sessionHash = null,
+                writeTarget = "GlobalImageCache",
                 language = "nl",
                 imageLanguage = "en",
                 networkExecuted = false,
@@ -165,9 +175,14 @@ class ProfileBoundaryAuditGoldenTest {
                 scope = "Account",
                 provider = "TRAKT,SIMKL",
                 profileId = 1,
+                activeProfileId = 1,
+                targetProfileId = 1,
                 cacheKey = "$traktKey | $simklKey",
                 profileIdInCacheKey = true,
                 credentialHashInCacheKey = true,
+                credentialTraceHash = "trakt-credential-p1|simkl-credential-p2",
+                sessionHash = "session-1|session-2",
+                writeTarget = "ProfileStore(p1)|ProfileStore(p2)",
                 language = null,
                 imageLanguage = null,
                 networkExecuted = false,
@@ -179,9 +194,14 @@ class ProfileBoundaryAuditGoldenTest {
                 scope = "ProfileLocal",
                 provider = "LOCAL",
                 profileId = 1,
+                activeProfileId = 1,
+                targetProfileId = 1,
                 cacheKey = continueWatchingKey,
                 profileIdInCacheKey = true,
                 credentialHashInCacheKey = false,
+                credentialTraceHash = null,
+                sessionHash = "session-p1",
+                writeTarget = "ProfileLocalStore(p1)",
                 language = null,
                 imageLanguage = null,
                 networkExecuted = false,
@@ -193,9 +213,14 @@ class ProfileBoundaryAuditGoldenTest {
                 scope = "ProfileLocal",
                 provider = "LOCAL",
                 profileId = 1,
+                activeProfileId = 2,
+                targetProfileId = 1,
                 cacheKey = "profile:1:session:session-p1-old",
                 profileIdInCacheKey = true,
                 credentialHashInCacheKey = false,
+                credentialTraceHash = null,
+                sessionHash = "session-p1-old",
+                writeTarget = "DiscardedByEnforcer",
                 language = null,
                 imageLanguage = null,
                 networkExecuted = false,
@@ -216,6 +241,11 @@ class ProfileBoundaryAuditGoldenTest {
         assertEquals(traktKey, traktCallSpec.operationKey)
         assertEquals(simklKey, simklCallSpec.operationKey)
         assertEquals(continueWatchingKey, continueWatchingSpec.requiredCacheKey)
+
+        assertTrue(scenarios.any { it.writeTarget != null })
+        assertTrue(scenarios.any { it.activeProfileId != null })
+        assertTrue(scenarios.any { it.credentialTraceHash != null })
+        assertTrue(scenarios.any { it.sessionHash != null })
 
         return ProfileBoundaryAuditReport(
             artifactRole = "PROFILE_BOUNDARY_SIGN_OFF",
@@ -258,10 +288,11 @@ class ProfileBoundaryAuditGoldenTest {
         appendLine("- Scenarios: `${report.totalScenarios}`")
         appendLine("- Violations: `${report.violations}`")
         appendLine()
-        appendLine("| Scenario | Status | Scope | Provider | Key Proof |")
-        appendLine("| --- | ---: | --- | --- | --- |")
+        appendLine("| Scenario | Status | Scope | Provider | Active→Target | WriteTarget | Notes |")
+        appendLine("| --- | ---: | --- | --- | --- | --- | --- |")
         report.scenarios.forEach { scenario ->
-            appendLine("| `${scenario.id}` | **${scenario.status}** | `${scenario.scope}` | `${scenario.provider}` | ${scenario.notes} |")
+            val activeTarget = "${scenario.activeProfileId ?: "-"}→${scenario.targetProfileId ?: "-"}"
+            appendLine("| `${scenario.id}` | **${scenario.status}** | `${scenario.scope}` | `${scenario.provider}` | $activeTarget | `${scenario.writeTarget ?: "-"}` | ${scenario.notes} |")
         }
     }
 
@@ -294,9 +325,14 @@ class ProfileBoundaryAuditGoldenTest {
         val scope: String,
         val provider: String,
         val profileId: Int?,
+        val activeProfileId: Int?,
+        val targetProfileId: Int?,
         val cacheKey: String,
         val profileIdInCacheKey: Boolean,
         val credentialHashInCacheKey: Boolean,
+        val credentialTraceHash: String?,
+        val sessionHash: String?,
+        val writeTarget: String?,
         val language: String?,
         val imageLanguage: String?,
         val networkExecuted: Boolean,
