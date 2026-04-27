@@ -110,4 +110,36 @@ class FieldResolverTest {
             result.ignoredOverwrites
         )
     }
+
+    @Test
+    fun `field resolver preserves selected localization source evidence`() {
+        val selected = MetadataLocalizationFieldTrace(
+            field = ResolvedField.OVERVIEW,
+            selectedProvider = MetadataPrimaryProvider.TVDB,
+            selectedLanguage = "eng",
+            fallbackRole = MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
+            sourceApiShapeId = "tvdb.series.translation",
+            rejectedCandidates = listOf(
+                MetadataLocalizationRejectedCandidate(
+                    provider = MetadataPrimaryProvider.TVDB,
+                    language = "nld",
+                    fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
+                    reason = "missing_or_placeholder"
+                )
+            )
+        )
+
+        val document = resolver.resolve(
+            primary = MetadataCandidate(
+                provider = MetadataPrimaryProvider.TVDB,
+                fields = mapOf(
+                    ResolvedField.OVERVIEW to FieldValue("English overview", FieldOwner.PRIMARY)
+                ),
+                localization = mapOf(ResolvedField.OVERVIEW to selected)
+            ),
+            secondary = emptyList()
+        )
+
+        assertEquals(selected, document.localization.getValue(ResolvedField.OVERVIEW))
+    }
 }
