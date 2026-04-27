@@ -11,7 +11,6 @@ import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.data.remote.api.TmdbSeasonResponse
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
-import com.nexio.tv.domain.model.ContentType
 import javax.inject.Inject
 
 class TmdbMetadataProviderAdapter @Inject constructor(
@@ -53,12 +52,45 @@ class TmdbMetadataProviderAdapter @Inject constructor(
                 )
             }
             TmdbApiShapes.TV_CORE ->
-                integrationProvider.fetchEnrichment(tmdbId.toString(), ContentType.TV, language, activePosterProvider = null)
-                    .toMetadataCandidate(this.provider)
+                buildTmdbLocalizedCandidate(
+                    provider = this.provider,
+                    policy = policy,
+                    requested = integrationProvider.fetchTvCore(
+                        tvId = tmdbId,
+                        normalizedLanguage = policy.requestedLanguage.providerCode,
+                        activePosterProvider = null,
+                        localizationPolicyVersion = policy.policyVersion
+                    ),
+                    english = if (policy.requestedIsFallback) {
+                        null
+                    } else {
+                        integrationProvider.fetchTvCore(
+                            tvId = tmdbId,
+                            normalizedLanguage = policy.fallbackLanguage.providerCode,
+                            activePosterProvider = null,
+                            localizationPolicyVersion = policy.policyVersion
+                        )
+                    },
+                    sourceApiShapeId = TmdbApiShapes.TV_CORE
+                )
             TmdbApiShapes.SEASON_EPISODES -> {
-                seasonEpisodeMetadata += integrationProvider
-                    .fetchTvSeasonEpisodes(tmdbId, route.seasonNumber ?: 1, language)
-                    .toEpisodeMetadata()
+                val requested = integrationProvider.fetchTvSeasonEpisodes(
+                    tvId = tmdbId,
+                    seasonNumber = route.seasonNumber ?: 1,
+                    normalizedLanguage = policy.requestedLanguage.providerCode,
+                    localizationPolicyVersion = policy.policyVersion
+                )
+                val english = if (policy.requestedIsFallback) {
+                    null
+                } else {
+                    integrationProvider.fetchTvSeasonEpisodes(
+                        tvId = tmdbId,
+                        seasonNumber = route.seasonNumber ?: 1,
+                        normalizedLanguage = policy.fallbackLanguage.providerCode,
+                        localizationPolicyVersion = policy.policyVersion
+                    )
+                }
+                seasonEpisodeMetadata += requested.toEpisodeMetadata(english)
                 emptyCandidate(this.provider)
             }
             TmdbApiShapes.MOVIE_VIDEOS -> {
@@ -97,18 +129,24 @@ class TmdbMetadataProviderAdapter @Inject constructor(
     private fun MetadataCandidate.withCanonicalId(route: MetadataRoute): MetadataCandidate =
         if (fields.isNotEmpty() || route.mediaKind in setOf(MetadataMediaKind.MOVIE, MetadataMediaKind.SERIES)) this else this
 
-    private fun TmdbSeasonResponse?.toEpisodeMetadata(): Map<Pair<Int, Int>, TvEpisodeMetadata> {
-        val season = this?.seasonNumber ?: return emptyMap()
-        return episodes
-            .orEmpty()
+    private fun TmdbSeasonResponse?.toEpisodeMetadata(
+        english: TmdbSeasonResponse? = null
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        val season = this?.seasonNumber ?: english?.seasonNumber ?: return emptyMap()
+        val primaryEpisodes = this?.episodes ?: english?.episodes ?: return emptyMap()
+        val englishByNumber = english?.episodes.orEmpty().mapNotNull { episode ->
+            episode.episodeNumber?.let { it to episode }
+        }.toMap()
+        return primaryEpisodes
             .mapNotNull { episode ->
                 val number = episode.episodeNumber ?: return@mapNotNull null
+                val englishEpisode = englishByNumber[number]
                 (season to number) to TvEpisodeMetadata(
                     providerEpisodeId = episode.id?.let { "tmdb:$it" },
                     seasonNumber = season,
                     episodeNumber = number,
-                    title = episode.name,
-                    overview = episode.overview,
+                    title = episode.name.cleanLocalizedValue() ?: englishEpisode?.name.cleanLocalizedValue(),
+                    overview = episode.overview.cleanLocalizedValue() ?: englishEpisode?.overview.cleanLocalizedValue(),
                     thumbnail = episode.stillPath,
                     airDate = episode.airDate,
                     runtimeMinutes = episode.runtime

@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import org.junit.Assert.assertEquals
@@ -28,6 +29,35 @@ class TmdbLocalizationPolicyTest {
         assertEquals("Nederlandse titel", candidate.fields.getValue(ResolvedField.TITLE).value)
         assertEquals("English overview", candidate.fields.getValue(ResolvedField.OVERVIEW).value)
         assertEquals("poster-nl", candidate.fields.getValue(ResolvedField.POSTER).value)
+    }
+
+    @Test
+    fun `tmdb tv localized missing overview falls back to tmdb english only`() {
+        val policy = LocalizationPolicy.tmdb("nl-NL")
+        val candidate = buildTmdbLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            policy = policy,
+            requested = enrichment(
+                title = "Nederlandse serie",
+                overview = "No description available.",
+                poster = "poster-nl"
+            ),
+            english = enrichment(
+                title = "English series",
+                overview = "English overview",
+                poster = "poster-en"
+            ),
+            sourceApiShapeId = "tmdb.tv.core"
+        )
+
+        assertEquals("Nederlandse serie", candidate.fields.getValue(ResolvedField.TITLE).value)
+        assertEquals("English overview", candidate.fields.getValue(ResolvedField.OVERVIEW).value)
+        assertEquals("en-US", candidate.localization.getValue(ResolvedField.OVERVIEW).selectedLanguage)
+        assertEquals(
+            MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
+            candidate.localization.getValue(ResolvedField.OVERVIEW).fallbackRole
+        )
+        assertEquals("tmdb.tv.core", candidate.localization.getValue(ResolvedField.OVERVIEW).sourceApiShapeId)
     }
 
     @Test

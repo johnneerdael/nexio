@@ -340,10 +340,47 @@ class TmdbIntegrationProvider private constructor(
         ).valueOrNull()
     }
 
+    suspend fun fetchTvCore(
+        tvId: Int,
+        normalizedLanguage: String,
+        activePosterProvider: PosterRatingsUrlResolver.ActiveProvider?,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
+    ): TmdbEnrichment? {
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        return runtime.get(
+            IntegrationSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.TV_CORE,
+                operationKey = "tmdb.tv.core",
+                cacheKey = "tmdb:tv:$tvId:$normalizedLanguage:core:$providerToken:policy:$localizationPolicyVersion",
+                codec = gsonCodec<TmdbEnrichment>(),
+                cachePolicy = IntegrationCachePolicy.CacheFirst(
+                    ttlMs = 7L * 24L * 60L * 60L * 1000L,
+                    staleAfterExpiryMs = 30L * 24L * 60L * 60L * 1000L
+                ),
+                ownership = ownershipFactory.media(
+                    mediaType = ContentType.TV.toApiString(),
+                    rawId = "tmdb:$tvId",
+                    tmdbId = tvId.toString()
+                ),
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                load = {
+                    loadTmdbEnrichment(
+                        tmdbId = tvId.toString(),
+                        tmdbType = "tv",
+                        normalizedLanguage = normalizedLanguage,
+                        activePosterProvider = activePosterProvider
+                    )
+                }
+            )
+        ).valueOrNull()
+    }
+
     suspend fun fetchTvSeasonEpisodes(
         tvId: Int,
         seasonNumber: Int,
-        normalizedLanguage: String
+        normalizedLanguage: String,
+        localizationPolicyVersion: Int = LocalizationPolicy.CURRENT_VERSION
     ): TmdbSeasonResponse? {
         val credential = credential()
         if (credential.missing) return null
@@ -352,7 +389,7 @@ class TmdbIntegrationProvider private constructor(
                 provider = IntegrationProvider.TMDB,
                 apiShapeId = TmdbApiShapes.SEASON_EPISODES,
                 operationKey = "tmdb.season.episodes",
-                cacheKey = "tmdb:tv:$tvId:season:$seasonNumber:episodes:$normalizedLanguage",
+                cacheKey = "tmdb:tv:$tvId:season:$seasonNumber:episodes:$normalizedLanguage:policy:$localizationPolicyVersion",
                 codec = gsonCodec<TmdbSeasonResponse>(),
                 cachePolicy = IntegrationCachePolicy.CacheFirst(24L * 60L * 60L * 1000L, 7L * 24L * 60L * 60L * 1000L),
                 workClass = IntegrationWorkClass.USER_VISIBLE,
