@@ -135,6 +135,7 @@ import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilityReportUploader
 import com.nexio.tv.data.repository.device.DeviceCapabilityRepository
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TrackingProgressService
@@ -284,6 +285,9 @@ class MainActivity : ComponentActivity() {
     lateinit var deviceCapabilityRepository: DeviceCapabilityRepository
 
     @Inject
+    lateinit var deviceCapabilityReportUploader: DeviceCapabilityReportUploader
+
+    @Inject
     lateinit var profileManager: com.nexio.tv.core.profile.ProfileManager
 
     private lateinit var jankStats: JankStats
@@ -381,6 +385,7 @@ class MainActivity : ComponentActivity() {
         )
         lifecycleScope.launch(Dispatchers.IO) {
             deviceCapabilityRepository.ensureCached()
+            deviceCapabilityReportUploader.submitOnceIfEnabled()
         }
         lifecycleScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
