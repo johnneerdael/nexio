@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.nexio.tv.core.trace.TraceBundleGoldenTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-04-27T23:05:13.540Z" hostname="KQ2DRW310F" time="0.053">
+  <properties/>
+  <testcase name="synthetic session validates PASS and bundle has no raw tokens" classname="com.nexio.tv.core.trace.TraceBundleGoldenTest" time="0.053"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
