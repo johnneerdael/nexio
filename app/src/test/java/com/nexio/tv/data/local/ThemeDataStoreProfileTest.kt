@@ -21,9 +21,9 @@ class ThemeDataStoreProfileTest {
         store.setTheme(AppTheme.CRIMSON)
         assertEquals(AppTheme.CRIMSON, store.selectedTheme.first())
 
-        // Switch to profile 2: should see default WHITE
+        // Switch to profile 2: should see default CRIMSON
         activeProfileId.value = 2
-        assertEquals(AppTheme.WHITE, store.selectedTheme.first())
+        assertEquals(AppTheme.CRIMSON, store.selectedTheme.first())
 
         // Profile 2: set theme to OCEAN
         store.setTheme(AppTheme.OCEAN)

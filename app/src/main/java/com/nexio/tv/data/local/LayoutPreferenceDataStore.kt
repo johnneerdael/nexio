@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,6 +28,11 @@ private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_de
 private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
 private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
 private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
+
+internal fun migrateThemePreference(stored: String?): AppTheme {
+    if (stored == "WHITE") return AppTheme.CRIMSON
+    return runCatching { AppTheme.valueOf(stored ?: "") }.getOrDefault(AppTheme.CRIMSON)
+}
 
 internal fun applyLayoutPreferenceMigrations(prefs: MutablePreferences) {
     val sidebarCollapseDefaultMigrated = prefs[migrationSidebarCollapsedDefaultEnabledKey] ?: false

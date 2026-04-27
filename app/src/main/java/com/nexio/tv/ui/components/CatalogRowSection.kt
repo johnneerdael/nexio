@@ -57,6 +57,7 @@ import androidx.tv.material3.Text
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import com.nexio.tv.ui.util.formatAddonTypeLabel
 
 internal fun catalogRowItemContentType(item: MetaPreview): String = item.apiType
@@ -293,7 +294,7 @@ fun CatalogRowSection(
                         ),
                         border = CardDefaults.border(
                             focusedBorder = Border(
-                                border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
+                                border = BorderStroke(posterCardStyle.focusedBorderWidth, rememberBreathingFocusRing()),
                                 shape = seeAllCardShape
                             )
                         ),

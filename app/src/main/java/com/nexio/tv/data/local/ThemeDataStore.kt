@@ -30,8 +30,7 @@ class ThemeDataStore @Inject constructor(
 
     val selectedTheme: Flow<AppTheme> = profileManager.activeProfileId.flatMapLatest { pid ->
         store(pid).data.map { prefs ->
-            val themeName = prefs[themeKey] ?: AppTheme.WHITE.name
-            runCatching { AppTheme.valueOf(themeName) }.getOrDefault(AppTheme.WHITE)
+            migrateThemePreference(prefs[themeKey])
         }
     }
 

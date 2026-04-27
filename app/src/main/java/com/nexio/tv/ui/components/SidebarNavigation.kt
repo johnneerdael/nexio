@@ -41,6 +41,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 
 private val NavItemShape = RoundedCornerShape(14.dp)
 private val NavItemIconShape = RoundedCornerShape(10.dp)
@@ -109,12 +110,13 @@ private fun SidebarNavItem(
     onNavigate: (String) -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val breathingFocusRing = rememberBreathingFocusRing()
     val backgroundColor by animateColorAsState(
         targetValue = if (isFocused || isSelected) NexioColors.FocusBackground else Color.Transparent,
         label = "navItemBackground"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isFocused) NexioColors.FocusRing else Color.Transparent,
+        targetValue = if (isFocused) breathingFocusRing else Color.Transparent,
         label = "navItemBorder"
     )
 

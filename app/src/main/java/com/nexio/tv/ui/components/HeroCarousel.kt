@@ -54,6 +54,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.ui.screens.detail.titleRatingBadge
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import kotlinx.coroutines.delay
 
 private const val AUTO_ADVANCE_INTERVAL_MS = 10000L
@@ -135,7 +136,7 @@ fun HeroCarousel(
         }
 
         // Indicator dots — pre-compute colors + shape to avoid reallocation per dot
-        val focusRing = NexioColors.FocusRing
+        val focusRing = rememberBreathingFocusRing()
         val dotColorFocusedInactive = remember(focusRing) { focusRing.copy(alpha = 0.4f) }
         val dotColorUnfocusedInactive = remember { Color.White.copy(alpha = 0.3f) }
         val dotShape = remember { RoundedCornerShape(3.dp) }
