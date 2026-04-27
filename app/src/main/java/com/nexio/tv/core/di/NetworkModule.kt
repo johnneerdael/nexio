@@ -115,9 +115,10 @@ object NetworkModule {
                 mode = IntegrationNetworkPermitInterceptor.Mode.AUDIT_ONLY
             )
         )
-        // Trace interceptor is added LAST so it observes the final outgoing request shape
-        // (after other app-level interceptors have applied headers/redirects/etc.).
-        .addInterceptor(traceInterceptor)
+        // Trace interceptor is added as a NETWORK interceptor so it observes the final
+        // outgoing request shape — including headers added by app-level interceptors on
+        // derived clients (e.g. auth interceptors added via newBuilder()).
+        .addNetworkInterceptor(traceInterceptor)
         .eventListenerFactory(traceEventListenerFactory)
         .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -188,8 +189,9 @@ object NetworkModule {
                 }
                 response
             }
-            // Trace interceptor LAST so it observes the final outgoing request shape.
-            .addInterceptor(traceInterceptor)
+            // Trace interceptor as NETWORK interceptor so it observes the final outgoing
+            // request shape — including headers added by app interceptors on derived clients.
+            .addNetworkInterceptor(traceInterceptor)
             .build()
     }
 
