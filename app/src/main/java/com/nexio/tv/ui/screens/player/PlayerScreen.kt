@@ -145,7 +145,8 @@ internal fun applySubtitleStyle(
 
     subtitleView.setStyle(
         CaptionStyleCompat(
-            subtitleStyle.textColor,
+            // TODO(burnin-task-7): replace with off-white when burn-in enabled
+            android.graphics.Color.WHITE,
             subtitleStyle.backgroundColor,
             android.graphics.Color.TRANSPARENT,
             edgeType,

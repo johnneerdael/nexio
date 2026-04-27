@@ -1132,7 +1132,6 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setSubtitleSize(settings.playback.subtitles.size)
         playerSettingsDataStore.setSubtitleVerticalOffset(settings.playback.subtitles.verticalOffset)
         playerSettingsDataStore.setSubtitleBold(settings.playback.subtitles.bold)
-        playerSettingsDataStore.setSubtitleTextColor(settings.playback.subtitles.textColor)
         playerSettingsDataStore.setSubtitleBackgroundColor(settings.playback.subtitles.backgroundColor)
         playerSettingsDataStore.setSubtitleOutlineEnabled(settings.playback.subtitles.outlineEnabled)
         playerSettingsDataStore.setSubtitleOutlineColor(settings.playback.subtitles.outlineColor)

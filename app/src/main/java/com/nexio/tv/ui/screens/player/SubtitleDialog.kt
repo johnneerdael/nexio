@@ -65,16 +65,6 @@ import com.nexio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 
-// Subtitle text color options (matching mobile app)
-private val SUBTITLE_TEXT_COLORS = listOf(
-    Color.White,
-    Color(0xFFD9D9D9),  // Light gray
-    Color(0xFFFFD700),  // Yellow/Gold
-    Color(0xFF00E5FF),  // Cyan
-    Color(0xFFFF5C5C),  // Red
-    Color(0xFF00FF88),  // Green
-)
-
 // Subtitle outline color options
 private val SUBTITLE_OUTLINE_COLORS = listOf(
     Color.Black,
@@ -736,27 +726,6 @@ private fun SubtitleStyleContent(
                 title = stringResource(R.string.subtitle_section_advanced),
                 icon = Icons.Default.Tune
             ) {
-                // Text Color
-                Column {
-                    Text(
-                        text = stringResource(R.string.subtitle_text_color),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SUBTITLE_TEXT_COLORS.forEach { color ->
-                            StyleColorChip(
-                                color = color,
-                                isSelected = subtitleStyle.textColor == color.toArgb(),
-                                onClick = { onEvent(PlayerEvent.OnSetSubtitleTextColor(color.toArgb())) }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
                 // Outline
                 StyleSettingRow(label = stringResource(R.string.subtitle_outline)) {
                     StyleToggleButton(

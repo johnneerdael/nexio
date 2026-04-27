@@ -277,10 +277,6 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleBold(bold)
     }
 
-    suspend fun setSubtitleTextColor(color: Int) {
-        playerSettingsDataStore.setSubtitleTextColor(color)
-    }
-
     suspend fun setSubtitleBackgroundColor(color: Int) {
         playerSettingsDataStore.setSubtitleBackgroundColor(color)
     }

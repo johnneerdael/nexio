@@ -91,7 +91,6 @@ data class SubtitleStyleSettings(
     val size: Int = 120, // Percentage (50-200)
     val verticalOffset: Int = 5, // Percentage from bottom (-20 to 50)
     val bold: Boolean = false,
-    val textColor: Int = Color.White.toArgb(),
     val backgroundColor: Int = Color.Transparent.toArgb(),
     val outlineEnabled: Boolean = true,
     val outlineColor: Int = Color.Black.toArgb(),
@@ -569,7 +568,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val subtitleSizeKey = intPreferencesKey("subtitle_size")
     private val subtitleVerticalOffsetKey = intPreferencesKey("subtitle_vertical_offset")
     private val subtitleBoldKey = booleanPreferencesKey("subtitle_bold")
-    private val subtitleTextColorKey = intPreferencesKey("subtitle_text_color")
     private val subtitleBackgroundColorKey = intPreferencesKey("subtitle_background_color")
     private val subtitleOutlineEnabledKey = booleanPreferencesKey("subtitle_outline_enabled")
     private val subtitleOutlineColorKey = intPreferencesKey("subtitle_outline_color")
@@ -903,7 +901,6 @@ class PlayerSettingsDataStore @Inject constructor(
                     size = prefs[subtitleSizeKey] ?: 100,
                     verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
                     bold = prefs[subtitleBoldKey] ?: false,
-                    textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
                     backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
                     outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
                     outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
@@ -1491,12 +1488,6 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setSubtitleBold(bold: Boolean) {
         store().edit { prefs ->
             prefs[subtitleBoldKey] = bold
-        }
-    }
-
-    suspend fun setSubtitleTextColor(color: Int) {
-        store().edit { prefs ->
-            prefs[subtitleTextColorKey] = color
         }
     }
 
