@@ -318,10 +318,51 @@ internal fun selectKitsuTitleField(
 }
 
 internal fun selectKitsuSynopsis(
+    policy: LocalizationPolicy,
     synopsis: String?,
     description: String?
 ): String? =
-    synopsis.cleanLocalizedValue() ?: description.cleanLocalizedValue()
+    selectKitsuSynopsisField(
+        policy = policy,
+        synopsis = synopsis,
+        description = description
+    )?.value
+
+internal fun selectKitsuSynopsisField(
+    policy: LocalizationPolicy,
+    synopsis: String?,
+    description: String?
+): SelectedLocalizedField? =
+    LocalizationResolver.selectField(
+        field = ResolvedField.OVERVIEW,
+        policy = policy,
+        candidates = listOf(
+            LocalizedFieldCandidate(
+                field = ResolvedField.OVERVIEW,
+                value = null,
+                language = policy.requestedLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.LOCALIZED
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.OVERVIEW,
+                value = synopsis,
+                language = policy.fallbackLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.LANGUAGE_FALLBACK
+            ),
+            LocalizedFieldCandidate(
+                field = ResolvedField.OVERVIEW,
+                value = description,
+                language = policy.fallbackLanguage,
+                provider = MetadataPrimaryProvider.KITSU,
+                sourceShape = KitsuApiShapes.ANIME_CORE,
+                fallbackRole = FallbackRole.CANONICAL
+            )
+        )
+    )
 
 private fun TvdbTranslationRecord.toLocalizedCandidate(
     field: ResolvedField,
