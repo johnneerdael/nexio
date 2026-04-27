@@ -172,6 +172,37 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitFieldSelected(
+        contentId: String,
+        field: String,
+        selectedProvider: String,
+        sourceRole: String,
+        valuePreview: String,
+        ownershipRule: String,
+        rejectedCandidates: List<Map<String, Any?>>
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.field_selected",
+                payload = mapOf(
+                    "contentId" to contentId,
+                    "field" to field,
+                    "selectedProvider" to selectedProvider,
+                    "sourceRole" to sourceRole,
+                    "valuePreview" to valuePreview,
+                    "ownershipRule" to ownershipRule,
+                    "rejectedCandidates" to rejectedCandidates
+                )
+            )
+        )
+    }
+
     fun emitRouteDecision(
         contentId: String,
         parentId: String,
