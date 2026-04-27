@@ -28,19 +28,21 @@ class KitsuMetadataProviderAdapter @Inject constructor(
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val mediaKind = route.mediaKind.toContentMediaKind()
         val policy = LocalizationPolicy.kitsu(route.language)
+        var titleField: SelectedLocalizedField? = null
         val candidate = when (step.apiShapeId) {
             KitsuApiShapes.ANIME_CORE ->
                 integrationProvider.fetchEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { resource ->
                     val attributes = resource.attributes ?: return@fetchEnrichment null
                     val titles = attributes.titles.orEmpty()
+                    titleField = selectKitsuTitleField(
+                        policy = policy,
+                        titles = titles,
+                        canonicalTitle = attributes.canonicalTitle,
+                        romanizedTitle = titles["en_jp"]
+                    )
                     TvMetadataEnrichment(
                         seriesTvdbId = null,
-                        localizedTitle = selectKitsuTitle(
-                            policy = policy,
-                            titles = titles,
-                            canonicalTitle = attributes.canonicalTitle,
-                            romanizedTitle = titles["en_jp"]
-                        ),
+                        localizedTitle = titleField?.value,
                         description = selectKitsuSynopsis(
                             synopsis = attributes.synopsis,
                             description = attributes.description
@@ -54,7 +56,10 @@ class KitsuMetadataProviderAdapter @Inject constructor(
                         status = attributes.status,
                         remoteIds = mapOf("kitsu" to setOf(kitsuId))
                     )
-                }.toMetadataCandidate(this.provider).withKitsuCanonicalId(kitsuId)
+                }
+                    .toMetadataCandidate(this.provider)
+                    .withKitsuCanonicalId(kitsuId)
+                    .withLocalizationTrace(titleField)
             KitsuApiShapes.ANIME_EPISODES -> {
                 integrationProvider.fetchEpisodeEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { emptyMap() }
                 emptyCandidate(this.provider)
@@ -85,6 +90,13 @@ class KitsuMetadataProviderAdapter @Inject constructor(
 
     private fun MetadataCandidate.withKitsuCanonicalId(kitsuId: String): MetadataCandidate =
         copy(fields = fields + (ResolvedField.CANONICAL_ID to FieldValue("kitsu:$kitsuId", FieldOwner.PRIMARY)))
+
+    private fun MetadataCandidate.withLocalizationTrace(trace: SelectedLocalizedField?): MetadataCandidate =
+        if (trace == null) {
+            this
+        } else {
+            copy(localization = localization + (ResolvedField.TITLE to trace.toMetadataTrace()))
+        }
 
     private companion object {
         val kitsuShapes = setOf(

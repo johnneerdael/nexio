@@ -21,6 +21,24 @@ class KitsuLocalizationPolicyTest {
     }
 
     @Test
+    fun `kitsu title fallback returns selected field trace`() {
+        val policy = LocalizationPolicy.kitsu("nl-NL")
+        val selected = selectKitsuTitleField(
+            policy = policy,
+            titles = mapOf(
+                "ja_jp" to "日本語タイトル",
+                "en" to "English title"
+            ),
+            canonicalTitle = "Canonical title",
+            romanizedTitle = "Romanized title"
+        )
+
+        assertEquals("English title", selected?.value)
+        assertEquals("en", selected?.language?.providerCode)
+        assertEquals(FallbackRole.LANGUAGE_FALLBACK, selected?.fallbackRole)
+    }
+
+    @Test
     fun `kitsu title fallback uses canonical before romanized`() {
         val policy = LocalizationPolicy.kitsu("nl-NL")
         val title = selectKitsuTitle(
