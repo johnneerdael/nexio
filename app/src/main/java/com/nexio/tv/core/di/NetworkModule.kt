@@ -104,13 +104,21 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient = OkHttpClient.Builder()
+    fun provideOkHttpClient(
+        @ApplicationContext context: Context,
+        traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor,
+        traceEventListenerFactory: okhttp3.EventListener.Factory
+    ): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(
             IntegrationNetworkPermitInterceptor(
                 hostClassifier = IntegrationHostClassifier.default(),
                 mode = IntegrationNetworkPermitInterceptor.Mode.AUDIT_ONLY
             )
         )
+        // Trace interceptor is added LAST so it observes the final outgoing request shape
+        // (after other app-level interceptors have applied headers/redirects/etc.).
+        .addInterceptor(traceInterceptor)
+        .eventListenerFactory(traceEventListenerFactory)
         .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -145,7 +153,9 @@ object NetworkModule {
     @Named("playback")
     fun providePlaybackOkHttpClient(
         @ApplicationContext context: Context,
-        @Named("playback.callTimeoutMs") callTimeoutMs: Long
+        @Named("playback.callTimeoutMs") callTimeoutMs: Long,
+        traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor,
+        traceEventListenerFactory: okhttp3.EventListener.Factory
     ): OkHttpClient {
         // Shared dispatcher: maxRequestsPerHost=12 proved safe by locked-envelope work.
         val dispatcher = Dispatcher().apply {
@@ -164,6 +174,7 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
+            .eventListenerFactory(traceEventListenerFactory)
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
                 val response = chain.proceed(originalRequest)
@@ -177,6 +188,8 @@ object NetworkModule {
                 }
                 response
             }
+            // Trace interceptor LAST so it observes the final outgoing request shape.
+            .addInterceptor(traceInterceptor)
             .build()
     }
 
