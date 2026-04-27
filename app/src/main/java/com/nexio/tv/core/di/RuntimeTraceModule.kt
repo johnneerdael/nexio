@@ -66,6 +66,11 @@ object RuntimeTraceModule {
         com.nexio.tv.core.integration.ProfileBoundaryEnforcer.installTraceSink(sink) {
             manager.activeSession()?.traceSessionId
         }
+        // Side-effect: wire ContinueWatchingSnapshotService's static sink slot so
+        // snapshot writes/reads emit `continue_watching.snapshot_write|read` events.
+        com.nexio.tv.data.repository.ContinueWatchingSnapshotService.installTraceSink(sink) {
+            manager.activeSession()?.traceSessionId
+        }
         return sink
     }
 
