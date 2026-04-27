@@ -27,6 +27,7 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
@@ -80,6 +81,60 @@ data class ProfileOwnedContinueWatchingSnapshot(
     fun isOwnedBy(activeProfileId: Int): Boolean {
         return profileId == activeProfileId
     }
+}
+
+internal fun ProfileOwnedContinueWatchingSnapshot.toContinueWatchingRecords(): List<ContinueWatchingRecord> {
+    val now = System.currentTimeMillis().coerceAtLeast(1L)
+    val resumeRecords = snapshot.resumeItems.map { progress ->
+        val parentId = progress.contentId
+        val episodeContext = if (progress.season != null && progress.episode != null) {
+            ContinueWatchingRecord.EpisodeContext(
+                season = progress.season!!,
+                number = progress.episode!!
+            )
+        } else {
+            null
+        }
+        val itemKey = if (episodeContext != null) {
+            "$parentId:s${episodeContext.season}e${episodeContext.number}"
+        } else {
+            parentId
+        }
+        ContinueWatchingRecord(
+            profileId = profileId,
+            parentId = parentId,
+            contentId = itemKey,
+            provider = TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = progress.position,
+            durationMs = progress.duration,
+            episodeContext = episodeContext,
+            clickTimeDisplayMetadata = snapshot.metadataSnapshotsByItemKey[itemKey],
+            source = ContinueWatchingRecord.Source.LOCAL,
+            updatedAt = if (progress.lastWatched > 0L) progress.lastWatched else now
+        )
+    }
+    val nextUpRecords = snapshot.nextUpItems.map { entry ->
+        val episodeContext = ContinueWatchingRecord.EpisodeContext(
+            season = entry.season,
+            number = entry.episode
+        )
+        val itemKey = "${entry.contentId}:s${entry.season}e${entry.episode}"
+        ContinueWatchingRecord(
+            profileId = profileId,
+            parentId = entry.contentId,
+            contentId = itemKey,
+            provider = TrackingProvider.TRAKT,
+            routingVersion = ContinueWatchingMetadataSnapshot.CURRENT_ROUTING_VERSION,
+            positionMs = 0L,
+            durationMs = 0L,
+            episodeContext = episodeContext,
+            clickTimeDisplayMetadata = snapshot.metadataSnapshotsByItemKey[itemKey],
+            source = ContinueWatchingRecord.Source.SYNTHETIC,
+            updatedAt = if (entry.activityAtMs > 0L) entry.activityAtMs else now
+        )
+    }
+    return resumeRecords + nextUpRecords
 }
 
 private data class LiveContinueWatchingSnapshotEmission(
@@ -287,6 +342,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         Log.w("ContinueWatching", "Failed to refresh continue watching snapshot", error)
                     }
             }
+        }
+    }
+
+    fun observeContinueWatching(profileId: Int): Flow<List<ContinueWatchingRecord>> {
+        require(profileId > 0) { "profileId must be positive" }
+        return observeSnapshot().map { owned ->
+            if (owned.profileId == profileId) owned.toContinueWatchingRecords() else emptyList()
         }
     }
 
