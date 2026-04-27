@@ -11,8 +11,6 @@ import com.nexio.tv.core.integration.IntegrationPolicyRegistry
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.NoOpIntegrationAuditSink
 import com.nexio.tv.core.integration.defaultIntegrationPolicyRegistry
-import com.nexio.tv.core.trace.NoopRuntimeTraceSink
-import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.ui.screens.home.DefaultHomeRailHydrationExecutor
 import com.nexio.tv.ui.screens.home.HomeRailHydrationExecutor
 import com.nexio.tv.data.local.integration.IntegrationBlobStore
@@ -77,10 +75,6 @@ object IntegrationRuntimeModule {
     @Provides
     @Singleton
     fun provideIntegrationAuditSink(): IntegrationAuditSink = NoOpIntegrationAuditSink
-
-    @Provides
-    @Singleton
-    fun provideRuntimeTraceSink(): RuntimeTraceSink = NoopRuntimeTraceSink
 
     @Provides
     @Singleton
