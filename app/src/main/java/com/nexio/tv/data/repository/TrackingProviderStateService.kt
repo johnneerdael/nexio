@@ -41,16 +41,30 @@ data class EffectiveTrackingProviderState(
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrackingProviderStateService @Inject constructor(
-    playerSettingsDataStore: PlayerSettingsDataStore,
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val simklAuthDataStore: SimklAuthDataStore,
     private val profileManager: ProfileManager,
     private val profileModeRouter: ProfileModeRouter,
     private val profileBoundary: ProfileBoundary
 ) {
-    val state: Flow<EffectiveTrackingProviderState> = combine(
-        playerSettingsDataStore.playerSettings,
+    val state: Flow<EffectiveTrackingProviderState> = combineTrackingState(
         profileManager.activeProfileId.flatMapLatest(::authStateForProfile)
+    )
+
+    fun stateForProfile(profileId: Int): Flow<EffectiveTrackingProviderState> =
+        combineTrackingState(authStateForProfile(profileId))
+
+    suspend fun currentState(): EffectiveTrackingProviderState = state.first()
+
+    suspend fun currentState(profileId: Int): EffectiveTrackingProviderState =
+        stateForProfile(profileId).first()
+
+    fun currentProfileId(): Int = profileManager.activeProfileId.value
+
+    private fun combineTrackingState(authStateFlow: Flow<TrackingAuthState>): Flow<EffectiveTrackingProviderState> = combine(
+        playerSettingsDataStore.playerSettings,
+        authStateFlow
     ) { settings, authState ->
         val effectiveProvider = if (authState.hasAnyAuthenticatedProvider) {
             when {
@@ -69,8 +83,6 @@ class TrackingProviderStateService @Inject constructor(
             simklAuthenticated = authState.simklAuthenticated
         )
     }
-
-    suspend fun currentState(): EffectiveTrackingProviderState = state.first()
 
     private fun selectedProvider(provider: TrackingProvider): TrackingProvider = provider
 

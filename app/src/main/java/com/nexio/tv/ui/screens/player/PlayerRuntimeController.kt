@@ -73,6 +73,7 @@ class PlayerRuntimeController(
     internal val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
     internal val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
     internal val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
+    internal val playbackOwnerProfileId: Int,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {

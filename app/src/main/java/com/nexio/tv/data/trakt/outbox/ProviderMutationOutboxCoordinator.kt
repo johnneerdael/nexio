@@ -26,12 +26,15 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val adaptersByKey = adapters.associateBy { it.adapterKey }
     private val drainMutex = Mutex()
-    private var drainJob: Job? = null
+    private val drainJobs = mutableMapOf<Int, Job>()
+    private val profileIds: IntRange = 1..4
 
     init {
         scope.launch {
             runCatching {
-                worker.recoverExpiredLeases()
+                profileIds.forEach { profileId ->
+                    worker.recoverExpiredLeases(profileId)
+                }
                 requestDrain()
             }.onFailure { error ->
                 Log.w(TAG, "Failed to bootstrap persisted provider outbox drain: ${error.message}")
@@ -43,7 +46,7 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
         val adapter = adapterFor(envelope.adapterKey)
         adapter.applyOptimistic(envelope)
         val queued = worker.enqueue(envelope)
-        ensureDraining()
+        ensureDraining(queued.profileId)
         return queued
     }
 
@@ -55,7 +58,7 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
         lateinit var settled: TraktMutationEnvelope
         withTimeout(timeoutMs) {
             while (true) {
-                val current = worker.snapshot().items.firstOrNull { it.id == queued.id }
+                val current = worker.snapshot(queued.profileId).items.firstOrNull { it.id == queued.id }
                     ?: run {
                         settled = queued
                         return@withTimeout
@@ -75,28 +78,32 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
     }
 
     suspend fun requestDrain() {
-        ensureDraining()
+        profileIds.forEach { profileId ->
+            ensureDraining(profileId)
+        }
     }
 
     suspend fun snapshot(): TraktMutationOutboxSnapshot = worker.snapshot()
 
-    private suspend fun ensureDraining() {
+    suspend fun snapshot(profileId: Int): TraktMutationOutboxSnapshot = worker.snapshot(profileId)
+
+    private suspend fun ensureDraining(profileId: Int) {
         drainMutex.withLock {
-            if (drainJob?.isActive == true) return
-            drainJob = scope.launch { drainLoop() }
+            if (drainJobs[profileId]?.isActive == true) return
+            drainJobs[profileId] = scope.launch { drainLoop(profileId) }
         }
     }
 
-    private suspend fun drainLoop() {
+    private suspend fun drainLoop(profileId: Int) {
         while (true) {
-            val lease = worker.leaseNextReady()
+            val lease = worker.leaseNextReady(profileId)
             if (lease == null) {
-                val waitMs = nextWakeDelayMs(worker.snapshot())
+                val waitMs = nextWakeDelayMs(worker.snapshot(profileId))
                 if (waitMs == null) {
                     drainMutex.withLock {
-                        val latestSnapshot = worker.snapshot()
+                        val latestSnapshot = worker.snapshot(profileId)
                         if (nextWakeDelayMs(latestSnapshot) == null) {
-                            drainJob = null
+                            drainJobs.remove(profileId)
                             return
                         }
                     }
@@ -118,6 +125,7 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
             when (execution) {
                 is TraktMutationExecutionResult.Success -> {
                     worker.settle(
+                        profileId = lease.envelope.profileId,
                         leaseToken = lease.envelope.leaseToken ?: return,
                         settlement = TraktMutationSettlement.Succeeded(
                             httpStatusCode = execution.httpStatusCode
@@ -135,6 +143,7 @@ class ProviderMutationOutboxCoordinator @Inject constructor(
                         attemptCount = lease.envelope.attemptCount
                     )
                     val settled = worker.settle(
+                        profileId = lease.envelope.profileId,
                         leaseToken = lease.envelope.leaseToken ?: return,
                         settlement = settlement
                     )

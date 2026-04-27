@@ -323,7 +323,8 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
         val progressPercent = currentPlaybackProgressPercent()
         trackingScrobbleService.scrobbleStart(
             item = item,
-            progressPercent = progressPercent
+            progressPercent = progressPercent,
+            ownerProfileId = playbackOwnerProfileId
         )
         if (requestGeneration != scrobbleStartRequestGeneration || !hasRequestedScrobbleStartForCurrentItem) return@launch
         hasSentScrobbleStartForCurrentItem = true
@@ -344,7 +345,8 @@ internal fun PlayerRuntimeController.emitScrobbleStop(
     scope.launch {
         trackingScrobbleService.scrobbleStop(
             item = item,
-            progressPercent = percent
+            progressPercent = percent,
+            ownerProfileId = playbackOwnerProfileId
         )
     }
     stopScrobbleHeartbeat()
@@ -407,7 +409,8 @@ private fun PlayerRuntimeController.startScrobbleHeartbeat() {
             if (progressPercent < 1f || progressPercent >= 95f) continue
             trackingScrobbleService.scrobbleStart(
                 item = item,
-                progressPercent = progressPercent
+                progressPercent = progressPercent,
+                ownerProfileId = playbackOwnerProfileId
             )
         }
     }

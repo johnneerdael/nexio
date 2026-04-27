@@ -70,62 +70,69 @@ class SimklScrobbleService @Inject constructor(
     private val minSendIntervalMs = 8_000L
     private val progressWindow = 1.5f
 
-    suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float) {
-        if (!canMutateWatchingState()) return
+    suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null) {
+        val profileId = ownerProfileId ?: trackingProviderStateService.currentProfileId()
+        if (!canMutateWatchingState(profileId)) return
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
         submitMutation(
             request = SimklWatchingMutationRequest.Scrobble(
                 action = "start",
                 item = item,
                 progressPercent = progressPercent,
-                optimisticVersion = optimisticVersion
+                optimisticVersion = optimisticVersion,
+                profileId = profileId
             )
         )
     }
 
-    suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float) {
-        if (!canMutateWatchingState()) return
+    suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null) {
+        val profileId = ownerProfileId ?: trackingProviderStateService.currentProfileId()
+        if (!canMutateWatchingState(profileId)) return
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
         submitMutation(
             request = SimklWatchingMutationRequest.Scrobble(
                 action = "stop",
                 item = item,
                 progressPercent = progressPercent,
-                optimisticVersion = optimisticVersion
+                optimisticVersion = optimisticVersion,
+                profileId = profileId
             )
         )
     }
 
-    suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float) {
-        if (!canMutateWatchingState()) return
+    suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null) {
+        val profileId = ownerProfileId ?: trackingProviderStateService.currentProfileId()
+        if (!canMutateWatchingState(profileId)) return
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
         submitMutation(
             request = SimklWatchingMutationRequest.Scrobble(
                 action = "pause",
                 item = item,
                 progressPercent = progressPercent,
-                optimisticVersion = optimisticVersion
+                optimisticVersion = optimisticVersion,
+                profileId = profileId
             )
         )
     }
 
-    suspend fun checkin(item: TrackingScrobbleItem, message: String? = null): Boolean {
-        if (!canMutateWatchingState()) return false
+    suspend fun checkin(item: TrackingScrobbleItem, message: String? = null, ownerProfileId: Int? = null): Boolean {
+        val profileId = ownerProfileId ?: trackingProviderStateService.currentProfileId()
+        if (!canMutateWatchingState(profileId)) return false
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
         return submitMutation(
             request = SimklWatchingMutationRequest.CheckIn(
                 item = item,
                 message = message,
-                optimisticVersion = optimisticVersion
+                optimisticVersion = optimisticVersion,
+                profileId = profileId
             )
         ) == SimklScrobbleMutationResult.Success
     }
 
     fun observeWatchingNowState(): StateFlow<WatchingNowState> = watchingNowState
 
-    private suspend fun canMutateWatchingState(): Boolean {
-        return trackingProviderStateService.currentState().simklAuthenticated
-    }
+    private suspend fun canMutateWatchingState(profileId: Int): Boolean =
+        trackingProviderStateService.currentState(profileId).simklAuthenticated
 
     private suspend fun submitMutation(request: SimklWatchingMutationRequest): SimklScrobbleMutationResult {
         val result = CompletableDeferred<SimklScrobbleMutationResult>()
@@ -188,7 +195,8 @@ class SimklScrobbleService @Inject constructor(
                     item = request.item,
                     message = request.message,
                     rollbackState = rollbackState,
-                    optimisticVersion = request.optimisticVersion
+                    optimisticVersion = request.optimisticVersion,
+                    profileId = request.profileId
                 )
             )
             SimklScrobbleMutationResult.Success
@@ -210,7 +218,8 @@ class SimklScrobbleService @Inject constructor(
                     action = action,
                     progressPercent = clampedProgress,
                     rollbackState = rollbackState,
-                    optimisticVersion = request.optimisticVersion
+                    optimisticVersion = request.optimisticVersion,
+                    profileId = request.profileId
                 )
             )
             lastScrobbleStamp = ScrobbleStamp(
@@ -242,7 +251,8 @@ private sealed interface SimklWatchingMutationRequest {
         val action: String,
         val item: TrackingScrobbleItem,
         val progressPercent: Float,
-        override val optimisticVersion: Long
+        override val optimisticVersion: Long,
+        val profileId: Int
     ) : SimklWatchingMutationRequest {
         override fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot {
             val progress = progressPercent.coerceIn(0f, 100f)
@@ -258,7 +268,8 @@ private sealed interface SimklWatchingMutationRequest {
     data class CheckIn(
         val item: TrackingScrobbleItem,
         val message: String?,
-        override val optimisticVersion: Long
+        override val optimisticVersion: Long,
+        val profileId: Int
     ) : SimklWatchingMutationRequest {
         override fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot {
             return TraktWatchingNowStateController.Snapshot(

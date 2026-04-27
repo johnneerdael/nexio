@@ -224,6 +224,7 @@ class TraktMutationOutboxPolicyTest {
         val firstLease = worker.leaseNextReady()
         assertEquals("first", firstLease?.envelope?.id)
         val firstSettled = worker.settle(
+            profileId = firstLease!!.envelope.profileId,
             leaseToken = firstLease!!.envelope.leaseToken!!,
             settlement = TraktMutationSettlement.Succeeded(httpStatusCode = 201)
         )

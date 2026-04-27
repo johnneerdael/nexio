@@ -7,8 +7,10 @@ import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -30,7 +32,8 @@ class TraktScrobbleServiceTest {
                 action = "start",
                 item = movieItem("Existing"),
                 progressPercent = 12f,
-                optimisticVersion = 1L
+                optimisticVersion = 1L,
+                profileId = 1
             ),
             rollbackState = TraktWatchingNowStateController.Snapshot(
                 active = false,
@@ -43,7 +46,8 @@ class TraktScrobbleServiceTest {
                 action = "stop",
                 item = movieItem("Existing"),
                 progressPercent = 42f,
-                optimisticVersion = 2L
+                optimisticVersion = 2L,
+                profileId = 1
             ),
             rollbackState = TraktWatchingNowStateController.Snapshot(
                 active = true,
@@ -67,6 +71,7 @@ class TraktScrobbleServiceTest {
         val requestGate = CompletableDeferred<Unit>()
 
         coEvery { traktAuthService.getCurrentAuthState() } returns authenticatedState()
+        coEvery { traktAuthService.getAuthState(any()) } returns authenticatedState()
         every { traktAuthService.hasRequiredCredentials() } returns true
         every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         coEvery { coordinator.enqueueAndDrain(any()) } coAnswers {
@@ -100,6 +105,7 @@ class TraktScrobbleServiceTest {
         var callCount = 0
 
         coEvery { traktAuthService.getCurrentAuthState() } returns authenticatedState()
+        coEvery { traktAuthService.getAuthState(any()) } returns authenticatedState()
         every { traktAuthService.hasRequiredCredentials() } returns true
         every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         coEvery { coordinator.enqueueAndDrain(any()) } coAnswers {
@@ -137,6 +143,32 @@ class TraktScrobbleServiceTest {
 
         assertFalse(first.await())
         awaitState(service) { !it.active && it.title == "Heat" && it.progressPercent == 42f }
+    }
+
+    @Test
+    fun `scrobble start uses playback owner profile for auth and outbox envelope`() = runTest {
+        val traktAuthService = mockk<TraktAuthService>()
+        val coordinator = mockk<TraktMutationOutboxCoordinator>()
+        val controller = TraktWatchingNowStateController()
+        val envelope = slot<TraktMutationEnvelope>()
+        val session = slot<TrackingAuthSession>()
+
+        coEvery { traktAuthService.getAuthState(capture(session)) } returns authenticatedState()
+        every { traktAuthService.hasRequiredCredentials() } returns true
+        every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
+        coEvery { coordinator.enqueueAndDrain(capture(envelope)) } answers { envelope.captured }
+
+        val service = TraktScrobbleService(
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
+            watchingNowStateController = controller,
+            traktMutationOutboxCoordinator = coordinator
+        )
+
+        service.scrobbleStart(movieItem("Arrival"), progressPercent = 12f, ownerProfileId = 2)
+
+        assertEquals(2, session.captured.profileId)
+        assertEquals(2, envelope.captured.profileId)
+        coVerify(exactly = 1) { coordinator.enqueueAndDrain(any()) }
     }
 
     private suspend fun awaitState(

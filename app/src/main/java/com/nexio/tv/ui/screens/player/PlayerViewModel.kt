@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
@@ -56,6 +57,7 @@ class PlayerViewModel @Inject constructor(
     private val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
     private val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
     private val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
+    private val profileManager: ProfileManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -81,6 +83,7 @@ class PlayerViewModel @Inject constructor(
         playbackMediaSourceTransport = playbackMediaSourceTransport,
         openSubtitlesHashIntegrationProvider = openSubtitlesHashIntegrationProvider,
         playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
+        playbackOwnerProfileId = profileManager.activeProfileId.value,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )
