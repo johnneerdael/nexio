@@ -1154,6 +1154,16 @@ class StreamScreenViewModel @Inject constructor(
         if (autoPlayFirstScoringAtMs == 0L && event.winners.isNotEmpty()) {
             autoPlayFirstScoringAtMs = System.currentTimeMillis()
         }
+
+        // Fire prewarm on EVERY pass (including ones that will return null below)
+        // so the resolver's verdict for the top-N candidate URLs is hot by the
+        // time early-finish triggers. Without this, prewarm only ran in the same
+        // pass that would commit to a candidate, so the resolve-budget polling
+        // loop had to wait for the resolver's full HTTP roundtrip — measured at
+        // 1.8–4.0s on real captures. Idempotent: prewarm short-circuits on cache
+        // hits or in-flight requests, so repeated calls across passes are cheap.
+        prewarmTopAutoplayCandidatesForResolveBudget(event = event, eligibleStreams = eligibleStreams)
+
         val earlyFinishFallbackElapsed = if (autoPlayFirstScoringAtMs > 0L) {
             System.currentTimeMillis() - autoPlayFirstScoringAtMs
         } else {
@@ -1196,15 +1206,6 @@ class StreamScreenViewModel @Inject constructor(
         if (!isFinalPass && !earlyFinishDecision.triggered && !earlyFinishFallbackReached) {
             return null
         }
-
-        // Prewarm the top-N candidate proxy URLs BEFORE the resolve-budget
-        // candidate-selection loop runs. Without this, `lastResolutionFor()`
-        // returns null for every URL the resolver hasn't seen yet, so the
-        // resolve-budget predicate always exhausts its 4s window with no
-        // verdict and skips every candidate. The existing
-        // `prewarmCometProxyCandidates` only fires AFTER autoplay commits to
-        // a primary, which is too late for our pre-commit readiness check.
-        prewarmTopAutoplayCandidatesForResolveBudget(event = event, eligibleStreams = eligibleStreams)
 
         val resolveBudgetDeadlineMs = System.currentTimeMillis() + AUTOPLAY_RESOLVE_BUDGET_MS
         val selectedCandidate = selectDeterministicAutoplayCandidate(
@@ -1822,6 +1823,10 @@ internal data class DeterministicEarlyFinishStreamRow(
     }
 }
 
+private fun isX265TaggedFilename(filename: String?): Boolean {
+    return filename?.contains("x265", ignoreCase = true) == true
+}
+
 internal fun deterministicAutoplayEarlyFinishDecision(
     winners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>,
     request: ShadowRequestContext
@@ -1885,13 +1890,32 @@ internal fun deterministicAutoplayEarlyFinishDecision(
                 it.breakdown.releaseType == "remux"
         }
         val webdlCount = countMatching(targetResolution, "webdl", webdlThreshold)
-        if (!localHasRemux && webdlCount >= 3) {
+        // Series-only: count 1080p HEVC x265 small_encodes alongside webdl.
+        // classifyReleaseType() puts these into SMALL_ENCODE because the
+        // filename has no source token (no WEB-DL/BluRay) and bitrate sits
+        // below the 10 Mbps NORMAL_ENCODE floor — neither of which reflects
+        // actual quality for an x265 re-encode of a WEB-DL master. Gated to
+        // 1080p, x265-tagged filenames only, ≥1.0 Mbps to filter total-junk
+        // encodes; XviD and SD x264 releases sharing the small_encode bucket
+        // are excluded by the x265 tag check.
+        val x265SmallEncodeCount = if (!is4k && !movie) {
+            countedWinners.count { candidate ->
+                candidate.resolution.equals(targetResolution, ignoreCase = true) &&
+                    candidate.breakdown.releaseType == "small_encode" &&
+                    candidate.breakdown.averageBitrateMbps >= 1.0 &&
+                    isX265TaggedFilename(candidate.parsed.filename)
+            }
+        } else {
+            0
+        }
+        val combinedCount = webdlCount + x265SmallEncodeCount
+        if (!localHasRemux && combinedCount >= 3) {
             return DeterministicEarlyFinishDecision(
                 triggered = true,
                 reason = "threshold_met",
-                matchingCount = webdlCount,
+                matchingCount = combinedCount,
                 resolution = targetResolution,
-                releaseType = "webdl",
+                releaseType = if (x265SmallEncodeCount > 0) "webdl_or_x265_small" else "webdl",
                 hasRemux = hasRemux,
                 breakdown = breakdown
             )
