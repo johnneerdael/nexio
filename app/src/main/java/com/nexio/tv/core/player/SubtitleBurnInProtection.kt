@@ -60,6 +60,9 @@ internal fun buildMediaSeedKey(
     return when {
         trimmedContentId != null && season != null && episode != null ->
             "$trimmedContentId:s${season}e${episode}"
+        // Partial metadata (one of season/episode null): fall back to content-level
+        // granularity. Acceptable: hash collisions across episodes are harmless for
+        // zone rotation; only repeats happen, not visible bugs.
         trimmedContentId != null -> trimmedContentId
         else -> "url:${streamUrl.hashCode()}"
     }

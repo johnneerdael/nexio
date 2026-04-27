@@ -123,8 +123,8 @@ private suspend fun PlayerRuntimeController.resolveBurnInProtectionState(
     val salt = playerSettingsDataStore.getOrCreateBurnInProtectionUserSalt()
     val seed = buildMediaSeedKey(
         contentId = contentId,
-        season = initialSeason,
-        episode = initialEpisode,
+        season = currentSeason,
+        episode = currentEpisode,
         streamUrl = currentStreamUrl,
     )
     return computeBurnInProtectionState(
@@ -728,8 +728,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
 
             scope.launch {
-                val enabled = playerSettingsDataStore.playerSettings.first().burnInProtection.enabled
-                val resolved = resolveBurnInProtectionState(enabled)
+                if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
+                val resolved = resolveBurnInProtectionState(playerSettings.burnInProtection.enabled)
                 if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
                 _uiState.update { it.copy(burnInProtection = resolved) }
             }
