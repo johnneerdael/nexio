@@ -115,6 +115,40 @@ class TraceMetadataEvents(
         )
     }
 
+    // TODO(trace): wire from TVDB/Kitsu provider adapters where localized payload fetches are orchestrated.
+    fun emitLocalizationPlan(
+        provider: String,
+        contentId: String,
+        requestedLanguage: String,
+        fallbackLanguage: String,
+        policyVersion: Int,
+        providerFallbackAllowedForMissingLocalizedFields: Boolean,
+        payloads: List<Map<String, Any?>>,
+        perEpisodeTranslationFallbacks: Map<String, Any?>
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.localization_plan",
+                payload = mapOf(
+                    "provider" to provider,
+                    "contentId" to contentId,
+                    "requestedLanguage" to requestedLanguage,
+                    "fallbackLanguage" to fallbackLanguage,
+                    "policyVersion" to policyVersion,
+                    "providerFallbackAllowedForMissingLocalizedFields" to providerFallbackAllowedForMissingLocalizedFields,
+                    "payloads" to payloads,
+                    "perEpisodeTranslationFallbacks" to perEpisodeTranslationFallbacks
+                )
+            )
+        )
+    }
+
     fun emitRouteDecision(
         contentId: String,
         parentId: String,
