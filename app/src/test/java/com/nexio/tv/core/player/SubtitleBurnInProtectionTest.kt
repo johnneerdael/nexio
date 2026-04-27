@@ -80,4 +80,26 @@ class SubtitleBurnInProtectionTest {
     fun max_alpha_constant_is_zero_point_nine() {
         assertEquals(0.90f, SUBTITLE_MAX_ALPHA, 0.0001f)
     }
+
+    @Test
+    fun seed_uses_content_id_with_season_and_episode_when_all_present() {
+        assertEquals("tt9999:s2e5", buildMediaSeedKey("tt9999", 2, 5, "https://example/x"))
+    }
+
+    @Test
+    fun seed_uses_content_id_alone_for_movies() {
+        assertEquals("tt9999", buildMediaSeedKey("tt9999", null, null, "https://example/x"))
+    }
+
+    @Test
+    fun seed_falls_back_to_stream_url_hash_when_content_id_missing() {
+        val seed = buildMediaSeedKey(null, null, null, "https://example/movie.mkv")
+        assertEquals("url:${"https://example/movie.mkv".hashCode()}", seed)
+    }
+
+    @Test
+    fun seed_treats_blank_content_id_as_missing() {
+        val seed = buildMediaSeedKey("   ", null, null, "https://example/y")
+        assertEquals("url:${"https://example/y".hashCode()}", seed)
+    }
 }

@@ -44,3 +44,23 @@ internal fun computeBurnInProtectionState(
         horizontalOffsetPx = horizontalOffsetPx,
     )
 }
+
+/**
+ * Build a stable media-identity seed string. Prefers contentId+season+episode for
+ * tracked content; falls back to the stream URL for arbitrary playback (e.g., trailers
+ * launched into the main player or untracked debrid streams).
+ */
+internal fun buildMediaSeedKey(
+    contentId: String?,
+    season: Int?,
+    episode: Int?,
+    streamUrl: String,
+): String {
+    val trimmedContentId = contentId?.takeIf { it.isNotBlank() }
+    return when {
+        trimmedContentId != null && season != null && episode != null ->
+            "$trimmedContentId:s${season}e${episode}"
+        trimmedContentId != null -> trimmedContentId
+        else -> "url:${streamUrl.hashCode()}"
+    }
+}
