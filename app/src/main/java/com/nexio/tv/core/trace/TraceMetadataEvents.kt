@@ -149,6 +149,29 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitResolverSchedule(
+        depth: String,
+        scheduled: List<String>,
+        skipped: Map<String, String>
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.resolver_schedule",
+                payload = mapOf(
+                    "depth" to depth,
+                    "scheduled" to scheduled,
+                    "skipped" to skipped
+                )
+            )
+        )
+    }
+
     fun emitRouteDecision(
         contentId: String,
         parentId: String,
