@@ -35,19 +35,31 @@ class ProfileBoundaryAuditGoldenTest {
 
     private fun buildReport(): ProfileBoundaryAuditReport {
         val globalMetadataKey = "metadata:TMDB:tmdb.movie.core:tmdb:550:lang:nl:policy:v1"
-        ProfileBoundaryEnforcer.validateRequest(
+        val globalMetadataSpec = IntegrationSpec(
             provider = IntegrationProvider.TMDB,
-            scope = IntegrationScope.GlobalLocalizedContent(language = "nl", localizationPolicyVersion = 1),
+            apiShapeId = "tmdb.movie.core",
+            operationKey = "tmdb.movie.core:tmdb:550:lang:nl",
             cacheKey = globalMetadataKey,
-            profileContext = null
+            codec = StringIntegrationCodec,
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 60_000L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = IntegrationScope.GlobalLocalizedContent(language = "nl", localizationPolicyVersion = 1),
+            profileContext = null,
+            load = { IntegrationLoadResult.Success("global metadata") }
         )
 
         val imageKey = "artwork:TMDB:poster:tmdb:550:imageLang:en:policy:1"
-        ProfileBoundaryEnforcer.validateRequest(
+        val imageSpec = IntegrationSpec(
             provider = IntegrationProvider.TMDB,
-            scope = IntegrationScope.GlobalEnglishImage,
+            apiShapeId = "artwork.poster",
+            operationKey = "artwork.poster:tmdb:550:imageLang:en",
             cacheKey = imageKey,
-            profileContext = null
+            codec = StringIntegrationCodec,
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 60_000L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = IntegrationScope.GlobalEnglishImage,
+            profileContext = null,
+            load = { IntegrationLoadResult.Success("image") }
         )
 
         val traktContext = accountContext(
@@ -56,15 +68,18 @@ class ProfileBoundaryAuditGoldenTest {
             credentialHash = "trakt-credential-p1"
         )
         val traktKey = "profile:1:provider:TRAKT:credential:trakt-credential-p1:operation:trakt.user.lists"
-        ProfileBoundaryEnforcer.validateRequest(
+        val traktCallSpec = IntegrationCallSpec(
             provider = IntegrationProvider.TRAKT,
+            apiShapeId = "trakt.user.lists",
+            operationKey = traktKey,
+            workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.Account(
                 profileId = 1,
                 provider = IntegrationProvider.TRAKT,
                 credentialHash = "trakt-credential-p1"
             ),
-            cacheKey = traktKey,
-            profileContext = traktContext
+            profileContext = traktContext,
+            call = { IntegrationCallResult.Success("trakt account") }
         )
 
         val simklContext = accountContext(
@@ -73,28 +88,37 @@ class ProfileBoundaryAuditGoldenTest {
             credentialHash = "simkl-credential-p2"
         )
         val simklKey = "profile:2:provider:SIMKL:credential:simkl-credential-p2:operation:simkl.last_activities"
-        ProfileBoundaryEnforcer.validateRequest(
+        val simklCallSpec = IntegrationCallSpec(
             provider = IntegrationProvider.SIMKL,
+            apiShapeId = "simkl.last_activities",
+            operationKey = simklKey,
+            workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.Account(
                 profileId = 2,
                 provider = IntegrationProvider.SIMKL,
                 credentialHash = "simkl-credential-p2"
             ),
-            cacheKey = simklKey,
-            profileContext = simklContext
+            profileContext = simklContext,
+            call = { IntegrationCallResult.Success("simkl account") }
         )
 
         val continueWatchingKey = "profile:1:continue-watching:tt1234567"
-        ProfileBoundaryEnforcer.validateRequest(
+        val continueWatchingSpec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
-            scope = IntegrationScope.ProfileLocal(profileId = 1),
+            apiShapeId = "local.continue_watching.snapshot",
+            operationKey = "profile:1:operation:continue-watching.snapshot",
             cacheKey = continueWatchingKey,
+            codec = StringIntegrationCodec,
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 60_000L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = IntegrationScope.ProfileLocal(profileId = 1),
             profileContext = ProfileExecutionContext(
                 profileId = 1,
                 sessionId = "session-p1",
                 displayLanguage = "nl",
                 region = "NL"
-            )
+            ),
+            load = { IntegrationLoadResult.Success("cw") }
         )
 
         val staleWrite = assertThrows(ProfileBoundaryException::class.java) {
@@ -187,6 +211,11 @@ class ProfileBoundaryAuditGoldenTest {
         assertTrue(simklKey.contains("profile:2"))
         assertTrue(simklKey.contains("credential:simkl-credential-p2"))
         assertEquals(ProfileBoundaryViolation.STALE_SESSION_WRITE_REJECTED, staleWrite.violation)
+        assertEquals(globalMetadataKey, globalMetadataSpec.requiredCacheKey)
+        assertEquals(imageKey, imageSpec.requiredCacheKey)
+        assertEquals(traktKey, traktCallSpec.operationKey)
+        assertEquals(simklKey, simklCallSpec.operationKey)
+        assertEquals(continueWatchingKey, continueWatchingSpec.requiredCacheKey)
 
         return ProfileBoundaryAuditReport(
             artifactRole = "PROFILE_BOUNDARY_SIGN_OFF",
