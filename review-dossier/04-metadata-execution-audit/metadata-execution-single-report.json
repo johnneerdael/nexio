@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "gitSha": "4d2d956ec",
+  "gitWorktree": {"state":"DIRTY","dirtyFileCount":1,"untrackedFileCount":3},
+  "artifactRole": "SMOKE_DEBUG_ONLY",
+  "fixtureName": "netflix_movie_nfx.json",
+  "scenario": "netflix-movie-detail-core",
+  "verdict": "PASS",
+  "totalItems": 1,
+  "routedItems": 1,
+  "networkCalls": 1,
+  "items": [
+    {
+      "itemId": "tt16431404",
+      "itemType": "movie",
+      "provider": "TMDB",
+      "apiShapes": ["tmdb.movie.core"]
+    }
+  ]
+}
