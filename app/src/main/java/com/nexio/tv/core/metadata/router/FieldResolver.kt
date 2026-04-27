@@ -11,11 +11,13 @@ class FieldResolver @Inject constructor() {
     ): ResolvedMetadataDocument {
         val fields = linkedMapOf<ResolvedField, Any>()
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
+        val localization = linkedMapOf<ResolvedField, MetadataLocalizationFieldTrace>()
         val ignoredOverwrites = mutableListOf<IgnoredFieldOverwrite>()
 
         primary.fields.forEach { (field, fieldValue) ->
             fields[field] = fieldValue.value
             owners[field] = FieldOwner.PRIMARY
+            primary.localization[field]?.let { localization[field] = it }
         }
 
         secondary.forEach { candidate ->
@@ -24,6 +26,7 @@ class FieldResolver @Inject constructor() {
                 if (existingOwner == null) {
                     fields[field] = fieldValue.value
                     owners[field] = fieldValue.owner
+                    candidate.localization[field]?.let { localization[field] = it }
                 } else {
                     ignoredOverwrites += IgnoredFieldOverwrite(
                         field = field,
@@ -45,7 +48,8 @@ class FieldResolver @Inject constructor() {
             rating = fields[ResolvedField.RATING],
             runtimeMinutes = fields[ResolvedField.RUNTIME] as? Int,
             fieldOwners = owners,
-            ignoredOverwrites = ignoredOverwrites
+            ignoredOverwrites = ignoredOverwrites,
+            localization = localization
         )
     }
 }

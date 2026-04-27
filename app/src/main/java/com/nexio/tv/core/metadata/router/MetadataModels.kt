@@ -70,10 +70,45 @@ data class FieldValue(
     val owner: FieldOwner
 )
 
+enum class MetadataLocalizationFallbackRole {
+    LOCALIZED,
+    LANGUAGE_FALLBACK,
+    CANONICAL,
+    ADDON_FALLBACK,
+    PROVIDER_FALLBACK
+}
+
+data class MetadataLocalizationRejectedCandidate(
+    val provider: MetadataPrimaryProvider,
+    val language: String,
+    val fallbackRole: MetadataLocalizationFallbackRole,
+    val reason: String
+)
+
+data class MetadataLocalizationFieldTrace(
+    val field: ResolvedField,
+    val selectedProvider: MetadataPrimaryProvider,
+    val selectedLanguage: String,
+    val fallbackRole: MetadataLocalizationFallbackRole,
+    val sourceApiShapeId: String,
+    val rejectedCandidates: List<MetadataLocalizationRejectedCandidate>
+)
+
+data class MetadataLocalizationPayloadTrace(
+    val provider: MetadataPrimaryProvider,
+    val apiShapeId: String,
+    val language: String,
+    val cacheKey: String,
+    val cacheDecision: String?,
+    val executedNetwork: Boolean,
+    val policyVersion: Int
+)
+
 data class MetadataCandidate(
     val provider: MetadataPrimaryProvider,
     val resolverType: ResolverType? = null,
-    val fields: Map<ResolvedField, FieldValue>
+    val fields: Map<ResolvedField, FieldValue>,
+    val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap()
 )
 
 data class IgnoredFieldOverwrite(
@@ -93,7 +128,8 @@ data class ResolvedMetadataDocument(
     val rating: Any?,
     val runtimeMinutes: Int?,
     val fieldOwners: Map<ResolvedField, FieldOwner>,
-    val ignoredOverwrites: List<IgnoredFieldOverwrite>
+    val ignoredOverwrites: List<IgnoredFieldOverwrite>,
+    val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap()
 )
 
 data class ResolverSchedule(
