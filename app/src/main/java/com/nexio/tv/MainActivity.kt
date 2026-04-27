@@ -185,7 +185,7 @@ import androidx.compose.ui.res.stringResource
 import com.nexio.tv.core.search.AndroidTvNativeSearchIntent
 import com.nexio.tv.R
 import com.nexio.tv.DrawerItem
-import com.nexio.tv.ModernSidebarBlurPanel
+
 import kotlin.coroutines.resume
 
 val LocalSidebarExpanded = compositionLocalOf { false }
@@ -199,9 +199,6 @@ private data class MainUiPrefs(
     val theme: AppTheme = AppTheme.CRIMSON,
     val font: AppFont = AppFont.INTER,
     val hasChosenLayout: Boolean? = null,
-    val sidebarCollapsed: Boolean = false,
-    val modernSidebarEnabled: Boolean = false,
-    val modernSidebarBlurPref: Boolean = false,
     val trailerScreensaverEnabled: Boolean = false
 )
 
@@ -431,18 +428,12 @@ class MainActivity : ComponentActivity() {
                     themeDataStore.selectedTheme,
                     themeDataStore.selectedFont,
                     layoutPreferenceDataStore.hasChosenLayout,
-                    layoutPreferenceDataStore.sidebarCollapsedByDefault,
-                    layoutPreferenceDataStore.modernSidebarEnabled,
-                ) { theme, font, hasChosenLayout, sidebarCollapsed, modernSidebarEnabled ->
+                ) { theme, font, hasChosenLayout ->
                     MainUiPrefs(
                         theme = theme,
                         font = font,
                         hasChosenLayout = hasChosenLayout,
-                        sidebarCollapsed = sidebarCollapsed,
-                        modernSidebarEnabled = modernSidebarEnabled,
                     )
-                }.combine(layoutPreferenceDataStore.modernSidebarBlurEnabled) { prefs, modernSidebarBlurPref ->
-                    prefs.copy(modernSidebarBlurPref = modernSidebarBlurPref)
                 }.combine(layoutPreferenceDataStore.trailerScreensaverEnabled) { prefs, trailerScreensaverEnabled ->
                     prefs.copy(trailerScreensaverEnabled = trailerScreensaverEnabled)
                 }
@@ -503,12 +494,6 @@ class MainActivity : ComponentActivity() {
                         )
                         return@Surface
                     }
-                    val sidebarCollapsed = mainUiPrefs.sidebarCollapsed
-                    val modernSidebarEnabled = mainUiPrefs.modernSidebarEnabled
-                    val modernSidebarBlurEnabled =
-                        mainUiPrefs.modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-                    val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
-
                     // Profile selection gating (D-02, UI-01, UI-02)
                     var hasPassedProfileSelectionGate by rememberSaveable {
                         mutableStateOf(processProfileSelectionGatePassed)
@@ -963,77 +948,39 @@ class MainActivity : ComponentActivity() {
                     val selectedDrawerItem = drawerItems.firstOrNull { it.route == selectedDrawerRoute } ?: drawerItems.first()
 
                     Box(modifier = Modifier.fillMaxSize()) {
-                        if (modernSidebarEnabled) {
-                            ModernSidebarScaffold(
-                                navController = navController,
-                                startDestination = startDestination,
-                                currentRoute = currentRoute,
-                                rootRoutes = rootRoutes,
-                                drawerItems = drawerItems,
-                                selectedDrawerRoute = selectedDrawerRoute,
-                                selectedDrawerItem = selectedDrawerItem,
-                                sidebarCollapsed = sidebarCollapsed,
-                                modernSidebarBlurEnabled = modernSidebarBlurEnabled,
-                                hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
-                                idleScreensaverVisible = idleScreensaverVisible,
-                                startupSplashVisible = showStartupSplash,
-                                idleScreensaverController = idleScreensaverController,
-                                onHomeTrailerPlaybackActiveChanged = { active ->
-                                    inAppTrailerPlaybackActive = active
-                                },
-                                onHomeTrailerFullscreenActiveChanged = { active ->
-                                    modernHomeTrailerFullscreenActive = active
-                                },
-                                onDetailTrailerPlaybackActiveChanged = { active ->
-                                    inAppTrailerPlaybackActive = active
-                                },
-                                onExitApp = {
-                                    finishAffinity()
-                                    finishAndRemoveTask()
-                                },
-                                profiles = profiles,
-                                activeProfileId = profileManager.activeProfileId.collectAsState().value,
-                                onSwitchProfile = { profileId ->
-                                    processProfileSelectionGatePassed = true
-                                    hasPassedProfileSelectionGate = true
-                                    switchProfileAndApplyLocale(profileId)
-                                }
-                            )
-                        } else {
-                            LegacySidebarScaffold(
-                                navController = navController,
-                                startDestination = startDestination,
-                                currentRoute = currentRoute,
-                                rootRoutes = rootRoutes,
-                                drawerItems = drawerItems,
-                                selectedDrawerRoute = selectedDrawerRoute,
-                                sidebarCollapsed = sidebarCollapsed,
-                                hideBuiltInHeaders = false,
-                                idleScreensaverVisible = idleScreensaverVisible,
-                                startupSplashVisible = showStartupSplash,
-                                idleScreensaverController = idleScreensaverController,
-                                onHomeTrailerPlaybackActiveChanged = { active ->
-                                    inAppTrailerPlaybackActive = active
-                                },
-                                onHomeTrailerFullscreenActiveChanged = { active ->
-                                    modernHomeTrailerFullscreenActive = active
-                                },
-                                onDetailTrailerPlaybackActiveChanged = { active ->
-                                    inAppTrailerPlaybackActive = active
-                                },
-                                onExitApp = {
-                                    finishAffinity()
-                                    finishAndRemoveTask()
-                                },
-                                profiles = profiles,
-                                activeProfileId = profileManager.activeProfileId.collectAsState().value,
-                                onSwitchProfile = { profileId ->
-                                    processProfileSelectionGatePassed = true
-                                    hasPassedProfileSelectionGate = true
-                                    switchProfileAndApplyLocale(profileId)
-                                }
-                            )
-                        }
+                        LegacySidebarScaffold(
+                            navController = navController,
+                            startDestination = startDestination,
+                            currentRoute = currentRoute,
+                            rootRoutes = rootRoutes,
+                            drawerItems = drawerItems,
+                            selectedDrawerRoute = selectedDrawerRoute,
+                            sidebarCollapsed = true,
+                            hideBuiltInHeaders = false,
+                            idleScreensaverVisible = idleScreensaverVisible,
+                            startupSplashVisible = showStartupSplash,
+                            idleScreensaverController = idleScreensaverController,
+                            onHomeTrailerPlaybackActiveChanged = { active ->
+                                inAppTrailerPlaybackActive = active
+                            },
+                            onHomeTrailerFullscreenActiveChanged = { active ->
+                                modernHomeTrailerFullscreenActive = active
+                            },
+                            onDetailTrailerPlaybackActiveChanged = { active ->
+                                inAppTrailerPlaybackActive = active
+                            },
+                            onExitApp = {
+                                finishAffinity()
+                                finishAndRemoveTask()
+                            },
+                            profiles = profiles,
+                            activeProfileId = profileManager.activeProfileId.collectAsState().value,
+                            onSwitchProfile = { profileId ->
+                                processProfileSelectionGatePassed = true
+                                hasPassedProfileSelectionGate = true
+                                switchProfileAndApplyLocale(profileId)
+                            }
+                        )
 
                         UpdatePromptDialog(
                             state = updateState,
@@ -2079,419 +2026,6 @@ private fun LegacyProfileSwitcherRow(
     }
 }
 
-@Composable
-private fun ModernSidebarScaffold(
-    navController: NavHostController,
-    startDestination: String,
-    currentRoute: String?,
-    rootRoutes: Set<String>,
-    drawerItems: List<DrawerItem>,
-    selectedDrawerRoute: String?,
-    selectedDrawerItem: DrawerItem,
-    sidebarCollapsed: Boolean,
-    modernSidebarBlurEnabled: Boolean,
-    hideBuiltInHeaders: Boolean,
-    idleScreensaverVisible: Boolean,
-    startupSplashVisible: Boolean,
-    idleScreensaverController: IdleScreensaverController,
-    onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
-    onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
-    onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
-    onExitApp: () -> Unit,
-    profiles: List<UserProfile> = emptyList(),
-    activeProfileId: Int = 1,
-    onSwitchProfile: (Int) -> Unit = {}
-) {
-    var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
-    val showSidebar = currentRoute in rootRoutes && !homeTrailerFullscreenActive
-    val collapsedSidebarWidth = if (sidebarCollapsed) 0.dp else 184.dp
-    val openSidebarWidth = 262.dp
-
-    val focusManager = LocalFocusManager.current
-    val contentFocusRequester = remember { FocusRequester() }
-    val drawerItemFocusRequesters = remember(drawerItems) {
-        drawerItems.associate { item -> item.route to FocusRequester() }
-    }
-    val profileSwitcherFocusRequester = remember { FocusRequester() }
-
-    var isSidebarExpanded by remember { mutableStateOf(false) }
-    var sidebarCollapsePending by remember { mutableStateOf(false) }
-    var pendingContentFocusTransfer by remember { mutableStateOf(false) }
-    var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
-    var focusedDrawerIndex by remember { mutableStateOf(-1) }
-    var isFloatingPillIconOnly by remember { mutableStateOf(false) }
-    val keepFloatingPillExpanded = selectedDrawerRoute == Screen.Settings.route
-    val keepSidebarFocusDuringCollapse =
-        isSidebarExpanded || sidebarCollapsePending || pendingContentFocusTransfer
-
-    LaunchedEffect(showSidebar) {
-        if (!showSidebar) {
-            isSidebarExpanded = false
-            sidebarCollapsePending = false
-            pendingContentFocusTransfer = false
-            pendingSidebarFocusRequest = false
-            isFloatingPillIconOnly = false
-        }
-    }
-
-    LaunchedEffect(keepFloatingPillExpanded, showSidebar) {
-        if (!showSidebar || keepFloatingPillExpanded) {
-            isFloatingPillIconOnly = false
-        }
-    }
-
-    BackHandler(enabled = currentRoute in rootRoutes && !isSidebarExpanded && !sidebarCollapsePending) {
-        isSidebarExpanded = true
-        sidebarCollapsePending = false
-        pendingSidebarFocusRequest = true
-    }
-
-    BackHandler(enabled = currentRoute in rootRoutes && isSidebarExpanded && !sidebarCollapsePending) {
-        onExitApp()
-    }
-
-    LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
-        if (!showSidebar || !sidebarCollapsePending) {
-            return@LaunchedEffect
-        }
-        if (!isSidebarExpanded) {
-            sidebarCollapsePending = false
-            return@LaunchedEffect
-        }
-        delay(95L)
-        isSidebarExpanded = false
-        sidebarCollapsePending = false
-    }
-
-    val sidebarVisible = showSidebar && (isSidebarExpanded || !sidebarCollapsed)
-    val sidebarHazeState = remember { HazeState() }
-    val targetSidebarWidth = when {
-        !sidebarVisible -> 0.dp
-        isSidebarExpanded -> openSidebarWidth
-        else -> collapsedSidebarWidth
-    }
-    val sidebarWidth by animateDpAsState(
-        targetValue = targetSidebarWidth,
-        animationSpec = if (isSidebarExpanded) {
-            keyframes {
-                durationMillis = 365
-                (openSidebarWidth + 12.dp) at 175
-            }
-        } else {
-            tween(durationMillis = 385, easing = LinearOutSlowInEasing)
-        },
-        label = "sidebarWidth"
-    )
-    val sidebarSlideX by animateDpAsState(
-        targetValue = if (sidebarVisible) 0.dp else (-24).dp,
-        animationSpec = tween(durationMillis = 205, easing = FastOutSlowInEasing),
-        label = "sidebarSlideX"
-    )
-    val sidebarSurfaceAlpha by animateFloatAsState(
-        targetValue = if (sidebarVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 135, easing = FastOutSlowInEasing),
-        label = "sidebarSurfaceAlpha"
-    )
-    val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (
-        isSidebarExpanded || sidebarCollapsePending
-        )
-    val sidebarTransition = updateTransition(
-        targetState = isSidebarExpanded,
-        label = "sidebarTransition"
-    )
-    val sidebarLabelAlpha by sidebarTransition.animateFloat(
-        transitionSpec = {
-            if (targetState) {
-                tween(durationMillis = 125, easing = FastOutSlowInEasing)
-            } else {
-                tween(durationMillis = 145, easing = LinearOutSlowInEasing)
-            }
-        },
-        label = "sidebarLabelAlpha"
-    ) { expanded ->
-        if (expanded) 1f else 0f
-    }
-    val sidebarExpandProgress by sidebarTransition.animateFloat(
-        transitionSpec = {
-            if (targetState) {
-                tween(durationMillis = 345, easing = FastOutSlowInEasing)
-            } else {
-                tween(durationMillis = 385, easing = LinearOutSlowInEasing)
-            }
-        },
-        label = "sidebarExpandProgress"
-    ) { expanded ->
-        if (expanded) 1f else 0f
-    }
-
-    // derivedStateOf prevents per-frame recomposition — only triggers when the boolean crosses the threshold
-    val sidebarBlocksContentKeys by remember { derivedStateOf { sidebarExpandProgress > 0.2f } }
-    val sidebarShowExpandedPanel by remember { derivedStateOf { sidebarExpandProgress > 0.01f } }
-    val sidebarShowCollapsedPill by remember { derivedStateOf { sidebarExpandProgress < 0.98f } }
-
-    val sidebarIconScale by sidebarTransition.animateFloat(
-        transitionSpec = { tween(durationMillis = 145, easing = FastOutSlowInEasing) },
-        label = "sidebarIconScale"
-    ) { expanded ->
-        if (expanded) 1f else 0.92f
-    }
-    val sidebarBloomScale by sidebarTransition.animateFloat(
-        transitionSpec = {
-            if (targetState) {
-                tween(durationMillis = 345, easing = FastOutSlowInEasing)
-            } else {
-                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
-            }
-        },
-        label = "sidebarBloomScale"
-    ) { expanded ->
-        if (expanded) 1f else 0.9f
-    }
-    val sidebarDeflateOffsetX by sidebarTransition.animateDp(
-        transitionSpec = {
-            if (targetState) {
-                tween(durationMillis = 345, easing = FastOutSlowInEasing)
-            } else {
-                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
-            }
-        },
-        label = "sidebarDeflateOffsetX"
-    ) { expanded ->
-        if (expanded) 0.dp else (-10).dp
-    }
-    val sidebarDeflateOffsetY by sidebarTransition.animateDp(
-        transitionSpec = {
-            if (targetState) {
-                tween(durationMillis = 345, easing = FastOutSlowInEasing)
-            } else {
-                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
-            }
-        },
-        label = "sidebarDeflateOffsetY"
-    ) { expanded ->
-        if (expanded) 0.dp else (-8).dp
-    }
-
-    LaunchedEffect(isSidebarExpanded, sidebarCollapsePending, pendingContentFocusTransfer, showSidebar) {
-        if (!showSidebar || !pendingContentFocusTransfer || isSidebarExpanded || sidebarCollapsePending) {
-            return@LaunchedEffect
-        }
-        repeat(2) { withFrameNanos { } }
-        runCatching { contentFocusRequester.requestFocus() }
-        pendingContentFocusTransfer = false
-    }
-
-    LaunchedEffect(isSidebarExpanded, pendingSidebarFocusRequest, showSidebar, selectedDrawerRoute) {
-        if (!showSidebar || !pendingSidebarFocusRequest || !isSidebarExpanded) {
-            return@LaunchedEffect
-        }
-        val requester = if (profiles.size > 1) {
-            profileSwitcherFocusRequester
-        } else {
-            val targetRoute = selectedDrawerRoute ?: run {
-                pendingSidebarFocusRequest = false
-                return@LaunchedEffect
-            }
-            drawerItemFocusRequesters[targetRoute]
-        } ?: run {
-            pendingSidebarFocusRequest = false
-            return@LaunchedEffect
-        }
-        repeat(2) { withFrameNanos { } }
-        runCatching { requester.requestFocus() }
-        pendingSidebarFocusRequest = false
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (shouldApplySidebarHaze) {
-                        Modifier.haze(sidebarHazeState)
-                    } else {
-                        Modifier
-                    }
-                )
-                .onPreviewKeyEvent { keyEvent ->
-                    if (
-                        isSidebarExpanded &&
-                        !sidebarCollapsePending &&
-                        sidebarBlocksContentKeys &&
-                        keyEvent.type == KeyEventType.KeyDown &&
-                        isBlockedContentKey(keyEvent.key)
-                    ) {
-                        true
-                    } else {
-                        false
-                    }
-                }
-                .onKeyEvent { keyEvent ->
-                    if (showSidebar && !isSidebarExpanded && keyEvent.type == KeyEventType.KeyDown) {
-                        if (!keepFloatingPillExpanded) {
-                            when (keyEvent.key) {
-                                Key.DirectionDown -> isFloatingPillIconOnly = true
-                                Key.DirectionUp -> isFloatingPillIconOnly = false
-                                else -> Unit
-                            }
-                        }
-                        if (keyEvent.key == Key.DirectionLeft) {
-                            isSidebarExpanded = true
-                            sidebarCollapsePending = false
-                            pendingSidebarFocusRequest = true
-                            true
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }
-        ) {
-            CompositionLocalProvider(
-                LocalSidebarExpanded provides isSidebarExpanded,
-                LocalContentFocusRequester provides contentFocusRequester
-            ) {
-                NexioNavHost(
-                    navController = navController,
-                    startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders,
-                    idleScreensaverVisible = idleScreensaverVisible,
-                    startupSplashVisible = startupSplashVisible,
-                    onModernHomeTrailerPlaybackStarted = {
-                        idleScreensaverController.registerInteraction()
-                    },
-                    onModernHomeTrailerPlaybackActiveChanged = { active ->
-                        onHomeTrailerPlaybackActiveChanged(active)
-                    },
-                    onModernHomeTrailerFullscreenActiveChanged = { active ->
-                        homeTrailerFullscreenActive = active
-                        onHomeTrailerFullscreenActiveChanged(active)
-                    },
-                    onDetailTrailerPlaybackActiveChanged = { active ->
-                        onDetailTrailerPlaybackActiveChanged(active)
-                    }
-                )
-            }
-        }
-
-        if (showSidebar && (sidebarVisible || sidebarWidth > 0.dp)) {
-            val panelShape = RoundedCornerShape(30.dp)
-            val showExpandedPanel = isSidebarExpanded || sidebarShowExpandedPanel
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .width(sidebarWidth)
-                    .padding(start = 14.dp, top = 16.dp, bottom = 12.dp, end = 8.dp)
-                    .offset {
-                        IntOffset(
-                            (sidebarSlideX + sidebarDeflateOffsetX).roundToPx(),
-                            sidebarDeflateOffsetY.roundToPx()
-                        )
-                    }
-                    .graphicsLayer {
-                        alpha = sidebarSurfaceAlpha
-                        scaleX = sidebarBloomScale
-                        scaleY = sidebarBloomScale
-                        transformOrigin = TransformOrigin(0f, 0f)
-                    }
-                    .selectableGroup()
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (!isSidebarExpanded || keyEvent.type != KeyEventType.KeyDown) {
-                            return@onPreviewKeyEvent false
-                        }
-                        when (keyEvent.key) {
-                            Key.DirectionUp -> {
-                                focusedDrawerIndex < 0
-                            }
-
-                            Key.DirectionDown -> {
-                                focusedDrawerIndex > drawerItems.lastIndex
-                            }
-
-                            Key.DirectionRight -> {
-                                pendingContentFocusTransfer = false
-                                sidebarCollapsePending = true
-                                true
-                            }
-
-                            else -> false
-                        }
-                    }
-            ) {
-                if (showExpandedPanel) {
-                    ModernSidebarBlurPanel(
-                        drawerItems = drawerItems,
-                        selectedDrawerRoute = selectedDrawerRoute,
-                        keepSidebarFocusDuringCollapse = keepSidebarFocusDuringCollapse,
-                        sidebarLabelAlpha = sidebarLabelAlpha,
-                        sidebarIconScale = sidebarIconScale,
-                        sidebarExpandProgress = sidebarExpandProgress,
-                        isSidebarExpanded = isSidebarExpanded,
-                        sidebarCollapsePending = sidebarCollapsePending,
-                        blurEnabled = modernSidebarBlurEnabled,
-                        sidebarHazeState = sidebarHazeState,
-                        panelShape = panelShape,
-                        drawerItemFocusRequesters = drawerItemFocusRequesters,
-                        onDrawerItemFocused = { focusedDrawerIndex = it },
-                        onDrawerItemClick = { targetRoute ->
-                            navigateToDrawerRoute(
-                                navController = navController,
-                                currentRoute = currentRoute,
-                                targetRoute = targetRoute
-                            )
-                            pendingSidebarFocusRequest = false
-                            isSidebarExpanded = false
-                            sidebarCollapsePending = false
-                            pendingContentFocusTransfer = true
-                        },
-                        profiles = profiles,
-                        activeProfileId = activeProfileId,
-                        onSwitchProfile = onSwitchProfile,
-                        profileSwitcherFocusRequester = profileSwitcherFocusRequester,
-                        onProfileSwitcherFocused = { focusedDrawerIndex = -1 }
-                    )
-                }
-            }
-
-            if (
-                !sidebarCollapsed &&
-                sidebarShowCollapsedPill &&
-                selectedDrawerRoute != Screen.Search.route
-            ) {
-                CollapsedSidebarPill(
-                    label = selectedDrawerItem.label,
-                    iconRes = selectedDrawerItem.iconRes,
-                    icon = selectedDrawerItem.icon,
-                    iconOnly = isFloatingPillIconOnly && !keepFloatingPillExpanded,
-                    blurEnabled = modernSidebarBlurEnabled,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .offset {
-                            IntOffset(
-                                14.dp.roundToPx(),
-                                (16.dp + sidebarDeflateOffsetY).roundToPx()
-                            )
-                        }
-                        .graphicsLayer {
-                            val progress = sidebarExpandProgress
-                            alpha = 1f - progress
-                            val s = 0.9f + (0.1f * (1f - progress))
-                            scaleX = s
-                            scaleY = s
-                            transformOrigin = TransformOrigin(0f, 0f)
-                        },
-                    onExpand = {
-                        isSidebarExpanded = true
-                        sidebarCollapsePending = false
-                        pendingSidebarFocusRequest = true
-                    }
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun CollapsedSidebarPill(
