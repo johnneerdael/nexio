@@ -1,12 +1,14 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
+import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import javax.inject.Inject
 
@@ -30,63 +32,60 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                     tvdbId = tvdbId,
                     localizationPolicyVersion = policy.policyVersion
                 )
-                val english = integrationProvider.fetchSeriesTranslation(
+                val english = integrationProvider.fetchSeriesTranslationWithTrace(
                     tvdbId = tvdbId,
                     language = policy.fallbackLanguage.providerCode,
+                    fallbackRole = MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
                     localizationPolicyVersion = policy.policyVersion
                 )
-                localizationPayloads += MetadataLocalizationPayloadTrace(
-                    provider = this.provider,
-                    apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
-                    language = policy.fallbackLanguage.providerCode,
-                    cacheKey = tvdbSeriesTranslationCacheKey(
-                        tvdbId = tvdbId,
-                        language = policy.fallbackLanguage.providerCode,
-                        policyVersion = policy.policyVersion
-                    ),
-                    cacheDecision = null,
-                    executedNetwork = false,
-                    policyVersion = policy.policyVersion
-                )
+                localizationPayloads += english.trace
                 val requested = if (policy.requestedIsFallback) {
                     null
                 } else {
-                    integrationProvider.fetchSeriesTranslation(
+                    integrationProvider.fetchSeriesTranslationWithTrace(
                         tvdbId = tvdbId,
                         language = policy.requestedLanguage.providerCode,
+                        fallbackRole = MetadataLocalizationFallbackRole.LOCALIZED,
                         localizationPolicyVersion = policy.policyVersion
                     ).also {
-                        localizationPayloads += MetadataLocalizationPayloadTrace(
-                            provider = this.provider,
-                            apiShapeId = TvdbApiShapes.SERIES_TRANSLATION,
-                            language = policy.requestedLanguage.providerCode,
-                            cacheKey = tvdbSeriesTranslationCacheKey(
-                                tvdbId = tvdbId,
-                                language = policy.requestedLanguage.providerCode,
-                                policyVersion = policy.policyVersion
-                            ),
-                            cacheDecision = null,
-                            executedNetwork = false,
-                            policyVersion = policy.policyVersion
-                        )
-                    }
+                        localizationPayloads += it.trace
+                    }.value
                 }
                 buildTvdbCoreLocalizedCandidate(
                     provider = this.provider,
                     policy = policy,
                     extended = extended,
-                    englishTranslation = english,
+                    englishTranslation = english.value,
                     requestedTranslation = requested
                 )
             }
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE -> {
-                episodeMetadata += integrationProvider.fetchLocalizedSeasonEpisodeBundle(
+                val bundle = integrationProvider.fetchLocalizedSeasonEpisodeBundle(
                     tvdbId = tvdbId,
                     seasonType = "default",
                     requestedLanguage = language,
                     season = route.seasonNumber
-                ).episodes.mapValues { it.value.metadata }
-                emptyCandidate(this.provider)
+                )
+                episodeMetadata += bundle.episodes.mapValues { it.value.metadata }
+                localizationPayloads += bundle.localizationPayloads
+                val episodeLocalization = bundle.episodes.mapValues { (_, localizedEpisode) ->
+                    localizedEpisode.fieldSources.mapKeys { (fieldName, _) ->
+                        when (fieldName) {
+                            "title" -> ResolvedField.TITLE
+                            "overview" -> ResolvedField.OVERVIEW
+                            else -> ResolvedField.OVERVIEW
+                        }
+                    }.mapValues { (field, source) ->
+                        source.toMetadataTrace(field = field, provider = this.provider)
+                    }
+                }
+                return ProviderStepResult(
+                    step = step,
+                    candidate = emptyCandidate(this.provider),
+                    episodeMetadata = episodeMetadata,
+                    episodeLocalization = episodeLocalization,
+                    localizationPayloads = localizationPayloads
+                )
             }
             else -> emptyCandidate(this.provider)
         }

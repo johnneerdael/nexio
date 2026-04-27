@@ -307,10 +307,10 @@ class MetadataAuditReportWriter {
         appendLine("|---|---|---|---:|---:|---:|")
         appendLine("| `${event.provider}` | `${event.requestedLanguage}` | `${event.fallbackLanguage}` | `${event.policyVersion}` | `${event.providerFallbackUsed}` | `${event.perEpisodeTranslationFallbacksAttempted}/${event.maxPerEpisodeTranslationFallbacksAllowed}` |")
         appendLine()
-        appendLine("| API shape | Language | Cache decision | Network | Source | Cache key |")
-        appendLine("|---|---|---|---:|---|---|")
+        appendLine("| API shape | Language | Role | Cache decision | Network | Source | Cache key |")
+        appendLine("|---|---|---|---|---:|---|---|")
         event.payloads.forEach {
-            appendLine("| `${it.apiShapeId}` | `${it.language}` | `${it.cacheDecision}` | `${it.executedNetwork}` | `${it.source}` | `${it.cacheKey}` |")
+            appendLine("| `${it.apiShapeId}` | `${it.language}` | `${it.fallbackRole}` | `${it.cacheDecision}` | `${it.executedNetwork}` | `${it.source}` | `${it.cacheKey}` |")
         }
         appendLine()
     }
@@ -364,7 +364,7 @@ class MetadataAuditReportWriter {
         } ?: "null"
 
     private fun localizationPayloadJson(payload: LocalizationPayloadReport): String =
-        """{"apiShapeId":"${payload.apiShapeId}","language":"${payload.language}","cacheKey":"${payload.cacheKey}","cacheDecision":"${payload.cacheDecision}","executedNetwork":${payload.executedNetwork},"source":"${payload.source}"}"""
+        """{"apiShapeId":"${payload.apiShapeId}","language":"${payload.language}","fallbackRole":"${payload.fallbackRole}","cacheKey":"${payload.cacheKey}","cacheDecision":"${payload.cacheDecision}","executedNetwork":${payload.executedNetwork},"source":"${payload.source}"}"""
 
     private fun gitWorktreeJson(state: GitWorktreeState): String =
         """{"state":"${state.state}","dirtyFileCount":${state.dirtyFileCount},"untrackedFileCount":${state.untrackedFileCount}}"""

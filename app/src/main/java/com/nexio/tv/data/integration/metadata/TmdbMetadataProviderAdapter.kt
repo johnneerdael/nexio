@@ -2,13 +2,16 @@ package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.metadata.router.MetadataCandidate
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFieldTrace
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
+import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbSeasonResponse
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import javax.inject.Inject
@@ -26,6 +29,7 @@ class TmdbMetadataProviderAdapter @Inject constructor(
         val language = route.language.orEmpty()
         val policy = LocalizationPolicy.tmdb(language)
         val seasonEpisodeMetadata = mutableMapOf<Pair<Int, Int>, TvEpisodeMetadata>()
+        val seasonEpisodeLocalization = mutableMapOf<Pair<Int, Int>, Map<ResolvedField, MetadataLocalizationFieldTrace>>()
         val candidate = when (step.apiShapeId) {
             TmdbApiShapes.MOVIE_CORE -> {
                 val requested = integrationProvider.fetchMovieCore(
@@ -90,7 +94,9 @@ class TmdbMetadataProviderAdapter @Inject constructor(
                         localizationPolicyVersion = policy.policyVersion
                     )
                 }
-                seasonEpisodeMetadata += requested.toEpisodeMetadata(english)
+                val localizedEpisodes = requested.toEpisodeMetadata(policy = policy, english = english)
+                seasonEpisodeMetadata += localizedEpisodes.metadata
+                seasonEpisodeLocalization += localizedEpisodes.localization
                 emptyCandidate(this.provider)
             }
             TmdbApiShapes.MOVIE_VIDEOS -> {
@@ -122,7 +128,8 @@ class TmdbMetadataProviderAdapter @Inject constructor(
         return ProviderStepResult(
             step = step,
             candidate = candidate.withCanonicalId(route),
-            episodeMetadata = seasonEpisodeMetadata
+            episodeMetadata = seasonEpisodeMetadata,
+            episodeLocalization = seasonEpisodeLocalization
         )
     }
 
@@ -130,30 +137,73 @@ class TmdbMetadataProviderAdapter @Inject constructor(
         if (fields.isNotEmpty() || route.mediaKind in setOf(MetadataMediaKind.MOVIE, MetadataMediaKind.SERIES)) this else this
 
     private fun TmdbSeasonResponse?.toEpisodeMetadata(
+        policy: LocalizationPolicy,
         english: TmdbSeasonResponse? = null
-    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
-        val season = this?.seasonNumber ?: english?.seasonNumber ?: return emptyMap()
-        val primaryEpisodes = this?.episodes ?: english?.episodes ?: return emptyMap()
+    ): TmdbEpisodeLocalizationResult {
+        val season = this?.seasonNumber ?: english?.seasonNumber ?: return TmdbEpisodeLocalizationResult()
+        val primaryEpisodes = this?.episodes ?: english?.episodes ?: return TmdbEpisodeLocalizationResult()
         val englishByNumber = english?.episodes.orEmpty().mapNotNull { episode ->
             episode.episodeNumber?.let { it to episode }
         }.toMap()
-        return primaryEpisodes
+        val localization = mutableMapOf<Pair<Int, Int>, Map<ResolvedField, MetadataLocalizationFieldTrace>>()
+        val metadata = primaryEpisodes
             .mapNotNull { episode ->
                 val number = episode.episodeNumber ?: return@mapNotNull null
                 val englishEpisode = englishByNumber[number]
+                val title = LocalizationResolver.selectField(
+                    field = ResolvedField.TITLE,
+                    policy = policy,
+                    candidates = listOf(
+                        episode.localizedCandidate(ResolvedField.TITLE, episode.name, policy.requestedLanguage, FallbackRole.LOCALIZED),
+                        episode.localizedCandidate(ResolvedField.TITLE, englishEpisode?.name, policy.fallbackLanguage, FallbackRole.LANGUAGE_FALLBACK)
+                    )
+                )
+                val overview = LocalizationResolver.selectField(
+                    field = ResolvedField.OVERVIEW,
+                    policy = policy,
+                    candidates = listOf(
+                        episode.localizedCandidate(ResolvedField.OVERVIEW, episode.overview, policy.requestedLanguage, FallbackRole.LOCALIZED),
+                        episode.localizedCandidate(ResolvedField.OVERVIEW, englishEpisode?.overview, policy.fallbackLanguage, FallbackRole.LANGUAGE_FALLBACK)
+                    )
+                )
+                localization[season to number] = buildMap {
+                    title?.let { put(ResolvedField.TITLE, it.toMetadataTrace()) }
+                    overview?.let { put(ResolvedField.OVERVIEW, it.toMetadataTrace()) }
+                }
                 (season to number) to TvEpisodeMetadata(
                     providerEpisodeId = episode.id?.let { "tmdb:$it" },
                     seasonNumber = season,
                     episodeNumber = number,
-                    title = episode.name.cleanLocalizedValue() ?: englishEpisode?.name.cleanLocalizedValue(),
-                    overview = episode.overview.cleanLocalizedValue() ?: englishEpisode?.overview.cleanLocalizedValue(),
+                    title = title?.value,
+                    overview = overview?.value,
                     thumbnail = episode.stillPath,
                     airDate = episode.airDate,
                     runtimeMinutes = episode.runtime
                 )
             }
             .toMap()
+        return TmdbEpisodeLocalizationResult(metadata = metadata, localization = localization)
     }
+
+    private fun TmdbEpisode.localizedCandidate(
+        field: ResolvedField,
+        value: String?,
+        language: NormalizedLanguage,
+        fallbackRole: FallbackRole
+    ): LocalizedFieldCandidate =
+        LocalizedFieldCandidate(
+            field = field,
+            value = value,
+            language = language,
+            provider = this@TmdbMetadataProviderAdapter.provider,
+            sourceShape = TmdbApiShapes.SEASON_EPISODES,
+            fallbackRole = fallbackRole
+        )
+
+    private data class TmdbEpisodeLocalizationResult(
+        val metadata: Map<Pair<Int, Int>, TvEpisodeMetadata> = emptyMap(),
+        val localization: Map<Pair<Int, Int>, Map<ResolvedField, MetadataLocalizationFieldTrace>> = emptyMap()
+    )
 
     private companion object {
         val tmdbShapes = setOf(

@@ -89,6 +89,19 @@ internal fun SelectedLocalizedField.toMetadataTrace(): MetadataLocalizationField
         rejectedCandidates = rejectedCandidates.map { it.toMetadataRejection() }
     )
 
+internal fun LocalizedEpisodeFieldSource.toMetadataTrace(
+    field: ResolvedField,
+    provider: MetadataPrimaryProvider
+): MetadataLocalizationFieldTrace =
+    MetadataLocalizationFieldTrace(
+        field = field,
+        selectedProvider = provider,
+        selectedLanguage = selectedLanguage.providerCode,
+        fallbackRole = fallbackRole.toMetadataRole(),
+        sourceApiShapeId = sourceShape,
+        rejectedCandidates = rejectedCandidates.map { it.toMetadataRejection() }
+    )
+
 private fun LocalizedFieldRejection.toMetadataRejection(): MetadataLocalizationRejectedCandidate =
     MetadataLocalizationRejectedCandidate(
         provider = provider,
@@ -97,7 +110,7 @@ private fun LocalizedFieldRejection.toMetadataRejection(): MetadataLocalizationR
         reason = reason
     )
 
-private fun FallbackRole.toMetadataRole(): MetadataLocalizationFallbackRole =
+internal fun FallbackRole.toMetadataRole(): MetadataLocalizationFallbackRole =
     when (this) {
         FallbackRole.LOCALIZED -> MetadataLocalizationFallbackRole.LOCALIZED
         FallbackRole.LANGUAGE_FALLBACK -> MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK

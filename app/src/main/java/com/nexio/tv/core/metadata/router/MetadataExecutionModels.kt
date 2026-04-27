@@ -7,6 +7,7 @@ data class ProviderStepResult(
     val step: ProviderPlanStep,
     val candidate: MetadataCandidate? = null,
     val episodeMetadata: Map<Pair<Int, Int>, TvEpisodeMetadata> = emptyMap(),
+    val episodeLocalization: Map<Pair<Int, Int>, Map<ResolvedField, MetadataLocalizationFieldTrace>> = emptyMap(),
     val localizationPayloads: List<MetadataLocalizationPayloadTrace> = emptyList(),
     val trace: List<MetadataRouteTrace> = emptyList()
 )

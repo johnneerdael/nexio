@@ -390,8 +390,12 @@ class MetadataAuditRunner private constructor(
         provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider?
     ): LocalizationEvent? {
         if (isEmpty() || provider == null) return null
-        val requested = first()
-        val fallback = firstOrNull { !it.executedNetwork && it.language != requested.language } ?: requested
+        val requested = firstOrNull {
+            it.fallbackRole == com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole.LOCALIZED
+        } ?: first()
+        val fallback = firstOrNull {
+            it.fallbackRole == com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK
+        } ?: requested
         return LocalizationEvent(
             itemId = itemId,
             provider = provider,
@@ -403,6 +407,7 @@ class MetadataAuditRunner private constructor(
                 LocalizationPayloadReport(
                     apiShapeId = payload.apiShapeId,
                     language = payload.language,
+                    fallbackRole = payload.fallbackRole.name,
                     cacheKey = payload.cacheKey,
                     cacheDecision = payload.cacheDecision?.let(CacheDecision::valueOf),
                     executedNetwork = payload.executedNetwork,
@@ -703,6 +708,7 @@ private class AuditMetadataProviderAdapter(
                 provider = route.provider,
                 apiShapeId = apiShapeId,
                 language = requested,
+                fallbackRole = com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole.LOCALIZED,
                 cacheKey = cacheKey,
                 cacheDecision = decision.name,
                 executedNetwork = executedNetwork,
@@ -715,6 +721,7 @@ private class AuditMetadataProviderAdapter(
                     provider = route.provider,
                     apiShapeId = apiShapeId,
                     language = fallback,
+                    fallbackRole = com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK,
                     cacheKey = "$cacheKey:fallback:$fallback",
                     cacheDecision = CacheDecision.HIT.name,
                     executedNetwork = false,

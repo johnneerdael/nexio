@@ -189,6 +189,7 @@ data class LocalizationEvent(
 data class LocalizationPayloadReport(
     val apiShapeId: String,
     val language: String,
+    val fallbackRole: String,
     val cacheKey: String,
     val cacheDecision: CacheDecision?,
     val executedNetwork: Boolean,
