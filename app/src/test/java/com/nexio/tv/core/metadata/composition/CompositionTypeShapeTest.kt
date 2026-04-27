@@ -15,4 +15,20 @@ class CompositionTypeShapeTest {
         val violations = declared.intersect(forbidden)
         assertTrue("GlobalMetadataDocument may not declare $violations", violations.isEmpty())
     }
+
+    @Test
+    fun `ProfileMetadataOverlay declares all expected profile-owned fields`() {
+        val expected = setOf(
+            "profileId", "watched", "progress", "listMembership",
+            "scrobbleState", "userRating", "continueWatching"
+        )
+        val declared = ProfileMetadataOverlay::class.memberProperties.map { it.name }.toSet()
+        assertTrue("ProfileMetadataOverlay missing fields: ${expected - declared}", declared.containsAll(expected))
+    }
+
+    @Test
+    fun `ProfileResolvedDisplayDocument bundles profileId plus global plus overlay`() {
+        val declared = ProfileResolvedDisplayDocument::class.memberProperties.map { it.name }.toSet()
+        assertTrue(declared.containsAll(setOf("profileId", "global", "overlay")))
+    }
 }
