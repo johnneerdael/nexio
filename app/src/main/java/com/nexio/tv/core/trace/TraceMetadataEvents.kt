@@ -3,14 +3,11 @@ package com.nexio.tv.core.trace
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Helper for metadata-layer instrumentation. Tasks 20-27 will extend this with
- * emitProviderPlan, emitLocalizationPlan, emitResolverSchedule, emitFieldSelected,
- * emitIdentityResolution.
+ * Helper for metadata-layer instrumentation.
  *
- * `emitFirstPaint` documents the case where the UI renders cached addon-preview
- * metadata without invoking MetadataRouter. This emission point is not yet wired
- * because the codebase has no preview-only render path; the helper is here so
- * future preview UI work can call it.
+ * `emitFirstPaint` is wired in production via [FirstPaintTracer], invoked from
+ * the canonical addon-preview boundary `MetaPreview.toHomeDisplayMetadata()` so
+ * the validator rule `PreviewMustNotRouteOrNetwork` has a real event to evaluate.
  *
  * `emitRouteDecision` is invoked from [com.nexio.tv.core.metadata.router.MetadataRouter]
  * at its single private route() builder, so every MetadataRoute construction emits
@@ -29,10 +26,12 @@ class TraceMetadataEvents(
     fun emitFirstPaint(
         contentId: String,
         itemType: String,
+        surface: SourceSurface,
         source: String,
         routerExecuted: Boolean,
         networkExecuted: Boolean,
-        fieldsUsed: List<String>
+        fieldsUsed: List<String>,
+        profileHash: String?
     ) {
         val sid = sessionId() ?: return
         sink.emit(
@@ -46,10 +45,12 @@ class TraceMetadataEvents(
                 payload = mapOf(
                     "contentId" to contentId,
                     "itemType" to itemType,
+                    "surface" to surface.name,
                     "source" to source,
                     "routerExecuted" to routerExecuted,
                     "networkExecuted" to networkExecuted,
-                    "fieldsUsed" to fieldsUsed
+                    "fieldsUsed" to fieldsUsed,
+                    "profileHash" to profileHash
                 )
             )
         )
@@ -110,40 +111,6 @@ class TraceMetadataEvents(
                     "mediaKind" to mediaKind,
                     "depth" to depth,
                     "steps" to steps
-                )
-            )
-        )
-    }
-
-    // TODO(trace): wire from TVDB/Kitsu provider adapters where localized payload fetches are orchestrated.
-    fun emitLocalizationPlan(
-        provider: String,
-        contentId: String,
-        requestedLanguage: String,
-        fallbackLanguage: String,
-        policyVersion: Int,
-        providerFallbackAllowedForMissingLocalizedFields: Boolean,
-        payloads: List<Map<String, Any?>>,
-        perEpisodeTranslationFallbacks: Map<String, Any?>
-    ) {
-        val sid = sessionId() ?: return
-        sink.emit(
-            TraceEventEnvelope(
-                traceSessionId = sid,
-                sequence = seq.incrementAndGet(),
-                wallClockMs = System.currentTimeMillis(),
-                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
-                threadName = Thread.currentThread().name,
-                eventType = "metadata.localization_plan",
-                payload = mapOf(
-                    "provider" to provider,
-                    "contentId" to contentId,
-                    "requestedLanguage" to requestedLanguage,
-                    "fallbackLanguage" to fallbackLanguage,
-                    "policyVersion" to policyVersion,
-                    "providerFallbackAllowedForMissingLocalizedFields" to providerFallbackAllowedForMissingLocalizedFields,
-                    "payloads" to payloads,
-                    "perEpisodeTranslationFallbacks" to perEpisodeTranslationFallbacks
                 )
             )
         )

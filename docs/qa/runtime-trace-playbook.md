@@ -25,7 +25,7 @@ For each flow below, run the trace validator on the captured JSONL and confirm t
 
 **Expected validator verdict:** `PASS`. The rule `PreviewMustNotRouteOrNetwork` would fire if the preview path invoked the router.
 
-> **Status:** Currently the addon-preview render path does not emit `metadata.first_paint` (no production code path bypasses the router yet). The `emitFirstPaint` helper exists for future wiring. Skip this flow until the addon-preview path is built; the validator rule is in place.
+> **Status:** Active — emission wired at `MetaPreview.toHomeDisplayMetadata()` boundary.
 
 ---
 
@@ -94,21 +94,9 @@ For each flow below, run the trace validator on the captured JSONL and confirm t
 
 ---
 
-## Flow F — Localized TVDB with English fallback
+## Flow F — Localized TVDB tracing (deferred)
 
-**Steps:**
-1. Set the active profile's language to **Dutch (nl)**.
-2. Open a TV series detail screen (preferably one with partial Dutch translations on TVDB, e.g. a recent show).
-3. Open the season list.
-
-**Expected events:**
-- `metadata.localization_plan` with `provider = "TVDB"`, `requestedLanguage = "nl"`, `fallbackLanguage = "en"`.
-- `payloads[]` shows both `lang:nl` and `lang:en` cache decisions.
-- Episode titles missing Dutch translation are filled from the English payload — **no TMDB fallback** for missing localized TVDB fields.
-
-**Expected validator verdict:** `PASS`.
-
-> **Status:** Currently the localization plan emission is unwired pending TVDB/Kitsu provider-adapter orchestration site identification. The `emitLocalizationPlan` helper exists. Skip this flow until the orchestration site is wired.
+Localized TVDB tracing is deferred to a separate change that owns the TVDB/Kitsu provider-adapter localization-policy work. The validator has no rule depending on `metadata.localization_plan`. Skip this flow until that change lands.
 
 ---
 
@@ -133,7 +121,6 @@ For ad-hoc validation, the validator + bundle exporter classes are at:
 
 | Gap | Location |
 |---|---|
-| `metadata.first_paint` emission point | No addon-preview UI path bypasses the router yet. |
-| `metadata.localization_plan` emission point | TVDB/Kitsu provider adapters need orchestration-site wiring. |
+| Localization plan emission | Deferred to a separate change for TVDB/Kitsu adapter orchestration. |
 | Clear / Export buttons in the detail screen | Marked `TODO` in `RuntimeTraceSettingsScreen.kt`. Manual `adb pull` works in the meantime. |
 | Navigation route from Troubleshooting row to the detail screen | Marked `TODO` in `PlaybackSettingsScreen.kt`. The row is visible but tapping it is a no-op pending nav graph wiring. |
