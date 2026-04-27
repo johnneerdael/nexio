@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.playback.PlaybackSessionRegistry
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
@@ -58,32 +59,13 @@ class PlayerViewModel @Inject constructor(
     private val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
     private val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
     private val profileManager: ProfileManager,
+    private val playbackSessionRegistry: PlaybackSessionRegistry,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
-    private val controller = PlayerRuntimeController(
-        context = context,
-        watchProgressRepository = watchProgressRepository,
-        metaRepository = metaRepository,
-        streamRepository = streamRepository,
-        addonRepository = addonRepository,
-        subtitleRepository = subtitleRepository,
-        trackingScrobbleService = trackingScrobbleService,
-        skipIntroRepository = skipIntroRepository,
-        playerSettingsDataStore = playerSettingsDataStore,
-        debugSettingsDataStore = debugSettingsDataStore,
-        subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
-        theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
-        streamLinkCacheDataStore = streamLinkCacheDataStore,
-        layoutPreferenceDataStore = layoutPreferenceDataStore,
-        subtitleTranslationService = subtitleTranslationService,
-        subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider,
-        metadataRouterFacade = metadataRouterFacade,
-        playbackIdleGateState = playbackIdleGateState,
-        playbackActivityTracker = playbackActivityTracker,
-        playbackMediaSourceTransport = playbackMediaSourceTransport,
-        openSubtitlesHashIntegrationProvider = openSubtitlesHashIntegrationProvider,
-        playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
-        playbackOwnerContext = run {
+    private var playbackRegistrationToken: String? = null
+
+    private val controller = run {
+        val ownerContext = run {
             val session = profileManager.activeProfileSession.value
             com.nexio.tv.core.playback.PlaybackOwnerContext(
                 ownerProfileId = session.profileId,
@@ -92,10 +74,36 @@ class PlayerViewModel @Inject constructor(
                 simklAccount = null,
                 startedAtEpochMs = System.currentTimeMillis().coerceAtLeast(1L)
             )
-        },
-        savedStateHandle = savedStateHandle,
-        scope = viewModelScope
-    )
+        }
+        playbackRegistrationToken = playbackSessionRegistry.register(ownerContext)
+        PlayerRuntimeController(
+            context = context,
+            watchProgressRepository = watchProgressRepository,
+            metaRepository = metaRepository,
+            streamRepository = streamRepository,
+            addonRepository = addonRepository,
+            subtitleRepository = subtitleRepository,
+            trackingScrobbleService = trackingScrobbleService,
+            skipIntroRepository = skipIntroRepository,
+            playerSettingsDataStore = playerSettingsDataStore,
+            debugSettingsDataStore = debugSettingsDataStore,
+            subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
+            theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
+            streamLinkCacheDataStore = streamLinkCacheDataStore,
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            subtitleTranslationService = subtitleTranslationService,
+            subtitleSourceDownloadIntegrationProvider = subtitleSourceDownloadIntegrationProvider,
+            metadataRouterFacade = metadataRouterFacade,
+            playbackIdleGateState = playbackIdleGateState,
+            playbackActivityTracker = playbackActivityTracker,
+            playbackMediaSourceTransport = playbackMediaSourceTransport,
+            openSubtitlesHashIntegrationProvider = openSubtitlesHashIntegrationProvider,
+            playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
+            playbackOwnerContext = ownerContext,
+            savedStateHandle = savedStateHandle,
+            scope = viewModelScope
+        )
+    }
 
     val uiState: StateFlow<PlayerUiState>
         get() = controller.uiState
@@ -116,6 +124,7 @@ class PlayerViewModel @Inject constructor(
 
     fun stopAndRelease() {
         controller.stopAndRelease()
+        unregisterPlaybackSession()
     }
 
     fun scheduleHideControls() {
@@ -156,6 +165,12 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         controller.onCleared()
+        unregisterPlaybackSession()
         super.onCleared()
+    }
+
+    private fun unregisterPlaybackSession() {
+        playbackRegistrationToken?.let { playbackSessionRegistry.unregister(it) }
+        playbackRegistrationToken = null
     }
 }
