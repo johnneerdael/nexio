@@ -32,6 +32,15 @@ interface TmdbApi {
         @Query("page") page: Int = 1
     ): Response<TmdbPagedMediaResponse>
 
+    @GET("search/multi")
+    suspend fun searchMulti(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("language") language: String? = null,
+        @Query("include_adult") includeAdult: Boolean = false,
+        @Query("page") page: Int = 1
+    ): Response<TmdbMultiSearchResponse>
+
     @GET("trending/movie/{time_window}")
     suspend fun getTrendingMovies(
         @Path("time_window") timeWindow: String = "day",
@@ -337,6 +346,33 @@ data class TmdbPagedMediaResponse(
     @Json(name = "total_pages") val totalPages: Int? = null,
     @Json(name = "total_results") val totalResults: Int? = null,
     @Json(name = "results") val results: List<TmdbMediaResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMultiSearchResponse(
+    @Json(name = "page") val page: Int? = null,
+    @Json(name = "total_pages") val totalPages: Int? = null,
+    @Json(name = "total_results") val totalResults: Int? = null,
+    @Json(name = "results") val results: List<TmdbMultiSearchResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMultiSearchResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "media_type") val mediaType: String? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "original_title") val originalTitle: String? = null,
+    @Json(name = "original_name") val originalName: String? = null,
+    @Json(name = "original_language") val originalLanguage: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "profile_path") val profilePath: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "first_air_date") val firstAirDate: String? = null,
+    @Json(name = "vote_average") val voteAverage: Double? = null,
+    @Json(name = "vote_count") val voteCount: Int? = null,
+    @Json(name = "popularity") val popularity: Double? = null
 )
 
 @JsonClass(generateAdapter = true)

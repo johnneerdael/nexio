@@ -941,6 +941,9 @@ fun NexioNavHost(
                 onNavigateToSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
                 },
+                onNavigateToCastDetail = { personId, personName ->
+                    navController.navigate(Screen.CastDetail.createRoute(personId, personName))
+                },
                 onOpenDiscover = { navController.navigate(Screen.Discover.route) }
             )
         }

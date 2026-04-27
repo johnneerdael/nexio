@@ -198,8 +198,7 @@ class SearchViewModelTypeFilterTest {
                         "",
                         source = com.nexio.tv.core.metadata.MetadataCredentialSource.MISSING
                     )
-                    override suspend fun searchMovies(query: String, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMediaResult>()
-                    override suspend fun searchTv(query: String, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMediaResult>()
+                    override suspend fun searchMulti(query: String, page: Int, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMultiSearchResult>()
                     override suspend fun fetchCatalog(catalogId: String, preferences: TmdbCatalogPreferences) = emptyList<com.nexio.tv.data.remote.api.TmdbMediaResult>()
                     override suspend fun imdbId(tmdbId: Int, contentType: com.nexio.tv.domain.model.ContentType) = null
                 }

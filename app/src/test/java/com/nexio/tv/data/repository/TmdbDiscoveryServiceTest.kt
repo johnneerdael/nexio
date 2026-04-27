@@ -5,6 +5,7 @@ import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -19,27 +20,37 @@ import org.junit.Test
 
 class TmdbDiscoveryServiceTest {
     @Test
-    fun `search returns movies and series as one TMDB primary row with IMDb ids`() = runTest {
+    fun `search returns one TMDB row sorted by popularity with movies tv and persons`() = runTest {
         val service = FakeTmdbDiscoveryClient(
-            movieSearch = listOf(
-                mediaResult(
-                    id = 603,
-                    title = "The Matrix",
-                    backdropPath = "/matrix-backdrop.jpg",
-                    posterPath = "/matrix-poster.jpg",
-                    releaseDate = "1999-03-31",
-                    voteAverage = 8.2,
-                    originalLanguage = "en"
-                )
-            ),
-            tvSearch = listOf(
-                mediaResult(
-                    id = 1399,
-                    name = "Game of Thrones",
-                    posterPath = "/got-poster.jpg",
-                    firstAirDate = "2011-04-17",
-                    voteAverage = 8.4,
-                    originalLanguage = "en"
+            multiSearch = mapOf(
+                1 to listOf(
+                    multiResult(
+                        id = 603,
+                        mediaType = "movie",
+                        title = "The Matrix",
+                        posterPath = "/matrix-poster.jpg",
+                        releaseDate = "1999-03-31",
+                        voteAverage = 8.2,
+                        originalLanguage = "en",
+                        popularity = 50.0
+                    ),
+                    multiResult(
+                        id = 1399,
+                        mediaType = "tv",
+                        name = "Game of Thrones",
+                        posterPath = "/got-poster.jpg",
+                        firstAirDate = "2011-04-17",
+                        voteAverage = 8.4,
+                        originalLanguage = "en",
+                        popularity = 80.0
+                    ),
+                    multiResult(
+                        id = 287,
+                        mediaType = "person",
+                        name = "Brad Pitt",
+                        profilePath = "/brad.jpg",
+                        popularity = 30.0
+                    )
                 )
             ),
             imdbIds = mapOf(
@@ -58,18 +69,92 @@ class TmdbDiscoveryServiceTest {
         assertEquals("catalog", row.rawType)
         assertFalse(row.hasMore)
         assertFalse(row.supportsSkip)
-        assertEquals("tt0133093", row.items[0].id)
-        assertEquals(ContentType.MOVIE, row.items[0].type)
-        assertEquals("https://image.tmdb.org/t/p/w1280/matrix-backdrop.jpg", row.items[0].poster)
-        assertEquals("https://image.tmdb.org/t/p/w1280/matrix-backdrop.jpg", row.items[0].background)
-        assertEquals(PosterShape.LANDSCAPE, row.items[0].posterShape)
-        assertEquals(8.2f, row.items[0].imdbRating)
+
+        assertEquals(3, row.items.size)
+        assertEquals("tt0944947", row.items[0].id)
+        assertEquals(ContentType.SERIES, row.items[0].type)
+        assertEquals("Game of Thrones (2011)", row.items[0].name)
+        assertEquals("https://image.tmdb.org/t/p/w780/got-poster.jpg", row.items[0].poster)
+        assertEquals(null, row.items[0].background)
+        assertEquals(PosterShape.POSTER, row.items[0].posterShape)
+        assertEquals(8.4f, row.items[0].imdbRating)
         assertEquals(TitleRatingSource.TMDB, row.items[0].ratingSource)
-        assertEquals("en", row.items[0].language)
-        assertEquals("tt0944947", row.items[1].id)
-        assertEquals(ContentType.SERIES, row.items[1].type)
-        assertEquals("https://image.tmdb.org/t/p/w780/got-poster.jpg", row.items[1].poster)
+
+        assertEquals("tt0133093", row.items[1].id)
+        assertEquals(ContentType.MOVIE, row.items[1].type)
+        assertEquals("The Matrix (1999)", row.items[1].name)
+        assertEquals("https://image.tmdb.org/t/p/w780/matrix-poster.jpg", row.items[1].poster)
         assertEquals(PosterShape.POSTER, row.items[1].posterShape)
+        assertEquals("en", row.items[1].language)
+
+        assertEquals("tmdb_person:287", row.items[2].id)
+        assertEquals(ContentType.PERSON, row.items[2].type)
+        assertEquals("Brad Pitt", row.items[2].name)
+        assertEquals("https://image.tmdb.org/t/p/w780/brad.jpg", row.items[2].poster)
+        assertEquals(null, row.items[2].releaseInfo)
+        assertEquals(null, row.items[2].imdbRating)
+    }
+
+    @Test
+    fun `search merges two pages and caps at forty popularity-sorted items`() = runTest {
+        val page1 = (0 until 25).map { i ->
+            multiResult(
+                id = 1000 + i,
+                mediaType = "movie",
+                title = "Page1Movie$i",
+                posterPath = "/p1-$i.jpg",
+                releaseDate = "2020-01-01",
+                popularity = 100.0 - i
+            )
+        }
+        val page2 = (0 until 25).map { i ->
+            multiResult(
+                id = 2000 + i,
+                mediaType = "movie",
+                title = "Page2Movie$i",
+                posterPath = "/p2-$i.jpg",
+                releaseDate = "2021-01-01",
+                popularity = 50.0 - i
+            )
+        }
+        val service = FakeTmdbDiscoveryClient(
+            multiSearch = mapOf(1 to page1, 2 to page2)
+        ).createService()
+
+        val rows = service.search("foo", TmdbCatalogPreferences())
+
+        val items = rows.single().items
+        assertEquals(40, items.size)
+        // popularity-desc top 40 across both pages: all 25 from page1 (popularity 100..76) +
+        // top 15 from page2 (popularity 50..36). So first = Page1Movie0, last = Page2Movie14.
+        assertEquals("Page1Movie0 (2020)", items.first().name)
+        assertEquals("Page2Movie14 (2021)", items.last().name)
+    }
+
+    @Test
+    fun `search omits poster when poster path is missing and never falls back to backdrop`() = runTest {
+        // The multi-search DTO deliberately exposes no backdrop_path field, so the mapping
+        // can't reach for one even when the API returns one.
+        val service = FakeTmdbDiscoveryClient(
+            multiSearch = mapOf(
+                1 to listOf(
+                    multiResult(
+                        id = 1,
+                        mediaType = "movie",
+                        title = "No Poster",
+                        posterPath = null,
+                        popularity = 10.0
+                    )
+                )
+            )
+        ).createService()
+
+        val rows = service.search("foo", TmdbCatalogPreferences())
+
+        val item = rows.single().items.single()
+        assertEquals(null, item.poster)
+        assertEquals(null, item.background)
+        assertEquals(PosterShape.POSTER, item.posterShape)
     }
 
     @Test
@@ -112,8 +197,12 @@ class TmdbDiscoveryServiceTest {
         )
         val service = FakeTmdbDiscoveryClient(
             credential = MetadataProviderCredential("", source = MetadataCredentialSource.MISSING),
-            movieSearch = listOf(mediaResult(id = 603, title = "The Matrix")),
-            tvSearch = listOf(mediaResult(id = 1399, name = "Game of Thrones")),
+            multiSearch = mapOf(
+                1 to listOf(
+                    multiResult(id = 603, mediaType = "movie", title = "The Matrix"),
+                    multiResult(id = 1399, mediaType = "tv", name = "Game of Thrones")
+                )
+            ),
             catalogResults = mapOf(TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Movie")))
         ).createService()
 
@@ -160,7 +249,9 @@ class TmdbDiscoveryServiceTest {
     @Test
     fun `mapped preview ID falls back to tmdb ID when IMDb ID is missing`() = runTest {
         val service = FakeTmdbDiscoveryClient(
-            movieSearch = listOf(mediaResult(id = 999, title = "Unknown Movie"))
+            multiSearch = mapOf(
+                1 to listOf(multiResult(id = 999, mediaType = "movie", title = "Unknown Movie", popularity = 1.0))
+            )
         ).createService()
 
         val rows = service.search("unknown", TmdbCatalogPreferences())
@@ -311,8 +402,7 @@ class TmdbDiscoveryServiceTest {
             "key",
             source = MetadataCredentialSource.BUILT_IN
         ),
-        private val movieSearch: List<TmdbMediaResult> = emptyList(),
-        private val tvSearch: List<TmdbMediaResult> = emptyList(),
+        private val multiSearch: Map<Int, List<TmdbMultiSearchResult>> = emptyMap(),
         private val catalogResults: Map<String, List<TmdbMediaResult>> = emptyMap(),
         private val imdbIds: Map<String, String> = emptyMap()
     ) : TmdbDiscoveryClient {
@@ -320,15 +410,11 @@ class TmdbDiscoveryServiceTest {
 
         override suspend fun credential(): MetadataProviderCredential = credential
 
-        override suspend fun searchMovies(
+        override suspend fun searchMulti(
             query: String,
+            page: Int,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = movieSearch
-
-        override suspend fun searchTv(
-            query: String,
-            preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = tvSearch
+        ): List<TmdbMultiSearchResult> = multiSearch[page].orEmpty()
 
         override suspend fun fetchCatalog(
             catalogId: String,
@@ -344,6 +430,34 @@ class TmdbDiscoveryServiceTest {
         }
 
         fun createService(): TmdbDiscoveryService = TmdbDiscoveryService(client = this)
+    }
+
+    private fun multiResult(
+        id: Int,
+        mediaType: String,
+        title: String? = null,
+        name: String? = null,
+        originalLanguage: String? = null,
+        posterPath: String? = null,
+        profilePath: String? = null,
+        releaseDate: String? = null,
+        firstAirDate: String? = null,
+        voteAverage: Double? = null,
+        popularity: Double? = null
+    ): TmdbMultiSearchResult {
+        return TmdbMultiSearchResult(
+            id = id,
+            mediaType = mediaType,
+            title = title,
+            name = name,
+            originalLanguage = originalLanguage,
+            posterPath = posterPath,
+            profilePath = profilePath,
+            releaseDate = releaseDate,
+            firstAirDate = firstAirDate,
+            voteAverage = voteAverage,
+            popularity = popularity
+        )
     }
 
     private fun catalogRow(catalogId: String): com.nexio.tv.domain.model.CatalogRow {

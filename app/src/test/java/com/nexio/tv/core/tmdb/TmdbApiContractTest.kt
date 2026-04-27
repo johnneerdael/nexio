@@ -22,6 +22,7 @@ class TmdbApiContractTest {
     fun `tmdb api exposes search and stock catalog endpoints`() {
         assertEquals("search/movie", getPath("searchMovies"))
         assertEquals("search/tv", getPath("searchTv"))
+        assertEquals("search/multi", getPath("searchMulti"))
         assertEquals("trending/movie/{time_window}", getPath("getTrendingMovies"))
         assertEquals("trending/tv/{time_window}", getPath("getTrendingTv"))
         assertEquals("movie/popular", getPath("getPopularMovies"))
@@ -47,6 +48,10 @@ class TmdbApiContractTest {
         assertEquals(
             setOf("api_key", "query", "language", "include_adult", "page"),
             getQueryNames("searchTv")
+        )
+        assertEquals(
+            setOf("api_key", "query", "language", "include_adult", "page"),
+            getQueryNames("searchMulti")
         )
         assertEquals(
             setOf(

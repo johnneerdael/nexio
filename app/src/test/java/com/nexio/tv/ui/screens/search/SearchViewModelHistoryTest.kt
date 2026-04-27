@@ -158,15 +158,11 @@ class SearchViewModelHistoryTest {
             return MetadataProviderCredential("key", source = MetadataCredentialSource.BUILT_IN)
         }
 
-        override suspend fun searchMovies(
+        override suspend fun searchMulti(
             query: String,
+            page: Int,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = emptyList()
-
-        override suspend fun searchTv(
-            query: String,
-            preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = emptyList()
+        ): List<com.nexio.tv.data.remote.api.TmdbMultiSearchResult> = emptyList()
 
         override suspend fun fetchCatalog(
             catalogId: String,
