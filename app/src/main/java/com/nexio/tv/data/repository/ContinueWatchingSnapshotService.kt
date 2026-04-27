@@ -322,6 +322,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val normalized = upgradeStaleRouteSnapshots(sanitizeSnapshot(persisted))
             if (normalized.metadataSnapshotsByItemKey != persisted.metadataSnapshotsByItemKey) {
                 snapshotStore.write(normalized, profileId = profileId)
+                emitWrite(
+                    profileId = profileId,
+                    recordCount = normalized.resumeItems.size + normalized.nextUpItems.size
+                )
             }
             val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
             rawSnapshotState.value = owned
@@ -337,6 +341,11 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return combine(snapshotState, persistedSnapshotReady) { snapshot, ready ->
             snapshot.takeIf { ready }
         }.filterNotNull().onStart {
+            val current = snapshotState.value
+            emitRead(
+                profileId = current.profileId.takeIf { it > 0 } ?: activeProfileId(),
+                recordCount = current.snapshot.resumeItems.size + current.snapshot.nextUpItems.size
+            )
             scope.launch {
                 runCatching { ensureFresh(force = false) }
                     .onFailure { error ->
@@ -927,6 +936,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         syncContinueWatchingRail(hydrated, profileId)
         snapshotStore.write(hydrated, profileId = profileId)
+        emitWrite(
+            profileId = profileId,
+            recordCount = hydrated.resumeItems.size + hydrated.nextUpItems.size
+        )
         val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = hydrated)
         rawSnapshotState.value = owned
         activeRailTracker.markActive(RailKeyFactory.continueWatching(profileId))
@@ -1307,6 +1320,70 @@ class ContinueWatchingSnapshotService @Inject constructor(
             firstAiredMs = entry.firstAiredMs,
             availabilityInstantMs = entry.tvdbAvailabilityInstantMs
         )
+    }
+
+    companion object {
+        @Volatile
+        private var traceSink: com.nexio.tv.core.trace.RuntimeTraceSink =
+            com.nexio.tv.core.trace.NoopRuntimeTraceSink
+
+        @Volatile
+        private var traceSessionId: () -> String? = { null }
+
+        private val traceSeq = java.util.concurrent.atomic.AtomicLong(0L)
+
+        @JvmStatic
+        fun installTraceSink(
+            sink: com.nexio.tv.core.trace.RuntimeTraceSink,
+            sessionId: () -> String?
+        ) {
+            this.traceSink = sink
+            this.traceSessionId = sessionId
+        }
+
+        internal fun emitWrite(profileId: Int, recordCount: Int) {
+            if (traceSink === com.nexio.tv.core.trace.NoopRuntimeTraceSink) return
+            val sid = traceSessionId() ?: return
+            val profileHash = com.nexio.tv.core.trace.TraceHash.of(sid, profileId.toString())
+            traceSink.emit(
+                com.nexio.tv.core.trace.TraceEventEnvelope(
+                    traceSessionId = sid,
+                    sequence = traceSeq.incrementAndGet(),
+                    wallClockMs = System.currentTimeMillis(),
+                    elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                    threadName = Thread.currentThread().name,
+                    eventType = "continue_watching.snapshot_write",
+                    payload = mapOf(
+                        "profileHash" to profileHash,
+                        "profileId" to profileId,
+                        "recordCount" to recordCount,
+                        "source" to "LOCAL_PERSIST"
+                    )
+                )
+            )
+        }
+
+        internal fun emitRead(profileId: Int, recordCount: Int) {
+            if (traceSink === com.nexio.tv.core.trace.NoopRuntimeTraceSink) return
+            val sid = traceSessionId() ?: return
+            val profileHash = com.nexio.tv.core.trace.TraceHash.of(sid, profileId.toString())
+            traceSink.emit(
+                com.nexio.tv.core.trace.TraceEventEnvelope(
+                    traceSessionId = sid,
+                    sequence = traceSeq.incrementAndGet(),
+                    wallClockMs = System.currentTimeMillis(),
+                    elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                    threadName = Thread.currentThread().name,
+                    eventType = "continue_watching.snapshot_read",
+                    payload = mapOf(
+                        "profileHash" to profileHash,
+                        "profileId" to profileId,
+                        "recordCount" to recordCount,
+                        "source" to "OBSERVE_SUBSCRIBE"
+                    )
+                )
+            )
+        }
     }
 }
 
