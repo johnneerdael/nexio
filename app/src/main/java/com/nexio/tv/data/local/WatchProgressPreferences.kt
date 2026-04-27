@@ -92,10 +92,12 @@ class WatchProgressPreferences @Inject constructor(
      * Get watch progress for a specific content item
      */
     fun getProgress(contentId: String): Flow<WatchProgress?> {
-        return store().data.map { preferences ->
-            val json = preferences[watchProgressKey] ?: "{}"
-            val map = parseProgressMap(json)
-            map[contentId]
+        return profileManager.activeProfileId.flatMapLatest { profileId ->
+            store(profileId).data.map { preferences ->
+                val json = preferences[watchProgressKey] ?: "{}"
+                val map = parseProgressMap(json)
+                map[contentId]
+            }
         }
     }
 
@@ -103,11 +105,13 @@ class WatchProgressPreferences @Inject constructor(
      * Get watch progress for a specific episode
      */
     fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
-        return store().data.map { preferences ->
-            val json = preferences[watchProgressKey] ?: "{}"
-            val map = parseProgressMap(json)
-            map.values.find { 
-                it.contentId == contentId && it.season == season && it.episode == episode 
+        return profileManager.activeProfileId.flatMapLatest { profileId ->
+            store(profileId).data.map { preferences ->
+                val json = preferences[watchProgressKey] ?: "{}"
+                val map = parseProgressMap(json)
+                map.values.find {
+                    it.contentId == contentId && it.season == season && it.episode == episode
+                }
             }
         }
     }
@@ -116,12 +120,14 @@ class WatchProgressPreferences @Inject constructor(
      * Get all episode progress for a series
      */
     fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
-        return store().data.map { preferences ->
-            val json = preferences[watchProgressKey] ?: "{}"
-            val map = parseProgressMap(json)
-            map.values
-                .filter { it.contentId == contentId && it.season != null && it.episode != null }
-                .associateBy { (it.season!! to it.episode!!) }
+        return profileManager.activeProfileId.flatMapLatest { profileId ->
+            store(profileId).data.map { preferences ->
+                val json = preferences[watchProgressKey] ?: "{}"
+                val map = parseProgressMap(json)
+                map.values
+                    .filter { it.contentId == contentId && it.season != null && it.episode != null }
+                    .associateBy { (it.season!! to it.episode!!) }
+            }
         }
     }
 
