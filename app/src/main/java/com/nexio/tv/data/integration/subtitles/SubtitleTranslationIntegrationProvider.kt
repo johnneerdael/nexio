@@ -35,7 +35,7 @@ class SubtitleTranslationIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.SUBTITLE_TRANSLATION,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("subtitle:translation"),
+                scope = IntegrationScope.ProviderConfig("subtitle:translation"),
                 apiShapeId = SubtitleApiShapes.TRANSLATION,
                 operationKey = "subtitle.translation.execute",
                 call = {

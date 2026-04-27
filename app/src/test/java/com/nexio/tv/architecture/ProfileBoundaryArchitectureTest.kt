@@ -81,6 +81,24 @@ class ProfileBoundaryArchitectureTest {
     }
 
     @Test
+    fun `production runtime scopes do not use legacy string account constructor`() {
+        val productionRoot = File("app/src/main/java/com/nexio/tv")
+        val offenders = productionRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .flatMap { file ->
+                Regex("""IntegrationScope\.Account\(\s*"""")
+                    .findAll(file.readText())
+                    .map { "${file.path}:${file.readText().take(it.range.first).count { ch -> ch == '\n' } + 1}" }
+            }
+            .toList()
+
+        assertTrue(
+            "Use IntegrationScope.ProviderConfig for global provider config or explicit Account(profileId, provider, credentialHash) for profile-owned account calls:\n${offenders.joinToString("\n")}",
+            offenders.isEmpty()
+        )
+    }
+
+    @Test
     fun `simkl user settings auth runtime call is account scoped`() {
         val path = "app/src/main/java/com/nexio/tv/data/integration/simkl/SimklAuthIntegrationProvider.kt"
         val text = File(path).readText()

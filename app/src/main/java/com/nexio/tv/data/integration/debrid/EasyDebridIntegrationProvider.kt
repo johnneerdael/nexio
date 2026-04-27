@@ -137,7 +137,7 @@ class EasyDebridIntegrationProvider @Inject constructor(
     }
 
     private fun accountScope(apiKey: String): IntegrationScope =
-        IntegrationScope.Account("easydebrid:${apiKey.hashCode()}")
+        IntegrationScope.ProviderConfig("easydebrid:${apiKey.hashCode()}")
 
     private suspend fun <T> mutationRequest(
         apiShapeId: String,

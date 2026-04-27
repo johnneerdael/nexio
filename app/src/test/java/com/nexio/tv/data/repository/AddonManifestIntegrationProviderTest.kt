@@ -62,7 +62,7 @@ class AddonManifestIntegrationProviderTest {
         assertTrue(runtimeResult is IntegrationCallResult.Success<*>)
         assertEquals(IntegrationProvider.ADDON, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.Account("addon:community.addon"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("addon:community.addon"), specSlot.captured.scope)
         assertEquals(listOf("runtime.call-enter", "addonApi.getManifest", "runtime.call-exit"), callOrder)
         coVerifyOrder {
             runtime.call(any<IntegrationCallSpec<AddonManifestDto>>())

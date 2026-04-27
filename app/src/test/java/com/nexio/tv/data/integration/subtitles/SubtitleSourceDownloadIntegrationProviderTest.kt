@@ -56,7 +56,7 @@ class SubtitleSourceDownloadIntegrationProviderTest {
             )
             assertEquals(IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD, specSlot.captured.provider)
             assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-            assertEquals(IntegrationScope.Account("subtitle:source"), specSlot.captured.scope)
+            assertEquals(IntegrationScope.ProviderConfig("subtitle:source"), specSlot.captured.scope)
         } finally {
             server.shutdown()
         }

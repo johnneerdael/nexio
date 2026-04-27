@@ -32,7 +32,7 @@ class CustomImdbRatingsIntegrationProvider @Inject constructor(
                 apiShapeId = CustomImdbApiShapes.TRANSPORT_EXECUTE,
                 operationKey = "custom_imdb.ratings_execute",
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("custom-imdb:$baseUrl"),
+                scope = IntegrationScope.ProviderConfig("custom-imdb:$baseUrl"),
                 call = {
                     try {
                         val result = transport.execute(request)

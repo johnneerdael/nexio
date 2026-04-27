@@ -25,7 +25,7 @@ class YouTubeTrailerIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.YOUTUBE_TRAILER,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("youtube:trailer"),
+                scope = IntegrationScope.ProviderConfig("youtube:trailer"),
                 apiShapeId = "youtube_trailer.transport.execute",
                 operationKey = "youtube.trailer.fetch",
                 call = {
@@ -48,7 +48,7 @@ class YouTubeTrailerIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.YOUTUBE_TRAILER,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("youtube:trailer"),
+                scope = IntegrationScope.ProviderConfig("youtube:trailer"),
                 apiShapeId = "youtube_trailer.transport.probe",
                 operationKey = "youtube.trailer.probe",
                 call = {

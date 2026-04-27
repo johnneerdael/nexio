@@ -28,7 +28,7 @@ class AddonCatalogIntegrationProvider @Inject constructor(
                 IntegrationCallSpec(
                     provider = IntegrationProvider.ADDON,
                     workClass = IntegrationWorkClass.USER_VISIBLE,
-                    scope = IntegrationScope.Account("addon:$addonId"),
+                    scope = IntegrationScope.ProviderConfig("addon:$addonId"),
                     apiShapeId = AddonApiShapes.CATALOG,
                     operationKey = "addon.catalog.getCatalog",
                     call = {

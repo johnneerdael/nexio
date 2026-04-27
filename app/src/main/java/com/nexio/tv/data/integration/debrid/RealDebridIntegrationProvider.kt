@@ -28,7 +28,7 @@ class RealDebridIntegrationProvider @Inject constructor(
     private val realDebridApi: RealDebridApi,
     private val realDebridAuthService: RealDebridAuthService
 ) {
-    private suspend fun accountScope() = IntegrationScope.Account(
+    private suspend fun accountScope() = IntegrationScope.ProviderConfig(
         realDebridAuthService.getCurrentAuthState().username ?: "realdebrid"
     )
 

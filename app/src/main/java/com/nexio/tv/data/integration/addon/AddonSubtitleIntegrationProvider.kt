@@ -27,7 +27,7 @@ class AddonSubtitleIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.ADDON,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("addon:${addon.id}"),
+                scope = IntegrationScope.ProviderConfig("addon:${addon.id}"),
                 apiShapeId = AddonApiShapes.SUBTITLES,
                 operationKey = "addon.subtitle.getSubtitles",
                 call = {

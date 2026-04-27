@@ -53,7 +53,7 @@ class SubtitleTranslationIntegrationProviderTest {
         assertEquals(7_000L, response.retryAfterHeaderMs)
         assertEquals(IntegrationProvider.SUBTITLE_TRANSLATION, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.Account("subtitle:translation"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("subtitle:translation"), specSlot.captured.scope)
     }
 
     @Test

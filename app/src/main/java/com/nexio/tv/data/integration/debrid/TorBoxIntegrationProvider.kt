@@ -189,7 +189,7 @@ class TorBoxIntegrationProvider @Inject constructor(
     }
 
     private fun accountScope(apiKey: String): IntegrationScope =
-        IntegrationScope.Account("torbox:${apiKey.hashCode()}")
+        IntegrationScope.ProviderConfig("torbox:${apiKey.hashCode()}")
 
     private fun <T> loadFrom(
         block: suspend () -> retrofit2.Response<T>

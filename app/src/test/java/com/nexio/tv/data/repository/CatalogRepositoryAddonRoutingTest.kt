@@ -64,7 +64,7 @@ class CatalogRepositoryAddonRoutingTest {
         assertTrue(runtimeResult is IntegrationCallResult.Success<*>)
         assertEquals(IntegrationProvider.ADDON, specSlot.captured.provider)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
-        assertEquals(IntegrationScope.Account("addon:community.addon"), specSlot.captured.scope)
+        assertEquals(IntegrationScope.ProviderConfig("addon:community.addon"), specSlot.captured.scope)
         coVerify(exactly = 1) {
             runtime.call(any<IntegrationCallSpec<CatalogResponseDto>>())
             addonApi.getCatalog(catalogUrl)

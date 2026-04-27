@@ -48,7 +48,7 @@ class SubtitleSourceDownloadIntegrationProvider @Inject constructor(
             IntegrationCallSpec(
                 provider = IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
-                scope = IntegrationScope.Account("subtitle:source"),
+                scope = IntegrationScope.ProviderConfig("subtitle:source"),
                 apiShapeId = SubtitleApiShapes.SOURCE_DOWNLOAD,
                 operationKey = "subtitle.source.download",
                 call = {

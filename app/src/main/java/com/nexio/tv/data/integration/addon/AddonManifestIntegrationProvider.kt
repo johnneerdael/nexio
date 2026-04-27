@@ -28,7 +28,7 @@ class AddonManifestIntegrationProvider @Inject constructor(
                 IntegrationCallSpec(
                     provider = IntegrationProvider.ADDON,
                     workClass = IntegrationWorkClass.USER_VISIBLE,
-                    scope = IntegrationScope.Account("addon:$addonId"),
+                    scope = IntegrationScope.ProviderConfig("addon:$addonId"),
                     apiShapeId = AddonApiShapes.MANIFEST,
                     operationKey = "addon.manifest.getManifest",
                     call = {
