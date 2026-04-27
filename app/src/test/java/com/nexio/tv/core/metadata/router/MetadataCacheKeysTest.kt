@@ -173,6 +173,24 @@ class MetadataCacheKeysTest {
         assertEquals("metadata:image-blob:sha256:abc123", cacheKeys.imageBlobKey(urlHash = "abc123"))
     }
 
+    @Test
+    fun `localized metadata cache key includes language and policy but not profile`() {
+        val key = cacheKeys.localized(
+            provider = "TVDB",
+            apiShapeId = "tvdb.series.episodes.language",
+            contentId = "tvdb:399838",
+            language = "nld",
+            policyVersion = 2,
+            qualifiers = listOf("seasonType:default", "season:1")
+        )
+
+        assertEquals(
+            "metadata:TVDB:tvdb.series.episodes.language:tvdb:399838:seasonType:default:season:1:lang:nld:policy:2",
+            key
+        )
+        assertFalse(key.contains("profile:"))
+    }
+
     private fun route(
         targetIds: Map<MetadataPrimaryProvider, String> = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550")
     ): MetadataRoute =

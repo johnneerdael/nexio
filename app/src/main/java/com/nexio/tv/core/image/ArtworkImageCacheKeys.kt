@@ -32,5 +32,5 @@ object ArtworkImageCacheKeys {
     }
 
     private fun build(itemId: String, provider: String, type: String): String =
-        "${itemId}_${provider}_${type}"
+        "artwork:$provider:$type:$itemId:imageLang:en:policy:1"
 }

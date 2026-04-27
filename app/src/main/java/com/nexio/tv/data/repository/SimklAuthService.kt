@@ -144,7 +144,7 @@ class SimklAuthService @Inject constructor(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? = executeAuthOwnerRequest(session, call)
 
-    private fun currentAuthSession(): TrackingAuthSession {
+    fun currentAuthSession(): TrackingAuthSession {
         return TrackingAuthSession(
             provider = TrackingProvider.SIMKL,
             profileId = currentRoutedProfileId()
