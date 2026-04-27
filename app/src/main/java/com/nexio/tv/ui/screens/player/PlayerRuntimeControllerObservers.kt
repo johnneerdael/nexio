@@ -243,7 +243,12 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     loadingOverlayEnabled = settings.loadingOverlayEnabled,
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
-                    osdClockEnabled = settings.osdClockEnabled
+                    osdClockEnabled = settings.osdClockEnabled,
+                    burnInProtection = if (settings.burnInProtection.enabled) {
+                        state.burnInProtection.copy(enabled = true)
+                    } else {
+                        com.nexio.tv.core.player.BurnInProtectionState.DISABLED
+                    },
                 )
             }
             bufferLogsEnabled = settings.enableBufferLogs

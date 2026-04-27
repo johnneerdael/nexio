@@ -14,6 +14,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.text.Cue
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 
@@ -22,6 +23,7 @@ internal const val ASS_SSA_RENDER_OVERLAY_TAG = "ass-ssa-render-overlay"
 internal data class PlayerSurfaceRenderState(
     val resizeMode: Int,
     val subtitleStyle: SubtitleStyleSettings,
+    val burnInProtection: BurnInProtectionState,
     val overlayCues: List<Cue>,
     val suppressNativeSubtitles: Boolean,
     val keepScreenOn: Boolean = false
@@ -52,7 +54,8 @@ internal fun buildPlayerViewMutationPlan(
 ): PlayerViewMutationPlan {
     return PlayerViewMutationPlan(
         updateResizeMode = previous?.resizeMode != current.resizeMode,
-        updateSubtitleStyle = previous?.subtitleStyle != current.subtitleStyle,
+        updateSubtitleStyle = previous?.subtitleStyle != current.subtitleStyle ||
+            previous?.burnInProtection != current.burnInProtection,
         updateOverlay = previous?.overlayCues != current.overlayCues ||
             previous.suppressNativeSubtitles != current.suppressNativeSubtitles,
         updateKeepScreenOn = previous?.keepScreenOn != current.keepScreenOn
@@ -147,9 +150,11 @@ internal fun PlayerVideoSurface(
                 playerView.resizeMode = renderState.resizeMode
             }
             if (plan.updateSubtitleStyle) {
-                playerView.subtitleView?.let { applySubtitleStyle(it, renderState.subtitleStyle) }
+                playerView.subtitleView?.let {
+                    applySubtitleStyle(it, renderState.subtitleStyle, renderState.burnInProtection)
+                }
                 playerView.ensureExternalSubtitleOverlay()?.let {
-                    applySubtitleStyle(it, renderState.subtitleStyle)
+                    applySubtitleStyle(it, renderState.subtitleStyle, renderState.burnInProtection)
                 }
             }
             if (plan.updateOverlay) {

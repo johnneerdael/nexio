@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.text.Cue
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,6 +29,7 @@ class PlayerVideoSurfaceStateTest {
         val state = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
+            burnInProtection = BurnInProtectionState.DISABLED,
             overlayCues = emptyList(),
             suppressNativeSubtitles = true
         )
@@ -40,6 +42,7 @@ class PlayerVideoSurfaceStateTest {
         val state = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
+            burnInProtection = BurnInProtectionState.DISABLED,
             overlayCues = emptyList(),
             suppressNativeSubtitles = false
         )
@@ -57,6 +60,7 @@ class PlayerVideoSurfaceStateTest {
         val previous = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
+            burnInProtection = BurnInProtectionState.DISABLED,
             overlayCues = emptyList(),
             suppressNativeSubtitles = false
         )
@@ -77,6 +81,7 @@ class PlayerVideoSurfaceStateTest {
         val previous = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
+            burnInProtection = BurnInProtectionState.DISABLED,
             overlayCues = emptyList(),
             suppressNativeSubtitles = false
         )
@@ -95,6 +100,7 @@ class PlayerVideoSurfaceStateTest {
         val previous = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
+            burnInProtection = BurnInProtectionState.DISABLED,
             overlayCues = emptyList(),
             suppressNativeSubtitles = false,
             keepScreenOn = false

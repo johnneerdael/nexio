@@ -70,4 +70,14 @@ class SubtitleBurnInProtectionTest {
         val state = computeBurnInProtectionState(true, "anything", "salt", 1_700_000_000_000L)
         assertTrue(kotlin.math.abs(state.horizontalOffsetPx) <= SUBTITLE_BURN_IN_HORIZONTAL_JITTER_PX)
     }
+
+    @Test
+    fun off_white_constant_is_F0F0F0() {
+        assertEquals(0xFFF0F0F0.toInt(), SUBTITLE_OFF_WHITE_ARGB)
+    }
+
+    @Test
+    fun max_alpha_constant_is_zero_point_nine() {
+        assertEquals(0.90f, SUBTITLE_MAX_ALPHA, 0.0001f)
+    }
 }

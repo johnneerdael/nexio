@@ -50,6 +50,8 @@ data class PlayerUiState(
     val showMoreDialog: Boolean = false,
     // Subtitle style settings
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
+    val burnInProtection: com.nexio.tv.core.player.BurnInProtectionState =
+        com.nexio.tv.core.player.BurnInProtectionState.DISABLED,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
     // Addon subtitles
     val addonSubtitles: List<Subtitle> = emptyList(),
