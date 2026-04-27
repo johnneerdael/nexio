@@ -376,6 +376,8 @@
     <string name="sub_outline">Outline</string>
     <string name="sub_outline_sub">Add outline around subtitle text for better visibility</string>
     <string name="sub_outline_color">Outline Color</string>
+    <string name="subtitle_burn_in_protection_title">OLED burn-in protection</string>
+    <string name="subtitle_burn_in_protection_subtitle">Rotates subtitle position per stream and softens whites to reduce panel wear.</string>
     <string name="sub_org_none">None (default order)</string>
     <string name="sub_org_by_lang">By language</string>
     <string name="sub_org_by_addon">By addon</string>

@@ -301,6 +301,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setAddonSubtitleStartupMode(mode)
     }
 
+    suspend fun setBurnInProtectionEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setBurnInProtectionEnabled(enabled)
+    }
+
     // Buffer settings functions
 
     suspend fun setBufferMinBufferMs(ms: Int) {

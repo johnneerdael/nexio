@@ -63,6 +63,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
+    onSetBurnInProtectionEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -73,6 +74,18 @@ internal fun LazyListScope.subtitleSettingsItems(
             style = MaterialTheme.typography.titleMedium,
             color = NexioColors.TextSecondary,
             modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
+        )
+    }
+
+    item(key = "subtitle_burn_in_protection") {
+        ToggleSettingsItem(
+            icon = Icons.Default.ClosedCaption,
+            title = stringResource(R.string.subtitle_burn_in_protection_title),
+            subtitle = stringResource(R.string.subtitle_burn_in_protection_subtitle),
+            isChecked = playerSettings.burnInProtection.enabled,
+            onCheckedChange = onSetBurnInProtectionEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
