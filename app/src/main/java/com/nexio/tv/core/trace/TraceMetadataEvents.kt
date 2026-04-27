@@ -55,6 +55,39 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitIdentityResolution(
+        sourceId: String,
+        targetProvider: String,
+        resolver: String,
+        apiShapeId: String,
+        cacheDecision: String,
+        executedNetwork: Boolean,
+        resultId: String?,
+        success: Boolean
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.identity_resolution",
+                payload = mapOf(
+                    "sourceId" to sourceId,
+                    "targetProvider" to targetProvider,
+                    "resolver" to resolver,
+                    "apiShapeId" to apiShapeId,
+                    "cacheDecision" to cacheDecision,
+                    "executedNetwork" to executedNetwork,
+                    "resultId" to resultId,
+                    "success" to success
+                )
+            )
+        )
+    }
+
     fun emitRouteDecision(
         contentId: String,
         parentId: String,
