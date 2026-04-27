@@ -171,6 +171,32 @@ class TraktScrobbleServiceTest {
         coVerify(exactly = 1) { coordinator.enqueueAndDrain(any()) }
     }
 
+    @Test
+    fun `duplicate scrobble suppression is scoped by owner profile`() = runTest {
+        val traktAuthService = mockk<TraktAuthService>()
+        val coordinator = mockk<TraktMutationOutboxCoordinator>()
+        val controller = TraktWatchingNowStateController()
+        val envelopes = mutableListOf<TraktMutationEnvelope>()
+
+        coEvery { traktAuthService.getAuthState(any()) } returns authenticatedState()
+        every { traktAuthService.hasRequiredCredentials() } returns true
+        every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
+        coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
+
+        val service = TraktScrobbleService(
+            traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
+            watchingNowStateController = controller,
+            traktMutationOutboxCoordinator = coordinator
+        )
+        val item = movieItem("Arrival")
+
+        service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 1)
+        service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 2)
+
+        assertEquals(listOf(1, 2), envelopes.map { it.profileId })
+        coVerify(exactly = 2) { coordinator.enqueueAndDrain(any()) }
+    }
+
     private suspend fun awaitState(
         service: TraktScrobbleService,
         predicate: (TraktScrobbleService.WatchingNowState) -> Boolean

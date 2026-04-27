@@ -72,6 +72,12 @@ class TraktScrobbleService @Inject constructor(
         val timestampMs: Long
     )
 
+    private data class ProfileScrobbleState(
+        var lastScrobbleStamp: ScrobbleStamp? = null,
+        var pendingMutation: QueuedWatchingMutation? = null,
+        var pendingMutationDrainJob: Job? = null
+    )
+
     private val watchingNowState = watchingNowStateController.observe()
         .map { snapshot ->
             WatchingNowState(
@@ -89,9 +95,7 @@ class TraktScrobbleService @Inject constructor(
         )
     private val mutationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pendingMutationMutex = Mutex()
-    private var lastScrobbleStamp: ScrobbleStamp? = null
-    private var pendingMutation: QueuedWatchingMutation? = null
-    private var pendingMutationDrainJob: Job? = null
+    private val profileScrobbleStates = mutableMapOf<Int, ProfileScrobbleState>()
     private val minSendIntervalMs = 8_000L
     private val progressWindow = 1.5f
 
@@ -169,6 +173,7 @@ class TraktScrobbleService @Inject constructor(
     private suspend fun submitMutation(request: WatchingMutationRequest): MutationResult {
         val result = CompletableDeferred<MutationResult>()
         pendingMutationMutex.withLock {
+            val state = stateFor(request.profileId)
             val incoming = QueuedWatchingMutation(
                 mutation = PendingWatchingMutation(
                     request = request,
@@ -178,33 +183,34 @@ class TraktScrobbleService @Inject constructor(
                 result = result
             )
             watchingNowStateController.publish(request.toWatchingNowState())
-            val existing = pendingMutation
+            val existing = state.pendingMutation
             if (existing != null) {
                 existing.result.complete(MutationResult.Collapsed)
             }
-            pendingMutation = replacePendingWatchingMutation(
+            state.pendingMutation = replacePendingWatchingMutation(
                 existing = existing?.mutation,
                 incoming = incoming.mutation
             ).let { merged ->
                 incoming.copy(mutation = merged)
             }
-            if (pendingMutationDrainJob?.isActive != true) {
-                pendingMutationDrainJob = mutationScope.launch {
-                    drainPendingMutations()
+            if (state.pendingMutationDrainJob?.isActive != true) {
+                state.pendingMutationDrainJob = mutationScope.launch {
+                    drainPendingMutations(request.profileId)
                 }
             }
         }
         return result.await()
     }
 
-    private suspend fun drainPendingMutations() {
+    private suspend fun drainPendingMutations(profileId: Int) {
         while (true) {
             val next = pendingMutationMutex.withLock {
-                val queued = pendingMutation ?: run {
-                    pendingMutationDrainJob = null
+                val state = stateFor(profileId)
+                val queued = state.pendingMutation ?: run {
+                    state.pendingMutationDrainJob = null
                     return
                 }
-                pendingMutation = null
+                state.pendingMutation = null
                 queued
             }
             val result = executeMutation(next.mutation)
@@ -252,7 +258,7 @@ class TraktScrobbleService @Inject constructor(
         val action = request.action
         val item = request.item
         val clampedProgress = request.progressPercent.coerceIn(0f, 100f)
-        if (shouldSkip(action, item.itemKey, clampedProgress)) return MutationResult.Success
+        if (shouldSkip(request.profileId, action, item.itemKey, clampedProgress)) return MutationResult.Success
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
@@ -264,7 +270,7 @@ class TraktScrobbleService @Inject constructor(
                     profileId = request.profileId
                 )
             )
-            lastScrobbleStamp = ScrobbleStamp(
+            stateFor(request.profileId).lastScrobbleStamp = ScrobbleStamp(
                 action = action,
                 itemKey = item.itemKey,
                 progress = clampedProgress,
@@ -276,8 +282,11 @@ class TraktScrobbleService @Inject constructor(
         }
     }
 
-    private fun shouldSkip(action: String, itemKey: String, progress: Float): Boolean {
-        val last = lastScrobbleStamp ?: return false
+    private fun stateFor(profileId: Int): ProfileScrobbleState =
+        profileScrobbleStates.getOrPut(profileId) { ProfileScrobbleState() }
+
+    private fun shouldSkip(profileId: Int, action: String, itemKey: String, progress: Float): Boolean {
+        val last = stateFor(profileId).lastScrobbleStamp ?: return false
         val now = System.currentTimeMillis()
         val isSameWindow = now - last.timestampMs < minSendIntervalMs
         val isSameAction = last.action == action
@@ -290,6 +299,7 @@ class TraktScrobbleService @Inject constructor(
 
 internal sealed interface WatchingMutationRequest {
     val optimisticVersion: Long
+    val profileId: Int
     fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot
 
     data class Scrobble(
@@ -297,7 +307,7 @@ internal sealed interface WatchingMutationRequest {
         val item: TraktScrobbleItem,
         val progressPercent: Float,
         override val optimisticVersion: Long,
-        val profileId: Int
+        override val profileId: Int
     ) : WatchingMutationRequest {
         override fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot {
             val progress = progressPercent.coerceIn(0f, 100f)
@@ -330,7 +340,7 @@ internal sealed interface WatchingMutationRequest {
         val item: TraktScrobbleItem,
         val message: String?,
         override val optimisticVersion: Long,
-        val profileId: Int
+        override val profileId: Int
     ) : WatchingMutationRequest {
         override fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot {
             return TraktWatchingNowStateController.Snapshot(
