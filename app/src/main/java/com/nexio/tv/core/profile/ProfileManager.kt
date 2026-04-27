@@ -3,7 +3,10 @@ package com.nexio.tv.core.profile
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.integration.ActiveProfileSession
+import com.nexio.tv.core.integration.ProfileBoundaryException
+import com.nexio.tv.core.integration.ProfileBoundaryViolation
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.playback.PlaybackSessionRegistry
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.local.ProfileDataStore
 import com.nexio.tv.data.local.ProfileDataStoreFactory
@@ -40,7 +43,8 @@ class ProfileManager(
     private val factory: ProfileDataStoreFactory,
     private val context: Context,
     scope: CoroutineScope,
-    private val postgrest: Postgrest? = null
+    private val postgrest: Postgrest? = null,
+    private val playbackSessionRegistry: PlaybackSessionRegistry = PlaybackSessionRegistry()
 ) {
     /**
      * Primary Hilt constructor. Creates its own SupervisorJob+IO scope for production use.
@@ -50,13 +54,15 @@ class ProfileManager(
         profileDataStore: ProfileDataStore,
         factory: ProfileDataStoreFactory,
         @ApplicationContext context: Context,
-        postgrest: Postgrest
+        postgrest: Postgrest,
+        playbackSessionRegistry: PlaybackSessionRegistry
     ) : this(
         dataStore = profileDataStore,
         factory = factory,
         context = context,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-        postgrest = postgrest
+        postgrest = postgrest,
+        playbackSessionRegistry = playbackSessionRegistry
     )
 
     private val _profileSwitched = MutableSharedFlow<Int>(extraBufferCapacity = 1)
@@ -78,6 +84,10 @@ class ProfileManager(
         scope.launch {
             dataStore.activeProfileId.collect { id ->
                 val previousId = _activeProfileId.value
+                if (previousId != id && playbackSessionRegistry.activeOwner() != null) {
+                    Log.w(TAG, "Ignoring DataStore profile change to $id while playback active")
+                    return@collect
+                }
                 _activeProfileId.value = id
                 if (previousId != id) {
                     _activeProfileSession.value = newProfileSession(id)
@@ -97,16 +107,21 @@ class ProfileManager(
         get() = activeProfileId.value == 1
 
     suspend fun setActiveProfile(id: Int) {
-        // Read latest from DataStore directly to avoid StateFlow lag
         val current = dataStore.profilesList.first()
-        if (current.any { it.id == id }) {
-            if (_activeProfileId.value == id) return
-            AppLocaleResolver.setActiveProfileId(context, id)
-            _activeProfileId.value = id
-            _activeProfileSession.value = newProfileSession(id)
-            dataStore.setActiveProfile(id)
-            _profileSwitched.emit(id)
+        if (current.none { it.id == id }) return
+        if (_activeProfileId.value == id) return
+        val owner = playbackSessionRegistry.activeOwner()
+        if (owner != null) {
+            throw ProfileBoundaryException(
+                ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK,
+                "Cannot switch profile while playback owned by profile=${owner.ownerProfileId} session=${owner.ownerSessionId} is active"
+            )
         }
+        AppLocaleResolver.setActiveProfileId(context, id)
+        _activeProfileId.value = id
+        _activeProfileSession.value = newProfileSession(id)
+        dataStore.setActiveProfile(id)
+        _profileSwitched.emit(id)
     }
 
     private fun newProfileSession(profileId: Int): ActiveProfileSession =
