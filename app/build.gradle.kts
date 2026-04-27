@@ -400,6 +400,21 @@ tasks.register<Test>("generateProfileBoundaryAudit") {
     }
 }
 
+tasks.register<Test>("generateTraceValidatorAudit") {
+    group = "verification"
+    description = "Runs the runtime trace validator golden test."
+    val sourceTest = tasks.named<Test>("testUniversalDebugUnitTest")
+    testClassesDirs = sourceTest.get().testClassesDirs
+    classpath = sourceTest.get().classpath
+    filter {
+        // Phase 7 will replace this with TraceBundleGoldenTest. Until then,
+        // run the validator + bundle exporter unit tests as the audit signal.
+        includeTestsMatching("com.nexio.tv.core.trace.RuntimeTraceValidatorTest")
+        includeTestsMatching("com.nexio.tv.core.trace.TraceBundleExporterTest")
+        includeTestsMatching("com.nexio.tv.core.trace.TraceValidationRulesTest")
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
     dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)
