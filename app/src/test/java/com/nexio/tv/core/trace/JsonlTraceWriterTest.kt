@@ -1,6 +1,7 @@
 package com.nexio.tv.core.trace
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,15 +26,19 @@ class JsonlTraceWriterTest {
     @Test
     fun `drops low priority events when over cap`() {
         val file = tmp.newFile("events.jsonl")
-        val writer = JsonlTraceWriter(file = file, gson = Gson(), maxBytes = 80L)
+        // measure one envelope's serialized size, then size cap to admit ~2 HIGH events
+        val sample = """{"k":"v"}"""
+        val approxLine = 200L  // serialized envelope is ~120-180 bytes; 200 admits 2 lines, rejects 3rd
+        val writer = JsonlTraceWriter(file = file, gson = Gson(), maxBytes = approxLine * 2)
         writer.append(envelope("hi-1"), TraceEventPriority.HIGH)
-        writer.append(envelope("low-1"), TraceEventPriority.LOW)
         writer.append(envelope("hi-2"), TraceEventPriority.HIGH)
+        writer.append(envelope("low-1"), TraceEventPriority.LOW) // should drop — over cap
         writer.close()
         val text = file.readText()
         assertTrue(text.contains("\"eventType\":\"hi-1\""))
         assertTrue(text.contains("\"eventType\":\"hi-2\""))
-        assertTrue(writer.droppedCount() >= 1)
+        assertFalse(text.contains("\"eventType\":\"low-1\""))
+        assertEquals(1L, writer.droppedCount())
     }
 
     @Test

@@ -21,10 +21,7 @@ class JsonlTraceWriter(
     fun append(event: TraceEventEnvelope<*>, priority: TraceEventPriority) {
         val line = gson.toJson(event) + "\n"
         val lineBytes = line.toByteArray(Charsets.UTF_8).size.toLong()
-        val droppable = priority == TraceEventPriority.MEDIUM ||
-            priority == TraceEventPriority.LOW ||
-            priority == TraceEventPriority.VERBOSE
-        if (droppable && written.get() + lineBytes > maxBytes) {
+        if (priority != TraceEventPriority.BLOCKER && written.get() + lineBytes > maxBytes) {
             dropped.incrementAndGet()
             return
         }
