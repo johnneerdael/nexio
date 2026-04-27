@@ -1,0 +1,240 @@
+package com.nexio.tv.core.trace
+
+object TraceValidationRules {
+
+    private fun map(env: TraceEventEnvelope<*>): Map<*, *> = env.payload as? Map<*, *> ?: emptyMap<Any, Any>()
+    private fun fail(rule: TraceValidationRule, env: TraceEventEnvelope<*>, message: String) =
+        TraceValidationFailure(ruleId = rule.id, message = message, sequence = env.sequence)
+
+    val PreviewMustNotRouteOrNetwork: TraceValidationRule = object : TraceValidationRule {
+        override val id = "PreviewMustNotRouteOrNetwork"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "metadata.first_paint" }
+                .filter { e ->
+                    val p = map(e)
+                    p["source"] == "ADDON_META_PREVIEW" && (p["routerExecuted"] == true || p["networkExecuted"] == true)
+                }
+                .map { fail(this, it, "preview emitted with routerExecuted/networkExecuted=true") }
+    }
+
+    val RouteDecisionUsedInputs: TraceValidationRule = object : TraceValidationRule {
+        override val id = "RouteDecisionUsedInputs"
+        private val forbidden = setOf("catalog", "addon", "genre", "animeType", "link", "trend")
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "metadata.route_decision" }
+                .filter { e ->
+                    @Suppress("UNCHECKED_CAST")
+                    val used = (map(e)["usedInputs"] as? List<String>) ?: emptyList()
+                    used.any { input -> forbidden.any { f -> input.contains(f, ignoreCase = true) } }
+                }
+                .map { fail(this, it, "usedInputs contains forbidden routing-input token") }
+    }
+
+    val FreshCacheHitSuppressesNetwork: TraceValidationRule = object : TraceValidationRule {
+        override val id = "FreshCacheHitSuppressesNetwork"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            val failures = mutableListOf<TraceValidationFailure>()
+            val hitOps = mutableSetOf<String>()
+            events.forEach { e ->
+                val p = map(e)
+                when (e.eventType) {
+                    "runtime.cache_decision" -> {
+                        if (p["decision"] == "HIT") {
+                            (p["runtimeOperationId"] as? String)?.let { hitOps += it }
+                        }
+                    }
+                    "http.request" -> {
+                        val opId = p["runtimeOperationId"] as? String
+                        if (opId != null && opId in hitOps) {
+                            failures += fail(this, e, "http.request issued for op=$opId after fresh cache HIT")
+                        }
+                    }
+                }
+            }
+            return failures
+        }
+    }
+
+    val RuntimeCallHasApiShapeId: TraceValidationRule = object : TraceValidationRule {
+        override val id = "RuntimeCallHasApiShapeId"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "runtime.operation_start" }
+                .filter { e -> (map(e)["apiShapeId"] as? String).isNullOrBlank() }
+                .map { fail(this, it, "operation_start has blank apiShapeId") }
+    }
+
+    val NetworkCallHasRuntimeOperationId: TraceValidationRule = object : TraceValidationRule {
+        override val id = "NetworkCallHasRuntimeOperationId"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "http.request" }
+                .filter { e -> (map(e)["runtimeOperationId"] as? String).isNullOrBlank() }
+                .map { fail(this, it, "http.request lacks runtimeOperationId") }
+    }
+
+    val ProfileBoundCallHasProfileHash: TraceValidationRule = object : TraceValidationRule {
+        override val id = "ProfileBoundCallHasProfileHash"
+        private val profileScopes = setOf("Profile", "ProfileLocal", "Account")
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "profile.boundary_check" }
+                .filter { e ->
+                    val p = map(e)
+                    p["scope"] in profileScopes && (p["profileHash"] as? String).isNullOrBlank()
+                }
+                .map { fail(this, it, "profile-bound boundary_check lacks profileHash") }
+    }
+
+    val AccountBoundCallHasCredentialHash: TraceValidationRule = object : TraceValidationRule {
+        override val id = "AccountBoundCallHasCredentialHash"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "profile.boundary_check" }
+                .filter { e ->
+                    val p = map(e)
+                    p["scope"] == "Account" && (p["credentialTraceHash"] as? String).isNullOrBlank()
+                }
+                .map { fail(this, it, "Account-scoped boundary_check lacks credentialTraceHash") }
+    }
+
+    val GlobalKeyHasNoProfile: TraceValidationRule = object : TraceValidationRule {
+        override val id = "GlobalKeyHasNoProfile"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            val globalOps = mutableSetOf<String>()
+            val failures = mutableListOf<TraceValidationFailure>()
+            events.forEach { e ->
+                val p = map(e)
+                when (e.eventType) {
+                    "runtime.operation_start" -> {
+                        val scope = p["scope"] as? String ?: return@forEach
+                        if (scope.startsWith("Global")) {
+                            (p["runtimeOperationId"] as? String)?.let { globalOps += it }
+                        }
+                    }
+                    "runtime.cache_decision" -> {
+                        val opId = p["runtimeOperationId"] as? String
+                        val key = p["cacheKey"] as? String ?: return@forEach
+                        if (opId in globalOps && key.contains("profile:")) {
+                            failures += fail(this, e, "global op=$opId cache key contains 'profile:': $key")
+                        }
+                    }
+                }
+            }
+            return failures
+        }
+    }
+
+    val ImageKeyUsesEnglish: TraceValidationRule = object : TraceValidationRule {
+        override val id = "ImageKeyUsesEnglish"
+        private val nonEnglishLangPattern = Regex("""(?:imageLang|lang):([^:]+)""", RegexOption.IGNORE_CASE)
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "runtime.cache_decision" }
+                .filter { e ->
+                    val p = map(e)
+                    val scope = p["scope"] as? String
+                    val key = p["cacheKey"] as? String ?: return@filter false
+                    if (scope != "GlobalEnglishImage") return@filter false
+                    val match = nonEnglishLangPattern.find(key)
+                    val lang = match?.groupValues?.getOrNull(1)?.lowercase()
+                    lang != null && lang != "en"
+                }
+                .map { fail(this, it, "image cache key has non-English language: ${(map(it)["cacheKey"])}") }
+    }
+
+    val IdentityResolutionPrecedesProviderConflict: TraceValidationRule = object : TraceValidationRule {
+        override val id = "IdentityResolutionPrecedesProviderConflict"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            var sawIdentity = false
+            val failures = mutableListOf<TraceValidationFailure>()
+            events.forEach { e ->
+                when (e.eventType) {
+                    "metadata.identity_resolution" -> sawIdentity = true
+                    "metadata.provider_plan" -> {
+                        @Suppress("UNCHECKED_CAST")
+                        val steps = (map(e)["steps"] as? List<Map<String, Any?>>) ?: emptyList()
+                        val needsIdentity = steps.any { it["requiresIdentityResolution"] == true }
+                        if (needsIdentity && !sawIdentity) {
+                            failures += fail(this, e, "provider_plan requires identity resolution but none preceded")
+                        }
+                    }
+                }
+            }
+            return failures
+        }
+    }
+
+    val FieldHasOwnershipRule: TraceValidationRule = object : TraceValidationRule {
+        override val id = "FieldHasOwnershipRule"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "metadata.field_selected" }
+                .filter { e -> (map(e)["ownershipRule"] as? String).isNullOrBlank() }
+                .map { fail(this, it, "field_selected lacks ownershipRule") }
+    }
+
+    val SecondaryDoesNotOverwritePrimary: TraceValidationRule = object : TraceValidationRule {
+        override val id = "SecondaryDoesNotOverwritePrimary"
+        private val protectedFields = setOf("TITLE", "OVERVIEW", "EPISODE_LIST")
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "metadata.field_selected" }
+                .filter { e ->
+                    val p = map(e)
+                    val field = (p["field"] as? String)?.uppercase() ?: return@filter false
+                    if (field !in protectedFields) return@filter false
+                    @Suppress("UNCHECKED_CAST")
+                    val rejected = (p["rejectedCandidates"] as? List<Map<String, Any?>>) ?: emptyList()
+                    rejected.isNotEmpty()
+                }
+                .map { fail(this, it, "secondary overwrote primary on protected field ${map(it)["field"]}") }
+    }
+
+    val TraktSimklUsesCorrectProfile: TraceValidationRule = object : TraceValidationRule {
+        override val id = "TraktSimklUsesCorrectProfile"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "profile.boundary_check" }
+                .filter { e ->
+                    val p = map(e)
+                    val provider = p["provider"] as? String
+                    p["verdict"] == "FAIL" && (provider == "TRAKT" || provider == "SIMKL")
+                }
+                .map { fail(this, it, "${map(it)["provider"]} boundary_check verdict=FAIL") }
+    }
+
+    val NoStaleProfileWritesAfterSwitch: TraceValidationRule = object : TraceValidationRule {
+        override val id = "NoStaleProfileWritesAfterSwitch"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            val staleProfiles = mutableSetOf<String>()
+            val failures = mutableListOf<TraceValidationFailure>()
+            events.forEach { e ->
+                val p = map(e)
+                when (e.eventType) {
+                    "profile.boundary_check" -> {
+                        if (p["verdict"] == "FAIL" && p["violation"] == "STALE_SESSION_WRITE_REJECTED") {
+                            (p["profileHash"] as? String)?.let { staleProfiles += it }
+                        }
+                    }
+                    "continue_watching.snapshot_write" -> {
+                        val ph = p["profileHash"] as? String
+                        if (ph != null && ph in staleProfiles) {
+                            failures += fail(this, e, "CW write for stale profile=$ph after stale-session rejection")
+                        }
+                    }
+                }
+            }
+            return failures
+        }
+    }
+
+    val ALL: List<TraceValidationRule> = listOf(
+        PreviewMustNotRouteOrNetwork,
+        RouteDecisionUsedInputs,
+        FreshCacheHitSuppressesNetwork,
+        RuntimeCallHasApiShapeId,
+        NetworkCallHasRuntimeOperationId,
+        ProfileBoundCallHasProfileHash,
+        AccountBoundCallHasCredentialHash,
+        GlobalKeyHasNoProfile,
+        ImageKeyUsesEnglish,
+        IdentityResolutionPrecedesProviderConflict,
+        FieldHasOwnershipRule,
+        SecondaryDoesNotOverwritePrimary,
+        TraktSimklUsesCorrectProfile,
+        NoStaleProfileWritesAfterSwitch
+    )
+}
