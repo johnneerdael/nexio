@@ -11,6 +11,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
@@ -73,7 +74,7 @@ class PlayerRuntimeController(
     internal val playbackMediaSourceTransport: PlaybackMediaSourceTransport,
     internal val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
     internal val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
-    internal val playbackOwnerProfileId: Int,
+    internal val playbackOwnerContext: PlaybackOwnerContext,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {

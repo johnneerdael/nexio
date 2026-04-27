@@ -38,7 +38,7 @@ interface TrackingScrobbleService {
     suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext)
     suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext)
     suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext)
-    suspend fun checkin(item: TrackingScrobbleItem, message: String? = null, owner: PlaybackOwnerContext): Boolean
+    suspend fun checkin(item: TrackingScrobbleItem, message: String? = null, ownerProfileId: Int? = null): Boolean
     fun observeWatchingNowState(): Flow<TrackingWatchingNowState>
 }
 
@@ -92,17 +92,17 @@ class DefaultTrackingScrobbleService @Inject constructor(
         }
     }
 
-    override suspend fun checkin(item: TrackingScrobbleItem, message: String?, owner: PlaybackOwnerContext): Boolean {
-        val providerState = providerState(owner)
+    override suspend fun checkin(item: TrackingScrobbleItem, message: String?, ownerProfileId: Int?): Boolean {
+        val providerState = providerState(ownerProfileId)
         return when (providerState.effectiveProvider) {
             TrackingProvider.SIMKL -> {
                 if (!providerState.simklAuthenticated) return false
-                simklScrobbleService.checkin(item, message, owner.ownerProfileId)
+                simklScrobbleService.checkin(item, message, ownerProfileId)
             }
             TrackingProvider.TRAKT -> {
                 if (!providerState.traktAuthenticated) return false
                 val traktItem = toTraktItem(item) ?: return false
-                traktScrobbleService.checkin(traktItem, message, owner.ownerProfileId)
+                traktScrobbleService.checkin(traktItem, message, ownerProfileId)
             }
         }
     }
@@ -164,4 +164,8 @@ class DefaultTrackingScrobbleService @Inject constructor(
 
     private suspend fun providerState(owner: PlaybackOwnerContext): EffectiveTrackingProviderState =
         trackingProviderStateService.currentState(owner.ownerProfileId)
+
+    private suspend fun providerState(ownerProfileId: Int?): EffectiveTrackingProviderState =
+        ownerProfileId?.let { trackingProviderStateService.currentState(it) }
+            ?: trackingProviderStateService.currentState()
 }

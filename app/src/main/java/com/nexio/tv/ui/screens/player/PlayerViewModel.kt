@@ -83,7 +83,16 @@ class PlayerViewModel @Inject constructor(
         playbackMediaSourceTransport = playbackMediaSourceTransport,
         openSubtitlesHashIntegrationProvider = openSubtitlesHashIntegrationProvider,
         playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
-        playbackOwnerProfileId = profileManager.activeProfileId.value,
+        playbackOwnerContext = run {
+            val session = profileManager.activeProfileSession.value
+            com.nexio.tv.core.playback.PlaybackOwnerContext(
+                ownerProfileId = session.profileId,
+                ownerSessionId = session.sessionId,
+                traktAccount = null,
+                simklAccount = null,
+                startedAtEpochMs = System.currentTimeMillis().coerceAtLeast(1L)
+            )
+        },
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

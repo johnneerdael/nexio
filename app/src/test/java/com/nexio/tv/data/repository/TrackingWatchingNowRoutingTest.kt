@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -13,6 +14,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TrackingWatchingNowRoutingTest {
+
+    private fun owner(profileId: Int): PlaybackOwnerContext =
+        PlaybackOwnerContext(
+            ownerProfileId = profileId,
+            ownerSessionId = "session-$profileId",
+            traktAccount = null,
+            simklAccount = null,
+            startedAtEpochMs = 1L
+        )
 
     private fun trackingProviderStateService(
         provider: TrackingProvider
@@ -71,7 +81,8 @@ class TrackingWatchingNowRoutingTest {
                 title = "Inception",
                 year = 2010
             ),
-            12f
+            12f,
+            owner(1)
         )
 
         coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f) }
