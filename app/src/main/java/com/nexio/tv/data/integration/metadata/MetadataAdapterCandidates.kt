@@ -174,7 +174,8 @@ internal fun buildTmdbLocalizedCandidate(
     provider: MetadataPrimaryProvider,
     policy: LocalizationPolicy,
     requested: TmdbEnrichment?,
-    english: TmdbEnrichment?
+    english: TmdbEnrichment?,
+    sourceApiShapeId: String = TmdbApiShapes.MOVIE_CORE
 ): MetadataCandidate {
     val title = LocalizationResolver.selectField(
         field = ResolvedField.TITLE,
@@ -185,7 +186,7 @@ internal fun buildTmdbLocalizedCandidate(
                 value = requested?.localizedTitle,
                 language = policy.requestedLanguage,
                 provider = provider,
-                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                sourceShape = sourceApiShapeId,
                 fallbackRole = FallbackRole.LOCALIZED
             ),
             LocalizedFieldCandidate(
@@ -193,7 +194,7 @@ internal fun buildTmdbLocalizedCandidate(
                 value = english?.localizedTitle,
                 language = policy.fallbackLanguage,
                 provider = provider,
-                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                sourceShape = sourceApiShapeId,
                 fallbackRole = FallbackRole.LANGUAGE_FALLBACK
             )
         )
@@ -207,7 +208,7 @@ internal fun buildTmdbLocalizedCandidate(
                 value = requested?.description,
                 language = policy.requestedLanguage,
                 provider = provider,
-                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                sourceShape = sourceApiShapeId,
                 fallbackRole = FallbackRole.LOCALIZED
             ),
             LocalizedFieldCandidate(
@@ -215,7 +216,7 @@ internal fun buildTmdbLocalizedCandidate(
                 value = english?.description,
                 language = policy.fallbackLanguage,
                 provider = provider,
-                sourceShape = TmdbApiShapes.MOVIE_CORE,
+                sourceShape = sourceApiShapeId,
                 fallbackRole = FallbackRole.LANGUAGE_FALLBACK
             )
         )
@@ -231,6 +232,10 @@ internal fun buildTmdbLocalizedCandidate(
             source?.logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
             source?.rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             source?.runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+        },
+        localization = buildMap {
+            title?.let { put(ResolvedField.TITLE, it.toMetadataTrace()) }
+            overview?.let { put(ResolvedField.OVERVIEW, it.toMetadataTrace()) }
         }
     )
 }
