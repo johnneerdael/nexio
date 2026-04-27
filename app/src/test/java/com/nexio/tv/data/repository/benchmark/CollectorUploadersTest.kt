@@ -4,6 +4,7 @@ import android.os.Build
 import com.google.gson.JsonParser
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,6 +44,99 @@ class CollectorUploadersTest {
         assertEquals("shadow-android-id", envelope.getAsJsonObject("client").get("androidId").asString)
         server.shutdown()
     }
+
+    @Test
+    fun `device capability uploader posts envelope when data collection is enabled`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"ok":true,"id":"device-x"}"""))
+
+        val uploader = DeviceCapabilityReportUploader(
+            playerSettingsDataStore = playerSettingsDataStore(
+                PlayerSettings(shadowAutoplayDataCollectionEnabled = true)
+            ),
+            deviceCapabilityRepository = mockk<com.nexio.tv.data.repository.device.DeviceCapabilityRepository>().also {
+                coEvery { it.snapshotForAutoplay() } returns sampleSnapshot()
+            },
+            okHttpClient = OkHttpClient(),
+            baseUrlProvider = { server.url("/").toString().trimEnd('/') },
+            tokenProvider = { "write-token" },
+            clientInfoProvider = { clientInfoJson("device-x") }
+        )
+
+        uploader.submitOnceIfEnabled()
+
+        val request = server.takeRequest()
+        assertEquals("/api/v1/device-capability-reports", request.path)
+        assertEquals("Bearer write-token", request.getHeader("Authorization"))
+        val envelope = JsonParser.parseString(request.body.readUtf8()).asJsonObject
+        assertEquals("device-x", envelope.getAsJsonObject("client").get("androidId").asString)
+        assertEquals(34, envelope.getAsJsonObject("report").get("sdkInt").asInt)
+        server.shutdown()
+    }
+
+    @Test
+    fun `device capability uploader does not post when data collection is disabled`() = runTest {
+        val server = MockWebServer()
+        server.start()
+
+        val uploader = DeviceCapabilityReportUploader(
+            playerSettingsDataStore = playerSettingsDataStore(
+                PlayerSettings(shadowAutoplayDataCollectionEnabled = false)
+            ),
+            deviceCapabilityRepository = mockk<com.nexio.tv.data.repository.device.DeviceCapabilityRepository>().also {
+                coEvery { it.snapshotForAutoplay() } returns sampleSnapshot()
+            },
+            okHttpClient = OkHttpClient(),
+            baseUrlProvider = { server.url("/").toString().trimEnd('/') },
+            tokenProvider = { "write-token" },
+            clientInfoProvider = { clientInfoJson("device-x") }
+        )
+
+        uploader.submitOnceIfEnabled()
+
+        assertEquals(0, server.requestCount)
+        server.shutdown()
+    }
+
+    @Test
+    fun `device capability uploader posts at most once per instance`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(200))
+        server.enqueue(MockResponse().setResponseCode(200))
+
+        val uploader = DeviceCapabilityReportUploader(
+            playerSettingsDataStore = playerSettingsDataStore(
+                PlayerSettings(shadowAutoplayDataCollectionEnabled = true)
+            ),
+            deviceCapabilityRepository = mockk<com.nexio.tv.data.repository.device.DeviceCapabilityRepository>().also {
+                coEvery { it.snapshotForAutoplay() } returns sampleSnapshot()
+            },
+            okHttpClient = OkHttpClient(),
+            baseUrlProvider = { server.url("/").toString().trimEnd('/') },
+            tokenProvider = { "write-token" },
+            clientInfoProvider = { clientInfoJson("device-x") }
+        )
+
+        uploader.submitOnceIfEnabled()
+        uploader.submitOnceIfEnabled()
+        uploader.submitOnceIfEnabled()
+
+        assertEquals(1, server.requestCount)
+        server.shutdown()
+    }
+
+    private fun sampleSnapshot() = DeviceCapabilitySnapshot(
+        model = "Google TV Streamer",
+        manufacturer = "Google",
+        sdkInt = 34,
+        displayHdrTypes = setOf(DeviceHdrType.HDR10),
+        videoDecode = DeviceVideoDecodeCapabilities(),
+        audioOutput = DeviceAudioOutputCapabilities(),
+        evidence = null,
+        capturedAtMs = 1775519900000L
+    )
 
     private fun playerSettingsDataStore(settings: PlayerSettings): PlayerSettingsDataStore {
         return mockk<PlayerSettingsDataStore>(relaxed = true).also {
