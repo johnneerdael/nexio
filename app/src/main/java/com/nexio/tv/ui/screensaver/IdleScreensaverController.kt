@@ -2,14 +2,13 @@ package com.nexio.tv.ui.screensaver
 
 import android.os.SystemClock
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.coerceScreensaverDelaySeconds
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
-
-internal fun coerceScreensaverDelaySeconds(seconds: Int): Int = seconds.coerceIn(60, 600)
 
 @Singleton
 class IdleScreensaverController @Inject constructor(

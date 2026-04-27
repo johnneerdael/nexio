@@ -24,6 +24,11 @@ private val migrationHideUnreleasedDefaultEnabledKey =
     booleanPreferencesKey("migration_hide_unreleased_default_enabled")
 private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
 
+internal fun coerceScreensaverDelaySeconds(seconds: Int): Int = seconds.coerceIn(
+    LayoutPreferenceDataStore.MIN_SCREENSAVER_DELAY_SECONDS,
+    LayoutPreferenceDataStore.MAX_SCREENSAVER_DELAY_SECONDS
+)
+
 internal fun migrateThemePreference(stored: String?): AppTheme {
     if (stored == "WHITE") return AppTheme.CRIMSON
     return runCatching { AppTheme.valueOf(stored ?: "") }.getOrDefault(AppTheme.CRIMSON)
@@ -187,7 +192,7 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val screensaverDelaySeconds: Flow<Int> = profileFlow { prefs ->
         val stored = prefs[screensaverDelaySecondsKey] ?: DEFAULT_SCREENSAVER_DELAY_SECONDS
-        stored.coerceIn(MIN_SCREENSAVER_DELAY_SECONDS, MAX_SCREENSAVER_DELAY_SECONDS)
+        coerceScreensaverDelaySeconds(stored)
     }
 
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->
@@ -345,7 +350,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setScreensaverDelaySeconds(seconds: Int) {
         store().edit { prefs ->
             prefs[screensaverDelaySecondsKey] =
-                seconds.coerceIn(MIN_SCREENSAVER_DELAY_SECONDS, MAX_SCREENSAVER_DELAY_SECONDS)
+                coerceScreensaverDelaySeconds(seconds)
         }
     }
 

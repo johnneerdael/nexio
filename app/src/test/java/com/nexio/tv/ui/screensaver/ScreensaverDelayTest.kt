@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screensaver
 
+import com.nexio.tv.data.local.coerceScreensaverDelaySeconds
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
