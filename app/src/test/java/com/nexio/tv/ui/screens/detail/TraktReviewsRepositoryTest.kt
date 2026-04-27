@@ -9,6 +9,10 @@ import com.nexio.tv.data.remote.dto.trakt.TraktCommentUserDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentUserStatsDto
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktReviewsRepository
+import com.nexio.tv.data.repository.TrackingAuthSession
+import com.nexio.tv.domain.model.TrackingProvider
+import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -36,7 +40,15 @@ class TraktReviewsRepositoryTest {
         val provider = TraktIntegrationProvider(
             runtime = runtime,
             traktApi = mockk<TraktApi>(),
-            traktAuthService = mockk<TraktAuthService>(relaxed = true)
+            traktAuthService = mockk<TraktAuthService> {
+                val session = TrackingAuthSession(
+                    provider = TrackingProvider.TRAKT,
+                    profileId = 1,
+                    credentialHash = "trakt-test-1"
+                )
+                every { currentAuthSession() } returns session
+                coEvery { accountScopedSession() } returns session
+            }
         )
         val repository = TraktReviewsRepository(provider)
 
@@ -47,7 +59,10 @@ class TraktReviewsRepositoryTest {
             limit = 8
         )
 
-        assertEquals(listOf("profile:0:trakt:reviews:movie:fight-club-1999:page:1:limit:8"), runtime.keys)
+        assertEquals(
+            listOf("profile:1:provider:TRAKT:credential:trakt-test-1:trakt:reviews:movie:fight-club-1999:page:1:limit:8"),
+            runtime.keys
+        )
         assertEquals(1, page?.reviews?.size)
         assertTrue(page?.hasMore == true)
         assertEquals("Cine Phile", page?.reviews?.firstOrNull()?.author)

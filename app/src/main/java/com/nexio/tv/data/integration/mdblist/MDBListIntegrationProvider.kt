@@ -11,6 +11,8 @@ import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.MDBListApiShapes
+import com.nexio.tv.core.integration.ProfileExecutionContext
+import com.nexio.tv.core.integration.ProviderAccountRef
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.StringIntegrationCodec
 import com.nexio.tv.core.integration.credentialHash
@@ -38,15 +40,15 @@ class MDBListIntegrationProvider @Inject constructor(
 ) {
     suspend fun getRaw(
         relativeUrl: String,
-        apiKey: String
+        apiKey: String,
+        profileId: Int? = null
     ): IntegrationCallResult<String> =
         runtime.call(
-            IntegrationCallSpec(
-                provider = IntegrationProvider.MDBLIST,
-                apiShapeId = MDBListApiShapes.RAW_URL_LIST,
-                operationKey = "mdblist.get_raw",
-                workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
-                scope = IntegrationScope.Global
+            accountCallSpec(
+                relativeUrl = relativeUrl,
+                credential = apiKey,
+                profileId = profileId,
+                operation = "mdblist.get_raw"
             ) {
                 runCatching {
                     mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
@@ -65,15 +67,16 @@ class MDBListIntegrationProvider @Inject constructor(
 
     suspend fun getRawWithQuery(
         relativeUrl: String,
-        query: Map<String, String>
+        query: Map<String, String>,
+        profileId: Int? = null,
+        accountCredential: String? = query["apikey"] ?: query["apiKey"]
     ): IntegrationCallResult<String> =
         runtime.call(
-            IntegrationCallSpec(
-                provider = IntegrationProvider.MDBLIST,
-                apiShapeId = MDBListApiShapes.RAW_URL_LIST,
-                operationKey = "mdblist.get_raw_with_query",
-                workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
-                scope = IntegrationScope.Global
+            accountCallSpec(
+                relativeUrl = relativeUrl,
+                credential = accountCredential,
+                profileId = profileId,
+                operation = "mdblist.get_raw_with_query"
             ) {
                 runCatching {
                     mdbListApi.getRawWithQuery(relativeUrl = relativeUrl, query = query)
@@ -89,6 +92,54 @@ class MDBListIntegrationProvider @Inject constructor(
                 )
             }
         )
+
+    private fun accountCallSpec(
+        relativeUrl: String,
+        credential: String?,
+        profileId: Int?,
+        operation: String,
+        call: suspend () -> IntegrationCallResult<String>
+    ): IntegrationCallSpec<String> {
+        val normalizedCredential = credential?.takeIf { it.isNotBlank() }
+        if (profileId == null || normalizedCredential == null) {
+            return IntegrationCallSpec(
+                provider = IntegrationProvider.MDBLIST,
+                apiShapeId = MDBListApiShapes.RAW_URL_LIST,
+                operationKey = operation,
+                workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
+                scope = IntegrationScope.GlobalContent,
+                call = call
+            )
+        }
+
+        val credentialHash = credentialHash(IntegrationProvider.MDBLIST, normalizedCredential)
+        val operationKey = "profile:$profileId:provider:MDBLIST:credential:$credentialHash:operation:$operation:url:${relativeUrl.hashCode()}"
+        return IntegrationCallSpec(
+            provider = IntegrationProvider.MDBLIST,
+            apiShapeId = MDBListApiShapes.RAW_URL_LIST,
+            operationKey = operationKey,
+            workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
+            scope = IntegrationScope.Account(
+                profileId = profileId,
+                provider = IntegrationProvider.MDBLIST,
+                credentialHash = credentialHash
+            ),
+            profileContext = ProfileExecutionContext(
+                profileId = profileId,
+                sessionId = "mdblist:$profileId",
+                displayLanguage = "en",
+                region = "global",
+                accounts = mapOf(
+                    IntegrationProvider.MDBLIST to ProviderAccountRef(
+                        provider = IntegrationProvider.MDBLIST,
+                        credentialHash = credentialHash,
+                        accountIdHash = null
+                    )
+                )
+            ),
+            call = call
+        )
+    }
 
     suspend fun fetchRatings(
         imdbId: String,

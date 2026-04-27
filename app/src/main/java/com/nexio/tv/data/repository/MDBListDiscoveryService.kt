@@ -150,11 +150,12 @@ class MDBListDiscoveryService @Inject constructor(
                 return@withLock
             }
 
-            val personalLists = fetchPersonalLists(apiKey)
-            val topLists = fetchTopLists(apiKey)
+            val personalLists = fetchPersonalLists(apiKey, profileId)
+            val topLists = fetchTopLists(apiKey, profileId)
             val catalogPrefs = mdbListSettingsDataStore.catalogPreferences.first()
             val customCatalogs = fetchSelectedCatalogs(
                 apiKey = apiKey,
+                profileId = profileId,
                 personalLists = personalLists,
                 topLists = topLists,
                 catalogPrefs = catalogPrefs
@@ -177,11 +178,11 @@ class MDBListDiscoveryService @Inject constructor(
         }
     }
 
-    private suspend fun fetchPersonalLists(apiKey: String): List<MDBListListOption> {
+    private suspend fun fetchPersonalLists(apiKey: String, profileId: Int): List<MDBListListOption> {
         val arrays = listOfNotNull(
-            requestArray(apiKey = apiKey, relativeUrl = "lists/user"),
-            requestArray(apiKey = apiKey, relativeUrl = "my/lists"),
-            requestArray(apiKey = apiKey, relativeUrl = "lists/me")
+            requestArray(apiKey = apiKey, profileId = profileId, relativeUrl = "lists/user"),
+            requestArray(apiKey = apiKey, profileId = profileId, relativeUrl = "my/lists"),
+            requestArray(apiKey = apiKey, profileId = profileId, relativeUrl = "lists/me")
         )
         return arrays.asSequence()
             .flatMap { array -> parseListOptions(array, isPersonal = true).asSequence() }
@@ -189,10 +190,10 @@ class MDBListDiscoveryService @Inject constructor(
             .toList()
     }
 
-    private suspend fun fetchTopLists(apiKey: String): List<MDBListListOption> {
+    private suspend fun fetchTopLists(apiKey: String, profileId: Int): List<MDBListListOption> {
         val arrays = listOfNotNull(
-            requestArray(apiKey = apiKey, relativeUrl = "lists/top"),
-            requestArray(apiKey = apiKey, relativeUrl = "top/lists")
+            requestArray(apiKey = apiKey, profileId = profileId, relativeUrl = "lists/top"),
+            requestArray(apiKey = apiKey, profileId = profileId, relativeUrl = "top/lists")
         )
         return arrays.asSequence()
             .flatMap { array -> parseListOptions(array, isPersonal = false).asSequence() }
@@ -202,6 +203,7 @@ class MDBListDiscoveryService @Inject constructor(
 
     private suspend fun fetchSelectedCatalogs(
         apiKey: String,
+        profileId: Int,
         personalLists: List<MDBListListOption>,
         topLists: List<MDBListListOption>,
         catalogPrefs: MDBListCatalogPreferences
@@ -230,15 +232,16 @@ class MDBListDiscoveryService @Inject constructor(
 
         return orderedKeys.flatMap { key ->
             val option = activeOptions[key] ?: return@flatMap emptyList()
-            fetchCatalogForList(apiKey = apiKey, option = option)
+            fetchCatalogForList(apiKey = apiKey, profileId = profileId, option = option)
         }
     }
 
     private suspend fun fetchCatalogForList(
         apiKey: String,
+        profileId: Int,
         option: MDBListListOption
     ): List<MDBListCustomCatalog> {
-        val detailBody = requestListDetailBody(apiKey = apiKey, option = option)
+        val detailBody = requestListDetailBody(apiKey = apiKey, profileId = profileId, option = option)
         val detailOptions = detailBody
             ?.let(::parseJsonArray)
             ?.let { parseListOptions(it, isPersonal = option.isPersonal) }
@@ -260,6 +263,8 @@ class MDBListDiscoveryService @Inject constructor(
                 .mapNotNull { resolvedId ->
                     requestBodyWithQuery(
                         relativeUrl = "lists/$resolvedId/items",
+                        profileId = profileId,
+                        accountCredential = apiKey,
                         query = mapOf(
                             "apikey" to apiKey,
                             "limit" to maxItemsPerRail.toString(),
@@ -270,7 +275,11 @@ class MDBListDiscoveryService @Inject constructor(
                 }
                 .toTypedArray(),
             detailBody,
-            requestAbsoluteBody("https://mdblist.com/lists/${option.owner}/${option.listId}/json")
+            requestAbsoluteBody(
+                url = "https://mdblist.com/lists/${option.owner}/${option.listId}/json",
+                profileId = profileId,
+                accountCredential = apiKey
+            )
         )
 
         val parsedItems = payloads.asSequence()
@@ -318,13 +327,14 @@ class MDBListDiscoveryService @Inject constructor(
 
     private suspend fun requestListDetailBody(
         apiKey: String,
+        profileId: Int,
         option: MDBListListOption
     ): String? {
-        val byName = requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+        val byName = requestBody(apiKey = apiKey, profileId = profileId, relativeUrl = "lists/${option.owner}/${option.listId}")
         if (!byName.isNullOrBlank() || !option.listId.isNumericListId()) {
             return byName
         }
-        return requestBody(apiKey = apiKey, relativeUrl = "lists/${option.listId}")
+        return requestBody(apiKey = apiKey, profileId = profileId, relativeUrl = "lists/${option.listId}")
     }
 
     private fun parseTopListKeyFallback(key: String): MDBListListOption? {
@@ -343,13 +353,13 @@ class MDBListDiscoveryService @Inject constructor(
         )
     }
 
-    private suspend fun requestArray(apiKey: String, relativeUrl: String): JSONArray? {
-        return requestBody(apiKey, relativeUrl)?.let(::parseJsonArray)
+    private suspend fun requestArray(apiKey: String, profileId: Int, relativeUrl: String): JSONArray? {
+        return requestBody(apiKey, profileId, relativeUrl)?.let(::parseJsonArray)
     }
 
-    private suspend fun requestBody(apiKey: String, relativeUrl: String): String? {
+    private suspend fun requestBody(apiKey: String, profileId: Int, relativeUrl: String): String? {
         return try {
-            when (val result = mdbListIntegrationProvider.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)) {
+            when (val result = mdbListIntegrationProvider.getRaw(relativeUrl = relativeUrl, apiKey = apiKey, profileId = profileId)) {
                 is IntegrationCallResult.Success -> result.value.trim()
                 is IntegrationCallResult.HttpError -> {
                     Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${result.statusCode}")
@@ -363,9 +373,21 @@ class MDBListDiscoveryService @Inject constructor(
         }
     }
 
-    private suspend fun requestBodyWithQuery(relativeUrl: String, query: Map<String, String>): String? {
+    private suspend fun requestBodyWithQuery(
+        relativeUrl: String,
+        profileId: Int,
+        accountCredential: String,
+        query: Map<String, String>
+    ): String? {
         return try {
-            when (val result = mdbListIntegrationProvider.getRawWithQuery(relativeUrl = relativeUrl, query = query)) {
+            when (
+                val result = mdbListIntegrationProvider.getRawWithQuery(
+                    relativeUrl = relativeUrl,
+                    query = query,
+                    profileId = profileId,
+                    accountCredential = accountCredential
+                )
+            ) {
                 is IntegrationCallResult.Success -> result.value.trim()
                 is IntegrationCallResult.HttpError -> {
                     Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${result.statusCode} query=${query.keys.joinToString(",")}")
@@ -379,9 +401,20 @@ class MDBListDiscoveryService @Inject constructor(
         }
     }
 
-    private suspend fun requestAbsoluteBody(url: String): String? {
+    private suspend fun requestAbsoluteBody(
+        url: String,
+        profileId: Int,
+        accountCredential: String
+    ): String? {
         return try {
-            when (val result = mdbListIntegrationProvider.getRawWithQuery(relativeUrl = url, query = emptyMap())) {
+            when (
+                val result = mdbListIntegrationProvider.getRawWithQuery(
+                    relativeUrl = url,
+                    query = emptyMap(),
+                    profileId = profileId,
+                    accountCredential = accountCredential
+                )
+            ) {
                 is IntegrationCallResult.Success -> result.value.trim()
                 is IntegrationCallResult.HttpError -> {
                     Log.d("MDBListDiscovery", "Request failed: $url code=${result.statusCode}")

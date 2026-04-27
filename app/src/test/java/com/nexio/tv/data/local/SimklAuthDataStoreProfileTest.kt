@@ -111,4 +111,38 @@ class SimklAuthDataStoreProfileTest {
         val stateP1 = authStore.state.first()
         assertEquals("token_p1", stateP1.accessToken)
     }
+
+    @Test
+    fun `saving new token clears stale simkl account identity in same profile`() = runTest {
+        val manager = makeManager()
+        val authStore = makeAuthStore(manager)
+
+        authStore.saveAccessToken("token_p1")
+        authStore.saveUser(username = "old-user", accountId = 123L, accountType = "premium")
+
+        authStore.saveAccessToken("token_p1_new", clearAccountIdentity = true)
+        val state = authStore.state.first()
+
+        assertEquals("token_p1_new", state.accessToken)
+        assertNull(state.username)
+        assertNull(state.accountId)
+        assertNull(state.accountType)
+    }
+
+    @Test
+    fun `refresh token save preserves simkl account identity in same profile`() = runTest {
+        val manager = makeManager()
+        val authStore = makeAuthStore(manager)
+
+        authStore.saveAccessToken("token_p1")
+        authStore.saveUser(username = "old-user", accountId = 123L, accountType = "premium")
+
+        authStore.saveAccessToken("token_p1_refreshed")
+        val state = authStore.state.first()
+
+        assertEquals("token_p1_refreshed", state.accessToken)
+        assertEquals("old-user", state.username)
+        assertEquals(123L, state.accountId)
+        assertEquals("premium", state.accountType)
+    }
 }

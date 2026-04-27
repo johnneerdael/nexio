@@ -40,7 +40,7 @@ class SimklIntegrationProvider @Inject constructor(
     suspend fun getLastActivities(
         session: TrackingAuthSession? = null
     ): retrofit2.Response<SimklLastActivitiesResponseDto>? {
-        val ownerSession = session ?: simklAuthService.currentAuthSession()
+        val ownerSession = simklAuthService.accountScopedSession(session ?: simklAuthService.currentAuthSession())
         val result = runtime.call(
             IntegrationCallSpec(
                 provider = IntegrationProvider.SIMKL,
@@ -277,7 +277,7 @@ class SimklIntegrationProvider @Inject constructor(
         rawOperationKey: String,
         call: suspend (authorization: String) -> retrofit2.Response<T>
     ): retrofit2.Response<T>? {
-        val ownerSession = session ?: simklAuthService.currentAuthSession()
+        val ownerSession = simklAuthService.accountScopedSession(session ?: simklAuthService.currentAuthSession())
         val operationKey = accountOperationKey(ownerSession, rawOperationKey)
         val result = runtime.call(
             IntegrationCallSpec(
@@ -305,7 +305,7 @@ class SimklIntegrationProvider @Inject constructor(
         rawOperationKey: String,
         call: suspend (authorization: String) -> retrofit2.Response<T>
     ): retrofit2.Response<T>? {
-        val ownerSession = session ?: simklAuthService.currentAuthSession()
+        val ownerSession = simklAuthService.accountScopedSession(session ?: simklAuthService.currentAuthSession())
         val operationKey = accountOperationKey(ownerSession, rawOperationKey)
         val result = runtime.call(
             IntegrationCallSpec(
@@ -348,7 +348,7 @@ class SimklIntegrationProvider @Inject constructor(
                 IntegrationProvider.SIMKL to ProviderAccountRef(
                     provider = IntegrationProvider.SIMKL,
                     credentialHash = credentialHash(session),
-                    accountIdHash = null
+                    accountIdHash = session.accountIdHash
                 )
             )
         )
@@ -358,6 +358,6 @@ class SimklIntegrationProvider @Inject constructor(
 
     private fun credentialHash(session: TrackingAuthSession): String {
         require(session.provider == TrackingProvider.SIMKL) { "Expected SIMKL session, got ${session.provider}" }
-        return "simkl:profile:${session.profileId}"
+        return session.credentialHash?.takeIf { it.isNotBlank() } ?: "simkl:profile:${session.profileId}"
     }
 }

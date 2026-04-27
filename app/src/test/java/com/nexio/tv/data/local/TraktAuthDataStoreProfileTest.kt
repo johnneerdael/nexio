@@ -124,6 +124,38 @@ class TraktAuthDataStoreProfileTest {
     }
 
     @Test
+    fun `saving new token clears stale account identity in same profile`() = runTest {
+        val manager = makeManager()
+        val authStore = makeAuthStore(manager)
+
+        authStore.saveToken(fakeToken("token_profile1"))
+        authStore.saveUser(username = "old-user", userSlug = "old-slug")
+
+        authStore.saveToken(fakeToken("token_profile1_new"), clearAccountIdentity = true)
+        val state = authStore.state.first()
+
+        assertEquals("token_profile1_new", state.accessToken)
+        assertNull(state.username)
+        assertNull(state.userSlug)
+    }
+
+    @Test
+    fun `refresh token save preserves account identity in same profile`() = runTest {
+        val manager = makeManager()
+        val authStore = makeAuthStore(manager)
+
+        authStore.saveToken(fakeToken("token_profile1"))
+        authStore.saveUser(username = "old-user", userSlug = "old-slug")
+
+        authStore.saveToken(fakeToken("token_profile1_refreshed"))
+        val state = authStore.state.first()
+
+        assertEquals("token_profile1_refreshed", state.accessToken)
+        assertEquals("old-user", state.username)
+        assertEquals("old-slug", state.userSlug)
+    }
+
+    @Test
     fun `state flow reacts to profile switch`() = runTest {
         val manager = makeManager()
         val authStore = makeAuthStore(manager)

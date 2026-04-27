@@ -2,6 +2,8 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.credentialHash as integrationCredentialHash
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
@@ -41,6 +43,20 @@ class SimklAuthService @Inject constructor(
     private suspend fun getCurrentAuthState(session: TrackingAuthSession): SimklAuthState =
         simklAuthDataStore.stateForProfile(session.profileId).first()
 
+    suspend fun accountScopedSession(session: TrackingAuthSession = currentAuthSession()): TrackingAuthSession {
+        if (!session.credentialHash.isNullOrBlank()) return session
+        val state = getCurrentAuthState(session)
+        val accountMaterial = state.accountId?.toString()
+            ?: state.username?.takeIf { it.isNotBlank() }
+        val credentialMaterial = state.accessToken?.takeIf { it.isNotBlank() }
+            ?: accountMaterial
+            ?: "profile:${session.profileId}:unauthenticated"
+        return session.copy(
+            credentialHash = integrationCredentialHash(IntegrationProvider.SIMKL, credentialMaterial),
+            accountIdHash = accountMaterial?.let { integrationCredentialHash(IntegrationProvider.SIMKL, it) }
+        )
+    }
+
     suspend fun startPinAuth(): Result<Unit> {
         if (!hasRequiredCredentials()) {
             return Result.failure(IllegalStateException("Missing SIMKL_CLIENT_ID"))
@@ -77,7 +93,7 @@ class SimklAuthService @Inject constructor(
             return SimklTokenPollResult.Failed("PIN polling failed (${response.code()})")
         }
         if (body.result.equals("OK", ignoreCase = true) && !body.accessToken.isNullOrBlank()) {
-            simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)
+            simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId, clearAccountIdentity = true)
             simklAuthDataStore.clearDeviceFlow(profileId)
             val username = fetchUserSettings(session)
             return SimklTokenPollResult.Approved(username)
@@ -98,8 +114,12 @@ class SimklAuthService @Inject constructor(
     }
 
     private suspend fun fetchUserSettings(session: TrackingAuthSession): String? {
+        val ownerSession = accountScopedSession(session)
         val response = executeAuthOwnerRequest(session) { authHeader ->
-            simklAuthIntegrationProvider.getUserSettings(authorization = authHeader)
+            simklAuthIntegrationProvider.getUserSettings(
+                session = ownerSession,
+                authorization = authHeader
+            )
                 ?: return@executeAuthOwnerRequest Response.error(500, okhttp3.ResponseBody.create(null, "simkl_runtime_missing"))
         } ?: return null
         if (!response.isSuccessful) return null

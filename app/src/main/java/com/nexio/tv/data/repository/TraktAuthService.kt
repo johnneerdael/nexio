@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.credentialHash as integrationCredentialHash
 import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
@@ -109,6 +111,23 @@ class TraktAuthService @Inject constructor(
     private suspend fun getCurrentAuthState(session: TrackingAuthSession): TraktAuthState =
         traktAuthDataStore.stateForProfile(session.profileId).first()
 
+    suspend fun accountScopedSession(session: TrackingAuthSession = currentAuthSession()): TrackingAuthSession {
+        if (!session.credentialHash.isNullOrBlank()) return session
+        val state = getCurrentAuthState(session)
+        val credentialMaterial = state.refreshToken?.takeIf { it.isNotBlank() }
+            ?: state.accessToken?.takeIf { it.isNotBlank() }
+            ?: state.userSlug?.takeIf { it.isNotBlank() }
+            ?: state.username?.takeIf { it.isNotBlank() }
+            ?: "profile:${session.profileId}:unauthenticated"
+        val accountMaterial = state.userSlug
+            ?.takeIf { it.isNotBlank() }
+            ?: state.username?.takeIf { it.isNotBlank() }
+        return session.copy(
+            credentialHash = integrationCredentialHash(IntegrationProvider.TRAKT, credentialMaterial),
+            accountIdHash = accountMaterial?.let { integrationCredentialHash(IntegrationProvider.TRAKT, it) }
+        )
+    }
+
     suspend fun startDeviceAuth(): Result<TraktDeviceCodeResponseDto> {
         if (!hasRequiredCredentials()) {
             return Result.failure(IllegalStateException("Missing TRAKT credentials"))
@@ -171,7 +190,7 @@ class TraktAuthService @Inject constructor(
 
         val tokenBody = response.body()
         if (response.isSuccessful && tokenBody != null) {
-            traktAuthDataStore.saveToken(tokenBody, profileId = profileId)
+            traktAuthDataStore.saveToken(tokenBody, profileId = profileId, clearAccountIdentity = true)
             traktAuthDataStore.clearDeviceFlow(profileId)
             val user = fetchUserSettings(session)
             return TraktTokenPollResult.Approved(user)

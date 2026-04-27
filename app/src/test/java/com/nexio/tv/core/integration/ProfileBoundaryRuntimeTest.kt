@@ -2,6 +2,7 @@ package com.nexio.tv.core.integration
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfileBoundaryRuntimeTest {
@@ -62,6 +63,78 @@ class ProfileBoundaryRuntimeTest {
     }
 
     @Test
+    fun `account call spec rejects keys missing account isolation tokens`() {
+        val context = accountContext(
+            profileId = 2,
+            provider = IntegrationProvider.SIMKL,
+            credentialHash = "simkl:profile:2"
+        )
+
+        val exception = assertThrows(ProfileBoundaryException::class.java) {
+            IntegrationCallSpec(
+                provider = IntegrationProvider.SIMKL,
+                apiShapeId = "simkl.scrobble",
+                operationKey = "profile:2:operation:simkl.scrobble.start",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                scope = IntegrationScope.Account(
+                    profileId = 2,
+                    provider = IntegrationProvider.SIMKL,
+                    credentialHash = "simkl:profile:2"
+                ),
+                profileContext = context,
+                call = { IntegrationCallResult.Success("ok") }
+            )
+        }
+
+        assertEquals(ProfileBoundaryViolation.PROFILE_CACHE_KEY_MISSING_PROFILE_ID, exception.violation)
+    }
+
+    @Test
+    fun `simkl and trakt account call keys include profile provider credential and operation`() {
+        val accountKeys = listOf(
+            AccountKeyFixture(
+                provider = IntegrationProvider.SIMKL,
+                profileId = 2,
+                credentialHash = "simkl:profile:2",
+                operationName = "simkl.scrobble.start"
+            ),
+            AccountKeyFixture(
+                provider = IntegrationProvider.TRAKT,
+                profileId = 7,
+                credentialHash = "trakt:profile:7",
+                operationName = "trakt.scrobble.start"
+            )
+        )
+
+        accountKeys.forEach { fixture ->
+            val operationKey = "profile:${fixture.profileId}:provider:${fixture.provider.name}:credential:${fixture.credentialHash}:operation:${fixture.operationName}"
+            val spec = IntegrationCallSpec(
+                provider = fixture.provider,
+                apiShapeId = fixture.operationName.substringBeforeLast('.'),
+                operationKey = operationKey,
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                scope = IntegrationScope.Account(
+                    profileId = fixture.profileId,
+                    provider = fixture.provider,
+                    credentialHash = fixture.credentialHash
+                ),
+                profileContext = accountContext(
+                    profileId = fixture.profileId,
+                    provider = fixture.provider,
+                    credentialHash = fixture.credentialHash
+                ),
+                call = { IntegrationCallResult.Success("ok") }
+            )
+
+            assertEquals("Account", spec.scope.auditName)
+            assertTrue(operationKey.contains("profile:${fixture.profileId}"))
+            assertTrue(operationKey.contains("provider:${fixture.provider.name}"))
+            assertTrue(operationKey.contains("credential:${fixture.credentialHash}"))
+            assertTrue(operationKey.contains("operation:${fixture.operationName}"))
+        }
+    }
+
+    @Test
     fun `audit event exposes profile boundary scope details`() {
         val event = IntegrationAuditEvent(
             traceId = "trace",
@@ -105,4 +178,30 @@ class ProfileBoundaryRuntimeTest {
             override fun encode(value: String): ByteArray = value.toByteArray()
             override fun decode(bytes: ByteArray): String = bytes.decodeToString()
         }
+
+    private data class AccountKeyFixture(
+        val provider: IntegrationProvider,
+        val profileId: Int,
+        val credentialHash: String,
+        val operationName: String
+    )
+
+    private fun accountContext(
+        profileId: Int,
+        provider: IntegrationProvider,
+        credentialHash: String
+    ): ProfileExecutionContext =
+        ProfileExecutionContext(
+            profileId = profileId,
+            sessionId = "session-$profileId",
+            displayLanguage = "en-US",
+            region = "US",
+            accounts = mapOf(
+                provider to ProviderAccountRef(
+                    provider = provider,
+                    credentialHash = credentialHash,
+                    accountIdHash = null
+                )
+            )
+        )
 }

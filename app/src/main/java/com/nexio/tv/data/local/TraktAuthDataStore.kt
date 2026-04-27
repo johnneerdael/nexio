@@ -87,7 +87,8 @@ class TraktAuthDataStore @Inject constructor(
 
     suspend fun saveToken(
         token: TraktTokenResponseDto,
-        profileId: Int = profileManager.activeProfileId.value
+        profileId: Int = profileManager.activeProfileId.value,
+        clearAccountIdentity: Boolean = false
     ) {
         store(profileId).edit { preferences ->
             preferences[accessTokenKey] = token.accessToken
@@ -95,6 +96,10 @@ class TraktAuthDataStore @Inject constructor(
             preferences[tokenTypeKey] = token.tokenType
             preferences[createdAtKey] = token.createdAt
             preferences[expiresInKey] = token.expiresIn
+            if (clearAccountIdentity) {
+                preferences.remove(usernameKey)
+                preferences.remove(userSlugKey)
+            }
         }
     }
 
