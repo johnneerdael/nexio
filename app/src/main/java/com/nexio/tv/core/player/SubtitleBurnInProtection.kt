@@ -5,6 +5,7 @@ internal const val SUBTITLE_MAX_ALPHA: Float = 0.90f
 internal const val SUBTITLE_BURN_IN_ZONE_COUNT: Int = 5
 internal const val SUBTITLE_BURN_IN_ZONE_SPREAD_PERCENT: Float = 6f
 internal const val SUBTITLE_BURN_IN_HORIZONTAL_JITTER_PX: Float = 6f
+internal const val SUBTITLE_BURN_IN_HORIZONTAL_SLOT_COUNT: Int = 5
 private const val DAY_MS: Long = 24L * 60L * 60L * 1000L
 
 /**
@@ -15,7 +16,7 @@ private const val DAY_MS: Long = 24L * 60L * 60L * 1000L
  * @param userSalt persisted, per-install random string used to decorrelate users.
  * @param nowMs current epoch ms; bucketed to a day to drive cross-day rotation.
  */
-fun computeBurnInProtectionState(
+internal fun computeBurnInProtectionState(
     enabled: Boolean,
     mediaSeedKey: String,
     userSalt: String,
@@ -32,9 +33,8 @@ fun computeBurnInProtectionState(
     val stepPercent = SUBTITLE_BURN_IN_ZONE_SPREAD_PERCENT / (SUBTITLE_BURN_IN_ZONE_COUNT - 1)
     val verticalDeltaPercent = (zoneIndex - centerOffset) * stepPercent
 
-    val horizontalSlots = 5
-    val horizontalIndex = Math.floorMod(hash / 7, horizontalSlots)
-    val horizontalCenter = (horizontalSlots - 1) / 2f
+    val horizontalIndex = Math.floorMod(hash / 7, SUBTITLE_BURN_IN_HORIZONTAL_SLOT_COUNT)
+    val horizontalCenter = (SUBTITLE_BURN_IN_HORIZONTAL_SLOT_COUNT - 1) / 2f
     val horizontalStep = SUBTITLE_BURN_IN_HORIZONTAL_JITTER_PX / horizontalCenter
     val horizontalOffsetPx = (horizontalIndex - horizontalCenter) * horizontalStep
 
