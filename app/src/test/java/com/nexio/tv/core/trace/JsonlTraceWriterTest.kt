@@ -42,6 +42,17 @@ class JsonlTraceWriterTest {
     }
 
     @Test
+    fun `appended line is on disk before close`() {
+        val file = tmp.newFile("flush.jsonl")
+        val writer = JsonlTraceWriter(file = file, gson = Gson(), maxBytes = 1_000_000L)
+        writer.append(envelope("a"), priority = TraceEventPriority.HIGH)
+        // Read without closing — the line must already be flushed to disk
+        val content = file.readText()
+        assertTrue("line must be flushed to disk before close: '$content'", content.contains("\"eventType\":\"a\""))
+        writer.close()
+    }
+
+    @Test
     fun `BLOCKER priority is never dropped`() {
         val file = tmp.newFile("events.jsonl")
         val writer = JsonlTraceWriter(file = file, gson = Gson(), maxBytes = 10L)
