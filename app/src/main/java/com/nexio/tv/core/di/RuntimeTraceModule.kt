@@ -59,8 +59,15 @@ object RuntimeTraceModule {
 
     @Provides
     @Singleton
-    fun provideRuntimeTraceSink(manager: TraceSessionManager): RuntimeTraceSink =
-        ActiveSessionRuntimeTraceSink(manager)
+    fun provideRuntimeTraceSink(manager: TraceSessionManager): RuntimeTraceSink {
+        val sink: RuntimeTraceSink = ActiveSessionRuntimeTraceSink(manager)
+        // Side-effect: wire ProfileBoundaryEnforcer's static sink slot so
+        // boundary checks emit `profile.boundary_check` events into the active session.
+        com.nexio.tv.core.integration.ProfileBoundaryEnforcer.installTraceSink(sink) {
+            manager.activeSession()?.traceSessionId
+        }
+        return sink
+    }
 
     @Provides
     @Singleton
