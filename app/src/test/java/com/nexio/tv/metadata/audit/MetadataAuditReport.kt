@@ -191,7 +191,8 @@ data class LocalizationPayloadReport(
     val language: String,
     val cacheKey: String,
     val cacheDecision: CacheDecision?,
-    val executedNetwork: Boolean
+    val executedNetwork: Boolean,
+    val source: String
 )
 
 data class MetadataExecutionReport(

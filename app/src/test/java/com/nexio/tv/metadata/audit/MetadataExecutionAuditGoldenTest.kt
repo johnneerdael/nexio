@@ -211,6 +211,7 @@ class MetadataExecutionAuditGoldenTest {
         listOf(tvdb, tmdb, kitsu).forEach { localization ->
             assertEquals(2, localization.policyVersion)
             assertTrue(localization.payloads.isNotEmpty())
+            assertTrue(localization.payloads.all { it.source == "PRODUCTION_ADAPTER" })
             assertTrue(localization.payloads.all { it.cacheKey.contains("policy:2") })
             assertTrue(localization.payloads.any { it.language == localization.fallbackLanguage && !it.executedNetwork })
         }
