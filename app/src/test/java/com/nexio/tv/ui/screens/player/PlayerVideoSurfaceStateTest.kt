@@ -132,6 +132,29 @@ class PlayerVideoSurfaceStateTest {
         assertFalse(applied)
     }
 
+    @Test
+    fun `mutation plan invalidates subtitle style when burn-in protection changes`() {
+        val baseSubtitleStyle = SubtitleStyleSettings()
+        val previous = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = baseSubtitleStyle,
+            burnInProtection = BurnInProtectionState.DISABLED,
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = false
+        )
+        val current = previous.copy(
+            burnInProtection = BurnInProtectionState(
+                enabled = true,
+                verticalDeltaPercent = 1.5f,
+                horizontalOffsetPx = 3f
+            )
+        )
+
+        val plan = buildPlayerViewMutationPlan(previous = previous, current = current)
+
+        assertTrue(plan.updateSubtitleStyle)
+    }
+
     private class FakeComposeSurfaceSyncTarget {
         var enabled = false
 

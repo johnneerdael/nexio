@@ -112,7 +112,11 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.core.player.ExternalPlayerLauncher
+import com.nexio.tv.core.player.SUBTITLE_MAX_ALPHA
+import com.nexio.tv.core.player.SUBTITLE_OFF_WHITE_ARGB
+import com.nexio.tv.data.local.SubtitleStyleSettings
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 import android.text.format.DateFormat
@@ -125,8 +129,8 @@ internal const val EXTERNAL_SUBTITLE_OVERLAY_TAG = "external-subtitle-overlay"
 
 internal fun applySubtitleStyle(
     subtitleView: SubtitleView,
-    subtitleStyle: com.nexio.tv.data.local.SubtitleStyleSettings,
-    burnInProtection: com.nexio.tv.core.player.BurnInProtectionState,
+    subtitleStyle: SubtitleStyleSettings,
+    burnInProtection: BurnInProtectionState,
 ) {
     val baseFontSize = 24f
     val scaledFontSize = baseFontSize * (subtitleStyle.size / 100f)
@@ -145,7 +149,7 @@ internal fun applySubtitleStyle(
     }
 
     val foregroundColor = if (burnInProtection.enabled) {
-        com.nexio.tv.core.player.SUBTITLE_OFF_WHITE_ARGB
+        SUBTITLE_OFF_WHITE_ARGB
     } else {
         android.graphics.Color.WHITE
     }
@@ -163,7 +167,7 @@ internal fun applySubtitleStyle(
     subtitleView.setApplyEmbeddedStyles(false)
 
     subtitleView.alpha = if (burnInProtection.enabled) {
-        com.nexio.tv.core.player.SUBTITLE_MAX_ALPHA
+        SUBTITLE_MAX_ALPHA
     } else {
         1.0f
     }

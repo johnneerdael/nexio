@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import android.net.Uri
 import android.util.Log
 import com.nexio.tv.core.player.AndroidFrameRateSettings
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
@@ -244,10 +245,14 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
                     osdClockEnabled = settings.osdClockEnabled,
+                    // Preserve any previously-resolved deltas; only the enable flag flips
+                    // here. Per-stream deltas are recomputed at playback session start in
+                    // PlayerRuntimeControllerInitialization. Toggling on mid-stream takes
+                    // full effect on the next stream — acceptable v1 trade-off.
                     burnInProtection = if (settings.burnInProtection.enabled) {
                         state.burnInProtection.copy(enabled = true)
                     } else {
-                        com.nexio.tv.core.player.BurnInProtectionState.DISABLED
+                        BurnInProtectionState.DISABLED
                     },
                 )
             }

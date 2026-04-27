@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleStyleSettings
@@ -50,8 +51,7 @@ data class PlayerUiState(
     val showMoreDialog: Boolean = false,
     // Subtitle style settings
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
-    val burnInProtection: com.nexio.tv.core.player.BurnInProtectionState =
-        com.nexio.tv.core.player.BurnInProtectionState.DISABLED,
+    val burnInProtection: BurnInProtectionState = BurnInProtectionState.DISABLED,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
     // Addon subtitles
     val addonSubtitles: List<Subtitle> = emptyList(),
