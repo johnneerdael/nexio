@@ -45,7 +45,7 @@ class TrackingScrobbleServicePlaybackOwnerTest {
             trackingProviderStateService = state
         )
 
-        val item = TrackingScrobbleItem.Movie(contentId = "imdb:tt1", title = "t", year = 2020)
+        val item = TrackingScrobbleItem.Movie(contentId = "tt1234567", title = "t", year = 2020)
         service.scrobbleStart(item = item, progressPercent = 10f, owner = owner(profileId = 1))
 
         // verify the underlying trakt service got ownerProfileId = 1 (owner.ownerProfileId)

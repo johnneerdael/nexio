@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
@@ -324,7 +325,7 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
         trackingScrobbleService.scrobbleStart(
             item = item,
             progressPercent = progressPercent,
-            ownerProfileId = playbackOwnerProfileId
+            owner = playbackOwnerContext
         )
         if (requestGeneration != scrobbleStartRequestGeneration || !hasRequestedScrobbleStartForCurrentItem) return@launch
         hasSentScrobbleStartForCurrentItem = true
@@ -346,7 +347,7 @@ internal fun PlayerRuntimeController.emitScrobbleStop(
         trackingScrobbleService.scrobbleStop(
             item = item,
             progressPercent = percent,
-            ownerProfileId = playbackOwnerProfileId
+            owner = playbackOwnerContext
         )
     }
     stopScrobbleHeartbeat()
@@ -410,7 +411,7 @@ private fun PlayerRuntimeController.startScrobbleHeartbeat() {
             trackingScrobbleService.scrobbleStart(
                 item = item,
                 progressPercent = progressPercent,
-                ownerProfileId = playbackOwnerProfileId
+                owner = playbackOwnerContext
             )
         }
     }

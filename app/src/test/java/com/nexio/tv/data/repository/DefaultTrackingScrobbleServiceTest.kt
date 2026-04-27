@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.playback.PlaybackOwnerContext
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -12,6 +13,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class DefaultTrackingScrobbleServiceTest {
+
+    private fun owner(profileId: Int): PlaybackOwnerContext =
+        PlaybackOwnerContext(
+            ownerProfileId = profileId,
+            ownerSessionId = "session-$profileId",
+            traktAccount = null,
+            simklAccount = null,
+            startedAtEpochMs = 1L
+        )
 
     private fun trackingProviderStateService(
         provider: com.nexio.tv.domain.model.TrackingProvider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
@@ -122,7 +132,8 @@ class DefaultTrackingScrobbleServiceTest {
                 title = "Inception",
                 year = 2010
             ),
-            progressPercent = 12f
+            progressPercent = 12f,
+            owner = owner(1)
         )
 
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any()) }
@@ -177,7 +188,7 @@ class DefaultTrackingScrobbleServiceTest {
                 year = 2010
             ),
             progressPercent = 12f,
-            ownerProfileId = 2
+            owner = owner(2)
         )
 
         coVerify(exactly = 1) { stateService.currentState(2) }
@@ -207,7 +218,7 @@ class DefaultTrackingScrobbleServiceTest {
                 year = 2010
             ),
             progressPercent = 12f,
-            ownerProfileId = 2
+            owner = owner(2)
         )
 
         coVerify(exactly = 1) { stateService.currentState(2) }
