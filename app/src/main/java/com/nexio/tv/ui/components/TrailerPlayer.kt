@@ -15,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -304,6 +305,18 @@ fun TrailerPlayer(
         }
     }
 
+    val isBuffering by produceState(initialValue = false, trailerPlayer) {
+        val player = trailerPlayer ?: return@produceState
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                value = state == Player.STATE_BUFFERING
+            }
+        }
+        player.addListener(listener)
+        awaitDispose { player.removeListener(listener) }
+    }
+    val keepOn = shouldKeepScreenOnForTrailer(isPlaying = isPlaying, isBuffering = isBuffering)
+
     if (trailerPlayer != null) {
         AnimatedVisibility(
             visible = isPlaying,
@@ -320,9 +333,10 @@ fun TrailerPlayer(
                             isFocusable = true
                             isFocusableInTouchMode = true
                             setOnKeyListener { _, keyCode, event ->
+                                if (shouldConsumeTrailerKey(keyCode)) return@setOnKeyListener true
                                 currentOnRemoteKey(keyCode, event.action, event.repeatCount)
                             }
-                            keepScreenOn = true
+                            keepScreenOn = keepOn
                             setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                             setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                             resizeMode = if (cropToFill) {
@@ -334,6 +348,7 @@ fun TrailerPlayer(
                 },
                 update = { view ->
                     bindTrailerPlayerView(view, trailerPlayer)
+                    view.keepScreenOn = keepOn
                     view.resizeMode = if (cropToFill) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     } else {
