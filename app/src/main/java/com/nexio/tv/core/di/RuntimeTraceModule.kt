@@ -10,6 +10,7 @@ import com.nexio.tv.core.trace.RuntimeTraceInterceptor
 import com.nexio.tv.core.trace.RuntimeTraceSink
 import com.nexio.tv.core.trace.TraceBuildInfo
 import com.nexio.tv.core.trace.TraceEventEnvelope
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.trace.TraceModeProvider
 import com.nexio.tv.core.trace.TraceRedactor
 import com.nexio.tv.core.trace.TraceSessionManager
@@ -71,6 +72,16 @@ object RuntimeTraceModule {
     @Provides
     @Singleton
     fun provideTraceRedactor(): TraceRedactor = TraceRedactor()
+
+    @Provides
+    @Singleton
+    fun provideTraceMetadataEvents(
+        sink: RuntimeTraceSink,
+        manager: TraceSessionManager
+    ): TraceMetadataEvents = TraceMetadataEvents(
+        sink = sink,
+        sessionId = { manager.activeSession()?.traceSessionId }
+    )
 
     @Provides
     @Singleton
