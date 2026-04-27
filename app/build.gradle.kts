@@ -389,6 +389,17 @@ tasks.register<Test>("generateMetadataExecutionAudit") {
     }
 }
 
+tasks.register<Test>("generateProfileBoundaryAudit") {
+    group = "verification"
+    description = "Runs profile boundary audit and writes JSON/Markdown reports."
+    val sourceTest = tasks.named<Test>("testUniversalDebugUnitTest")
+    testClassesDirs = sourceTest.get().testClassesDirs
+    classpath = sourceTest.get().classpath
+    filter {
+        includeTestsMatching("com.nexio.tv.core.integration.ProfileBoundaryAuditGoldenTest")
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
     dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)
