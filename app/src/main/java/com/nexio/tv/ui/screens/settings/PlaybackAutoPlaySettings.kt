@@ -64,7 +64,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetServiceWrapEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
     onSetSkipPlaceholderStreamsEnabled: (Boolean) -> Unit,
-    onSetProbeProfilingDiagnosticEnabled: (Boolean) -> Unit,
     onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
@@ -149,17 +148,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
             subtitle = stringResource(R.string.streams_skip_placeholder_sub),
             isChecked = playerSettings.skipPlaceholderStreamsEnabled,
             onCheckedChange = onSetSkipPlaceholderStreamsEnabled,
-            onFocused = onItemFocused
-        )
-    }
-
-    item(key = "streams_probe_profiling") {
-        ToggleSettingsItem(
-            icon = Icons.Default.FilterAlt,
-            title = stringResource(R.string.streams_probe_profiling_title),
-            subtitle = stringResource(R.string.streams_probe_profiling_sub),
-            isChecked = playerSettings.probeProfilingDiagnosticEnabled,
-            onCheckedChange = onSetProbeProfilingDiagnosticEnabled,
             onFocused = onItemFocused
         )
     }

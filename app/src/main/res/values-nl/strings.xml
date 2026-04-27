@@ -131,6 +131,8 @@
   <string name="streams_deduplicate_grouped_sub">Verberg waarschijnlijk dubbele resultaten wanneer de gegroepeerde streammodus is ingeschakeld.</string>
   <string name="streams_filter_dv5_webdl_title">Filter WEB-DL Dolby Vision</string>
   <string name="streams_filter_dv5_webdl_sub">Verberg WEB-DL-streams met de tag DV of DoVi om problematische DV5-weergave te voorkomen.</string>
+  <string name="streams_probe_profiling_title">Probe-profiling-diagnostiek</string>
+  <string name="streams_probe_profiling_sub">Logt bij elke autoplay-beslissing de timings van de proxy-vs-CDN-race en parallelle fanout-probes. Heeft geen invloed op het afspelen. Logcat-tag: ProbeProfiling.</string>
   <string name="streams_filter_wrong_episodes_title">Filter verkeerde afleveringen</string>
   <string name="streams_filter_wrong_episodes_sub">Verberg episodische streams waarvan de seizoen- of afleveringstags niet overeenkomen met de gevraagde aflevering.</string>
   <string name="streams_filter_wrong_movie_year_title">Filter verkeerd jaar (films)</string>

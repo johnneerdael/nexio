@@ -404,7 +404,6 @@ internal fun PlaybackSettingsSections(
                 onSetServiceWrapEnabled = onSetServiceWrapEnabled,
                 onSetFilterWebDolbyVisionStreamsEnabled = onSetFilterWebDolbyVisionStreamsEnabled,
                 onSetSkipPlaceholderStreamsEnabled = onSetSkipPlaceholderStreamsEnabled,
-                onSetProbeProfilingDiagnosticEnabled = onSetProbeProfilingDiagnosticEnabled,
                 onSetFilterEpisodeMismatchStreamsEnabled = onSetFilterEpisodeMismatchStreamsEnabled,
                 onSetFilterMovieYearMismatchStreamsEnabled = onSetFilterMovieYearMismatchStreamsEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
@@ -589,6 +588,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_dolby_vision_diagnostics_subtitle),
                     isChecked = dolbyVisionDiagnosticsEnabled,
                     onCheckedChange = onSetDolbyVisionDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_probe_profiling") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.streams_probe_profiling_title),
+                    subtitle = stringResource(R.string.streams_probe_profiling_sub),
+                    isChecked = playerSettings.probeProfilingDiagnosticEnabled,
+                    onCheckedChange = onSetProbeProfilingDiagnosticEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }
