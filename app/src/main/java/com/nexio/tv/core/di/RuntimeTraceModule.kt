@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.trace.DataStoreTraceModeProvider
 import com.nexio.tv.core.trace.RuntimeTraceContext
+import com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor
 import com.nexio.tv.core.trace.RuntimeTraceEventListener
 import com.nexio.tv.core.trace.RuntimeTraceInterceptor
 import com.nexio.tv.core.trace.RuntimeTraceSink
@@ -125,6 +126,11 @@ object RuntimeTraceModule {
         sessionId = { manager.activeSession()?.traceSessionId },
         isInternalBuild = BuildConfig.DEBUG
     )
+
+    @Provides
+    @Singleton
+    fun provideRuntimeTraceContextRequestTaggingInterceptor(): RuntimeTraceContextRequestTaggingInterceptor =
+        RuntimeTraceContextRequestTaggingInterceptor()
 
     @Provides
     @Singleton

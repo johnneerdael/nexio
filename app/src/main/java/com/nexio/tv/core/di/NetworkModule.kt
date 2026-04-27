@@ -106,6 +106,7 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(
         @ApplicationContext context: Context,
+        taggingInterceptor: com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor,
         traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor,
         traceEventListenerFactory: okhttp3.EventListener.Factory
     ): OkHttpClient = OkHttpClient.Builder()
@@ -115,6 +116,11 @@ object NetworkModule {
                 mode = IntegrationNetworkPermitInterceptor.Mode.AUDIT_ONLY
             )
         )
+        // Application interceptor: bridges the coroutine-scoped RuntimeTraceContext (carried
+        // via thread-local by RuntimeTraceContextElement) onto the OkHttp Request as a tag,
+        // so the trace network interceptor can read it. MUST run on the calling thread (i.e.
+        // be an application interceptor) since the thread-local is set there.
+        .addInterceptor(taggingInterceptor)
         // Trace interceptor is added as a NETWORK interceptor so it observes the final
         // outgoing request shape — including headers added by app-level interceptors on
         // derived clients (e.g. auth interceptors added via newBuilder()).
@@ -155,6 +161,7 @@ object NetworkModule {
     fun providePlaybackOkHttpClient(
         @ApplicationContext context: Context,
         @Named("playback.callTimeoutMs") callTimeoutMs: Long,
+        taggingInterceptor: com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor,
         traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor,
         traceEventListenerFactory: okhttp3.EventListener.Factory
     ): OkHttpClient {
@@ -176,6 +183,10 @@ object NetworkModule {
             .followRedirects(true)
             .followSslRedirects(true)
             .eventListenerFactory(traceEventListenerFactory)
+            // Application interceptor: bridges the coroutine-scoped RuntimeTraceContext onto
+            // the OkHttp Request tag so the trace network interceptor below can read it. MUST
+            // run on the calling thread (application interceptor) where the thread-local is set.
+            .addInterceptor(taggingInterceptor)
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
                 val response = chain.proceed(originalRequest)
