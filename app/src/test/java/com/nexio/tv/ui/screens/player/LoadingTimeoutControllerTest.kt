@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -13,9 +14,9 @@ class LoadingTimeoutControllerTest {
         val events = mutableListOf<LoadingTimeoutEvent>()
         val controller = LoadingTimeoutController(
             phase = LoadingPhase.Initial,
-            onEvent = events::add,
             scope = this
         )
+        backgroundScope.launch { controller.events.collect { events.add(it) } }
         controller.start()
         advanceTimeBy(119_999)
         assertEquals(emptyList<LoadingTimeoutEvent>(), events)
@@ -27,9 +28,9 @@ class LoadingTimeoutControllerTest {
         val events = mutableListOf<LoadingTimeoutEvent>()
         val controller = LoadingTimeoutController(
             phase = LoadingPhase.MidStream,
-            onEvent = events::add,
             scope = this
         )
+        backgroundScope.launch { controller.events.collect { events.add(it) } }
         controller.start()
         advanceTimeBy(59_999)
         assertEquals(emptyList<LoadingTimeoutEvent>(), events)
@@ -41,9 +42,9 @@ class LoadingTimeoutControllerTest {
         val events = mutableListOf<LoadingTimeoutEvent>()
         val controller = LoadingTimeoutController(
             phase = LoadingPhase.MidStream,
-            onEvent = events::add,
             scope = this
         )
+        backgroundScope.launch { controller.events.collect { events.add(it) } }
         controller.start()
         advanceTimeBy(60_001)        // first ceiling -> Retry
         controller.start()           // caller restarts after retry
@@ -55,9 +56,9 @@ class LoadingTimeoutControllerTest {
         val events = mutableListOf<LoadingTimeoutEvent>()
         val controller = LoadingTimeoutController(
             phase = LoadingPhase.Initial,
-            onEvent = events::add,
             scope = this
         )
+        backgroundScope.launch { controller.events.collect { events.add(it) } }
         controller.start()
         advanceTimeBy(60_000)
         controller.cancel()

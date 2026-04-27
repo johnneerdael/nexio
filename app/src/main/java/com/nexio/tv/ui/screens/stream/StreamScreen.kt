@@ -101,6 +101,7 @@ import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay as coroutineDelay
 import kotlinx.coroutines.launch as coroutineLaunch
 import androidx.lifecycle.Lifecycle
@@ -244,25 +245,30 @@ fun StreamScreen(
             isLoading = uiState.isLoading
         )
 
-        if (uiState.showDirectAutoPlayOverlay || uiState.isDeterministicAutoplay) {
-            DisposableEffect(Unit) {
-                var controller: LoadingTimeoutController? = null
-                controller = LoadingTimeoutController(
-                    phase = LoadingPhase.Initial,
-                    onEvent = { event ->
-                        when (event) {
-                            LoadingTimeoutEvent.Retry -> {
-                                viewModel.onEvent(StreamScreenEvent.OnRetry)
-                                controller?.start()
-                            }
-                            LoadingTimeoutEvent.Error -> viewModel.surfaceTimeoutError()
-                        }
-                    },
-                    scope = loadingScope
-                )
-                controller.start()
-                onDispose { controller.cancel() }
+        val loadingTimeoutController = remember {
+            LoadingTimeoutController(phase = LoadingPhase.Initial, scope = loadingScope)
+        }
+        val showLoadingOverlay = (uiState.showDirectAutoPlayOverlay || uiState.isDeterministicAutoplay) && uiState.error == null
+        LaunchedEffect(loadingTimeoutController) {
+            loadingTimeoutController.events.collect { event ->
+                when (event) {
+                    LoadingTimeoutEvent.Retry -> {
+                        viewModel.onEvent(StreamScreenEvent.OnRetry)
+                        // Re-arm for the Error timeout after the retry attempt
+                        loadingTimeoutController.start()
+                    }
+                    LoadingTimeoutEvent.Error -> viewModel.surfaceTimeoutError()
+                }
             }
+        }
+        LaunchedEffect(showLoadingOverlay) {
+            if (showLoadingOverlay) loadingTimeoutController.start()
+            else loadingTimeoutController.cancel()
+        }
+        DisposableEffect(loadingTimeoutController) {
+            onDispose { loadingTimeoutController.cancel() }
+        }
+        if (showLoadingOverlay) {
             LoadingOverlay(
                 visible = true,
                 backdropUrl = uiState.backdrop ?: uiState.poster,

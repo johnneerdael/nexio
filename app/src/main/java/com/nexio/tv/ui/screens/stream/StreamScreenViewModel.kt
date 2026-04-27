@@ -245,6 +245,7 @@ class StreamScreenViewModel @Inject constructor(
             it.copy(
                 isLoading = false,
                 showDirectAutoPlayOverlay = false,
+                isDeterministicAutoplay = false,
                 error = context.getString(R.string.stream_loading_timeout)
             )
         }

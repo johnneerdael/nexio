@@ -2,7 +2,10 @@ package com.nexio.tv.ui.screens.player
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 enum class LoadingPhase(val timeoutMs: Long) {
@@ -17,9 +20,11 @@ sealed class LoadingTimeoutEvent {
 
 class LoadingTimeoutController(
     private val phase: LoadingPhase,
-    private val onEvent: (LoadingTimeoutEvent) -> Unit,
     private val scope: CoroutineScope
 ) {
+    private val _events = Channel<LoadingTimeoutEvent>(capacity = Channel.UNLIMITED)
+    val events: Flow<LoadingTimeoutEvent> = _events.receiveAsFlow()
+
     private var job: Job? = null
     private var hasRetried = false
 
@@ -29,9 +34,9 @@ class LoadingTimeoutController(
             delay(phase.timeoutMs)
             if (!hasRetried) {
                 hasRetried = true
-                onEvent(LoadingTimeoutEvent.Retry)
+                _events.send(LoadingTimeoutEvent.Retry)
             } else {
-                onEvent(LoadingTimeoutEvent.Error)
+                _events.send(LoadingTimeoutEvent.Error)
             }
         }
     }

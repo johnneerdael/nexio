@@ -125,6 +125,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 
 internal const val EXTERNAL_SUBTITLE_OVERLAY_TAG = "external-subtitle-overlay"
 
@@ -582,24 +583,27 @@ fun PlayerScreen(
         // Mid-playback rebuffer timeout: only active when buffering after first frame
         // (showLoadingOverlay is true before first frame; false during mid-stream rebuffers)
         val isMidStreamBuffering = uiState.isBuffering && !uiState.showLoadingOverlay
-        DisposableEffect(isMidStreamBuffering) {
-            if (!isMidStreamBuffering) return@DisposableEffect onDispose {}
-            var controller: LoadingTimeoutController? = null
-            controller = LoadingTimeoutController(
-                phase = LoadingPhase.MidStream,
-                onEvent = { event ->
-                    when (event) {
-                        LoadingTimeoutEvent.Retry -> {
-                            viewModel.onEvent(PlayerEvent.OnRetry)
-                            controller?.start()
-                        }
-                        LoadingTimeoutEvent.Error -> viewModel.surfaceLoadingTimeout()
+        val rebufferTimeoutController = remember {
+            LoadingTimeoutController(phase = LoadingPhase.MidStream, scope = rebufferScope)
+        }
+        LaunchedEffect(rebufferTimeoutController) {
+            rebufferTimeoutController.events.collect { event ->
+                when (event) {
+                    LoadingTimeoutEvent.Retry -> {
+                        viewModel.onEvent(PlayerEvent.OnRetry)
+                        // Re-arm for the Error timeout after the retry attempt
+                        rebufferTimeoutController.start()
                     }
-                },
-                scope = rebufferScope
-            )
-            controller.start()
-            onDispose { controller.cancel() }
+                    LoadingTimeoutEvent.Error -> viewModel.surfaceLoadingTimeout()
+                }
+            }
+        }
+        LaunchedEffect(isMidStreamBuffering) {
+            if (isMidStreamBuffering) rebufferTimeoutController.start()
+            else rebufferTimeoutController.cancel()
+        }
+        DisposableEffect(rebufferTimeoutController) {
+            onDispose { rebufferTimeoutController.cancel() }
         }
 
         LoadingOverlay(
