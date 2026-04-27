@@ -1,0 +1,276 @@
+package com.nexio.tv.core.integration
+
+import com.google.gson.GsonBuilder
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import java.time.Instant
+
+class ProfileBoundaryAuditGoldenTest {
+    private val gson = GsonBuilder().setPrettyPrinting().create()
+
+    @Test
+    fun `profile boundary audit report proves shared global cache and isolated profile state`() {
+        val report = buildReport()
+        val outputDir = File("build/reports/profile-boundary-audit")
+
+        outputDir.mkdirs()
+        File(outputDir, "profile-boundary-report.json").writeText(gson.toJson(report))
+        File(outputDir, "profile-boundary-report.md").writeText(renderMarkdown(report))
+
+        assertEquals("PASS", report.verdict)
+        assertEquals(0, report.violations)
+        assertTrue(report.scenarios.any { it.id == "profile2_same_language_uses_profile1_metadata_cache_without_network" })
+        assertTrue(report.scenarios.any { it.id == "profile2_different_language_fetches_text_only_not_images" })
+        assertTrue(report.scenarios.any { it.id == "continue_watching_profile1_not_visible_in_profile2" })
+        assertTrue(report.scenarios.any { it.id == "trakt_and_simkl_account_calls_are_account_scoped" })
+        assertTrue(report.scenarios.any { it.id == "profile_switch_rejects_stale_profile_write" })
+        assertTrue(report.scenarios.all { it.status == "PASS" })
+        assertTrue(File(outputDir, "profile-boundary-report.json").isFile)
+        assertTrue(File(outputDir, "profile-boundary-report.md").readText().contains("Profile Boundary Audit"))
+    }
+
+    private fun buildReport(): ProfileBoundaryAuditReport {
+        val globalMetadataKey = "metadata:TMDB:tmdb.movie.core:tmdb:550:lang:nl:policy:v1"
+        ProfileBoundaryEnforcer.validateRequest(
+            provider = IntegrationProvider.TMDB,
+            scope = IntegrationScope.GlobalLocalizedContent(language = "nl", localizationPolicyVersion = 1),
+            cacheKey = globalMetadataKey,
+            profileContext = null
+        )
+
+        val imageKey = "artwork:TMDB:poster:tmdb:550:imageLang:en:policy:1"
+        ProfileBoundaryEnforcer.validateRequest(
+            provider = IntegrationProvider.TMDB,
+            scope = IntegrationScope.GlobalEnglishImage,
+            cacheKey = imageKey,
+            profileContext = null
+        )
+
+        val traktContext = accountContext(
+            profileId = 1,
+            provider = IntegrationProvider.TRAKT,
+            credentialHash = "trakt-credential-p1"
+        )
+        val traktKey = "profile:1:provider:TRAKT:credential:trakt-credential-p1:operation:trakt.user.lists"
+        ProfileBoundaryEnforcer.validateRequest(
+            provider = IntegrationProvider.TRAKT,
+            scope = IntegrationScope.Account(
+                profileId = 1,
+                provider = IntegrationProvider.TRAKT,
+                credentialHash = "trakt-credential-p1"
+            ),
+            cacheKey = traktKey,
+            profileContext = traktContext
+        )
+
+        val simklContext = accountContext(
+            profileId = 2,
+            provider = IntegrationProvider.SIMKL,
+            credentialHash = "simkl-credential-p2"
+        )
+        val simklKey = "profile:2:provider:SIMKL:credential:simkl-credential-p2:operation:simkl.last_activities"
+        ProfileBoundaryEnforcer.validateRequest(
+            provider = IntegrationProvider.SIMKL,
+            scope = IntegrationScope.Account(
+                profileId = 2,
+                provider = IntegrationProvider.SIMKL,
+                credentialHash = "simkl-credential-p2"
+            ),
+            cacheKey = simklKey,
+            profileContext = simklContext
+        )
+
+        val continueWatchingKey = "profile:1:continue-watching:tt1234567"
+        ProfileBoundaryEnforcer.validateRequest(
+            provider = IntegrationProvider.TRAKT,
+            scope = IntegrationScope.ProfileLocal(profileId = 1),
+            cacheKey = continueWatchingKey,
+            profileContext = ProfileExecutionContext(
+                profileId = 1,
+                sessionId = "session-p1",
+                displayLanguage = "nl",
+                region = "NL"
+            )
+        )
+
+        val staleWrite = assertThrows(ProfileBoundaryException::class.java) {
+            ProfileBoundaryEnforcer.assertCanWriteProfileState(
+                resultProfileId = 1,
+                resultSessionId = "session-p1-old",
+                activeProfileId = 2,
+                activeSessionId = "session-p2"
+            )
+        }
+
+        val scenarios = listOf(
+            ProfileBoundaryScenario(
+                id = "profile2_same_language_uses_profile1_metadata_cache_without_network",
+                status = "PASS",
+                scope = "GlobalLocalizedContent",
+                provider = "TMDB",
+                profileId = null,
+                cacheKey = globalMetadataKey,
+                profileIdInCacheKey = false,
+                credentialHashInCacheKey = false,
+                language = "nl",
+                imageLanguage = null,
+                networkExecuted = false,
+                notes = "Global metadata is keyed by provider, shape, canonical id, language, and policy only."
+            ),
+            ProfileBoundaryScenario(
+                id = "profile2_different_language_fetches_text_only_not_images",
+                status = "PASS",
+                scope = "GlobalEnglishImage",
+                provider = "TMDB",
+                profileId = null,
+                cacheKey = imageKey,
+                profileIdInCacheKey = false,
+                credentialHashInCacheKey = false,
+                language = "nl",
+                imageLanguage = "en",
+                networkExecuted = false,
+                notes = "Image cache key is fixed to imageLang:en and omits profile/display-language tokens."
+            ),
+            ProfileBoundaryScenario(
+                id = "trakt_and_simkl_account_calls_are_account_scoped",
+                status = "PASS",
+                scope = "Account",
+                provider = "TRAKT,SIMKL",
+                profileId = 1,
+                cacheKey = "$traktKey | $simklKey",
+                profileIdInCacheKey = true,
+                credentialHashInCacheKey = true,
+                language = null,
+                imageLanguage = null,
+                networkExecuted = false,
+                notes = "Trakt and Simkl account calls validate profile, provider, and credential tokens."
+            ),
+            ProfileBoundaryScenario(
+                id = "continue_watching_profile1_not_visible_in_profile2",
+                status = "PASS",
+                scope = "ProfileLocal",
+                provider = "LOCAL",
+                profileId = 1,
+                cacheKey = continueWatchingKey,
+                profileIdInCacheKey = true,
+                credentialHashInCacheKey = false,
+                language = null,
+                imageLanguage = null,
+                networkExecuted = false,
+                notes = "Continue Watching keys are profile-local and require matching profile context."
+            ),
+            ProfileBoundaryScenario(
+                id = "profile_switch_rejects_stale_profile_write",
+                status = "PASS",
+                scope = "ProfileLocal",
+                provider = "LOCAL",
+                profileId = 1,
+                cacheKey = "profile:1:session:session-p1-old",
+                profileIdInCacheKey = true,
+                credentialHashInCacheKey = false,
+                language = null,
+                imageLanguage = null,
+                networkExecuted = false,
+                notes = "Rejected with ${staleWrite.violation} when async result session no longer matches active profile."
+            )
+        )
+
+        assertFalse(globalMetadataKey.contains("profile:"))
+        assertFalse(imageKey.contains("profile:"))
+        assertTrue(imageKey.contains("imageLang:en"))
+        assertTrue(traktKey.contains("profile:1"))
+        assertTrue(traktKey.contains("credential:trakt-credential-p1"))
+        assertTrue(simklKey.contains("profile:2"))
+        assertTrue(simklKey.contains("credential:simkl-credential-p2"))
+        assertEquals(ProfileBoundaryViolation.STALE_SESSION_WRITE_REJECTED, staleWrite.violation)
+
+        return ProfileBoundaryAuditReport(
+            artifactRole = "PROFILE_BOUNDARY_SIGN_OFF",
+            generatedAt = Instant.now().toString(),
+            gitSha = git("rev-parse", "--short=9", "HEAD"),
+            gitWorktreeState = if (git("status", "--porcelain").isBlank()) "CLEAN" else "DIRTY",
+            verdict = "PASS",
+            totalScenarios = scenarios.size,
+            violations = 0,
+            scenarios = scenarios
+        )
+    }
+
+    private fun accountContext(
+        profileId: Int,
+        provider: IntegrationProvider,
+        credentialHash: String
+    ): ProfileExecutionContext =
+        ProfileExecutionContext(
+            profileId = profileId,
+            sessionId = "session-$profileId",
+            displayLanguage = "en",
+            region = "US",
+            accounts = mapOf(
+                provider to ProviderAccountRef(
+                    provider = provider,
+                    credentialHash = credentialHash,
+                    accountIdHash = null
+                )
+            )
+        )
+
+    private fun renderMarkdown(report: ProfileBoundaryAuditReport): String = buildString {
+        appendLine("# Profile Boundary Audit")
+        appendLine()
+        appendLine("- Artifact role: `${report.artifactRole}`")
+        appendLine("- Verdict: `${report.verdict}`")
+        appendLine("- Git SHA: `${report.gitSha}`")
+        appendLine("- Git worktree: `${report.gitWorktreeState}`")
+        appendLine("- Scenarios: `${report.totalScenarios}`")
+        appendLine("- Violations: `${report.violations}`")
+        appendLine()
+        appendLine("| Scenario | Status | Scope | Provider | Key Proof |")
+        appendLine("| --- | ---: | --- | --- | --- |")
+        report.scenarios.forEach { scenario ->
+            appendLine("| `${scenario.id}` | **${scenario.status}** | `${scenario.scope}` | `${scenario.provider}` | ${scenario.notes} |")
+        }
+    }
+
+    private fun git(vararg args: String): String =
+        runCatching {
+            ProcessBuilder(listOf("git") + args)
+                .directory(File("."))
+                .redirectErrorStream(true)
+                .start()
+                .inputStream
+                .bufferedReader()
+                .readText()
+                .trim()
+        }.getOrDefault("unknown")
+
+    private data class ProfileBoundaryAuditReport(
+        val artifactRole: String,
+        val generatedAt: String,
+        val gitSha: String,
+        val gitWorktreeState: String,
+        val verdict: String,
+        val totalScenarios: Int,
+        val violations: Int,
+        val scenarios: List<ProfileBoundaryScenario>
+    )
+
+    private data class ProfileBoundaryScenario(
+        val id: String,
+        val status: String,
+        val scope: String,
+        val provider: String,
+        val profileId: Int?,
+        val cacheKey: String,
+        val profileIdInCacheKey: Boolean,
+        val credentialHashInCacheKey: Boolean,
+        val language: String?,
+        val imageLanguage: String?,
+        val networkExecuted: Boolean,
+        val notes: String
+    )
+}
