@@ -7,6 +7,7 @@ object ProfileBoundaryEnforcer {
         cacheKey: String?,
         profileContext: ProfileExecutionContext?
     ) {
+        rejectGlobalScopeForAuthenticatedProvider(provider, scope, profileContext)
         when (scope) {
             IntegrationScope.Global,
             IntegrationScope.GlobalContent -> validateGlobalCacheKey(cacheKey)
@@ -198,6 +199,26 @@ object ProfileBoundaryEnforcer {
             throw ProfileBoundaryException(
                 ProfileBoundaryViolation.PROFILE_CACHE_KEY_MISSING_PROFILE_ID,
                 "Account key must include profile:$profileId, provider:${provider.name}, and credential:$credentialHash: $key"
+            )
+        }
+    }
+
+    private fun rejectGlobalScopeForAuthenticatedProvider(
+        provider: IntegrationProvider,
+        scope: IntegrationScope,
+        profileContext: ProfileExecutionContext?
+    ) {
+        if (provider != IntegrationProvider.TRAKT && provider != IntegrationProvider.SIMKL) return
+        if (profileContext == null) return
+        val account = profileContext.account(provider) ?: return
+        val isGlobalScope = scope is IntegrationScope.GlobalContent ||
+            scope is IntegrationScope.GlobalLocalizedContent ||
+            scope is IntegrationScope.GlobalEnglishImage ||
+            scope === IntegrationScope.Global
+        if (isGlobalScope) {
+            throw ProfileBoundaryException(
+                ProfileBoundaryViolation.AUTHENTICATED_PROVIDER_USED_GLOBAL_SCOPE,
+                "Authenticated provider $provider with credentialHash=${account.credentialHash} cannot use Global scope ${scope.auditName}"
             )
         }
     }
