@@ -1,12 +1,18 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import javax.inject.Inject
 
 class MetadataRouter @Inject constructor(
     private val normalizer: MetadataRequestNormalizer,
     private val animeIdentityIndex: AnimeIdentityIndex,
-    private val idMappingStore: IdMappingStore
+    private val idMappingStore: IdMappingStore,
+    private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
+        sink = NoopRuntimeTraceSink,
+        sessionId = { null }
+    )
 ) {
     suspend fun route(request: MetadataRequest): MetadataRoute {
         require(request.depth != MetadataDepth.PREVIEW) {
@@ -245,8 +251,20 @@ class MetadataRouter @Inject constructor(
         targetId: String,
         trace: List<MetadataRouteTrace>,
         requiresIdentityResolution: Boolean = false
-    ): MetadataRoute =
-        MetadataRoute(
+    ): MetadataRoute {
+        traceEvents.emitRouteDecision(
+            contentId = normalized.originalContentId,
+            parentId = normalized.parentId,
+            itemType = normalized.contentType.name.lowercase(),
+            provider = provider.name,
+            mediaKind = mediaKind.name,
+            reason = reason.name,
+            usedInputs = listOf("item.id", "item.type", "AnimeIdentityIndex", "IdMappingStore"),
+            ignoredInputs = listOf("catalog.type", "addon.name", "genre", "animeType", "links", "trend"),
+            targetIdRequiresIdentityResolution = requiresIdentityResolution,
+            targetIds = mapOf(provider.name to targetId)
+        )
+        return MetadataRoute(
             provider = provider,
             parentId = normalized.parentId,
             mediaKind = mediaKind,
@@ -258,4 +276,5 @@ class MetadataRouter @Inject constructor(
             targetIdRequiresIdentityResolution = requiresIdentityResolution,
             trace = trace.toList()
         )
+    }
 }
