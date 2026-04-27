@@ -503,6 +503,7 @@
     <string name="layout_autoplay_trailer_sub">Start trailer previews for the focused poster when a trailer source is available.</string>
     <string name="layout_trailer_screensaver">Trailer Screensaver</string>
     <string name="layout_trailer_screensaver_sub">Play trailer-based screensaver content when the app is idle.</string>
+    <string name="screensaver_delay_title">Start screensaver after</string>
     <string name="layout_trailer_muted">Mute Trailer Previews</string>
     <string name="layout_trailer_muted_sub">Start focused-poster trailer previews muted.</string>
     <string name="layout_trailer_location">Trailer Playback Target</string>

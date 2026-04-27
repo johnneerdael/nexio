@@ -51,6 +51,9 @@ class LayoutPreferenceDataStore @Inject constructor(
         private const val DEFAULT_POSTER_CARD_CORNER_RADIUS_DP = 12
         private const val DEFAULT_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 3
         private const val MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 0
+        internal const val DEFAULT_SCREENSAVER_DELAY_SECONDS = 300
+        internal const val MIN_SCREENSAVER_DELAY_SECONDS = 60
+        internal const val MAX_SCREENSAVER_DELAY_SECONDS = 600
     }
 
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
@@ -77,6 +80,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val focusedPosterBackdropTrailerPlaybackTargetKey =
         stringPreferencesKey("focused_poster_backdrop_trailer_playback_target")
     private val trailerScreensaverEnabledKey = booleanPreferencesKey("trailer_screensaver_enabled")
+    private val screensaverDelaySecondsKey = intPreferencesKey("screensaver_delay_seconds")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
@@ -179,6 +183,11 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val trailerScreensaverEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[trailerScreensaverEnabledKey] ?: false
+    }
+
+    val screensaverDelaySeconds: Flow<Int> = profileFlow { prefs ->
+        val stored = prefs[screensaverDelaySecondsKey] ?: DEFAULT_SCREENSAVER_DELAY_SECONDS
+        stored.coerceIn(MIN_SCREENSAVER_DELAY_SECONDS, MAX_SCREENSAVER_DELAY_SECONDS)
     }
 
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->
@@ -330,6 +339,13 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setTrailerScreensaverEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[trailerScreensaverEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setScreensaverDelaySeconds(seconds: Int) {
+        store().edit { prefs ->
+            prefs[screensaverDelaySecondsKey] =
+                seconds.coerceIn(MIN_SCREENSAVER_DELAY_SECONDS, MAX_SCREENSAVER_DELAY_SECONDS)
         }
     }
 

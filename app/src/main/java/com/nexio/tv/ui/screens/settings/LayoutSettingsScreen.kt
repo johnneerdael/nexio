@@ -420,6 +420,22 @@ fun LayoutSettingsContent(
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.TRAILER_SCREENSAVER }
                     )
+                    SliderSettingsItem(
+                        icon = Icons.Default.Timer,
+                        title = stringResource(R.string.screensaver_delay_title),
+                        subtitle = null,
+                        value = uiState.screensaverDelaySeconds,
+                        valueText = formatScreensaverDelay(uiState.screensaverDelaySeconds),
+                        minValue = 60,
+                        maxValue = 600,
+                        step = 30,
+                        onValueChange = { seconds ->
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetScreensaverDelaySeconds(seconds)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.TRAILER_SCREENSAVER }
+                    )
                 }
             }
 
@@ -504,6 +520,12 @@ fun LayoutSettingsContent(
         }
         }
     }
+}
+
+private fun formatScreensaverDelay(seconds: Int): String {
+    val minutes = seconds / 60
+    val remainder = seconds % 60
+    return if (remainder == 0) "$minutes min" else "$minutes min ${remainder}s"
 }
 
 @Composable

@@ -35,6 +35,7 @@ data class LayoutSettingsUiState(
     val focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget =
         FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
     val trailerScreensaverEnabled: Boolean = false,
+    val screensaverDelaySeconds: Int = 300,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
@@ -67,6 +68,7 @@ sealed class LayoutSettingsEvent {
         val target: FocusedPosterTrailerPlaybackTarget
     ) : LayoutSettingsEvent()
     data class SetTrailerScreensaverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetScreensaverDelaySeconds(val seconds: Int) : LayoutSettingsEvent()
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
@@ -173,6 +175,11 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.screensaverDelaySeconds.distinctUntilChanged().collectLatest { seconds ->
+                updateUiStateIfChanged { it.copy(screensaverDelaySeconds = seconds) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.posterCardWidthDp.distinctUntilChanged().collectLatest { widthDp ->
                 updateUiStateIfChanged { it.copy(posterCardWidthDp = widthDp) }
             }
@@ -226,6 +233,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted -> setFocusedPosterBackdropTrailerMuted(event.muted)
             is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget -> setFocusedPosterBackdropTrailerPlaybackTarget(event.target)
             is LayoutSettingsEvent.SetTrailerScreensaverEnabled -> setTrailerScreensaverEnabled(event.enabled)
+            is LayoutSettingsEvent.SetScreensaverDelaySeconds -> setScreensaverDelaySeconds(event.seconds)
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
@@ -338,6 +346,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.trailerScreensaverEnabled == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setTrailerScreensaverEnabled(enabled)
+        }
+    }
+
+    private fun setScreensaverDelaySeconds(seconds: Int) {
+        if (_uiState.value.screensaverDelaySeconds == seconds) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setScreensaverDelaySeconds(seconds)
         }
     }
 

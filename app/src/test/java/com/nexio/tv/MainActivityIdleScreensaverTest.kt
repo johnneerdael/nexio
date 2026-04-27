@@ -16,8 +16,14 @@ import org.junit.Test
 class MainActivityIdleScreensaverTest {
 
     @Test
-    fun `idle screensaver timeout is five minutes`() {
-        assertEquals(5L * 60 * 1000L, MainActivity.IDLE_SCREENSAVER_TIMEOUT_MS)
+    fun `idle screensaver default timeout is five minutes`() {
+        assertEquals(5L * 60 * 1000L, MainActivity.IDLE_SCREENSAVER_DEFAULT_TIMEOUT_MS)
+    }
+
+    @Test
+    fun `idle screensaver min and max are 1 and 10 minutes`() {
+        assertEquals(60L * 1000L, MainActivity.IDLE_SCREENSAVER_MIN_TIMEOUT_MS)
+        assertEquals(10L * 60 * 1000L, MainActivity.IDLE_SCREENSAVER_MAX_TIMEOUT_MS)
     }
 
     @Test
