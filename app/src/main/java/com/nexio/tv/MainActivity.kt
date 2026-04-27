@@ -581,7 +581,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     var inAppTrailerPlaybackActive by remember { mutableStateOf(false) }
-                    var modernHomeTrailerFullscreenActive by remember { mutableStateOf(false) }
+                    var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
 
@@ -680,8 +680,8 @@ class MainActivity : ComponentActivity() {
                             )
                             inAppTrailerPlaybackActive = false
                         }
-                        if (currentRoute != Screen.Home.route && modernHomeTrailerFullscreenActive) {
-                            modernHomeTrailerFullscreenActive = false
+                        if (currentRoute != Screen.Home.route && homeTrailerFullscreenActive) {
+                            homeTrailerFullscreenActive = false
                         }
                     }
 
@@ -964,7 +964,7 @@ class MainActivity : ComponentActivity() {
                                 inAppTrailerPlaybackActive = active
                             },
                             onHomeTrailerFullscreenActiveChanged = { active ->
-                                modernHomeTrailerFullscreenActive = active
+                                homeTrailerFullscreenActive = active
                             },
                             onDetailTrailerPlaybackActiveChanged = { active ->
                                 inAppTrailerPlaybackActive = active
@@ -2026,104 +2026,6 @@ private fun LegacyProfileSwitcherRow(
     }
 }
 
-
-@Composable
-private fun CollapsedSidebarPill(
-    label: String,
-    iconRes: Int?,
-    icon: ImageVector?,
-    iconOnly: Boolean,
-    blurEnabled: Boolean,
-    modifier: Modifier = Modifier,
-    onExpand: () -> Unit
-) {
-    val pillShape = RoundedCornerShape(999.dp)
-    val bgElevated = NexioColors.BackgroundElevated
-    val bgCard = NexioColors.BackgroundCard
-    val borderBase = NexioColors.Border
-    val pillBackgroundBrush = remember(blurEnabled, bgElevated, bgCard) {
-        if (blurEnabled) {
-            Brush.verticalGradient(listOf(Color(0xD1424851), Color(0xC73B4149)))
-        } else {
-            Brush.verticalGradient(listOf(bgElevated, bgCard))
-        }
-    }
-    val pillBorderColor = remember(blurEnabled, borderBase) {
-        if (blurEnabled) Color.White.copy(alpha = 0.14f) else borderBase.copy(alpha = 0.9f)
-    }
-
-    Row(
-        modifier = modifier
-            .focusProperties { canFocus = false }
-            .animateContentSize()
-            .clickable(onClick = onExpand)
-            .padding(horizontal = 1.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(0.25.dp)
-    ) {
-        if (!iconOnly) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_chevron_compact_left),
-                contentDescription = stringResource(R.string.cd_expand_sidebar),
-                modifier = Modifier
-                    .width(8.5.dp)
-                    .height(16.dp)
-                    .offset(y = (-0.5).dp)
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .height(44.dp)
-                .graphicsLayer {
-                    shape = pillShape
-                    clip = true
-                    compositingStrategy = CompositingStrategy.Offscreen
-                }
-                .clip(pillShape)
-                .background(brush = pillBackgroundBrush, shape = pillShape)
-                .border(width = 1.dp, color = pillBorderColor, shape = pillShape)
-        ) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxHeight()
-                    .padding(start = 5.dp, end = if (iconOnly) 5.dp else 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (iconOnly) 0.dp else 9.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF4F555E)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    DrawerItemIcon(
-                        iconRes = iconRes,
-                        icon = icon,
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .offset(y = (-0.5).dp)
-                    )
-                }
-
-                if (!iconOnly) {
-                    Text(
-                        text = label,
-                        color = Color.White,
-                        style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
-                            lineHeight = 30.sp
-                        ),
-                        modifier = Modifier.offset(y = (-0.5).dp),
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-    }
-}
 
 private fun navigateToDrawerRoute(
     navController: NavHostController,

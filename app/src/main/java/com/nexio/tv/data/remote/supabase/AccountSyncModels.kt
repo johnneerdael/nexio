@@ -235,6 +235,10 @@ data class AppearanceSettings(
     val localeTag: String = "system"
 )
 
+// R4 (2026-04-27): sidebarCollapsedByDefault / modernSidebarEnabled /
+// modernSidebarBlurEnabled were removed when the modern sidebar variant was
+// retired. Do not re-add — sidebar is now a single permanent mode (legacy,
+// fully collapsed at rest). See docs/superpowers/specs/2026-04-27-oled-burnin-hardening-design.md#R4.
 @Serializable
 data class LayoutSettings(
     val selectedLayout: String = "MODERN",

@@ -204,13 +204,7 @@
   <string name="layout_hero_catalogs_sub">Selecciona uno o más catálogos para el contenido destacado del héroe.</string>
   <string name="layout_section_content">Contenido del inicio</string>
   <string name="layout_section_content_desc">Controla qué aparece en Inicio y Búsqueda.</string>
-  <string name="layout_collapse_sidebar">Colapsar barra lateral</string>
-  <string name="layout_collapse_sidebar_sub">Oculta la barra lateral por defecto; muéstrala al enfocarla.</string>
-  <string name="layout_modern_sidebar">Barra lateral moderna</string>
-  <string name="layout_modern_sidebar_sub">Habilita la navegación de la barra lateral flotante.</string>
-  <string name="layout_modern_sidebar_blur">Desenfoque de barra lateral moderna</string>
-  <string name="layout_modern_sidebar_blur_sub">Activa el efecto de desenfoque para la barra lateral moderna.</string>
-  <string name="layout_show_hero">Mostrar sección de héroe</string>
+<string name="layout_show_hero">Mostrar sección de héroe</string>
   <string name="layout_show_hero_sub">Muestra el carrusel de héroe en la parte superior de Inicio.</string>
   <string name="layout_show_discover">Mostrar Descubrir en Búsqueda</string>
   <string name="layout_show_discover_sub">Muestra la sección de exploración cuando la búsqueda está vacía.</string>

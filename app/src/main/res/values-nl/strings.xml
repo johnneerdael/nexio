@@ -399,13 +399,7 @@
   <string name="layout_hero_catalogs_sub">Selecteer een of meer catalogi voor hero-inhoud.</string>
   <string name="layout_section_content">Home-inhoud</string>
   <string name="layout_section_content_desc">Bepaal wat er op Home en in Zoeken verschijnt.</string>
-  <string name="layout_collapse_sidebar">Zijbalk samenvouwen</string>
-  <string name="layout_collapse_sidebar_sub">Zijbalk standaard verbergen; laten zien als je deze selecteert.</string>
-  <string name="layout_modern_sidebar">Moderne zijbalk</string>
-  <string name="layout_modern_sidebar_sub">Schakel zwevende zijbalknavigatie in.</string>
-  <string name="layout_modern_sidebar_blur">Moderne zijbalkvervaging</string>
-  <string name="layout_modern_sidebar_blur_sub">Schakel het vervagingseffect in voor de moderne zijbalk.</string>
-  <string name="layout_show_hero">Toon hero-sectie</string>
+<string name="layout_show_hero">Toon hero-sectie</string>
   <string name="layout_show_hero_sub">Laat de hero-carrousel bovenaan Home zien.</string>
   <string name="layout_show_discover">Toon Ontdekken in Zoeken</string>
   <string name="layout_show_discover_sub">Toon de bladersectie wanneer de zoekopdracht leeg is.</string>
