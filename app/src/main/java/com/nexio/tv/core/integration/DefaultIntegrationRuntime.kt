@@ -5,6 +5,7 @@ import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.RuntimeTraceContext
 import com.nexio.tv.core.trace.RuntimeTraceContextElement
 import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceCacheDecision
 import com.nexio.tv.core.trace.TraceEventEnvelope
 import com.nexio.tv.core.trace.TraceHash
 import java.util.concurrent.atomic.AtomicLong
@@ -86,6 +87,19 @@ class DefaultIntegrationRuntime @Inject constructor(
         )
     }
 
+    private fun emitCacheDecision(
+        ctx: RuntimeTraceContext,
+        decision: TraceCacheDecision,
+        extra: Map<String, Any?> = emptyMap()
+    ) {
+        if (traceSink === NoopRuntimeTraceSink) return
+        emitTrace(
+            "runtime.cache_decision",
+            ctx,
+            mapOf("decision" to decision.name) + extra
+        )
+    }
+
     private fun outcomeName(result: IntegrationCallResult<*>): String = when (result) {
         is IntegrationCallResult.Success -> "SUCCESS"
         is IntegrationCallResult.HttpError -> "HTTP_ERROR"
@@ -120,7 +134,7 @@ class DefaultIntegrationRuntime @Inject constructor(
         val tracedStartedAt = System.currentTimeMillis()
         return withContext(RuntimeTraceContextElement(traceContext)) {
             try {
-                val result = getInternal(spec, options, traceId)
+                val result = getInternal(spec, options, traceId, traceContext)
                 emitTrace(
                     "runtime.operation_finish",
                     traceContext,
@@ -149,7 +163,8 @@ class DefaultIntegrationRuntime @Inject constructor(
     private suspend fun <T> getInternal(
         spec: IntegrationSpec<T>,
         options: IntegrationFetchOptions,
-        traceId: String
+        traceId: String,
+        traceContext: RuntimeTraceContext
     ): IntegrationFetchResult<T> {
         record(
             spec = spec,
@@ -157,10 +172,31 @@ class DefaultIntegrationRuntime @Inject constructor(
             phase = IntegrationAuditPhase.REQUEST_RECEIVED
         )
         return when (val policy = spec.cachePolicy) {
-            IntegrationCachePolicy.Disabled -> executeWithoutCache(spec, options, traceId)
-            is IntegrationCachePolicy.ObserveOnly -> executeObserveOnly(spec, policy, options, traceId)
-            is IntegrationCachePolicy.CacheFirst -> executeCacheFirst(spec, policy, options, traceId)
-            IntegrationCachePolicy.Mutation -> executeMutation(spec, options, traceId)
+            IntegrationCachePolicy.Disabled -> {
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.BYPASS_DISABLED,
+                    mapOf("reason" to "policy-disabled", "networkSuppressed" to false)
+                )
+                executeWithoutCache(spec, options, traceId)
+            }
+            is IntegrationCachePolicy.ObserveOnly -> {
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.OBSERVE_ONLY,
+                    mapOf("reason" to "policy-observe-only", "networkSuppressed" to false)
+                )
+                executeObserveOnly(spec, policy, options, traceId)
+            }
+            is IntegrationCachePolicy.CacheFirst -> executeCacheFirst(spec, policy, options, traceId, traceContext)
+            IntegrationCachePolicy.Mutation -> {
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.BYPASS_DISABLED,
+                    mapOf("reason" to "policy-mutation", "networkSuppressed" to false)
+                )
+                executeMutation(spec, options, traceId)
+            }
         }
     }
 
@@ -391,10 +427,21 @@ class DefaultIntegrationRuntime @Inject constructor(
         spec: IntegrationSpec<T>,
         policy: IntegrationCachePolicy.CacheFirst,
         options: IntegrationFetchOptions,
-        traceId: String
+        traceId: String,
+        traceContext: RuntimeTraceContext
     ): IntegrationFetchResult<T> {
         cacheStore.readFresh(spec)?.let {
             record(spec, traceId, IntegrationAuditPhase.FRESH_CACHE_HIT, IntegrationOutcome.SUCCESS)
+            emitCacheDecision(
+                traceContext,
+                TraceCacheDecision.HIT,
+                mapOf(
+                    "reason" to "fresh-cache-hit",
+                    "ttlMs" to policy.ttlMs,
+                    "staleWindowMs" to policy.staleAfterExpiryMs,
+                    "networkSuppressed" to true
+                )
+            )
             return IntegrationFetchResult.Fresh(it)
         }
 
@@ -403,10 +450,30 @@ class DefaultIntegrationRuntime @Inject constructor(
             val stale = cacheStore.readStale(spec)
             return if (stale != null && providerPolicy.allowStaleWhilePaused && options.allowStaleOnFailure) {
                 record(spec, traceId, IntegrationAuditPhase.STALE_CACHE_HIT, IntegrationOutcome.SUCCESS)
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.STALE_HIT,
+                    mapOf(
+                        "reason" to "stale-cache-hit",
+                        "ttlMs" to policy.ttlMs,
+                        "staleWindowMs" to policy.staleAfterExpiryMs,
+                        "networkSuppressed" to true
+                    )
+                )
                 IntegrationFetchResult.Stale(stale)
             } else {
                 val phase = if (options.cacheOnly) IntegrationAuditPhase.MISSING else IntegrationAuditPhase.PLAYBACK_BLOCKED
                 record(spec, traceId, phase, IntegrationOutcome.MISSING)
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.EXPIRED_MISS,
+                    mapOf(
+                        "reason" to if (options.cacheOnly) "cache-only-miss" else "playback-blocked",
+                        "ttlMs" to policy.ttlMs,
+                        "staleWindowMs" to policy.staleAfterExpiryMs,
+                        "networkSuppressed" to true
+                    )
+                )
                 IntegrationFetchResult.Missing
             }
         }
@@ -415,21 +482,61 @@ class DefaultIntegrationRuntime @Inject constructor(
         return singleFlight.run(spec.requiredCacheKey) {
             cacheStore.readFresh(spec)?.let {
                 record(spec, traceId, IntegrationAuditPhase.FRESH_CACHE_HIT, IntegrationOutcome.SUCCESS)
+                emitCacheDecision(
+                    traceContext,
+                    TraceCacheDecision.HIT,
+                    mapOf(
+                        "reason" to "fresh-cache-hit",
+                        "ttlMs" to policy.ttlMs,
+                        "staleWindowMs" to policy.staleAfterExpiryMs,
+                        "networkSuppressed" to true
+                    )
+                )
                 return@run IntegrationFetchResult.Fresh(it)
             }
             if (backoffManager.isBlocked(spec.provider, spec.scope)) {
                 record(spec, traceId, IntegrationAuditPhase.BACKOFF_BLOCKED, IntegrationOutcome.MISSING)
                 cacheStore.readStale(spec)?.let {
                     record(spec, traceId, IntegrationAuditPhase.STALE_CACHE_HIT, IntegrationOutcome.SUCCESS)
+                    emitCacheDecision(
+                        traceContext,
+                        TraceCacheDecision.STALE_HIT,
+                        mapOf(
+                            "reason" to "stale-cache-hit-backoff",
+                            "ttlMs" to policy.ttlMs,
+                            "staleWindowMs" to policy.staleAfterExpiryMs,
+                            "networkSuppressed" to true
+                        )
+                    )
                     return@run IntegrationFetchResult.Stale(it)
                 }
                 return@run IntegrationFetchResult.Missing
             }
 
+            emitCacheDecision(
+                traceContext,
+                TraceCacheDecision.MISS_THEN_NETWORK,
+                mapOf(
+                    "reason" to "cache-miss",
+                    "ttlMs" to policy.ttlMs,
+                    "staleWindowMs" to policy.staleAfterExpiryMs,
+                    "networkSuppressed" to false
+                )
+            )
             when (val result = executeProviderLoad(spec, traceId)) {
                 is IntegrationFetchResult.Updated -> {
                     cacheStore.write(spec, result.value)
                     record(spec, traceId, IntegrationAuditPhase.CACHE_WRITE, IntegrationOutcome.SUCCESS, networkStarted = true, loaderInvoked = true)
+                    emitCacheDecision(
+                        traceContext,
+                        TraceCacheDecision.WRITE,
+                        mapOf(
+                            "reason" to "cache-write",
+                            "ttlMs" to policy.ttlMs,
+                            "staleWindowMs" to policy.staleAfterExpiryMs,
+                            "networkSuppressed" to false
+                        )
+                    )
                     result
                 }
                 is IntegrationFetchResult.Fresh -> result
@@ -437,9 +544,29 @@ class DefaultIntegrationRuntime @Inject constructor(
                 IntegrationFetchResult.Missing -> {
                     cacheStore.readStale(spec)?.let {
                         record(spec, traceId, IntegrationAuditPhase.STALE_CACHE_HIT, IntegrationOutcome.SUCCESS)
+                        emitCacheDecision(
+                            traceContext,
+                            TraceCacheDecision.STALE_HIT,
+                            mapOf(
+                                "reason" to "stale-cache-hit-after-network-miss",
+                                "ttlMs" to policy.ttlMs,
+                                "staleWindowMs" to policy.staleAfterExpiryMs,
+                                "networkSuppressed" to false
+                            )
+                        )
                         IntegrationFetchResult.Stale(it)
                     } ?: run {
                         record(spec, traceId, IntegrationAuditPhase.MISSING, IntegrationOutcome.MISSING)
+                        emitCacheDecision(
+                            traceContext,
+                            TraceCacheDecision.EXPIRED_MISS,
+                            mapOf(
+                                "reason" to "network-missing",
+                                "ttlMs" to policy.ttlMs,
+                                "staleWindowMs" to policy.staleAfterExpiryMs,
+                                "networkSuppressed" to false
+                            )
+                        )
                         IntegrationFetchResult.Missing
                     }
                 }
