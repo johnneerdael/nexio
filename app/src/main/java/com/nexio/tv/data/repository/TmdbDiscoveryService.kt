@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.railpreview.TmdbRailPreviewMapper
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.remote.api.TmdbMediaResult
@@ -8,14 +9,15 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +26,7 @@ class TmdbDiscoveryService @Inject constructor(
     private val client: TmdbDiscoveryClient
 ) {
     private val snapshot = MutableStateFlow(TmdbDiscoverySnapshot())
+    private val railPreviewMapper = TmdbRailPreviewMapper()
     private val imdbLookupSemaphore = Semaphore(IMDB_LOOKUP_CONCURRENCY)
 
     fun observeSnapshot(): Flow<TmdbDiscoverySnapshot> = snapshot
@@ -42,8 +45,8 @@ class TmdbDiscoveryService @Inject constructor(
         val tvResults = async {
             runCatchingOrEmpty { client.searchTv(trimmedQuery, preferences) }
         }
-        val items = mapResults(movieResults.await(), ContentType.MOVIE) +
-            mapResults(tvResults.await(), ContentType.SERIES)
+        val items = mapSearchResults(movieResults.await(), ContentType.MOVIE) +
+            mapSearchResults(tvResults.await(), ContentType.SERIES)
         if (items.isEmpty()) return@coroutineScope emptyList()
 
         listOf(
@@ -131,7 +134,12 @@ class TmdbDiscoveryService @Inject constructor(
         val title = tmdbCatalogTitle(catalogId) ?: return null
         val contentType = catalogContentType(catalogId) ?: return null
         val results = runCatchingOrEmpty { client.fetchCatalog(catalogId, preferences) }
-        val items = mapResults(results, contentType)
+        val items = mapCatalogResults(
+            railId = catalogId,
+            results = results,
+            contentType = contentType,
+            generatedAtMs = System.currentTimeMillis()
+        )
         return CatalogRow(
             addonId = ADDON_ID,
             addonName = ADDON_NAME,
@@ -150,10 +158,28 @@ class TmdbDiscoveryService @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (_: Throwable) {
-        emptyList()
+            emptyList()
     }
 
-    private suspend fun mapResults(
+    private fun mapCatalogResults(
+        railId: String,
+        results: List<TmdbMediaResult>,
+        contentType: ContentType,
+        generatedAtMs: Long
+    ): List<MetaPreview> {
+        return results.take(MAX_ITEMS_PER_SOURCE)
+            .mapIndexed { index, result ->
+                railPreviewMapper.mapResult(
+                    railId = railId,
+                    result = result,
+                    itemType = contentType,
+                    position = index,
+                    generatedAtMs = generatedAtMs
+                ).toMetaPreview()
+            }
+    }
+
+    private suspend fun mapSearchResults(
         results: List<TmdbMediaResult>,
         contentType: ContentType
     ): List<MetaPreview> = coroutineScope {
@@ -161,7 +187,7 @@ class TmdbDiscoveryService @Inject constructor(
             .map { result ->
                 async {
                     imdbLookupSemaphore.withPermit {
-                        mapResult(result, contentType)
+                        mapSearchResult(result, contentType)
                     }
                 }
             }
@@ -169,7 +195,7 @@ class TmdbDiscoveryService @Inject constructor(
             .filterNotNull()
     }
 
-    private suspend fun mapResult(
+    private suspend fun mapSearchResult(
         result: TmdbMediaResult,
         contentType: ContentType
     ): MetaPreview? {

@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.railpreview
 
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTrendingMovieItemDto
@@ -61,6 +62,85 @@ class TraktRailPreviewMapper {
         )
     }
 
+    fun mapMovie(
+        railId: String,
+        movie: TraktMovieDto,
+        position: Int,
+        generatedAtMs: Long
+    ): RailItemPreview? {
+        val ids = movie.ids ?: return null
+        val traktId = ids.trakt ?: return null
+
+        return mapPreview(
+            railId = railId,
+            sourceItemId = "trakt:movie:$traktId",
+            itemType = ContentType.MOVIE,
+            title = movie.title,
+            year = movie.year,
+            ids = ids,
+            watchers = null,
+            position = position,
+            generatedAtMs = generatedAtMs
+        )
+    }
+
+    fun mapShow(
+        railId: String,
+        show: TraktShowDto,
+        position: Int,
+        generatedAtMs: Long
+    ): RailItemPreview? {
+        val ids = show.ids ?: return null
+        val traktId = ids.trakt ?: return null
+
+        return mapPreview(
+            railId = railId,
+            sourceItemId = "trakt:show:$traktId",
+            itemType = ContentType.SERIES,
+            title = show.title,
+            year = show.year,
+            ids = ids,
+            watchers = null,
+            position = position,
+            generatedAtMs = generatedAtMs
+        )
+    }
+
+    fun mapCalendarEpisode(
+        railId: String,
+        item: TraktCalendarEpisodeItemDto,
+        position: Int,
+        generatedAtMs: Long
+    ): RailItemPreview? {
+        val show = item.show ?: return null
+        val ids = show.ids ?: return null
+        val traktId = ids.trakt ?: return null
+        val episode = item.episode
+        val title = buildString {
+            append(show.title ?: "trakt:show:$traktId")
+            if (episode?.season != null && episode.number != null) {
+                append("  S")
+                append(episode.season)
+                append("E")
+                append(episode.number)
+            }
+        }
+
+        return mapPreview(
+            railId = railId,
+            sourceItemId = "trakt:show:$traktId",
+            itemType = ContentType.SERIES,
+            title = title,
+            year = show.year,
+            ids = ids,
+            watchers = null,
+            position = position,
+            overview = episode?.title,
+            releaseDate = item.firstAired,
+            generatedAtMs = generatedAtMs
+        )
+    }
+
     private fun mapPreview(
         railId: String,
         sourceItemId: String,
@@ -70,6 +150,8 @@ class TraktRailPreviewMapper {
         ids: TraktIdsDto,
         watchers: Int?,
         position: Int,
+        overview: String? = null,
+        releaseDate: String? = null,
         generatedAtMs: Long
     ): RailItemPreview {
         val stableIds = ids.toProviderIds()
@@ -84,7 +166,9 @@ class TraktRailPreviewMapper {
             stableIds = stableIds,
             display = RailDisplaySeed(
                 title = title,
-                year = year
+                year = year,
+                releaseDate = releaseDate,
+                overview = overview
             ),
             ranking = RailRankingMetadata(
                 watchers = watchers,
@@ -103,6 +187,8 @@ class TraktRailPreviewMapper {
                     stableIds.slug.orEmpty(),
                     title.orEmpty(),
                     year?.toString().orEmpty(),
+                    overview.orEmpty(),
+                    releaseDate.orEmpty(),
                     watchers?.toString().orEmpty(),
                     rank.toString()
                 ).joinToString(separator = "|")

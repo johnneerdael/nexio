@@ -70,3 +70,13 @@ Built-in rail preview data SHALL enter Home through the same first-paint UI mode
 - **THEN** the same Home preview hydration entrypoint used by addon previews is used
 - **AND** provider-specific hydration schedulers are not used
 - **AND** MetadataRouter receives the preview content id, item type, source role, source provider, and stable IDs through `MetadataSourceContext`
+
+### Requirement: Built-in rail providers enter the shared first-paint lifecycle
+Trakt, MDBList, TMDB, Kitsu, and Simkl home rails MUST map provider payload items through provider-specific `RailPreviewMapper` implementations into `RailItemPreview`, then into the same shared `MetaPreview` first-paint model used by addon catalog previews.
+
+#### Scenario: Built-in provider mapper feeds shared home renderer
+- **WHEN** a built-in rail page response is available
+- **THEN** each item is mapped by its provider-specific mapper
+- **AND** the resulting item is converted through `RailItemPreview.toMetaPreview()`
+- **AND** the Home renderer receives only shared preview/card models
+- **AND** no provider-specific renderer, hydration scheduler, router, or field merge path is used

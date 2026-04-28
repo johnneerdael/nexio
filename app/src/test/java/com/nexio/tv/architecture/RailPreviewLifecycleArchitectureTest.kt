@@ -61,12 +61,39 @@ class RailPreviewLifecycleArchitectureTest {
             "railPreviewsToCatalogRow must enter CatalogRow through shared MetaPreview conversion.",
             normalized.contains("items = previews.map { it.toMetaPreview() }")
         )
-
         val offenders = forbiddenRenderers.filter { renderer ->
             Regex("""\b${Regex.escape(renderer)}\b""").containsMatchIn(functionBody)
         }
         if (offenders.isNotEmpty()) {
             fail("railPreviewsToCatalogRow must not grow provider-specific render methods: $offenders")
+        }
+    }
+
+    @Test
+    fun `built in rail preview mappers are used by production rail assembly`() {
+        val productionSources = productionKotlinFiles()
+            .filterNot { file -> file.invariantSeparatorsPath.contains("/data/integration/railpreview/") }
+            .joinToString(separator = "\n") { file -> file.readText() }
+
+        val requiredMapperUsages = mapOf(
+            "TraktDiscoveryService.kt" to "TraktRailPreviewMapper",
+            "MDBListDiscoveryService.kt" to "MDBListRailPreviewMapper",
+            "TmdbDiscoveryService.kt" to "TmdbRailPreviewMapper",
+            "KitsuDiscoveryService.kt" to "KitsuRailPreviewMapper",
+            "SimklDiscoveryService.kt" to "SimklRailPreviewMapper"
+        )
+
+        val missing = requiredMapperUsages.filterNot { (fileName, mapperName) ->
+            val source = productionKotlinFiles().firstOrNull { it.name == fileName }?.readText().orEmpty()
+            source.contains(mapperName) && source.contains("toMetaPreview()")
+        }
+
+        if (missing.isNotEmpty()) {
+            fail(
+                "Built-in rail providers must use source-specific RailPreviewMapper classes before " +
+                    "entering the shared MetaPreview lifecycle. Missing production usages: " +
+                    missing.entries.joinToString { (fileName, mapperName) -> "$mapperName in $fileName" }
+            )
         }
     }
 
@@ -139,6 +166,14 @@ class RailPreviewLifecycleArchitectureTest {
     private fun homeProductionFiles(): List<File> {
         assertTrue("Required Home source directory is missing: ${homeDirectory.path}", homeDirectory.isDirectory)
         return homeDirectory.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .toList()
+    }
+
+    private fun productionKotlinFiles(): List<File> {
+        val root = File("app/src/main/java/com/nexio/tv")
+        assertTrue("Required production source directory is missing: ${root.path}", root.isDirectory)
+        return root.walkTopDown()
             .filter { file -> file.isFile && file.extension == "kt" }
             .toList()
     }
