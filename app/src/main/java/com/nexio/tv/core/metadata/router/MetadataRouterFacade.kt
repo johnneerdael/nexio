@@ -356,11 +356,27 @@ class MetadataRouterFacade @Inject constructor(
         personId: Int,
         preferCrewCredits: Boolean = false
     ): PersonDetail? {
+        // Resolve through the canonical pipeline (fires metadata.route_decision +
+        // per-step provider_plan + per-field field_selected events).
+        val resolution = resolveRequest(metadataRequest)
+
+        // If the request's contentId carries the TVDB person prefix, the resolver pipeline
+        // dispatches TvdbOrganizationPersonAdapter; surface its CAST candidate as PersonDetail.
+        if (metadataRequest.contentId.startsWith("tvdb:person:")) {
+            val tvdbPersonDetail = resolution.providerRunResult
+                ?.stepResults
+                ?.firstOrNull { it.candidate?.provider == MetadataPrimaryProvider.TVDB }
+                ?.candidate
+                ?.fields
+                ?.get(ResolvedField.CAST)
+                ?.value as? PersonDetail
+            if (tvdbPersonDetail != null) return tvdbPersonDetail
+        }
+
+        // Default TMDB path: delegate to the secondary repository for the rich shape.
         val repo = checkNotNull(metadataSecondaryRepository) {
             "fetchPersonDetail requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
         }
-        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
-        resolveRequest(metadataRequest)
         return repo.fetchPersonDetail(personId, preferCrewCredits)
     }
 

@@ -10,8 +10,10 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 /**
@@ -130,6 +132,55 @@ class MetadataRouterFacadePersonCompanyTest {
         coVerify(exactly = 1) { secondaryRepo.fetchPersonDetail(608, true) }
     }
 
+    @Test
+    fun `fetchPersonDetail with tvdb prefix returns TVDB adapter's PersonDetail and skips TMDB repo`() = runTest {
+        val sink = RecordingTraceSink()
+        val secondaryRepo = mockk<MetadataSecondaryRepository>(relaxed = true)
+        val tvdbPerson = PersonDetail(
+            tmdbId = 0,
+            name = "Mark Hamill",
+            biography = "Voice actor and Jedi.",
+            birthday = "1951-09-25",
+            deathday = null,
+            placeOfBirth = "Oakland, California, USA",
+            profilePhoto = "/tvdb/mark.jpg",
+            knownFor = "Acting",
+            movieCredits = emptyList(),
+            tvCredits = emptyList()
+        )
+        val tvdbCandidate = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TVDB,
+            fields = mapOf(
+                ResolvedField.CAST to FieldValue(tvdbPerson, FieldOwner.PRIMARY)
+            )
+        )
+
+        val facade = newFacadeWithExtraAdapter(
+            sink = sink,
+            secondaryRepo = secondaryRepo,
+            extraAdapter = CannedCandidateAdapter(MetadataPrimaryProvider.TVDB, tvdbCandidate)
+        )
+
+        val result = facade.fetchPersonDetail(
+            metadataRequest = MetadataRequest(
+                contentId = "tvdb:person:287",
+                // Use SERIES so the router takes the TVDB-native path (tvdb scheme, native type
+                // is SERIES) and ProviderPlanExecutor.tvdbSteps validates without identity
+                // resolution; the CannedCandidateAdapter then returns our TVDB CAST candidate
+                // regardless of which step is dispatched.
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                language = "eng",
+                depth = MetadataDepth.DETAIL_SECONDARY
+            ),
+            personId = 287
+        )
+
+        assertNotNull(result)
+        assertSame(tvdbPerson, result)
+        coVerify(exactly = 0) { secondaryRepo.fetchPersonDetail(any(), any()) }
+    }
+
     private fun assertCanonicalTraceEvents(sink: RecordingTraceSink) {
         val routeEvents = sink.events.filter { it.eventType == "metadata.route_decision" }
         assertEquals(
@@ -162,6 +213,12 @@ class MetadataRouterFacadePersonCompanyTest {
     private fun newFacade(
         sink: RecordingTraceSink,
         secondaryRepo: MetadataSecondaryRepository
+    ): MetadataRouterFacade = newFacadeWithExtraAdapter(sink, secondaryRepo, extraAdapter = null)
+
+    private fun newFacadeWithExtraAdapter(
+        sink: RecordingTraceSink,
+        secondaryRepo: MetadataSecondaryRepository,
+        extraAdapter: MetadataProviderAdapter?
     ): MetadataRouterFacade {
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
         val tmdbCandidate = MetadataCandidate(
@@ -170,6 +227,10 @@ class MetadataRouterFacadePersonCompanyTest {
                 ResolvedField.TITLE to FieldValue("Spirited Away", FieldOwner.PRIMARY)
             )
         )
+        val adapters: Set<MetadataProviderAdapter> = buildSet {
+            add(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
+            if (extraAdapter != null) add(extraAdapter)
+        }
         return MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(),
@@ -185,9 +246,7 @@ class MetadataRouterFacadePersonCompanyTest {
                     override suspend fun tvdbToTmdb(tvdbId: String): String? = null
                 }
             ),
-            providerPlanRunner = ProviderPlanRunner(
-                setOf(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
-            ),
+            providerPlanRunner = ProviderPlanRunner(adapters),
             fieldResolver = FieldResolver(events),
             metadataSecondaryRepository = secondaryRepo
         )
