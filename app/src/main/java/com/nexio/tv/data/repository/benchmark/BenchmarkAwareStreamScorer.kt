@@ -997,6 +997,7 @@ internal fun resolveAudioScoringDecision(
         )
     }
 
+    // No supported tier found — penalise by the lowest base-point tier (least severe negative).
     return ShadowAudioScoringDecision(
         effectiveTier = candidates.minByOrNull(::audioBasePoints) ?: ShadowAudioTier.OTHER,
         supported = false,
@@ -1024,6 +1025,8 @@ internal fun detectAudioTierCandidates(
         releaseType == ShadowReleaseType.BLURAY_ENCODE
 
     return buildList {
+        // Atmos cases are exhaustive over hasAtmos == true; the when has no else, so
+        // when hasAtmos is false control falls through to the DTS / non-Atmos blocks below.
         when {
             // Explicit TrueHD co-tag (or both co-tags present — TrueHD wins because it
             // implies the higher-quality source).
