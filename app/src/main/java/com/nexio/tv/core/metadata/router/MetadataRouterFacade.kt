@@ -16,6 +16,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
+import com.nexio.tv.domain.model.PersonDetail
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -194,6 +195,67 @@ class MetadataRouterFacade @Inject constructor(
         resolveRequest(metadataRequest)
         // Delegate to the secondary repository for the TMDB recommendations list.
         return repo.fetchMoreLikeThis(tmdbId, contentType)
+    }
+
+    /**
+     * Routes a TMDB person-id-by-name lookup through the canonical resolve pipeline so
+     * that `metadata.route_decision` and `metadata.field_selected` trace events fire,
+     * then delegates the exact-name search to [MetadataSecondaryRepository].
+     *
+     * The Kitsu-bridge actor hydration path (see `hydrateKitsuNavigationTargetsAsync`)
+     * uses this to resolve TMDB person ids for actors that arrived via Kitsu metadata.
+     * The [metadataRequest] is supplied by the caller for trace observability — there
+     * is no canonical content-id for a "person by exact name" query.
+     */
+    suspend fun findPersonIdByExactName(
+        metadataRequest: MetadataRequest,
+        name: String
+    ): Int? {
+        val repo = checkNotNull(metadataSecondaryRepository) {
+            "findPersonIdByExactName requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        }
+        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
+        resolveRequest(metadataRequest)
+        return repo.findPersonIdByExactName(name)
+    }
+
+    /**
+     * Routes a TMDB company-id-by-name lookup through the canonical resolve pipeline so
+     * that `metadata.route_decision` and `metadata.field_selected` trace events fire,
+     * then delegates the exact-name search to [MetadataSecondaryRepository].
+     *
+     * Used by the Kitsu-bridge production-company hydration path to resolve TMDB
+     * company ids for studios that arrived via Kitsu metadata.
+     */
+    suspend fun findCompanyIdByExactName(
+        metadataRequest: MetadataRequest,
+        name: String
+    ): Int? {
+        val repo = checkNotNull(metadataSecondaryRepository) {
+            "findCompanyIdByExactName requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        }
+        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
+        resolveRequest(metadataRequest)
+        return repo.findCompanyIdByExactName(name)
+    }
+
+    /**
+     * Routes a TMDB person-detail fetch through the canonical resolve pipeline so that
+     * `metadata.route_decision` and `metadata.field_selected` trace events fire, then
+     * delegates the rich person-detail (biography, known-for, credits) fetch to
+     * [MetadataSecondaryRepository].
+     */
+    suspend fun fetchPersonDetail(
+        metadataRequest: MetadataRequest,
+        personId: Int,
+        preferCrewCredits: Boolean = false
+    ): PersonDetail? {
+        val repo = checkNotNull(metadataSecondaryRepository) {
+            "fetchPersonDetail requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        }
+        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
+        resolveRequest(metadataRequest)
+        return repo.fetchPersonDetail(personId, preferCrewCredits)
     }
 
     suspend fun fetchTvEpisodeEnrichment(

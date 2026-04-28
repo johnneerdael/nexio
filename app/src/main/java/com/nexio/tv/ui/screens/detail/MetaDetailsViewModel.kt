@@ -1647,12 +1647,34 @@ class MetaDetailsViewModel @Inject constructor(
         kitsuBridgeHydrationJob = viewModelScope.launch {
             val tmdbPersonIdsByActorName = coroutineScope {
                 actorNamesNeedingIds.associateWith { actorName ->
-                    async { metadataSecondaryRepository.findPersonIdByExactName(actorName) }
+                    async {
+                        metadataRouterFacade.findPersonIdByExactName(
+                            metadataRequest = MetadataRequest(
+                                contentId = "tmdb:person:$actorName",
+                                contentType = ContentType.MOVIE,
+                                sourceContext = MetadataSourceContext(),
+                                language = currentTvdbLanguageTag(),
+                                depth = MetadataDepth.DETAIL_SECONDARY
+                            ),
+                            name = actorName
+                        )
+                    }
                 }.mapValues { (_, deferred) -> deferred.await() }
             }
             val tmdbCompanyIdsByName = coroutineScope {
                 companyNamesNeedingIds.associateWith { companyName ->
-                    async { metadataSecondaryRepository.findCompanyIdByExactName(companyName) }
+                    async {
+                        metadataRouterFacade.findCompanyIdByExactName(
+                            metadataRequest = MetadataRequest(
+                                contentId = "tmdb:company:$companyName",
+                                contentType = ContentType.MOVIE,
+                                sourceContext = MetadataSourceContext(),
+                                language = currentTvdbLanguageTag(),
+                                depth = MetadataDepth.DETAIL_SECONDARY
+                            ),
+                            name = companyName
+                        )
+                    }
                 }.mapValues { (_, deferred) -> deferred.await() }
             }
 
