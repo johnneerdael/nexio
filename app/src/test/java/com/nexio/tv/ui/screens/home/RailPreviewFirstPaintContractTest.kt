@@ -47,22 +47,42 @@ class RailPreviewFirstPaintContractTest {
     @Test
     fun api_rail_first_paint_does_not_call_metadata_router() {
         assertFirstPaintHelperOnlyAcceptsDisplayInputs()
-        assertFirstPaintHelperDoesNotReference("metadata router", "MetadataRouter", "metadataRouter", "Router")
-        assertFirstPaintConversionUsesPreviewDisplayDataOnly()
+        assertFirstPaintBoundaryDoesNotReference(
+            "metadata router",
+            "MetadataRouter",
+            "MetadataRouterFacade",
+            "ProviderMetadataRouter",
+            "TvMetadataRouter",
+            "metadataRouter"
+        )
+        assertFirstPaintConversionUsesDelegatedPreviewDataOnly()
     }
 
     @Test
     fun api_rail_first_paint_does_not_call_provider_plan_runner() {
         assertFirstPaintHelperOnlyAcceptsDisplayInputs()
-        assertFirstPaintHelperDoesNotReference("provider plan runner", "ProviderPlanRunner", "providerPlanRunner", "PlanRunner", "Runner")
-        assertFirstPaintConversionUsesPreviewDisplayDataOnly()
+        assertFirstPaintBoundaryDoesNotReference(
+            "provider plan runner",
+            "ProviderPlanRunner",
+            "providerPlanRunner"
+        )
+        assertFirstPaintConversionUsesDelegatedPreviewDataOnly()
     }
 
     @Test
     fun api_rail_first_paint_does_not_execute_runtime_metadata_calls() {
         assertFirstPaintHelperOnlyAcceptsDisplayInputs()
-        assertFirstPaintHelperDoesNotReference("runtime metadata calls", "runtimeMetadata", "fetchEnrichment", "fetchEpisodeEnrichment", "fetchSeasonEpisodes", ".fetch")
-        assertFirstPaintConversionUsesPreviewDisplayDataOnly()
+        assertFirstPaintBoundaryDoesNotReference(
+            "runtime metadata calls",
+            "runtimeMetadata",
+            "resolveHomeRequest",
+            "resolveRequest",
+            "fetchEnrichment",
+            "fetchEpisodeEnrichment",
+            "fetchSeasonEpisodes",
+            ".fetch"
+        )
+        assertFirstPaintConversionUsesDelegatedPreviewDataOnly()
     }
 
     private fun assertFirstPaintHelperOnlyAcceptsDisplayInputs() {
@@ -77,15 +97,22 @@ class RailPreviewFirstPaintContractTest {
         assertTrue(helperSource.contains("previews: List<RailItemPreview>"))
     }
 
-    private fun assertFirstPaintHelperDoesNotReference(systemName: String, vararg prohibitedTerms: String) {
-        val helperSource = railPreviewsToCatalogRowSource()
+    private fun assertFirstPaintBoundaryDoesNotReference(systemName: String, vararg prohibitedTerms: String) {
+        val sourceBoundary = firstPaintConversionBoundarySource()
 
         prohibitedTerms.forEach { term ->
-            assertFalse("First-paint helper must not reference $systemName term '$term'", helperSource.contains(term))
+            assertFalse("First-paint conversion must not reference $systemName term '$term'", sourceBoundary.contains(term))
         }
     }
 
-    private fun assertFirstPaintConversionUsesPreviewDisplayDataOnly() {
+    private fun assertFirstPaintConversionUsesDelegatedPreviewDataOnly() {
+        val helperSource = railPreviewsToCatalogRowSource()
+
+        assertTrue(
+            "First-paint helper must delegate only through RailItemPreview.toMetaPreview()",
+            helperSource.contains("items = previews.map { it.toMetaPreview() }")
+        )
+
         val row = railPreviewsToCatalogRow(
             addonId = "trakt",
             addonName = "Trakt",
@@ -101,6 +128,10 @@ class RailPreviewFirstPaintContractTest {
         assertEquals(null, row.items.single().poster)
     }
 
+    private fun firstPaintConversionBoundarySource(): String {
+        return railPreviewsToCatalogRowSource() + "\n" + railItemPreviewToMetaPreviewSource()
+    }
+
     private fun railPreviewsToCatalogRowSource(): String {
         val source = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogUtils.kt").readText()
         val start = source.indexOf("internal fun railPreviewsToCatalogRow(")
@@ -108,6 +139,17 @@ class RailPreviewFirstPaintContractTest {
 
         assertTrue("railPreviewsToCatalogRow source should exist", start >= 0)
         assertTrue("railPreviewsToCatalogRow source boundary should exist", end > start)
+
+        return source.substring(start, end)
+    }
+
+    private fun railItemPreviewToMetaPreviewSource(): String {
+        val source = File("app/src/main/java/com/nexio/tv/domain/model/RailItemPreview.kt").readText()
+        val start = source.indexOf("fun RailItemPreview.toMetaPreview(): MetaPreview")
+        val end = source.indexOf("\n\nprivate fun ProviderId?.toTitleRatingSource()", start)
+
+        assertTrue("RailItemPreview.toMetaPreview source should exist", start >= 0)
+        assertTrue("RailItemPreview.toMetaPreview source boundary should exist", end > start)
 
         return source.substring(start, end)
     }
