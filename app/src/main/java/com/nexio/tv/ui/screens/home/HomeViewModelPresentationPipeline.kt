@@ -718,8 +718,7 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
         item = item,
         fallbackContentId = null,
         addonMetadata = item.toHomeDisplayMetadata(),
-        metadataRouterFacade = metadataRouterFacade,
-        providerMetadataRouter = providerMetadataRouter,
+        providerLocalizedMetadataResolver = providerLocalizedMetadataResolver,
         profileBoundary = profileBoundary
     ).value
 }

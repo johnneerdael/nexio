@@ -271,6 +271,42 @@ class RailPreviewLifecycleArchitectureTest {
         )
     }
 
+    @Test
+    fun `metadata audit rail visible scenarios use router facade not synthesized route records`() {
+        val source = File("app/src/test/java/com/nexio/tv/metadata/audit/MetadataAuditRunner.kt").readText()
+        val railScenario = functionSource(source, "runRailScenario")
+        val forbiddenRailSynthesis = listOf(
+            Regex("""\brailRoute\s*\("""),
+            Regex("""\brailFields\s*\("""),
+            Regex("""RuntimeCallEvent\s*\("""),
+            Regex("""CacheDecisionEvent\s*\("""),
+            Regex("""routingContentId\s*\("""),
+            Regex("""mapOf\s*\(\s*metaPreview\.id\s+to\s+targetId\s*\)""")
+        )
+        val offenders = forbiddenRailSynthesis.flatMap { pattern ->
+            pattern.findAll(railScenario).map { match -> match.value.trim() }
+        }
+
+        assertTrue(
+            "Rail visible hydration audit must execute the shared MetadataRouterFacade.resolveRequest(...) path.",
+            railScenario.contains("facade.resolveRequest(")
+        )
+        assertTrue(
+            "Rail visible hydration audit must pass rail previews as RAIL_PREVIEW source context.",
+            railScenario.contains("previewSourceRole = com.nexio.tv.core.metadata.router.SourceRole.RAIL_PREVIEW")
+        )
+        assertTrue(
+            "Rail visible hydration audit must request the facade with the source rail item id, not a preselected target provider id.",
+            railScenario.contains("contentId = spec.itemId")
+        )
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Rail scenario implementation must not synthesize visible route/runtime/cache/field data " +
+                    "with rail-only helpers or direct RuntimeCallEvent/CacheDecisionEvent construction: $offenders"
+            )
+        }
+    }
+
     private fun homeFile(name: String): File = File(homeDirectory, name).also { file ->
         assertTrue("Required Home source file is missing: ${file.path}", file.isFile)
     }
@@ -301,7 +337,7 @@ class RailPreviewLifecycleArchitectureTest {
 
     private fun functionSource(content: String, functionName: String): String {
         val functionMatch = Regex(
-            """(?m)^(?:internal|private|public)?\s*(?:suspend\s+)?fun\s+(?:[\w.<>]+\.)?${Regex.escape(functionName)}\s*\("""
+            """(?m)^\s*(?:internal|private|public)?\s*(?:suspend\s+)?fun\s+(?:[\w.<>]+\.)?${Regex.escape(functionName)}\s*\("""
         ).find(content)
         if (functionMatch == null) {
             fail("Required function is missing: $functionName")

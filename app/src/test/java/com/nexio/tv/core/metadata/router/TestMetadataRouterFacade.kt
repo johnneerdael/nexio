@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.trailer.TrailerService
@@ -40,6 +41,18 @@ private class TestMetadataProviderAdapter(
     override fun supports(step: ProviderPlanStep): Boolean = true
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+        val coreEnrichment = when {
+            route.seasonNumber == null && step.role == ProviderPlanRole.PRIMARY_CORE ->
+                providerMetadataRouter.fetchEnrichment(
+                    TvMetadataRequest(
+                        contentId = route.parentId,
+                        fallbackContentId = route.sourceContext.previewSourceItemId,
+                        contentType = route.mediaKind.toContentType(),
+                        language = route.language
+                    )
+                ).value
+            else -> null
+        }
         val episodeMetadata = when {
             route.seasonNumber == null -> emptyMap()
             step.role == ProviderPlanRole.SEASON -> {
@@ -71,13 +84,25 @@ private class TestMetadataProviderAdapter(
             step = step,
             candidate = MetadataCandidate(
                 provider = route.provider,
-                fields = mapOf(
+                fields = coreEnrichment?.toResolvedFields() ?: mapOf(
                     ResolvedField.TITLE to FieldValue("Test title", FieldOwner.PRIMARY)
                 )
             ),
             episodeMetadata = episodeMetadata
         )
     }
+
+    private fun TvMetadataEnrichment.toResolvedFields(): Map<ResolvedField, FieldValue> =
+        buildMap {
+            localizedTitle?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
+            description?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
+            poster?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            backdrop?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
+            logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
+            rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
+            runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            seriesTvdbId?.let { put(ResolvedField.CANONICAL_ID, FieldValue("tvdb:$it", FieldOwner.PRIMARY)) }
+        }
 
     private fun MetadataMediaKind.toContentType(): ContentType =
         when (this) {

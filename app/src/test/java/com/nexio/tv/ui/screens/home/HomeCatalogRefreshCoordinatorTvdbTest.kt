@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.content.Context
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -15,6 +16,7 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
@@ -30,6 +32,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,8 +69,8 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
 
         assertEquals("TVDB title", result.name)
         assertEquals("TVDB description", result.description)
-        assertEquals(listOf("Drama"), result.genres)
-        assertEquals("2011", result.releaseInfo)
+        assertEquals(listOf("Fantasy"), result.genres)
+        assertEquals("2010", result.releaseInfo)
         assertEquals(8.9f, result.imdbRating)
         assertEquals("tvdb-backdrop", result.background)
         assertEquals("tvdb-logo", result.logo)
@@ -107,8 +110,8 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
 
         assertEquals("The Matrix", result.name)
         assertEquals("Movie description", result.description)
-        assertEquals(listOf("Sci-Fi"), result.genres)
-        assertEquals("1999", result.releaseInfo)
+        assertEquals(listOf("Action"), result.genres)
+        assertEquals("1998", result.releaseInfo)
         assertEquals(8.7f, result.imdbRating)
         assertEquals("tmdb-backdrop", result.background)
         assertEquals("tmdb-logo", result.logo)
@@ -148,8 +151,10 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         val result = overlayProviderLocalizedMetadataForHome(
             item = moviePreview(),
             fallbackContentId = "fallback-video-id",
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            providerMetadataRouter = tvMetadataRouter,
+            providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
+                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+                providerMetadataRouter = tvMetadataRouter
+            ),
             profileBoundary = profileBoundary
         ) { event, details ->
             logs += event to details
@@ -169,6 +174,35 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         }
     }
 
+    @Test
+    fun `provider localized resolver does not run legacy router after facade exception`() = runTest {
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val profileBoundary = mockk<ProfileBoundary>()
+        every { profileBoundary.currentLanguageTag() } returns "en"
+        coEvery { metadataRouterFacade.resolveRequest(any()) } throws IllegalStateException("late provider failure")
+
+        val decision = fetchProviderLocalizedMetadataDecisionForHome(
+            item = moviePreview(),
+            providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
+                metadataRouterFacade = metadataRouterFacade,
+                providerMetadataRouter = tvMetadataRouter
+            ),
+            profileBoundary = profileBoundary
+        )
+
+        assertEquals(TvProvider.TVDB, decision.provider)
+        assertEquals(TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_ROUTE_FAILURE, decision.reason)
+        assertNull(decision.value)
+        assertTrue(
+            decision.diagnostics.any {
+                it.reason == TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_ROUTE_FAILURE &&
+                    it.detail == "facade_exception:IllegalStateException"
+            }
+        )
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
     private fun coordinator(
         tvMetadataRouter: TvMetadataRouter,
         tmdbService: TmdbService,
@@ -186,7 +220,10 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            providerMetadataRouter = tvMetadataRouter,
+            providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
+                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+                providerMetadataRouter = tvMetadataRouter
+            ),
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
             profileBoundary = profileBoundary,
             appContext = mockk<Context>(relaxed = true),

@@ -205,8 +205,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         val localizedPreview = overlayProviderLocalizedMetadataForHome(
             item = item.toContinueWatchingProviderPreview(),
             fallbackContentId = item.providerFallbackContentId(),
-            metadataRouterFacade = metadataRouterFacadeOrNull() ?: return item,
-            providerMetadataRouter = providerMetadataRouterOrNull() ?: return item,
+            providerLocalizedMetadataResolver = providerLocalizedMetadataResolverOrNull() ?: return item,
             profileBoundary = profileBoundary
         )
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(

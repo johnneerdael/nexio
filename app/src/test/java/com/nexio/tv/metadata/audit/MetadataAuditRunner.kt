@@ -38,6 +38,7 @@ import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.SourcePayloadQuality
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.toMetaPreview
 import org.json.JSONObject
 
@@ -82,7 +83,7 @@ class MetadataAuditRunner private constructor(
                 fixtureJson = fixture(spec.fixtureName),
                 scenario = spec.scenario
             )
-        } + railScenarioSpecs.map(::runRailScenario)
+        } + railScenarioSpecs.map { spec -> runRailScenario(spec) }
         val violations = reports.flatMap { it.policyViolations }
         return MetadataExecutionReportBundle(
             schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
@@ -261,7 +262,7 @@ class MetadataAuditRunner private constructor(
         )
     }
 
-    private fun runRailScenario(spec: RailScenarioSpec): MetadataExecutionReport {
+    private suspend fun runRailScenario(spec: RailScenarioSpec): MetadataExecutionReport {
         val scenario = MetadataAuditScenario(
             name = spec.name,
             depth = if (spec.routeProvider == null) MetadataDepth.PREVIEW else MetadataDepth.DETAIL_CORE,
@@ -274,58 +275,139 @@ class MetadataAuditRunner private constructor(
             fieldsUsed = spec.previewFields.filterValues { it != null }.keys
         )
         trace.onFirstPaint(firstPaint)
-        val beforeHydration = railFields(
-            itemId = metaPreview.id,
-            provider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
-            fields = spec.previewFields,
-            sourceRole = "RAIL_PREVIEW"
-        )
-        val route = spec.routeProvider?.let { provider ->
-            railRoute(
-                itemId = metaPreview.id,
-                itemType = metaPreview.apiType,
-                provider = provider,
-                mediaKind = spec.mediaKind,
-                targetIds = spec.targetIds,
-                usedInputs = spec.usedInputs
-            )
-        }
-        val afterHydration = route?.let {
-            railFields(
-                itemId = metaPreview.id,
-                provider = it.provider.name,
-                fields = spec.hydratedFields,
-                sourceRole = "PRIMARY",
-                rejectedProvider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
-                rejectedSourceRole = "RAIL_PREVIEW",
-                rejectedFields = spec.previewFields.filterValues { value -> value != null }.keys
-            )
-        }.orEmpty()
-        val runtimeCalls = route?.let {
-            listOf(
-                RuntimeCallEvent(
+
+        val beforeHydration = spec.previewFields.mapNotNull { (field, value) ->
+            value?.let {
+                FieldSelectedEvent(
                     itemId = metaPreview.id,
-                    provider = it.provider.name,
-                    apiShapeId = spec.apiShapeId,
-                    operationKey = "${spec.apiShapeId}:${it.targetIds[it.provider] ?: it.parentId}",
-                    cacheKey = "metadata:${it.provider}:${spec.apiShapeId}:${it.parentId}",
-                    workClass = "USER_VISIBLE",
-                    executedNetwork = true
+                    field = field,
+                    selectedProvider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
+                    sourceRole = com.nexio.tv.core.metadata.router.SourceRole.RAIL_PREVIEW.name,
+                    valuePreview = it,
+                    rejectedCandidates = emptyList(),
+                    ownershipRule = "$field selected from ${com.nexio.tv.core.metadata.router.SourceRole.RAIL_PREVIEW.name}"
+                )
+            }
+        }
+
+        val result = if (scenario.depth == MetadataDepth.PREVIEW) {
+            null
+        } else {
+            adapters.forEach { it.reset() }
+            adapters.forEach { adapter ->
+                adapter.bind(
+                    itemId = metaPreview.id,
+                    trace = trace,
+                    scenario = scenario,
+                    deterministicFields = spec.hydratedFields
+                )
+            }
+            facade.resolveRequest(
+                MetadataRequest(
+                    contentId = spec.itemId,
+                    contentType = ContentType.fromString(metaPreview.apiType),
+                    sourceContext = MetadataSourceContext(
+                        catalogId = spec.name,
+                        catalogType = metaPreview.apiType,
+                        itemType = metaPreview.apiType,
+                        sourceName = spec.railSource,
+                        addonMetadata = metaPreview.toHomeDisplayMetadata(),
+                        rowItemIds = listOf(metaPreview.id),
+                        previewSourceRole = com.nexio.tv.core.metadata.router.SourceRole.RAIL_PREVIEW,
+                        previewSourceProvider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
+                        previewStableIds = railPreview.stableIds,
+                        previewSourceItemId = railPreview.sourceItemId,
+                        previewRailSource = railPreview.railSource.name
+                    ),
+                    depth = scenario.depth
                 )
             )
-        }.orEmpty()
-        val cacheDecisions = runtimeCalls.map { call ->
-            val cachePolicy = MetadataAuditCachePolicy.forShape(call.apiShapeId)
-            CacheDecisionEvent(
-                itemId = spec.itemId,
-                provider = call.provider,
-                apiShapeId = call.apiShapeId,
-                cacheKey = call.cacheKey,
-                decision = CacheDecision.MISS_THEN_NETWORK,
-                ttlMs = cachePolicy.ttlMs,
-                staleWindowMs = cachePolicy.staleWindowMs,
-                reason = cachePolicy.name
+        }
+
+        val route = result?.route?.toAuditEvent(itemId = metaPreview.id, itemType = metaPreview.apiType)
+        if (route != null) trace.onRoute(route)
+        val providerPlan = result?.plan?.toAuditEvent(itemId = metaPreview.id)
+        if (providerPlan != null) trace.onProviderPlan(providerPlan)
+        val resolverSchedule = result?.resolverSchedule?.let { schedule ->
+            ResolverScheduleEvent(
+                itemId = metaPreview.id,
+                depth = schedule.depth,
+                resolversScheduled = schedule.localResolvers + schedule.networkResolvers,
+                resolversSkipped = emptyMap()
             )
+        }
+        if (resolverSchedule != null) trace.onResolverSchedule(resolverSchedule)
+        result
+            ?.providerRunResult
+            ?.stepResults
+            .orEmpty()
+            .flatMap { it.localizationPayloads }
+            .toLocalizationEvent(itemId = metaPreview.id, provider = result?.route?.provider)
+            ?.let(trace::onLocalization)
+
+        val resolverRejectedFields = result
+            ?.resolvedDocument
+            ?.ignoredOverwrites
+            .orEmpty()
+            .map { it.field }
+            .toSet()
+        val afterHydration = result?.let { resolution ->
+            resolution.resolvedDocument.fieldOwners.map { (field, owner) ->
+            val sourceRole = resolution.resolvedDocument.sourceRoles[field]?.name ?: owner.name
+            FieldSelectedEvent(
+                itemId = metaPreview.id,
+                field = field.name.lowercase(),
+                selectedProvider = resolution.resolvedDocument.sourceProviders[field] ?: resolution.route?.provider?.name.orEmpty(),
+                sourceRole = sourceRole,
+                valuePreview = resolution.resolvedDocument.valueFor(field)?.toString(),
+                rejectedCandidates = if (field in resolverRejectedFields && field.name.lowercase() in spec.previewFields.filterValues { it != null }) {
+                    listOf(
+                        RejectedCandidateReport(
+                            provider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
+                            sourceRole = com.nexio.tv.core.metadata.router.SourceRole.RAIL_PREVIEW.name,
+                            reason = "primary canonical field available"
+                        )
+                    )
+                } else {
+                    emptyList()
+                },
+                ownershipRule = when (sourceRole) {
+                    com.nexio.tv.core.metadata.router.SourceRole.RAIL_PREVIEW.name -> "rail preview fills field before canonical hydration"
+                    com.nexio.tv.core.metadata.router.SourceRole.PRIMARY.name -> "primary always wins"
+                    else -> "${field.name.lowercase()} owned by $sourceRole"
+                }
+            )
+            }
+        }.orEmpty()
+        afterHydration.forEach(trace::onFieldSelected)
+        val identityMappingsHarvested = emptyMap<String, String>()
+        val forbiddenOverwrites = result?.let { resolution ->
+            resolution.resolvedDocument.ignoredOverwrites.map { ignored ->
+            ForbiddenOverwriteEvent(
+                itemId = metaPreview.id,
+                field = ignored.field.name.lowercase(),
+                primaryProvider = resolution.route?.provider?.name.orEmpty(),
+                rejectedProvider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
+                reason = "Field already owned by ${ignored.existingOwner}; rejected ${ignored.attemptedOwner}"
+            )
+            }
+        }.orEmpty()
+        forbiddenOverwrites.forEach(trace::onForbiddenOverwrite)
+        val identityResolution = result?.route?.let { resolvedRoute ->
+            if (!resolvedRoute.targetIdRequiresIdentityResolution) {
+                null
+            } else {
+                IdentityResolutionEvent(
+                    itemId = metaPreview.id,
+                    required = true,
+                    sourceId = metaPreview.id,
+                    targetProvider = resolvedRoute.provider,
+                    resolver = "MetadataIdentityResolver",
+                    apiShapeId = providerPlan?.steps?.firstOrNull()?.apiShapeId.orEmpty(),
+                    resultId = resolvedRoute.targetIds[resolvedRoute.provider],
+                    success = !resolvedRoute.targetIds[resolvedRoute.provider].isNullOrBlank()
+                )
+            }
         }
         val item = ItemExecutionReport(
             itemId = metaPreview.id,
@@ -333,17 +415,17 @@ class MetadataAuditRunner private constructor(
             addonFields = spec.previewFields,
             firstPaint = firstPaint,
             routing = route,
-            providerPlan = null,
-            runtimeCalls = runtimeCalls,
-            cacheDecisions = cacheDecisions,
-            resolverSchedule = null,
+            providerPlan = providerPlan,
+            runtimeCalls = trace.events.mapNotNull { (it as? AuditEvent.RuntimeCall)?.event },
+            cacheDecisions = trace.events.mapNotNull { (it as? AuditEvent.CacheDecisionEventRecord)?.event },
+            resolverSchedule = resolverSchedule,
             selectedFields = afterHydration.ifEmpty { beforeHydration },
-            forbiddenOverwrites = emptyList(),
+            forbiddenOverwrites = forbiddenOverwrites,
             continueWatchingSnapshot = null,
-            identityResolution = null,
+            identityResolution = identityResolution,
             productionCallerOwnership = emptyList(),
-            localization = null,
-            violations = emptyList(),
+            localization = trace.events.mapNotNull { (it as? AuditEvent.Localization)?.event }.firstOrNull(),
+            violations = trace.events.mapNotNull { (it as? AuditEvent.PolicyViolation)?.event },
             events = trace.events,
             railSource = metaPreview.firstPaintRailSource?.name,
             sourceProvider = metaPreview.firstPaintSourceProvider?.name,
@@ -351,7 +433,7 @@ class MetadataAuditRunner private constructor(
             routingAfterVisible = route,
             selectedFieldsBeforeHydration = beforeHydration,
             selectedFieldsAfterHydration = afterHydration,
-            identityMappingsHarvested = spec.identityMappingsHarvested
+            identityMappingsHarvested = identityMappingsHarvested
         )
         val report = MetadataExecutionReport(
             schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
@@ -438,66 +520,6 @@ class MetadataAuditRunner private constructor(
         )
     }
 
-    private fun railRoute(
-        itemId: String,
-        itemType: String,
-        provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider,
-        mediaKind: MetadataMediaKind,
-        targetIds: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String>,
-        usedInputs: Set<String>
-    ): RouteEvent =
-        RouteEvent(
-            itemId = itemId,
-            parentId = targetIds[provider] ?: itemId,
-            itemType = itemType,
-            provider = provider,
-            mediaKind = mediaKind,
-            reason = when (provider) {
-                com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> MetadataDecisionReason.ITEM_TYPE_SERIES
-                com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> MetadataDecisionReason.ITEM_TYPE_MOVIE
-                com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> MetadataDecisionReason.KITSU_PREFIX_DIRECT
-                else -> MetadataDecisionReason.ITEM_TYPE_MOVIE
-            },
-            targetIds = targetIds,
-            preResolutionTargetIdRequiresIdentityResolution = false,
-            targetIdRequiresIdentityResolution = false,
-            usedInputs = usedInputs,
-            ignoredInputs = setOf("catalog.id", "addon.name")
-        )
-
-    private fun railFields(
-        itemId: String,
-        provider: String,
-        fields: Map<String, String?>,
-        sourceRole: String,
-        rejectedProvider: String? = null,
-        rejectedSourceRole: String? = null,
-        rejectedFields: Set<String> = emptySet()
-    ): List<FieldSelectedEvent> =
-        fields.mapNotNull { (field, value) ->
-            value?.let {
-                FieldSelectedEvent(
-                    itemId = itemId,
-                    field = field,
-                    selectedProvider = provider,
-                    sourceRole = sourceRole,
-                    valuePreview = it,
-                    rejectedCandidates = if (field in rejectedFields && rejectedProvider != null && rejectedSourceRole != null) {
-                        listOf(
-                            RejectedCandidateReport(
-                                provider = rejectedProvider,
-                                sourceRole = rejectedSourceRole,
-                                reason = "primary canonical field available"
-                            )
-                        )
-                    } else {
-                        emptyList()
-                    },
-                    ownershipRule = "$field selected from $sourceRole"
-                )
-            }
-        }
-
     private fun rejectedCandidatesFor(
         field: ResolvedField,
         scenario: MetadataAuditScenario,
@@ -546,10 +568,13 @@ class MetadataAuditRunner private constructor(
     }
 
     private fun MetadataRoute.toAuditEvent(item: AddonCatalogItemFixture): RouteEvent =
+        toAuditEvent(itemId = item.id, itemType = item.type)
+
+    private fun MetadataRoute.toAuditEvent(itemId: String, itemType: String): RouteEvent =
         RouteEvent(
-            itemId = item.id,
+            itemId = itemId,
             parentId = parentId,
-            itemType = item.type,
+            itemType = itemType,
             provider = provider,
             mediaKind = mediaKind,
             reason = if (trace.any { it.reason == com.nexio.tv.core.metadata.router.MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT }) {
@@ -602,8 +627,11 @@ class MetadataAuditRunner private constructor(
     }
 
     private fun ProviderExecutionPlan.toAuditEvent(item: AddonCatalogItemFixture): ProviderPlanEvent =
+        toAuditEvent(itemId = item.id)
+
+    private fun ProviderExecutionPlan.toAuditEvent(itemId: String): ProviderPlanEvent =
         ProviderPlanEvent(
-            itemId = item.id,
+            itemId = itemId,
             provider = route.provider,
             mediaKind = route.mediaKind,
             depth = depth,
@@ -983,17 +1011,25 @@ private class AuditMetadataProviderAdapter(
     private var itemId: String = "unknown"
     private var trace: MetadataAuditTraceCollector? = null
     private var scenario: MetadataAuditScenario = MetadataAuditScenario("default", MetadataDepth.DETAIL_CORE)
+    private var deterministicFields: Map<String, String?> = emptyMap()
 
-    fun bind(itemId: String, trace: MetadataAuditTraceCollector, scenario: MetadataAuditScenario) {
+    fun bind(
+        itemId: String,
+        trace: MetadataAuditTraceCollector,
+        scenario: MetadataAuditScenario,
+        deterministicFields: Map<String, String?> = emptyMap()
+    ) {
         this.itemId = itemId
         this.trace = trace
         this.scenario = scenario
+        this.deterministicFields = deterministicFields
     }
 
     fun reset() {
         itemId = "unknown"
         trace = null
         scenario = MetadataAuditScenario("default", MetadataDepth.DETAIL_CORE)
+        deterministicFields = emptyMap()
     }
 
     override fun supports(step: ProviderPlanStep): Boolean = true
@@ -1076,15 +1112,28 @@ private class AuditMetadataProviderAdapter(
             candidate = MetadataCandidate(
                 provider = route.provider,
                 resolverType = null,
-                fields = mapOf(
-                    ResolvedField.CANONICAL_ID to FieldValue(route.targetIds[route.provider] ?: route.parentId, FieldOwner.PRIMARY),
-                    ResolvedField.TITLE to FieldValue("Runtime ${route.provider.name} title", FieldOwner.PRIMARY),
-                    ResolvedField.POSTER to FieldValue("https://example.test/${route.provider.name.lowercase()}-poster.jpg", FieldOwner.PRIMARY)
-                )
+                fields = deterministicFields.toResolvedFieldValues(route).ifEmpty {
+                    mapOf(
+                        ResolvedField.CANONICAL_ID to FieldValue(route.targetIds[route.provider] ?: route.parentId, FieldOwner.PRIMARY),
+                        ResolvedField.TITLE to FieldValue("Runtime ${route.provider.name} title", FieldOwner.PRIMARY),
+                        ResolvedField.POSTER to FieldValue("https://example.test/${route.provider.name.lowercase()}-poster.jpg", FieldOwner.PRIMARY)
+                    )
+                }
             ),
             localizationPayloads = localizationPayloads
         )
     }
+
+    private fun Map<String, String?>.toResolvedFieldValues(route: MetadataRoute): Map<ResolvedField, FieldValue> =
+        buildMap<ResolvedField, FieldValue> {
+            put(ResolvedField.CANONICAL_ID, FieldValue(route.targetIds[route.provider] ?: route.parentId, FieldOwner.PRIMARY))
+            this@toResolvedFieldValues["title"]?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
+            this@toResolvedFieldValues["overview"]?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
+            this@toResolvedFieldValues["poster"]?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            this@toResolvedFieldValues["backdrop"]?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
+            this@toResolvedFieldValues["runtime"]?.toIntOrNull()?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            this@toResolvedFieldValues["year"]?.let { put(ResolvedField.RELEASE_DATE, FieldValue(it, FieldOwner.PRIMARY)) }
+        }
 
     private fun localizationPayloads(
         route: MetadataRoute,

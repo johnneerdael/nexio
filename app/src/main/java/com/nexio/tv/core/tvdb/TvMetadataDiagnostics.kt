@@ -23,7 +23,9 @@ enum class TvMetadataDecisionReason(val eventName: String) {
     TVDB_TRAILER_SUCCESS("tvdb_trailer_success"),
     TVDB_TRAILER_MISSING("tvdb_trailer_missing"),
     TVDB_TRAILER_UNUSABLE_URL("tvdb_trailer_unusable_url"),
-    TMDB_TRAILER_FALLBACK("tmdb_trailer_fallback")
+    TMDB_TRAILER_FALLBACK("tmdb_trailer_fallback"),
+    PROVIDER_LOCALIZED_CANONICAL_PAYLOAD_MISSING("provider_localized_canonical_payload_missing"),
+    PROVIDER_LOCALIZED_CANONICAL_ROUTE_FAILURE("provider_localized_canonical_route_failure")
 }
 
 data class TvMetadataDiagnosticEvent(
