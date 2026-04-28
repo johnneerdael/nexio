@@ -1064,7 +1064,11 @@ class MetaDetailsSeasonMediaViewModelTest {
             reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter, metadataSecondaryRepositoryInstance),
+            metadataRouterFacade = testMetadataRouterFacade(
+                providerMetadataRouter = tvMetadataRouter,
+                metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
+                trailerService = trailerService
+            ),
             metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,

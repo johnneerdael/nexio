@@ -3,11 +3,13 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
 
 fun testMetadataRouterFacade(
     providerMetadataRouter: ProviderMetadataRouter,
-    metadataSecondaryRepository: MetadataSecondaryRepository? = null
+    metadataSecondaryRepository: MetadataSecondaryRepository? = null,
+    trailerService: TrailerService? = null
 ): MetadataRouterFacade =
     MetadataRouterFacade(
         router = MetadataRouter(
@@ -27,7 +29,8 @@ fun testMetadataRouterFacade(
                 .toSet()
         ),
         fieldResolver = FieldResolver(),
-        metadataSecondaryRepository = metadataSecondaryRepository
+        metadataSecondaryRepository = metadataSecondaryRepository,
+        trailerService = trailerService
     )
 
 private class TestMetadataProviderAdapter(
