@@ -9,6 +9,7 @@ import com.nexio.tv.data.integration.metadata.TmdbOrganizationPersonAdapter
 import com.nexio.tv.data.integration.metadata.TmdbRecommendationMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TmdbReviewMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TmdbTrailerMetadataAdapter
+import com.nexio.tv.data.integration.metadata.TraktReviewMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TvdbMetadataProviderAdapter
 import com.nexio.tv.data.integration.metadata.TvdbTrailerMetadataAdapter
 import dagger.Binds
@@ -43,6 +44,10 @@ abstract class MetadataExecutionModule {
     @Binds
     @IntoSet
     abstract fun bindTmdbReviewAdapter(impl: TmdbReviewMetadataAdapter): MetadataProviderAdapter
+
+    @Binds
+    @IntoSet
+    abstract fun bindTraktReviewAdapter(impl: TraktReviewMetadataAdapter): MetadataProviderAdapter
 
     @Binds
     @IntoSet

@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.integration.TraktApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
 
 object MetadataProviderAdapterShapeRegistry {
@@ -25,6 +26,8 @@ object MetadataProviderAdapterShapeRegistry {
         TvdbApiShapes.SERIES_EXTENDED,
         TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
         TvdbApiShapes.TV_TRAILERS,
+        TraktApiShapes.MOVIE_COMMENTS,
+        TraktApiShapes.SHOW_COMMENTS,
         KitsuApiShapes.ANIME_CORE,
         KitsuApiShapes.ANIME_EPISODES,
         KitsuApiShapes.CASTINGS,
