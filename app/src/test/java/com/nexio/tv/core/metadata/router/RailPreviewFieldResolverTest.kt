@@ -1,5 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -30,6 +32,10 @@ class RailPreviewFieldResolverTest {
 
     @Test
     fun `primary title replaces rail preview title after hydration`() {
+        val sink = RecordingTraceSink()
+        val resolver = FieldResolver(
+            traceEvents = TraceMetadataEvents(sink, sessionId = { "rail-preview-test" })
+        )
         val preview = MetadataCandidate(
             provider = MetadataPrimaryProvider.TVDB,
             sourceProvider = "TRAKT",
@@ -55,6 +61,7 @@ class RailPreviewFieldResolverTest {
 
         assertEquals("Canonical Title", document.title)
         assertEquals(SourceRole.PRIMARY, document.sourceRoles[ResolvedField.TITLE])
+        assertEquals("TVDB", document.sourceProviders[ResolvedField.TITLE])
         assertEquals(
             IgnoredFieldOverwrite(
                 field = ResolvedField.TITLE,
@@ -63,6 +70,24 @@ class RailPreviewFieldResolverTest {
                 attemptedValue = "Preview Title"
             ),
             document.ignoredOverwrites.single()
+        )
+
+        val titleEvent = sink.events
+            .first { it.eventType == "metadata.field_selected" && (it.payload as Map<*, *>)["field"] == "TITLE" }
+        val payload = titleEvent.payload as Map<*, *>
+        assertEquals("TVDB", payload["selectedProvider"])
+        assertEquals("PRIMARY", payload["sourceRole"])
+        assertEquals("primary canonical field replaces rail preview", payload["ownershipRule"])
+        @Suppress("UNCHECKED_CAST")
+        val rejected = payload["rejectedCandidates"] as List<Map<String, Any?>>
+        assertEquals(
+            mapOf(
+                "provider" to "TVDB",
+                "sourceProvider" to "TRAKT",
+                "sourceRole" to "RAIL_PREVIEW",
+                "reason" to "primary canonical field available"
+            ),
+            rejected.single()
         )
     }
 }

@@ -30,10 +30,93 @@ class FieldResolver @Inject constructor(
         primary: MetadataCandidate?,
         secondary: List<MetadataCandidate>
     ): ResolvedMetadataDocument {
-        return resolveInternal(
+        return resolvePreviewFirst(
             preview = preview,
             primary = primary,
             secondary = secondary
+        )
+    }
+
+    private fun resolvePreviewFirst(
+        preview: MetadataCandidate?,
+        primary: MetadataCandidate?,
+        secondary: List<MetadataCandidate>
+    ): ResolvedMetadataDocument {
+        val fields = linkedMapOf<ResolvedField, Any>()
+        val owners = linkedMapOf<ResolvedField, FieldOwner>()
+        val sourceRoles = linkedMapOf<ResolvedField, SourceRole>()
+        val sourceProviders = linkedMapOf<ResolvedField, String>()
+        val localization = linkedMapOf<ResolvedField, MetadataLocalizationFieldTrace>()
+        val ignoredOverwrites = mutableListOf<IgnoredFieldOverwrite>()
+        val rejectedByField = linkedMapOf<ResolvedField, MutableList<Map<String, Any?>>>()
+
+        preview?.let { candidate ->
+            applyMissingCandidate(
+                candidate = candidate,
+                fields = fields,
+                owners = owners,
+                sourceRoles = sourceRoles,
+                sourceProviders = sourceProviders,
+                localization = localization,
+                ignoredOverwrites = ignoredOverwrites,
+                rejectedByField = rejectedByField
+            )
+        }
+
+        primary?.fields?.forEach { (field, fieldValue) ->
+            if (sourceRoles[field] == SourceRole.RAIL_PREVIEW) {
+                val previewValue = fields[field]
+                ignoredOverwrites += IgnoredFieldOverwrite(
+                    field = field,
+                    existingOwner = FieldOwner.PRIMARY,
+                    attemptedOwner = owners[field] ?: fieldValue.owner,
+                    attemptedValue = previewValue ?: fieldValue.value
+                )
+                rejectedByField.getOrPut(field) { mutableListOf() }.add(
+                    mapOf(
+                        "provider" to (preview?.provider?.name ?: sourceProviders[field]),
+                        "sourceProvider" to sourceProviders[field],
+                        "sourceRole" to SourceRole.RAIL_PREVIEW.name,
+                        "reason" to "primary canonical field available"
+                    )
+                )
+            }
+            selectField(
+                fields = fields,
+                owners = owners,
+                sourceRoles = sourceRoles,
+                sourceProviders = sourceProviders,
+                localization = localization,
+                candidate = primary,
+                field = field,
+                fieldValue = fieldValue,
+                selectedOwner = FieldOwner.PRIMARY
+            )
+        }
+
+        secondary.forEach { candidate ->
+            applyMissingCandidate(
+                candidate = candidate,
+                fields = fields,
+                owners = owners,
+                sourceRoles = sourceRoles,
+                sourceProviders = sourceProviders,
+                localization = localization,
+                ignoredOverwrites = ignoredOverwrites,
+                rejectedByField = rejectedByField
+            )
+        }
+
+        return buildDocument(
+            fields = fields,
+            owners = owners,
+            sourceRoles = sourceRoles,
+            sourceProviders = sourceProviders,
+            localization = localization,
+            ignoredOverwrites = ignoredOverwrites,
+            rejectedByField = rejectedByField,
+            traceContentId = primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN",
+            fallbackSourceProvider = primary?.sourceProvider ?: preview?.sourceProvider ?: "UNKNOWN"
         )
     }
 
@@ -90,12 +173,39 @@ class FieldResolver @Inject constructor(
             )
         }
 
-        val traceContentId = primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN"
+        return buildDocument(
+            fields = fields,
+            owners = owners,
+            sourceRoles = sourceRoles,
+            sourceProviders = sourceProviders,
+            localization = localization,
+            ignoredOverwrites = ignoredOverwrites,
+            rejectedByField = rejectedByField,
+            traceContentId = primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN",
+            fallbackSourceProvider = primary?.sourceProvider ?: preview?.sourceProvider ?: "UNKNOWN"
+        )
+    }
+
+    private fun buildDocument(
+        fields: Map<ResolvedField, Any>,
+        owners: Map<ResolvedField, FieldOwner>,
+        sourceRoles: Map<ResolvedField, SourceRole>,
+        sourceProviders: Map<ResolvedField, String>,
+        localization: Map<ResolvedField, MetadataLocalizationFieldTrace>,
+        ignoredOverwrites: List<IgnoredFieldOverwrite>,
+        rejectedByField: Map<ResolvedField, List<Map<String, Any?>>>,
+        traceContentId: String,
+        fallbackSourceProvider: String
+    ): ResolvedMetadataDocument {
         fields.forEach { (field, value) ->
             val owner = owners[field] ?: FieldOwner.PRIMARY
-            val selectedProvider = sourceProviders[field] ?: primary?.sourceProvider ?: preview?.sourceProvider ?: "UNKNOWN"
+            val selectedProvider = sourceProviders[field] ?: fallbackSourceProvider
             val sourceRole = sourceRoles[field] ?: owner.defaultSourceRole()
-            val rule = if (sourceRole == SourceRole.RAIL_PREVIEW) {
+            val replacedRailPreview = rejectedByField[field]
+                ?.any { it["reason"] == "primary canonical field available" } == true
+            val rule = if (replacedRailPreview) {
+                "primary canonical field replaces rail preview"
+            } else if (sourceRole == SourceRole.RAIL_PREVIEW) {
                 "rail preview fills field before canonical hydration"
             } else if (owner == FieldOwner.PRIMARY) {
                 "primary always wins"
