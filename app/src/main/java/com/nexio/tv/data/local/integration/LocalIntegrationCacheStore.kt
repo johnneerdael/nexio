@@ -20,10 +20,12 @@ class LocalIntegrationCacheStore @Inject constructor(
         val entry = cacheDao.getCacheEntry(spec.requiredCacheKey) ?: return null
         if (entry.expiresAtEpochMs < nowMsProvider()) return null
 
-        val file = blobStore.fileFor(entry.blobPath)
-        if (!file.exists()) return null
-
-        return spec.codec.decode(file.readBytes())
+        // F-D-02: tolerate FileNotFoundException, short reads, decode failures during concurrent writes
+        return runCatching {
+            val file = blobStore.fileFor(entry.blobPath)
+            if (!file.exists()) return@runCatching null
+            spec.codec.decode(file.readBytes())
+        }.getOrNull()
     }
 
     override suspend fun <T> readStale(spec: IntegrationSpec<T>): T? {
@@ -32,10 +34,12 @@ class LocalIntegrationCacheStore @Inject constructor(
         val entry = cacheDao.getCacheEntry(spec.requiredCacheKey) ?: return null
         if (entry.staleUntilEpochMs < nowMsProvider()) return null
 
-        val file = blobStore.fileFor(entry.blobPath)
-        if (!file.exists()) return null
-
-        return spec.codec.decode(file.readBytes())
+        // F-D-02: tolerate FileNotFoundException, short reads, decode failures during concurrent writes
+        return runCatching {
+            val file = blobStore.fileFor(entry.blobPath)
+            if (!file.exists()) return@runCatching null
+            spec.codec.decode(file.readBytes())
+        }.getOrNull()
     }
 
     override suspend fun <T> write(spec: IntegrationSpec<T>, value: T) {
@@ -45,15 +49,20 @@ class LocalIntegrationCacheStore @Inject constructor(
         val staleUntil = freshUntil + policy.staleAfterExpiryMs
         val cacheKey = spec.requiredCacheKey
         val blobPath = cacheKey.replace(':', '/') + ".bin"
-        val file = blobStore.fileFor(blobPath)
+        val finalFile = blobStore.fileFor(blobPath)
+        val tmpFile = blobStore.fileFor("$blobPath.tmp")
         val ownerToken = when (val ownership = spec.ownership) {
             IntegrationCacheOwnership.None -> null
             is IntegrationCacheOwnership.Media -> ownership.mediaKey
         }
 
-        file.writeBytes(spec.codec.encode(value))
-        cacheDao.upsertCacheEntry(
-            IntegrationCacheEntity(
+        // F-D-02: write to .tmp first, then atomically rename + upsert in a Room @Transaction.
+        finalFile.parentFile?.mkdirs()
+        tmpFile.writeBytes(spec.codec.encode(value))
+        cacheDao.atomicRenameAndUpsert(
+            tmpFile = tmpFile,
+            finalFile = finalFile,
+            entity = IntegrationCacheEntity(
                 cacheKey = cacheKey,
                 provider = spec.provider.name,
                 scopeKey = spec.scope.storageKey,
