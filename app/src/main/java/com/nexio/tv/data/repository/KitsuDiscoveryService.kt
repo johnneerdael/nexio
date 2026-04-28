@@ -7,6 +7,8 @@ import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.RailPreviewCatalogRowRecord
 import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +38,9 @@ class KitsuDiscoveryService @Inject constructor(
             ?.toSet()
         val previous = snapshot.value
         val previousCurrentRows = previous.currentRowsFor(sanitized)
+        val previousCurrentRowRecords = previous.rowRecordsByCatalog.filterKeys { key ->
+            key in previousCurrentRows
+        }
         if (!force && requestedCatalogIds != null && requestedCatalogIds.all { it in previousCurrentRows }) {
             return previous
         }
@@ -52,7 +57,7 @@ class KitsuDiscoveryService @Inject constructor(
         val rows = if (catalogIds == null) {
             refreshedRows
         } else {
-            previousCurrentRows - requestedCatalogIds.orEmpty() + refreshedRows
+            previousCurrentRowRecords - requestedCatalogIds.orEmpty() + refreshedRows
         }
         val currentPreferenceCatalogIds = sanitized.enabledCatalogIds()
         val catalogIdsWithCurrentPreferences = if (catalogIds == null) {
@@ -63,7 +68,7 @@ class KitsuDiscoveryService @Inject constructor(
         }
 
         return KitsuDiscoverySnapshot(
-            rowsByCatalog = rows,
+            rowRecordsByCatalog = rows,
             updatedAtMs = System.currentTimeMillis(),
             catalogIdsWithCurrentPreferences = catalogIdsWithCurrentPreferences
         ).also { snapshot.value = it }
@@ -72,7 +77,7 @@ class KitsuDiscoveryService @Inject constructor(
     private suspend fun fetchCatalogRow(
         catalogId: String,
         preferences: KitsuCatalogPreferences
-    ): CatalogRow? {
+    ): RailPreviewCatalogRowRecord? {
         val title = kitsuCatalogTitle(catalogId) ?: return null
         val results = runCatching { client.fetchCatalog(catalogId, preferences) }
             .getOrDefault(emptyList())
@@ -82,7 +87,7 @@ class KitsuDiscoveryService @Inject constructor(
             generatedAtMs = System.currentTimeMillis()
         )
         if (items.isEmpty()) return null
-        return CatalogRow(
+        return RailPreviewCatalogRowRecord(
             addonId = ADDON_ID,
             addonName = ADDON_NAME,
             addonBaseUrl = ADDON_BASE_URL,
@@ -90,9 +95,7 @@ class KitsuDiscoveryService @Inject constructor(
             catalogName = title,
             type = ContentType.SERIES,
             rawType = ContentType.SERIES.toApiString("catalog"),
-            items = items,
-            hasMore = false,
-            supportsSkip = false
+            previews = items
         )
     }
 
@@ -100,7 +103,7 @@ class KitsuDiscoveryService @Inject constructor(
         railId: String,
         results: List<KitsuAnimeResource>,
         generatedAtMs: Long
-    ): List<MetaPreview> {
+    ): List<RailItemPreview> {
         return results.take(MAX_ITEMS_PER_SOURCE)
             .mapIndexedNotNull { index, result ->
                 railPreviewMapper.mapAnime(
@@ -108,7 +111,7 @@ class KitsuDiscoveryService @Inject constructor(
                     anime = result,
                     position = index,
                     generatedAtMs = generatedAtMs
-                )?.toMetaPreview()
+                )
             }
     }
 

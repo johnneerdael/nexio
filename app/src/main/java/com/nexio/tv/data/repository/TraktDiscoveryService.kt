@@ -27,6 +27,8 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 import com.nexio.tv.domain.model.toMetaPreview
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
@@ -81,22 +83,88 @@ data class TraktCustomListCatalog(
     val catalogId: String,
     val catalogName: String,
     val type: ContentType,
-    val items: List<MetaPreview>
+    val itemRecords: List<RailItemPreview> = emptyList()
+) {
+    constructor(
+        key: String,
+        catalogId: String,
+        catalogName: String,
+        type: ContentType,
+        items: List<MetaPreview>,
+        fromLegacyItems: Boolean = true
+    ) : this(
+        key = key,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        itemRecords = items.toLegacyRailItemPreviews(railId = catalogId)
+    )
+
+    val items get() = itemRecords.map { it.toMetaPreview() }
+}
+
+fun legacyTraktCustomListCatalog(
+    key: String,
+    catalogId: String,
+    catalogName: String,
+    type: ContentType,
+    items: List<MetaPreview>
+): TraktCustomListCatalog = TraktCustomListCatalog(
+    key = key,
+    catalogId = catalogId,
+    catalogName = catalogName,
+    type = type,
+    itemRecords = items.toLegacyRailItemPreviews(railId = catalogId)
 )
 
 data class TraktDiscoverySnapshot(
-    val calendarItems: List<MetaPreview> = emptyList(),
-    val recommendationMovieItems: List<MetaPreview> = emptyList(),
-    val recommendationShowItems: List<MetaPreview> = emptyList(),
-    val trendingMovieItems: List<MetaPreview> = emptyList(),
-    val trendingShowItems: List<MetaPreview> = emptyList(),
-    val popularMovieItems: List<MetaPreview> = emptyList(),
-    val popularShowItems: List<MetaPreview> = emptyList(),
+    val calendarItemRecords: List<RailItemPreview> = emptyList(),
+    val recommendationMovieItemRecords: List<RailItemPreview> = emptyList(),
+    val recommendationShowItemRecords: List<RailItemPreview> = emptyList(),
+    val trendingMovieItemRecords: List<RailItemPreview> = emptyList(),
+    val trendingShowItemRecords: List<RailItemPreview> = emptyList(),
+    val popularMovieItemRecords: List<RailItemPreview> = emptyList(),
+    val popularShowItemRecords: List<RailItemPreview> = emptyList(),
     val customListCatalogs: List<TraktCustomListCatalog> = emptyList(),
     val popularLists: List<TraktPopularListOption> = emptyList(),
     val recommendationRefsByStatusKey: Map<String, TraktRecommendationRef> = emptyMap(),
     val updatedAtMs: Long = 0L
-)
+) {
+    constructor(
+        calendarItems: List<MetaPreview> = emptyList(),
+        recommendationMovieItems: List<MetaPreview> = emptyList(),
+        recommendationShowItems: List<MetaPreview> = emptyList(),
+        trendingMovieItems: List<MetaPreview> = emptyList(),
+        trendingShowItems: List<MetaPreview> = emptyList(),
+        popularMovieItems: List<MetaPreview> = emptyList(),
+        popularShowItems: List<MetaPreview> = emptyList(),
+        customListCatalogs: List<TraktCustomListCatalog> = emptyList(),
+        popularLists: List<TraktPopularListOption> = emptyList(),
+        recommendationRefsByStatusKey: Map<String, TraktRecommendationRef> = emptyMap(),
+        updatedAtMs: Long = 0L,
+        fromLegacyItems: Boolean = true
+    ) : this(
+        calendarItemRecords = calendarItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.CALENDAR),
+        recommendationMovieItemRecords = recommendationMovieItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.RECOMMENDED_MOVIES),
+        recommendationShowItemRecords = recommendationShowItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.RECOMMENDED_SHOWS),
+        trendingMovieItemRecords = trendingMovieItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.TRENDING_MOVIES),
+        trendingShowItemRecords = trendingShowItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.TRENDING_SHOWS),
+        popularMovieItemRecords = popularMovieItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.POPULAR_MOVIES),
+        popularShowItemRecords = popularShowItems.toLegacyRailItemPreviews(railId = TraktCatalogIds.POPULAR_SHOWS),
+        customListCatalogs = customListCatalogs,
+        popularLists = popularLists,
+        recommendationRefsByStatusKey = recommendationRefsByStatusKey,
+        updatedAtMs = updatedAtMs
+    )
+
+    val calendarItems get() = calendarItemRecords.map { it.toMetaPreview() }
+    val recommendationMovieItems get() = recommendationMovieItemRecords.map { it.toMetaPreview() }
+    val recommendationShowItems get() = recommendationShowItemRecords.map { it.toMetaPreview() }
+    val trendingMovieItems get() = trendingMovieItemRecords.map { it.toMetaPreview() }
+    val trendingShowItems get() = trendingShowItemRecords.map { it.toMetaPreview() }
+    val popularMovieItems get() = popularMovieItemRecords.map { it.toMetaPreview() }
+    val popularShowItems get() = popularShowItemRecords.map { it.toMetaPreview() }
+}
 
 internal fun shouldPreserveLastNonEmptyTraktDiscoverySnapshot(
     previousSnapshot: TraktDiscoverySnapshot,
@@ -115,16 +183,16 @@ private fun TraktCatalogPreferences.hasExpectedDiscoveryBackedTraktRails(): Bool
 private fun TraktDiscoverySnapshot.hasConfiguredDiscoveryContent(
     prefs: TraktCatalogPreferences
 ): Boolean {
-    if (TraktCatalogIds.TRENDING_MOVIES in prefs.enabledCatalogs && trendingMovieItems.isNotEmpty()) return true
-    if (TraktCatalogIds.TRENDING_SHOWS in prefs.enabledCatalogs && trendingShowItems.isNotEmpty()) return true
-    if (TraktCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs && popularMovieItems.isNotEmpty()) return true
-    if (TraktCatalogIds.POPULAR_SHOWS in prefs.enabledCatalogs && popularShowItems.isNotEmpty()) return true
-    if (TraktCatalogIds.RECOMMENDED_MOVIES in prefs.enabledCatalogs && recommendationMovieItems.isNotEmpty()) return true
-    if (TraktCatalogIds.RECOMMENDED_SHOWS in prefs.enabledCatalogs && recommendationShowItems.isNotEmpty()) return true
-    if (TraktCatalogIds.CALENDAR in prefs.enabledCatalogs && calendarItems.isNotEmpty()) return true
+    if (TraktCatalogIds.TRENDING_MOVIES in prefs.enabledCatalogs && trendingMovieItemRecords.isNotEmpty()) return true
+    if (TraktCatalogIds.TRENDING_SHOWS in prefs.enabledCatalogs && trendingShowItemRecords.isNotEmpty()) return true
+    if (TraktCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs && popularMovieItemRecords.isNotEmpty()) return true
+    if (TraktCatalogIds.POPULAR_SHOWS in prefs.enabledCatalogs && popularShowItemRecords.isNotEmpty()) return true
+    if (TraktCatalogIds.RECOMMENDED_MOVIES in prefs.enabledCatalogs && recommendationMovieItemRecords.isNotEmpty()) return true
+    if (TraktCatalogIds.RECOMMENDED_SHOWS in prefs.enabledCatalogs && recommendationShowItemRecords.isNotEmpty()) return true
+    if (TraktCatalogIds.CALENDAR in prefs.enabledCatalogs && calendarItemRecords.isNotEmpty()) return true
     if (prefs.selectedPopularListKeys.isEmpty()) return false
     return customListCatalogs.any { catalog ->
-        catalog.key in prefs.selectedPopularListKeys && catalog.items.isNotEmpty()
+        catalog.key in prefs.selectedPopularListKeys && catalog.itemRecords.isNotEmpty()
     }
 }
 
@@ -189,18 +257,18 @@ class TraktDiscoveryService @Inject constructor(
                 if (dismissedKeys.isEmpty()) {
                     profileId to snapshot
                 } else {
-                    val filteredMovieItems = snapshot.recommendationMovieItems.filterNot { item ->
-                        recommendationStatusKey(item.id, item.apiType) in dismissedKeys
+                    val filteredMovieItems = snapshot.recommendationMovieItemRecords.filterNot { item ->
+                        recommendationStatusKey(item.toMetaPreview().id, item.itemType.toApiString()) in dismissedKeys
                     }
-                    val filteredShowItems = snapshot.recommendationShowItems.filterNot { item ->
-                        recommendationStatusKey(item.id, item.apiType) in dismissedKeys
+                    val filteredShowItems = snapshot.recommendationShowItemRecords.filterNot { item ->
+                        recommendationStatusKey(item.toMetaPreview().id, item.itemType.toApiString()) in dismissedKeys
                     }
                     val activeKeys = (filteredMovieItems + filteredShowItems)
-                        .map { recommendationStatusKey(it.id, it.apiType) }
+                        .map { recommendationStatusKey(it.toMetaPreview().id, it.itemType.toApiString()) }
                         .toSet()
                     profileId to snapshot.copy(
-                        recommendationMovieItems = filteredMovieItems,
-                        recommendationShowItems = filteredShowItems,
+                        recommendationMovieItemRecords = filteredMovieItems,
+                        recommendationShowItemRecords = filteredShowItems,
                         recommendationRefsByStatusKey = snapshot.recommendationRefsByStatusKey
                             .filterKeys { it in activeKeys }
                     )
@@ -329,19 +397,20 @@ class TraktDiscoveryService @Inject constructor(
 
             val refs = buildMap {
                 (recommendationMovies + recommendationShows).forEach { pair ->
-                    val statusKey = recommendationStatusKey(pair.first.id, pair.first.apiType)
+                    val previewMeta = pair.first.toMetaPreview()
+                    val statusKey = recommendationStatusKey(previewMeta.id, previewMeta.apiType)
                     put(statusKey, pair.second)
                 }
             }
 
             val refreshedSnapshot = TraktDiscoverySnapshot(
-                calendarItems = calendar,
-                recommendationMovieItems = recommendationMovies.map { it.first },
-                recommendationShowItems = recommendationShows.map { it.first },
-                trendingMovieItems = trendingMovies,
-                trendingShowItems = trendingShows,
-                popularMovieItems = popularMovies,
-                popularShowItems = popularShows,
+                calendarItemRecords = calendar,
+                recommendationMovieItemRecords = recommendationMovies.map { it.first },
+                recommendationShowItemRecords = recommendationShows.map { it.first },
+                trendingMovieItemRecords = trendingMovies,
+                trendingShowItemRecords = trendingShows,
+                popularMovieItemRecords = popularMovies,
+                popularShowItemRecords = popularShows,
                 customListCatalogs = selectedCustomCatalogs,
                 popularLists = popularLists,
                 recommendationRefsByStatusKey = refs,
@@ -397,7 +466,7 @@ class TraktDiscoveryService @Inject constructor(
         return changed
     }
 
-    private suspend fun fetchRecommendations(type: String): List<Pair<MetaPreview, TraktRecommendationRef>> {
+    private suspend fun fetchRecommendations(type: String): List<Pair<RailItemPreview, TraktRecommendationRef>> {
         val generatedAtMs = System.currentTimeMillis()
         val railId = if (type == "movies") {
             TraktCatalogIds.RECOMMENDED_MOVIES
@@ -419,7 +488,7 @@ class TraktDiscoveryService @Inject constructor(
             .take(maxItemsPerRail)
     }
 
-    private suspend fun fetchCalendarShows(days: Int): List<MetaPreview> {
+    private suspend fun fetchCalendarShows(days: Int): List<RailItemPreview> {
         val startDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE)
         val generatedAtMs = System.currentTimeMillis()
         return traktIntegrationProvider.fetchCalendarShows(
@@ -437,7 +506,7 @@ class TraktDiscoveryService @Inject constructor(
             .take(maxItemsPerRail)
     }
 
-    private suspend fun fetchTrendingMovies(): List<MetaPreview> {
+    private suspend fun fetchTrendingMovies(): List<RailItemPreview> {
         val generatedAtMs = System.currentTimeMillis()
         return mapTrendingMovieRailPreviews(
             railId = TraktCatalogIds.TRENDING_MOVIES,
@@ -447,7 +516,7 @@ class TraktDiscoveryService @Inject constructor(
             .take(maxItemsPerRail)
     }
 
-    private suspend fun fetchTrendingShows(): List<MetaPreview> {
+    private suspend fun fetchTrendingShows(): List<RailItemPreview> {
         val generatedAtMs = System.currentTimeMillis()
         return mapTrendingShowRailPreviews(
             railId = TraktCatalogIds.TRENDING_SHOWS,
@@ -461,14 +530,14 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         items: List<TraktTrendingMovieItemDto>,
         generatedAtMs: Long
-    ): List<MetaPreview> {
+    ): List<RailItemPreview> {
         return items.mapIndexedNotNull { index, item ->
             railPreviewMapper.mapTrendingMovie(
                 railId = railId,
                 item = item,
                 position = index,
                 generatedAtMs = generatedAtMs
-            )?.toMetaPreview()
+            )
         }
     }
 
@@ -476,18 +545,18 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         items: List<TraktTrendingShowItemDto>,
         generatedAtMs: Long
-    ): List<MetaPreview> {
+    ): List<RailItemPreview> {
         return items.mapIndexedNotNull { index, item ->
             railPreviewMapper.mapTrendingShow(
                 railId = railId,
                 item = item,
                 position = index,
                 generatedAtMs = generatedAtMs
-            )?.toMetaPreview()
+            )
         }
     }
 
-    private suspend fun fetchPopularMovies(): List<MetaPreview> {
+    private suspend fun fetchPopularMovies(): List<RailItemPreview> {
         val generatedAtMs = System.currentTimeMillis()
         return traktIntegrationProvider.fetchPopularMovies(limit = maxItemsPerRail).orEmpty()
             .mapIndexedNotNull { index, movie ->
@@ -501,7 +570,7 @@ class TraktDiscoveryService @Inject constructor(
             .take(maxItemsPerRail)
     }
 
-    private suspend fun fetchPopularShows(): List<MetaPreview> {
+    private suspend fun fetchPopularShows(): List<RailItemPreview> {
         val generatedAtMs = System.currentTimeMillis()
         return traktIntegrationProvider.fetchPopularShows(limit = maxItemsPerRail).orEmpty()
             .mapIndexedNotNull { index, show ->
@@ -610,7 +679,7 @@ class TraktDiscoveryService @Inject constructor(
                     generatedAtMs = generatedAtMs
                 )
             }
-            .distinctBy { it.id }
+            .distinctBy { it.sourceItemId }
             .take(maxItemsPerRail)
 
         val rows = mutableListOf<TraktCustomListCatalog>()
@@ -620,7 +689,7 @@ class TraktDiscoveryService @Inject constructor(
                 catalogId = movieRailId,
                 catalogName = "${option.title} (Movies)",
                 type = ContentType.MOVIE,
-                items = movies
+                itemRecords = movies
             )
         }
         if (shows.isNotEmpty()) {
@@ -629,7 +698,7 @@ class TraktDiscoveryService @Inject constructor(
                 catalogId = showRailId,
                 catalogName = "${option.title} (Shows)",
                 type = ContentType.SERIES,
-                items = shows
+                itemRecords = shows
             )
         }
         return rows
@@ -640,7 +709,7 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         position: Int,
         generatedAtMs: Long
-    ): Pair<MetaPreview, TraktRecommendationRef>? {
+    ): Pair<RailItemPreview, TraktRecommendationRef>? {
         val movie = dto.movie
         val show = dto.show
         return if (movie != null) {
@@ -655,7 +724,8 @@ class TraktDiscoveryService @Inject constructor(
                 ?: movie.ids?.imdb
                 ?: movie.ids?.tmdb?.toString()
                 ?: return null
-            val key = recommendationStatusKey(preview.id, preview.apiType)
+            val previewMeta = preview.toMetaPreview()
+            val key = recommendationStatusKey(previewMeta.id, previewMeta.apiType)
             preview to TraktRecommendationRef(
                 recommendationKey = key,
                 type = "movies",
@@ -673,7 +743,8 @@ class TraktDiscoveryService @Inject constructor(
                 ?: show.ids?.imdb
                 ?: show.ids?.tmdb?.toString()
                 ?: return null
-            val key = recommendationStatusKey(preview.id, preview.apiType)
+            val previewMeta = preview.toMetaPreview()
+            val key = recommendationStatusKey(previewMeta.id, previewMeta.apiType)
             preview to TraktRecommendationRef(
                 recommendationKey = key,
                 type = "shows",
@@ -689,14 +760,13 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         position: Int,
         generatedAtMs: Long
-    ): MetaPreview? {
+    ): RailItemPreview? {
         return railPreviewMapper.mapCalendarEpisode(
             railId = railId,
             item = dto,
             position = position,
             generatedAtMs = generatedAtMs
-        )?.toMetaPreview()
-            ?.let { preview -> posterRatingsUrlResolver.apply(preview, activePosterProvider) }
+        )
     }
 
     private fun mapMovieDto(
@@ -704,14 +774,13 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         position: Int,
         generatedAtMs: Long
-    ): MetaPreview? {
+    ): RailItemPreview? {
         return railPreviewMapper.mapMovie(
             railId = railId,
             movie = movie,
             position = position,
             generatedAtMs = generatedAtMs
-        )?.toMetaPreview()
-            ?.let { preview -> posterRatingsUrlResolver.apply(preview, activePosterProvider) }
+        )
     }
 
     private fun mapShowDto(
@@ -719,14 +788,13 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         position: Int,
         generatedAtMs: Long
-    ): MetaPreview? {
+    ): RailItemPreview? {
         return railPreviewMapper.mapShow(
             railId = railId,
             show = show,
             position = position,
             generatedAtMs = generatedAtMs
-        )?.toMetaPreview()
-            ?.let { preview -> posterRatingsUrlResolver.apply(preview, activePosterProvider) }
+        )
     }
 
     private fun mapListMovieItem(
@@ -734,7 +802,7 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         position: Int,
         generatedAtMs: Long
-    ): MetaPreview? {
+    ): RailItemPreview? {
         return item.movie?.let {
             mapMovieDto(
                 movie = it,
@@ -750,7 +818,7 @@ class TraktDiscoveryService @Inject constructor(
         railId: String,
         position: Int,
         generatedAtMs: Long
-    ): MetaPreview? {
+    ): RailItemPreview? {
         return item.show?.let {
             mapShowDto(
                 show = it,

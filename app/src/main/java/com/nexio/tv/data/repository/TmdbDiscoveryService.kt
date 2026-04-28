@@ -8,6 +8,8 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.RailPreviewCatalogRowRecord
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.async
@@ -88,6 +90,9 @@ class TmdbDiscoveryService @Inject constructor(
             ?.toSet()
         val previous = snapshot.value
         val previousCurrentRows = previous.currentRowsFor(sanitized)
+        val previousCurrentRowRecords = previous.rowRecordsByCatalog.filterKeys { key ->
+            key in previousCurrentRows
+        }
         if (!force && requestedCatalogIds != null && requestedCatalogIds.all { it in previousCurrentRows }) {
             return@coroutineScope previous
         }
@@ -97,7 +102,7 @@ class TmdbDiscoveryService @Inject constructor(
         val refreshedRows = enabledCatalogs
             .map { catalogId ->
                 async {
-                    val row = fetchCatalogRow(catalogId, sanitized)
+                    val row = fetchCatalogRowRecord(catalogId, sanitized)
                     catalogId to row
                 }
             }
@@ -108,16 +113,16 @@ class TmdbDiscoveryService @Inject constructor(
         val rows = if (catalogIds == null) {
             refreshedRows
         } else {
-            previousCurrentRows + refreshedRows
+            (previousCurrentRowRecords - requestedCatalogIds.orEmpty()) + refreshedRows
         }
         val previousCurrentCatalogIds = previousCurrentRows.keys
         val catalogIdsWithCurrentPreferences = if (catalogIds == null) {
             refreshedRows.keys
         } else {
-            previousCurrentCatalogIds + refreshedRows.keys
+            (previousCurrentCatalogIds - requestedCatalogIds.orEmpty()) + refreshedRows.keys
         }
         val refreshed = TmdbDiscoverySnapshot(
-            rowsByCatalog = rows,
+            rowRecordsByCatalog = rows,
             updatedAtMs = System.currentTimeMillis(),
             includeAdult = sanitized.includeAdult,
             hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
@@ -127,10 +132,10 @@ class TmdbDiscoveryService @Inject constructor(
         refreshed
     }
 
-    private suspend fun fetchCatalogRow(
+    private suspend fun fetchCatalogRowRecord(
         catalogId: String,
         preferences: TmdbCatalogPreferences
-    ): CatalogRow? {
+    ): RailPreviewCatalogRowRecord? {
         val title = tmdbCatalogTitle(catalogId) ?: return null
         val contentType = catalogContentType(catalogId) ?: return null
         val results = runCatchingOrEmpty { client.fetchCatalog(catalogId, preferences) }
@@ -140,16 +145,15 @@ class TmdbDiscoveryService @Inject constructor(
             contentType = contentType,
             generatedAtMs = System.currentTimeMillis()
         )
-        return CatalogRow(
+        if (items.isEmpty()) return null
+        return RailPreviewCatalogRowRecord(
             addonId = ADDON_ID,
             addonName = ADDON_NAME,
             addonBaseUrl = ADDON_BASE_URL,
             catalogId = catalogId,
             catalogName = title,
             type = contentType,
-            items = items,
-            hasMore = false,
-            supportsSkip = false
+            previews = items
         )
     }
 
@@ -166,7 +170,7 @@ class TmdbDiscoveryService @Inject constructor(
         results: List<TmdbMediaResult>,
         contentType: ContentType,
         generatedAtMs: Long
-    ): List<MetaPreview> {
+    ): List<RailItemPreview> {
         return results.take(MAX_ITEMS_PER_SOURCE)
             .mapIndexed { index, result ->
                 railPreviewMapper.mapResult(
@@ -175,7 +179,7 @@ class TmdbDiscoveryService @Inject constructor(
                     itemType = contentType,
                     position = index,
                     generatedAtMs = generatedAtMs
-                ).toMetaPreview()
+                )
             }
     }
 

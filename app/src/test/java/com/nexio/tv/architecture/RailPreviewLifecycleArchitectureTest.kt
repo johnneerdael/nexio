@@ -59,7 +59,10 @@ class RailPreviewLifecycleArchitectureTest {
 
         assertTrue(
             "railPreviewsToCatalogRow must enter CatalogRow through shared MetaPreview conversion.",
-            normalized.contains("items = previews.map { it.toMetaPreview() }")
+            normalized.contains("CatalogRow(") &&
+                normalized.contains("items =") &&
+                normalized.contains("previews.map") &&
+                normalized.contains("toMetaPreview()")
         )
         val offenders = forbiddenRenderers.filter { renderer ->
             Regex("""\b${Regex.escape(renderer)}\b""").containsMatchIn(functionBody)
@@ -81,29 +84,66 @@ class RailPreviewLifecycleArchitectureTest {
 
         val missing = requiredMapperUsages.filterNot { (fileName, mapperName) ->
             val source = productionKotlinFiles().firstOrNull { it.name == fileName }?.readText().orEmpty()
-            source.contains(mapperName) && source.contains("toMetaPreview()")
+            source.contains(mapperName) &&
+                (source.contains("RailItemPreview") || source.contains("RailPreviewCatalogRowRecord"))
         }
 
         if (missing.isNotEmpty()) {
             fail(
-                "Built-in rail providers must use source-specific RailPreviewMapper classes before " +
-                    "entering the shared MetaPreview lifecycle. Missing production usages: " +
+                "Built-in rail providers must use source-specific RailPreviewMapper classes and retain " +
+                    "RailItemPreview or RailPreviewCatalogRowRecord records before CatalogRow publication. Missing production usages: " +
                     missing.entries.joinToString { (fileName, mapperName) -> "$mapperName in $fileName" }
             )
         }
     }
 
     @Test
-    fun `kitsu discovery service maps through mapper directly into shared meta preview bridge`() {
+    fun `built in discovery snapshots store rail preview source records`() {
+        val checkedFiles = listOf(
+            "data/repository/TraktDiscoveryService.kt",
+            "data/local/TraktDiscoverySnapshotStore.kt",
+            "data/repository/MDBListDiscoveryService.kt",
+            "data/local/MDBListDiscoverySnapshotStore.kt",
+            "data/repository/SimklDiscoveryService.kt",
+            "data/local/SimklDiscoverySnapshotStore.kt",
+            "data/repository/TmdbDiscoveryModels.kt",
+            "data/repository/KitsuDiscoveryModels.kt"
+        )
+        val forbiddenStorageFields = listOf(
+            Regex("""val\s+\w+\s*:\s*List<MetaPreview>"""),
+            Regex("""val\s+\w+\s*:\s*Map<String,\s*List<MetaPreview>>"""),
+            Regex("""val\s+\w+\s*:\s*Map<String,\s*CatalogRow>""")
+        )
+
+        val offenders = checkedFiles.flatMap { relativePath ->
+            val source = productionFile(relativePath).readText()
+                .replace(Regex("""constructor\([\s\S]*?\)\s*:\s*this\([\s\S]*?\)"""), "")
+            forbiddenStorageFields.flatMap { pattern ->
+                pattern.findAll(source).map { match ->
+                    "app/src/main/java/com/nexio/tv/$relativePath:${match.value}"
+                }
+            }
+        }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Built-in discovery snapshots and stores must retain RailItemPreview or " +
+                    "RailPreviewCatalogRowRecord source records, not MetaPreview/CatalogRow storage fields:\n" +
+                    offenders.joinToString("\n")
+            )
+        }
+    }
+
+    @Test
+    fun `kitsu discovery service retains mapper result until catalog row publication`() {
         val source = productionFile("data/repository/KitsuDiscoveryService.kt").readText()
 
         assertTrue(
-            "Kitsu catalog result mapping must call KitsuRailPreviewMapper.mapAnime and immediately " +
-                "convert the mapped RailItemPreview through the shared toMetaPreview() bridge.",
-            Regex(
-                """mapCatalogResults\([\s\S]*?results\.take\(MAX_ITEMS_PER_SOURCE\)[\s\S]*?""" +
-                    """railPreviewMapper\.mapAnime\([\s\S]*?\)\?\.toMetaPreview\(\)"""
-            ).containsMatchIn(source)
+            "Kitsu catalog result mapping must call KitsuRailPreviewMapper.mapAnime, retain " +
+                "RailItemPreview values, and publish through RailPreviewCatalogRowRecord.",
+            source.contains("railPreviewMapper.mapAnime(") &&
+                source.contains("RailPreviewCatalogRowRecord(") &&
+                source.contains("previews =")
         )
     }
 

@@ -76,6 +76,7 @@ class MDBListDiscoveryServiceTest {
         val snapshot = service.observeSnapshot(autoRefreshOnStart = false).first()
         val customCatalog = snapshot.customListCatalogs.single()
         assertEquals("Oscars 2026 | The 98th Academy Awards (Movies)", customCatalog.catalogName)
+        assert(customCatalog.itemRecords.isNotEmpty())
     }
 
     @Test
@@ -134,6 +135,7 @@ class MDBListDiscoveryServiceTest {
             .customListCatalogs
             .single()
         assertEquals("Anime (Shows)", customCatalog.catalogName)
+        assert(customCatalog.itemRecords.isNotEmpty())
     }
 
     private fun buildService(

@@ -104,6 +104,8 @@ class TmdbDiscoveryServiceTest {
         val stockRow = snapshot.rowsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES)
         assertFalse(stockRow.hasMore)
         assertFalse(stockRow.supportsSkip)
+        assertEquals(requestedCatalogs, snapshot.rowRecordsByCatalog.keys)
+        assertEquals(1, snapshot.rowRecordsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES).previews.size)
     }
 
     @Test
@@ -350,6 +352,35 @@ class TmdbDiscoveryServiceTest {
         assertFalse(TmdbCatalogIds.POPULAR_MOVIES in refreshed.currentRowsFor(currentPreferences))
     }
 
+    @Test
+    fun `subset catalog refresh removes requested row when fetch returns empty`() = runTest {
+        val client = FakeTmdbDiscoveryClient(
+            catalogResults = mapOf(
+                TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Trending")),
+                TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 2, title = "Popular"))
+            )
+        )
+        val service = client.createService()
+        val preferences = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
+        )
+        service.refreshCatalogs(preferences, force = true)
+        client.catalogResults = mapOf(
+            TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 2, title = "Popular"))
+        )
+
+        val refreshed = service.refreshCatalogs(
+            preferences = preferences,
+            force = true,
+            catalogIds = setOf(TmdbCatalogIds.TRENDING_MOVIES)
+        )
+
+        assertFalse(TmdbCatalogIds.TRENDING_MOVIES in refreshed.rowsByCatalog)
+        assertFalse(TmdbCatalogIds.TRENDING_MOVIES in refreshed.catalogIdsWithCurrentPreferences)
+        assertEquals(setOf(TmdbCatalogIds.POPULAR_MOVIES), refreshed.rowsByCatalog.keys)
+    }
+
     private class FakeTmdbDiscoveryClient(
         var credential: MetadataProviderCredential = MetadataProviderCredential(
             "key",
@@ -357,7 +388,7 @@ class TmdbDiscoveryServiceTest {
         ),
         private val movieSearch: List<TmdbMediaResult> = emptyList(),
         private val tvSearch: List<TmdbMediaResult> = emptyList(),
-        private val catalogResults: Map<String, List<TmdbMediaResult>> = emptyMap(),
+        var catalogResults: Map<String, List<TmdbMediaResult>> = emptyMap(),
         private val imdbIds: Map<String, String> = emptyMap(),
         private val searchDelayMillis: Long = 0L,
         private val catalogDelayMillis: Long = 0L
