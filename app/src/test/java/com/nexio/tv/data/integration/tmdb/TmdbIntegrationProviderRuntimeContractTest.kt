@@ -48,9 +48,9 @@ class TmdbIntegrationProviderRuntimeContractTest {
     }
 
     @Test
-    fun `loadPersonCombinedCredits routes through runtime call with PERSON_COMBINED_CREDITS apiShape`() = runTest {
+    fun `loadPersonCombinedCredits routes through runtime get with CacheFirst PERSON_COMBINED_CREDITS apiShape`() = runTest {
         val runtime = RecordingIntegrationRuntime<TmdbPersonCreditsResponse>(
-            nextCallResult = IntegrationCallResult.Success(TmdbPersonCreditsResponse())
+            nextResult = IntegrationFetchResult.Updated(TmdbPersonCreditsResponse())
         )
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         coEvery {
@@ -61,8 +61,15 @@ class TmdbIntegrationProviderRuntimeContractTest {
 
         provider.loadPersonCombinedCredits(personId = 287)
 
-        assertEquals(1, runtime.callSpecs.size)
-        assertEquals(TmdbApiShapes.PERSON_COMBINED_CREDITS, runtime.callSpecs.single().apiShapeId)
+        assertEquals(0, runtime.callSpecs.size)
+        assertEquals(1, runtime.specs.size)
+        val spec = runtime.specs.single()
+        assertEquals(TmdbApiShapes.PERSON_COMBINED_CREDITS, spec.apiShapeId)
+        assertEquals("tmdb.person.combined_credits", spec.operationKey)
+        assertTrue(
+            "expected CacheFirst, was ${spec.cachePolicy}",
+            spec.cachePolicy is IntegrationCachePolicy.CacheFirst
+        )
     }
 
     @Test
