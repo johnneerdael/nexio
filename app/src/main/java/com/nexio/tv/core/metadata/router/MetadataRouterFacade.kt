@@ -201,16 +201,15 @@ class MetadataRouterFacade @Inject constructor(
     }
 
     /**
-     * Routes a TMDB review fetch through the canonical resolve pipeline at depth
-     * [MetadataDepth.DETAIL_SECONDARY] so that `metadata.route_decision` and
-     * `metadata.field_selected` trace events fire, then delegates the actual
-     * review-list fetch to [MetadataSecondaryRepository].
+     * Routes a review fetch through the canonical resolve pipeline at depth
+     * [MetadataDepth.DETAIL_SECONDARY], aggregating REVIEWS candidates from every
+     * registered review adapter (TMDB, Trakt). If no adapter produced reviews
+     * (e.g. plan didn't include a review step), falls back to the direct
+     * [MetadataSecondaryRepository.fetchReviews] TMDB call so existing TMDB-only
+     * flows keep working.
      *
-     * The Trakt review path (see `ReviewsRepository.fetchTraktReviewPage`) is intentionally
-     * NOT migrated here yet — that requires adding `MetadataPrimaryProvider.TRAKT` to the
-     * provider enum, which would touch 10+ exhaustive `when` statements (deferred per
-     * Task 12 scope decision). Routing the TMDB half through the facade still delivers
-     * the canonical trace observability for the audit's primary goal.
+     * Trace events fire via the resolver pipeline: `metadata.route_decision`,
+     * `metadata.provider_plan`, `metadata.field_selected(REVIEWS)`.
      */
     suspend fun fetchReviews(
         metadataRequest: MetadataRequest,
@@ -220,10 +219,29 @@ class MetadataRouterFacade @Inject constructor(
         val repo = checkNotNull(metadataSecondaryRepository) {
             "fetchReviews requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
         }
-        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
-        resolveRequest(metadataRequest)
-        // Delegate to the secondary repository for the TMDB review list.
-        return repo.fetchReviews(tmdbId, contentType)
+        // Resolve through the canonical pipeline (depth = DETAIL_SECONDARY) — fires
+        // metadata.route_decision + per-step provider_plan + per-field field_selected events.
+        val resolution = resolveRequest(metadataRequest)
+
+        // Collect REVIEWS-bearing candidates from every adapter that produced one
+        // (TmdbReviewMetadataAdapter, TraktReviewMetadataAdapter, etc.). The resolver's
+        // aggregation contract merges these via ReviewResolver; we flatten the per-step
+        // REVIEWS lists here so the call site receives the union.
+        val resolverReviews: List<MetaReview> = resolution.providerRunResult
+            ?.stepResults
+            ?.mapNotNull { stepResult ->
+                @Suppress("UNCHECKED_CAST")
+                stepResult.candidate?.fields?.get(ResolvedField.REVIEWS)?.value as? List<MetaReview>
+            }
+            ?.flatten()
+            .orEmpty()
+
+        // Backwards-compat fallback: if the plan didn't include any review step yet,
+        // fall back to the direct repo call so existing TMDB-only flows keep working.
+        if (resolverReviews.isEmpty()) {
+            return repo.fetchReviews(tmdbId, contentType)
+        }
+        return resolverReviews
     }
 
     /**
