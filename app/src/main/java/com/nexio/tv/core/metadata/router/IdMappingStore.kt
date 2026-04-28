@@ -30,11 +30,15 @@ object IdMappingTtlPolicy {
 }
 
 interface IdMappingStore {
+    suspend fun lookup(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping?
     suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping?
     suspend fun persist(mapping: IdMapping)
 }
 
 fun ParsedMetadataId.mappingKey(): String = "${scheme.name.lowercase()}:${normalizeMetadataIdValue(scheme, value)}"
+
+fun parseMetadataId(rawId: String): ParsedMetadataId? =
+    MetadataIdParser.parse(rawId).takeUnless { it.scheme == AnimeIdScheme.UNKNOWN }
 
 class InMemoryIdMappingStore(
     initialMappings: List<IdMapping> = emptyList(),
@@ -44,21 +48,25 @@ class InMemoryIdMappingStore(
 
     init {
         initialMappings.forEach { mapping ->
-            mappings[mapping.sourceId.mappingKey()] = mapping.withPolicyExpiry()
+            mappings[mapping.storeKey()] = mapping.withPolicyExpiry()
         }
     }
 
-    override suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping? {
-        val mapping = mappings[sourceId.mappingKey()] ?: return null
+    override suspend fun lookup(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping? {
+        val key = mappingStoreKey(provider, sourceId)
+        val mapping = mappings[key] ?: return null
         if (mapping.isExpired()) {
-            mappings.remove(sourceId.mappingKey())
+            mappings.remove(key)
             return null
         }
-        return mapping.takeIf { it.provider == MetadataPrimaryProvider.KITSU && it.source != IdMappingSource.NEGATIVE }
+        return mapping.takeIf { it.provider == provider && it.source != IdMappingSource.NEGATIVE }
     }
 
+    override suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping? =
+        lookup(MetadataPrimaryProvider.KITSU, sourceId)
+
     override suspend fun persist(mapping: IdMapping) {
-        val key = mapping.sourceId.mappingKey()
+        val key = mapping.storeKey()
         val incoming = mapping.withPolicyExpiry()
         val existing = mappings[key]
         if (existing == null || existing.isExpired() || IdMappingTtlPolicy.comparePriority(incoming.source, existing.source) <= 0) {
@@ -71,4 +79,10 @@ class InMemoryIdMappingStore(
 
     private fun IdMapping.isExpired(): Boolean =
         expiresAtEpochMs?.let { it <= nowEpochMs() } == true
+
+    private fun IdMapping.storeKey(): String =
+        mappingStoreKey(provider, sourceId)
+
+    private fun mappingStoreKey(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): String =
+        "${sourceId.mappingKey()}:${provider.name.lowercase()}"
 }
