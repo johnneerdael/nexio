@@ -262,6 +262,28 @@ class RailItemPreviewTest {
     }
 
     @Test
+    fun `best supported routing id falls back to source item id when stable ids are empty`() {
+        val preview = railItemPreview(
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(),
+            sourceItemId = "source:movie:empty-stable-ids"
+        )
+
+        assertEquals("source:movie:empty-stable-ids", preview.bestSupportedRoutingId())
+    }
+
+    @Test
+    fun `best supported routing id does not use imdb for movie without tmdb`() {
+        val preview = railItemPreview(
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(imdb = "tt99"),
+            sourceItemId = "source:movie:imdb-only"
+        )
+
+        assertEquals("source:movie:imdb-only", preview.bestSupportedRoutingId())
+    }
+
+    @Test
     fun `best supported routing id uses series tvdb id`() {
         val preview = railItemPreview(
             itemType = ContentType.SERIES,
