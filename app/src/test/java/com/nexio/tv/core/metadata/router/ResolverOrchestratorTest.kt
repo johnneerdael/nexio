@@ -33,12 +33,12 @@ class ResolverOrchestratorTest {
     }
 
     @Test
-    fun `detail media schedules artwork locally and trailers over network`() {
+    fun `detail media schedules trailers over network`() {
         val schedule = orchestrator.schedule(MetadataDepth.DETAIL_MEDIA)
 
         assertEquals(
             "local",
-            listOf(ResolverType.ADDON_DISPLAY, ResolverType.ARTWORK),
+            listOf(ResolverType.ADDON_DISPLAY),
             schedule.localResolvers
         )
         assertEquals(
