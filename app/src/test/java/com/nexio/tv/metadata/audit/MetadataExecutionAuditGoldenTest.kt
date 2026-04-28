@@ -6,6 +6,7 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolverType
 import java.io.File
 import kotlinx.coroutines.test.runTest
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -374,6 +375,7 @@ class MetadataExecutionAuditGoldenTest {
 
         val json = File(outputDir, "metadata-execution-report.json").readText()
         val markdown = File(outputDir, "metadata-execution-report.md").readText()
+        JSONObject(json)
         assertTrue(json.contains("\"schemaVersion\""))
         assertTrue(json.contains("\"gitSha\""))
         assertTrue(json.contains("\"gitWorktree\""))
@@ -409,6 +411,7 @@ class MetadataExecutionAuditGoldenTest {
         MetadataAuditReportWriter().writeMarkdown(report, File(outputDir, "metadata-execution-single-report.md"))
 
         val json = File(outputDir, "metadata-execution-single-report.json").readText()
+        JSONObject(json)
         assertTrue(json.contains("SMOKE_DEBUG_ONLY"))
         assertTrue(json.contains("routingAfterVisible"))
         assertTrue(json.contains("selectedFieldsBeforeHydration"))

@@ -27,21 +27,21 @@ class MetadataAuditReportWriter {
         buildString {
             appendLine("{")
             appendLine("  \"schemaVersion\": ${report.schemaVersion},")
-            appendLine("  \"gitSha\": \"${report.provenance.gitSha}\",")
+            appendLine("  \"gitSha\": ${jsonString(report.provenance.gitSha)},")
             appendLine("  \"gitWorktree\": ${gitWorktreeJson(report.provenance.gitWorktree)},")
             appendLine("  \"artifactRole\": \"SMOKE_DEBUG_ONLY\",")
-            appendLine("  \"fixtureName\": \"${report.fixtureName}\",")
-            appendLine("  \"scenario\": \"${report.scenario.name}\",")
-            appendLine("  \"verdict\": \"${report.verdict}\",")
+            appendLine("  \"fixtureName\": ${jsonString(report.fixtureName)},")
+            appendLine("  \"scenario\": ${jsonString(report.scenario.name)},")
+            appendLine("  \"verdict\": ${jsonString(report.verdict.name)},")
             appendLine("  \"totalItems\": ${report.summaries.totalItems},")
             appendLine("  \"routedItems\": ${report.summaries.routedItems},")
             appendLine("  \"networkCalls\": ${report.summaries.networkCalls},")
             appendLine("  \"items\": [")
             report.items.forEachIndexed { index, item ->
                 appendLine("    {")
-                appendLine("      \"itemId\": \"${item.itemId}\",")
-                appendLine("      \"itemType\": \"${item.itemType}\",")
-                appendLine("      \"provider\": \"${item.routing?.provider ?: ""}\",")
+                appendLine("      \"itemId\": ${jsonString(item.itemId)},")
+                appendLine("      \"itemType\": ${jsonString(item.itemType)},")
+                appendLine("      \"provider\": ${jsonString(item.routing?.provider?.name.orEmpty())},")
                 appendLine("      \"railSource\": ${nullableStringJson(item.railSource)},")
                 appendLine("      \"sourceProvider\": ${nullableStringJson(item.sourceProvider)},")
                 appendLine("      \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
@@ -49,7 +49,7 @@ class MetadataAuditReportWriter {
                 appendLine("      \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
-                appendLine("      \"apiShapes\": [${item.runtimeCalls.joinToString { "\"${it.apiShapeId}\"" }}]")
+                appendLine("      \"apiShapes\": ${stringArrayJson(item.runtimeCalls.map { it.apiShapeId })}")
                 append("    }")
                 if (index != report.items.lastIndex) append(",")
                 appendLine()
@@ -62,25 +62,25 @@ class MetadataAuditReportWriter {
         buildString {
             appendLine("{")
             appendLine("  \"schemaVersion\": ${bundle.schemaVersion},")
-            appendLine("  \"gitSha\": \"${bundle.provenance.gitSha}\",")
+            appendLine("  \"gitSha\": ${jsonString(bundle.provenance.gitSha)},")
             appendLine("  \"gitWorktree\": ${gitWorktreeJson(bundle.provenance.gitWorktree)},")
             appendLine("  \"artifactRole\": \"SIGN_OFF_AGGREGATE\",")
-            appendLine("  \"verdict\": \"${bundle.verdict}\",")
+            appendLine("  \"verdict\": ${jsonString(bundle.verdict.name)},")
             appendLine("  \"generatedAtEpochMs\": ${bundle.generatedAtEpochMs},")
             appendLine("  \"summary\": ${summaryJson(bundle.summaries, indent = "  ")},")
             appendLine("  \"reports\": [")
             bundle.reports.forEachIndexed { reportIndex, report ->
                 appendLine("    {")
-                appendLine("      \"fixtureName\": \"${report.fixtureName}\",")
-                appendLine("      \"scenario\": \"${report.scenario.name}\",")
-                appendLine("      \"verdict\": \"${report.verdict}\",")
+                appendLine("      \"fixtureName\": ${jsonString(report.fixtureName)},")
+                appendLine("      \"scenario\": ${jsonString(report.scenario.name)},")
+                appendLine("      \"verdict\": ${jsonString(report.verdict.name)},")
                 appendLine("      \"items\": [")
                 report.items.forEachIndexed { itemIndex, item ->
                     appendLine("        {")
-                    appendLine("          \"itemId\": \"${item.itemId}\",")
-                    appendLine("          \"itemType\": \"${item.itemType}\",")
+                    appendLine("          \"itemId\": ${jsonString(item.itemId)},")
+                    appendLine("          \"itemType\": ${jsonString(item.itemType)},")
                     appendLine("          \"firstPaint\": {")
-                    appendLine("            \"source\": \"${item.firstPaint.source}\",")
+                    appendLine("            \"source\": ${jsonString(item.firstPaint.source)},")
                     appendLine("            \"routerExecuted\": ${item.firstPaint.routerExecuted},")
                     appendLine("            \"networkExecuted\": ${item.firstPaint.networkExecuted}")
                     appendLine("          },")
@@ -363,61 +363,86 @@ class MetadataAuditReportWriter {
 
     private fun routeJson(route: RouteEvent?, indent: String): String =
         route?.let {
-            """{"parentId":"${it.parentId}","provider":"${it.provider}","mediaKind":"${it.mediaKind}","reason":"${it.reason}","preResolutionTargetIdRequiresIdentityResolution":${it.preResolutionTargetIdRequiresIdentityResolution},"executionTargetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"executionIdentityResolved":${!it.targetIdRequiresIdentityResolution},"usedInputs":[${it.usedInputs.joinToString { input -> "\"$input\"" }}],"ignoredInputs":[${it.ignoredInputs.joinToString { input -> "\"$input\"" }}]}"""
+            """{"parentId":${jsonString(it.parentId)},"provider":${jsonString(it.provider.name)},"mediaKind":${jsonString(it.mediaKind.name)},"reason":${jsonString(it.reason.name)},"preResolutionTargetIdRequiresIdentityResolution":${it.preResolutionTargetIdRequiresIdentityResolution},"executionTargetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"executionIdentityResolved":${!it.targetIdRequiresIdentityResolution},"usedInputs":${stringArrayJson(it.usedInputs)},"ignoredInputs":${stringArrayJson(it.ignoredInputs)}}"""
         } ?: "null"
 
     private fun providerPlanJson(plan: ProviderPlanEvent?, indent: String): String =
         plan?.let {
-            """{"provider":"${it.provider}","mediaKind":"${it.mediaKind}","depth":"${it.depth}","steps":[${it.steps.joinToString { step -> "{\"stepId\":\"${step.stepId}\",\"provider\":\"${step.provider}\",\"apiShapeId\":\"${step.apiShapeId}\",\"workClass\":\"${step.workClass}\",\"cachePolicy\":\"${step.cachePolicy}\",\"requiresIdentityResolution\":${step.requiresIdentityResolution}}" }}]}"""
+            """{"provider":${jsonString(it.provider.name)},"mediaKind":${jsonString(it.mediaKind.name)},"depth":${jsonString(it.depth.name)},"steps":[${it.steps.joinToString { step -> "{\"stepId\":${jsonString(step.stepId)},\"provider\":${jsonString(step.provider.name)},\"apiShapeId\":${jsonString(step.apiShapeId)},\"workClass\":${jsonString(step.workClass)},\"cachePolicy\":${jsonString(step.cachePolicy)},\"requiresIdentityResolution\":${step.requiresIdentityResolution}}" }}]}"""
         } ?: "null"
 
     private fun resolverScheduleJson(schedule: ResolverScheduleEvent?, indent: String): String =
         schedule?.let {
-            """{"depth":"${it.depth}","resolversScheduled":[${it.resolversScheduled.joinToString { resolver -> "\"$resolver\"" }}],"resolversSkipped":${it.resolversSkipped}}"""
+            """{"depth":${jsonString(it.depth.name)},"resolversScheduled":${stringArrayJson(it.resolversScheduled.map { resolver -> resolver.name })},"resolversSkipped":${stringMapJson(it.resolversSkipped)}}"""
         } ?: "null"
 
     private fun runtimeCallJson(call: RuntimeCallEvent): String =
-        """{"provider":"${call.provider}","apiShapeId":"${call.apiShapeId}","operationKey":"${call.operationKey}","cacheKey":"${call.cacheKey}","workClass":"${call.workClass}","executedNetwork":${call.executedNetwork}}"""
+        """{"provider":${jsonString(call.provider)},"apiShapeId":${jsonString(call.apiShapeId)},"operationKey":${jsonString(call.operationKey)},"cacheKey":${jsonString(call.cacheKey)},"workClass":${jsonString(call.workClass)},"executedNetwork":${call.executedNetwork}}"""
 
     private fun cacheDecisionJson(decision: CacheDecisionEvent): String =
-        """{"provider":"${decision.provider}","apiShapeId":"${decision.apiShapeId}","cacheKey":"${decision.cacheKey}","decision":"${decision.decision}","ttlMs":${decision.ttlMs},"staleWindowMs":${decision.staleWindowMs},"reason":"${decision.reason}"}"""
+        """{"provider":${jsonString(decision.provider)},"apiShapeId":${jsonString(decision.apiShapeId)},"cacheKey":${jsonString(decision.cacheKey)},"decision":${jsonString(decision.decision.name)},"ttlMs":${decision.ttlMs},"staleWindowMs":${decision.staleWindowMs},"reason":${jsonString(decision.reason)}}"""
 
     private fun selectedFieldJson(field: FieldSelectedEvent): String =
-        """{"field":"${field.field}","selectedProvider":"${field.selectedProvider}","sourceRole":"${field.sourceRole}","valuePreview":"${field.valuePreview.orEmpty()}","ownershipRule":"${field.ownershipRule}","rejectedCandidates":[${field.rejectedCandidates.joinToString { rejected -> "{\"provider\":\"${rejected.provider}\",\"reason\":\"${rejected.reason}\"}" }}]}"""
+        """{"field":${jsonString(field.field)},"selectedProvider":${jsonString(field.selectedProvider)},"sourceRole":${jsonString(field.sourceRole)},"valuePreview":${jsonString(field.valuePreview.orEmpty())},"ownershipRule":${jsonString(field.ownershipRule)},"rejectedCandidates":[${field.rejectedCandidates.joinToString { rejected -> "{\"provider\":${jsonString(rejected.provider)},\"reason\":${jsonString(rejected.reason)}}" }}]}"""
 
     private fun forbiddenOverwriteJson(overwrite: ForbiddenOverwriteEvent): String =
-        """{"field":"${overwrite.field}","primaryProvider":"${overwrite.primaryProvider}","rejectedProvider":"${overwrite.rejectedProvider}","reason":"${overwrite.reason}"}"""
+        """{"field":${jsonString(overwrite.field)},"primaryProvider":${jsonString(overwrite.primaryProvider)},"rejectedProvider":${jsonString(overwrite.rejectedProvider)},"reason":${jsonString(overwrite.reason)}}"""
 
     private fun continueWatchingJson(snapshot: ContinueWatchingSnapshotEvent?, indent: String): String =
         snapshot?.let {
-            """{"contentId":"${it.contentId}","parentId":"${it.parentId}","provider":"${it.provider}","routingVersion":${it.routingVersion},"hasClickTimeMetadata":${it.hasClickTimeMetadata},"reroutedDueToVersionMismatch":${it.reroutedDueToVersionMismatch}}"""
+            """{"contentId":${jsonString(it.contentId)},"parentId":${jsonString(it.parentId)},"provider":${nullableStringJson(it.provider?.name)},"routingVersion":${it.routingVersion},"hasClickTimeMetadata":${it.hasClickTimeMetadata},"reroutedDueToVersionMismatch":${it.reroutedDueToVersionMismatch}}"""
         } ?: "null"
 
     private fun identityResolutionJson(event: IdentityResolutionEvent?): String =
         event?.let {
-            """{"required":${it.required},"sourceId":"${it.sourceId}","targetProvider":"${it.targetProvider}","resolver":"${it.resolver}","apiShapeId":"${it.apiShapeId}","resultId":"${it.resultId}","success":${it.success}}"""
+            """{"required":${it.required},"sourceId":${jsonString(it.sourceId)},"targetProvider":${jsonString(it.targetProvider.name)},"resolver":${jsonString(it.resolver)},"apiShapeId":${nullableStringJson(it.apiShapeId)},"resultId":${nullableStringJson(it.resultId)},"success":${it.success}}"""
         } ?: "null"
 
     private fun productionCallerOwnershipJson(event: ProductionCallerOwnershipEvent): String =
-        """{"pathName":"${event.pathName}","entrypoint":"${event.entrypoint}","facadeOrRepositoryCalled":${event.facadeOrRepositoryCalled},"providerPlanRunnerExpected":${event.providerPlanRunnerExpected},"fieldResolverExpected":${event.fieldResolverExpected},"legacyRouterUsedAfterFacade":${event.legacyRouterUsedAfterFacade}}"""
+        """{"pathName":${jsonString(event.pathName)},"entrypoint":${jsonString(event.entrypoint)},"facadeOrRepositoryCalled":${event.facadeOrRepositoryCalled},"providerPlanRunnerExpected":${event.providerPlanRunnerExpected},"fieldResolverExpected":${event.fieldResolverExpected},"legacyRouterUsedAfterFacade":${event.legacyRouterUsedAfterFacade}}"""
 
     private fun localizationJson(event: LocalizationEvent?): String =
         event?.let {
-            """{"provider":"${it.provider}","requestedLanguage":"${it.requestedLanguage}","fallbackLanguage":"${it.fallbackLanguage}","policyVersion":${it.policyVersion},"providerFallbackAllowedForMissingLocalizedFields":${it.providerFallbackAllowedForMissingLocalizedFields},"providerFallbackUsed":${it.providerFallbackUsed},"perEpisodeTranslationFallbacksAttempted":${it.perEpisodeTranslationFallbacksAttempted},"maxPerEpisodeTranslationFallbacksAllowed":${it.maxPerEpisodeTranslationFallbacksAllowed},"payloads":[${it.payloads.joinToString { payload -> localizationPayloadJson(payload) }}]}"""
+            """{"provider":${jsonString(it.provider.name)},"requestedLanguage":${jsonString(it.requestedLanguage)},"fallbackLanguage":${jsonString(it.fallbackLanguage)},"policyVersion":${it.policyVersion},"providerFallbackAllowedForMissingLocalizedFields":${it.providerFallbackAllowedForMissingLocalizedFields},"providerFallbackUsed":${it.providerFallbackUsed},"perEpisodeTranslationFallbacksAttempted":${it.perEpisodeTranslationFallbacksAttempted},"maxPerEpisodeTranslationFallbacksAllowed":${it.maxPerEpisodeTranslationFallbacksAllowed},"payloads":[${it.payloads.joinToString { payload -> localizationPayloadJson(payload) }}]}"""
         } ?: "null"
 
     private fun localizationPayloadJson(payload: LocalizationPayloadReport): String =
-        """{"apiShapeId":"${payload.apiShapeId}","language":"${payload.language}","fallbackRole":"${payload.fallbackRole}","cacheKey":"${payload.cacheKey}","cacheDecision":"${payload.cacheDecision}","executedNetwork":${payload.executedNetwork},"source":"${payload.source}"}"""
+        """{"apiShapeId":${jsonString(payload.apiShapeId)},"language":${jsonString(payload.language)},"fallbackRole":${jsonString(payload.fallbackRole)},"cacheKey":${jsonString(payload.cacheKey)},"cacheDecision":${nullableStringJson(payload.cacheDecision?.name)},"executedNetwork":${payload.executedNetwork},"source":${jsonString(payload.source)}}"""
 
     private fun gitWorktreeJson(state: GitWorktreeState): String =
-        """{"state":"${state.state}","dirtyFileCount":${state.dirtyFileCount},"untrackedFileCount":${state.untrackedFileCount}}"""
+        """{"state":${jsonString(state.state)},"dirtyFileCount":${state.dirtyFileCount},"untrackedFileCount":${state.untrackedFileCount}}"""
 
     private fun nullableStringJson(value: String?): String =
-        value?.let { "\"$it\"" } ?: "null"
+        value?.let(::jsonString) ?: "null"
 
     private fun stringArrayJson(values: Iterable<String>): String =
-        "[${values.joinToString { "\"$it\"" }}]"
+        "[${values.joinToString { jsonString(it) }}]"
 
     private fun stringMapJson(values: Map<String, String>): String =
-        "{${values.entries.joinToString { "\"${it.key}\":\"${it.value}\"" }}}"
+        "{${values.entries.joinToString { "${jsonString(it.key)}:${jsonString(it.value)}" }}}"
+
+    private fun jsonString(value: String): String =
+        buildString {
+            append('"')
+            value.forEach { char ->
+                when (char) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\b' -> append("\\b")
+                    '\u000C' -> append("\\f")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else -> {
+                        if (char < ' ') {
+                            append("\\u")
+                            append(char.code.toString(16).padStart(4, '0'))
+                        } else {
+                            append(char)
+                        }
+                    }
+                }
+            }
+            append('"')
+        }
 }
