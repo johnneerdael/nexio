@@ -71,7 +71,7 @@ class MDBListIntegrationProvider @Inject constructor(
             ) {
                 getRawWithQueryWithinRuntimeLoad(
                     relativeUrl = relativeUrl,
-                    query = query.withRailAppendToResponse()
+                    query = withRailAppendToResponse(query)
                 )
             }
         )
@@ -103,13 +103,6 @@ class MDBListIntegrationProvider @Inject constructor(
             IntegrationCallResult.HttpError(response.code())
         } else {
             IntegrationCallResult.Success(response.body()?.string().orEmpty())
-        }
-
-    private fun Map<String, String>.withRailAppendToResponse(): Map<String, String> =
-        if (containsKey("append_to_response")) {
-            this
-        } else {
-            this + ("append_to_response" to MDBLIST_RAIL_APPEND_TO_RESPONSE)
         }
 
     private fun accountCallSpec(
@@ -327,3 +320,19 @@ private fun Map<String, Double>?.toEpisodeRatingMap(): Map<Pair<Int, Int>, Doubl
         val episode = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
         (season to episode) to rating
     }.toMap()
+
+internal fun withRailAppendToResponse(query: Map<String, String>): Map<String, String> {
+    val existingTokens = query["append_to_response"]
+        ?.split(',')
+        ?.mapNotNull { token -> token.trim().takeIf { it.isNotEmpty() } }
+        .orEmpty()
+    val mergedTokens = existingTokens.toMutableList()
+
+    MDBLIST_RAIL_APPEND_TO_RESPONSE.split(',').forEach { requiredToken ->
+        if (mergedTokens.none { it == requiredToken }) {
+            mergedTokens += requiredToken
+        }
+    }
+
+    return query + ("append_to_response" to mergedTokens.joinToString(","))
+}
