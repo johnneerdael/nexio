@@ -27,7 +27,15 @@ class ProviderPlanExecutor @Inject constructor() {
             MetadataPrimaryProvider.TMDB -> tmdbSteps(route, depth)
             MetadataPrimaryProvider.TVDB -> tvdbSteps(route, depth)
             MetadataPrimaryProvider.KITSU -> kitsuSteps(route, depth)
-            else -> error("No provider execution adapter for ${route.provider}")
+            // TODO: integrate TRAKT/IMDB/SIMKL provider execution adapters per future phase plan.
+            // For now treat them as having no allowed mediaKinds so unknown-kind validation
+            // surfaces the canonical "Invalid mediaKind" error before the missing-adapter check.
+            MetadataPrimaryProvider.TRAKT,
+            MetadataPrimaryProvider.IMDB,
+            MetadataPrimaryProvider.SIMKL -> {
+                validateMediaKind(route)
+                error("No provider execution adapter for ${route.provider}")
+            }
         }
 
         return ProviderExecutionPlan(route = route, depth = depth, steps = steps)
