@@ -27,6 +27,16 @@ Production code outside `core/metadata/router/` and `data/integration/metadata/`
 - **WHEN** a developer adds `metadataSecondaryRepository.fetchReviews(...)` in `MetaDetailsViewModel.kt`
 - **THEN** `./gradlew :app:testUniversalDebugUnitTest --tests MetadataRouterBoundaryTest` fails with a clear message naming the offending file:line
 
+### Requirement: DETAIL_CORE primary source is the Stremio meta-addon, with canonical facade providing enrichment
+
+`MetaDetailsViewModel.loadMeta()` MUST source the primary detail metadata (canonical id, title, overview, season list, episode placeholders) from a Stremio meta-addon via `getMetaFromAllAddons` / `getMeta`. `MetadataRouterFacade.resolveRequest(depth = DETAIL_CORE)` then enriches the addon-supplied baseline with TMDB/TVDB-sourced fields using `FieldResolver` primary-wins ownership rules. This layering is intentional — the addon ecosystem is the catalog source of truth; canonical providers are enrichment.
+
+#### Scenario: Detail screen load sequence is addon-first, facade-second
+
+- **WHEN** the user opens a detail screen
+- **THEN** trace order MUST show one Stremio meta-addon HTTP request → one `metadata.route_decision` for DETAIL_CORE → ≥1 `metadata.field_selected` events for non-null enrichment fields
+- **AND** the addon-supplied title field MUST appear as `selectedProvider = "ADDON"` in `metadata.field_selected` if the addon's title is preferred over TMDB
+
 ## REMOVED Requirements
 
 ### Requirement: ResolverType.SKIP_SEGMENTS lists a resolver scheduled by orchestrator
