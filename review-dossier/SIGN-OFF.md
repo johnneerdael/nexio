@@ -5,6 +5,25 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster C landed — localization tracing
+
+The 5 cluster-C findings (3 P1 + 1 P2 + 1 nit) have been remediated:
+
+- **F-E-02** — `TraceMetadataEvents.emitLocalizationPlan(...)` helper (`2b38e4f7d`); wired in TVDB / TMDB / Kitsu provider adapters (`0c9db6d9a`, `f00777239`, `974a7fd4b`); validator rule `LocalizationPlanPrecedesProviderSteps` (`028dee37a`).
+- **F-E-01** — Per-episode fallback counter surfaced via the second `localization_plan` emission inside `TvdbMetadataProviderAdapter`'s `SERIES_EPISODES_LANGUAGE` branch (folded into `0c9db6d9a`).
+- **F-E-03** — TVDB per-episode `metadata.field_selected` emissions (`933916346`); TMDB and Kitsu documented as N/A (per-episode localization not applicable to those adapters' API shapes) — `7a7f76911`, `17f47d63b`.
+- **F-E-04** — `LocalizationPolicy.kitsu(...)` documents `fallbackLanguageEmbeddedInResponse = true` field (`ca46d8460`).
+- **F-E-05** — `idsMissingLocalizedFields` sorts before `take()` for deterministic truncation (`7badf4a71`).
+
+OpenSpec change `surface-localization-decisions-in-trace` deployed (`8019160bb`).
+
+**Audit status:** Re-run of 4 audit gradle tasks: 3 of 4 BUILD SUCCESSFUL (`generateProfileBoundaryAudit`, `generateMetadataExecutionAudit`, `generateTraceValidatorAudit`); `generateIntegrationRuntimeAudit` continues to report verdict FAIL with control-plane gate FAIL — same 2 endpoint-shape mismatches around `tmdb.person.detail` / `tmdb.person.combined_credits` carried over from cluster B sign-off (codec-backfill PR's verification still pending the parallel-session WIP fix; MetadataRouter-readiness gate PASS_WITH_WARNINGS, no new mismatches introduced by Cluster C). Out of scope for Cluster C.
+
+**Updated decision:** APPROVED for merge. Remaining clusters per `09-known-gaps.md`:
+- Cluster D (Trace observability): F-I-01..05, F-F-02, F-G-01..03, F-02-01
+- Cluster E (Profile/playback hardening): F-F-03..05, F-H-01..02, F-J-02..04
+- Cluster F (Provider contracts + identity + nits): F-B-01..02, F-B-05..07, F-C-02..06
+
 ## Cluster B landed — cache + backoff hardening
 
 The 11 cluster-B findings (4 P1 + 4 P2 + 3 nits) have been remediated:
