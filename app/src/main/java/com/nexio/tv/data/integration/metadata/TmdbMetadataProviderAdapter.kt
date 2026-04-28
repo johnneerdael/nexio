@@ -10,6 +10,7 @@ import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbSeasonResponse
@@ -17,7 +18,8 @@ import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
 import javax.inject.Inject
 
 class TmdbMetadataProviderAdapter @Inject constructor(
-    private val integrationProvider: TmdbIntegrationProvider
+    private val integrationProvider: TmdbIntegrationProvider,
+    private val traceEvents: TraceMetadataEvents
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TMDB
 
@@ -28,6 +30,18 @@ class TmdbMetadataProviderAdapter @Inject constructor(
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val language = route.language.orEmpty()
         val policy = LocalizationPolicy.tmdb(language)
+        // F-E-02: emit localization_plan after policy construction.
+        traceEvents.emitLocalizationPlan(
+            contentId = "tmdb:$tmdbId",
+            provider = "TMDB",
+            policyVersion = policy.policyVersion,
+            requestedLanguage = policy.requestedLanguage.providerCode,
+            fallbackLanguage = policy.fallbackLanguage.providerCode,
+            requestedIsFallback = policy.requestedIsFallback,
+            allowProviderFallbackForMissingLocalizedFields = policy.allowProviderFallbackForMissingLocalizedFields,
+            perEpisodeFallbacksAttempted = 0,
+            perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest
+        )
         val seasonEpisodeMetadata = mutableMapOf<Pair<Int, Int>, TvEpisodeMetadata>()
         val seasonEpisodeLocalization = mutableMapOf<Pair<Int, Int>, Map<ResolvedField, MetadataLocalizationFieldTrace>>()
         val candidate = when (step.apiShapeId) {
