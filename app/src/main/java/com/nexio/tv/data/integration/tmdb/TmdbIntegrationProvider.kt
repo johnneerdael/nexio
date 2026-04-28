@@ -802,16 +802,33 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) {
             return IntegrationLoadResult.HttpError(statusCode = 401, reason = "tmdb_api_key_missing")
         }
-        return loadResponse(
-            request = "tmdb_search_people",
-            call = {
-                tmdbApi.searchPeople(
-                    apiKey = credential.apiKey,
-                    query = query,
-                    includeAdult = false
-                )
-            }
+        val result = runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.SEARCH_PEOPLE,
+                operationKey = "tmdb.search.people",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                call = {
+                    val response = runCatching {
+                        tmdbApi.searchPeople(
+                            apiKey = credential.apiKey,
+                            query = query,
+                            includeAdult = false
+                        )
+                    }.getOrElse { exception ->
+                        if (exception is CancellationException) throw exception
+                        return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
+                    }
+                    if (!response.isSuccessful) {
+                        IntegrationCallResult.HttpError(response.code(), reason = "tmdb_search_people")
+                    } else {
+                        response.body()?.let { IntegrationCallResult.Success(it) }
+                            ?: IntegrationCallResult.HttpError(response.code(), reason = "tmdb_search_people:empty_body")
+                    }
+                }
+            )
         )
+        return result.toLoadResult(httpReason = "tmdb_search_people")
     }
 
     suspend fun searchCompanies(query: String): IntegrationLoadResult<TmdbCompanySearchResponse> {
@@ -819,10 +836,29 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) {
             return IntegrationLoadResult.HttpError(statusCode = 401, reason = "tmdb_api_key_missing")
         }
-        return loadResponse(
-            request = "tmdb_search_companies",
-            call = { tmdbApi.searchCompanies(apiKey = credential.apiKey, query = query) }
+        val result = runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.SEARCH_COMPANIES,
+                operationKey = "tmdb.search.companies",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                call = {
+                    val response = runCatching {
+                        tmdbApi.searchCompanies(apiKey = credential.apiKey, query = query)
+                    }.getOrElse { exception ->
+                        if (exception is CancellationException) throw exception
+                        return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
+                    }
+                    if (!response.isSuccessful) {
+                        IntegrationCallResult.HttpError(response.code(), reason = "tmdb_search_companies")
+                    } else {
+                        response.body()?.let { IntegrationCallResult.Success(it) }
+                            ?: IntegrationCallResult.HttpError(response.code(), reason = "tmdb_search_companies:empty_body")
+                    }
+                }
+            )
         )
+        return result.toLoadResult(httpReason = "tmdb_search_companies")
     }
 
     suspend fun loadTmdbEnrichment(

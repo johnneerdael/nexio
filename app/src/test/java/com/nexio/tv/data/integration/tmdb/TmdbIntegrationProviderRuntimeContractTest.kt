@@ -6,8 +6,10 @@ import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.remote.api.TmdbCompanySearchResponse
 import com.nexio.tv.data.remote.api.TmdbPersonCreditsResponse
 import com.nexio.tv.data.remote.api.TmdbPersonResponse
+import com.nexio.tv.data.remote.api.TmdbPersonSearchResponse
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -51,6 +53,42 @@ class TmdbIntegrationProviderRuntimeContractTest {
 
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(TmdbApiShapes.PERSON_COMBINED_CREDITS, runtime.callSpecs.single().apiShapeId)
+    }
+
+    @Test
+    fun `searchPeople routes through runtime call with SEARCH_PEOPLE apiShape`() = runTest {
+        val runtime = RecordingIntegrationRuntime<TmdbPersonSearchResponse>(
+            nextCallResult = IntegrationCallResult.Success(TmdbPersonSearchResponse())
+        )
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        coEvery {
+            tmdbApi.searchPeople(apiKey = "tmdb-key", query = "Keanu", includeAdult = false)
+        } returns Response.success(TmdbPersonSearchResponse())
+
+        val provider = buildProvider(runtime = runtime, tmdbApi = tmdbApi)
+
+        provider.searchPeople(query = "Keanu")
+
+        assertEquals(1, runtime.callSpecs.size)
+        assertEquals(TmdbApiShapes.SEARCH_PEOPLE, runtime.callSpecs.single().apiShapeId)
+    }
+
+    @Test
+    fun `searchCompanies routes through runtime call with SEARCH_COMPANIES apiShape`() = runTest {
+        val runtime = RecordingIntegrationRuntime<TmdbCompanySearchResponse>(
+            nextCallResult = IntegrationCallResult.Success(TmdbCompanySearchResponse())
+        )
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        coEvery {
+            tmdbApi.searchCompanies(apiKey = "tmdb-key", query = "Pixar")
+        } returns Response.success(TmdbCompanySearchResponse())
+
+        val provider = buildProvider(runtime = runtime, tmdbApi = tmdbApi)
+
+        provider.searchCompanies(query = "Pixar")
+
+        assertEquals(1, runtime.callSpecs.size)
+        assertEquals(TmdbApiShapes.SEARCH_COMPANIES, runtime.callSpecs.single().apiShapeId)
     }
 
     private fun personDetailFixture(): TmdbPersonResponse =
