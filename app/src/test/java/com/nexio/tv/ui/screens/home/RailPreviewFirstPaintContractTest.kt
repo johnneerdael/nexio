@@ -39,9 +39,11 @@ class RailPreviewFirstPaintContractTest {
             )
         )
 
-        assertEquals("Breaking Bad", row.items.single().name)
-        assertEquals("2008", row.items.single().releaseInfo)
-        assertEquals(null, row.items.single().poster)
+        val item = row.items.single()
+        assertEquals("tvdb:81189", item.id)
+        assertEquals("Breaking Bad", item.name)
+        assertEquals("2008", item.releaseInfo)
+        assertEquals(null, item.poster)
     }
 
     @Test
@@ -123,9 +125,11 @@ class RailPreviewFirstPaintContractTest {
             previews = listOf(preview())
         )
 
-        assertEquals("Breaking Bad", row.items.single().name)
-        assertEquals("2008", row.items.single().releaseInfo)
-        assertEquals(null, row.items.single().poster)
+        val item = row.items.single()
+        assertEquals("tvdb:81189", item.id)
+        assertEquals("Breaking Bad", item.name)
+        assertEquals("2008", item.releaseInfo)
+        assertEquals(null, item.poster)
     }
 
     private fun firstPaintConversionBoundarySource(): String {
