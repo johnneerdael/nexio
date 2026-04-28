@@ -1,5 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -81,7 +83,7 @@ class ResolverOrchestratorTest {
     }
 
     @Test
-    fun `player schedules tracking and skip segments over network only`() {
+    fun `player schedules tracking over network only`() {
         val schedule = orchestrator.schedule(MetadataDepth.PLAYER)
 
         assertEquals(
@@ -91,8 +93,22 @@ class ResolverOrchestratorTest {
         )
         assertEquals(
             "network",
-            listOf(ResolverType.TRACKING, ResolverType.SKIP_SEGMENTS),
+            listOf(ResolverType.TRACKING),
             schedule.networkResolvers
+        )
+    }
+
+    @Test
+    fun `PLAYER does not schedule SKIP_SEGMENTS (F-12-01)`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s1" })
+        val orchestrator = ResolverOrchestrator(events)
+        val schedule = orchestrator.schedule(MetadataDepth.PLAYER)
+        // After removal of the enum value, ResolverType.SKIP_SEGMENTS does not exist.
+        // We assert no resolver type with that name is in the schedule.
+        assertTrue(
+            "PLAYER schedule must not contain SKIP_SEGMENTS (player skip is owned by SkipIntroRepository)",
+            (schedule.localResolvers + schedule.networkResolvers).none { it.name == "SKIP_SEGMENTS" }
         )
     }
 

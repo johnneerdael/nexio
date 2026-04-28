@@ -25,7 +25,6 @@ enum class ResolverType {
     ARTWORK,
     REVIEWS,
     TRACKING,
-    SKIP_SEGMENTS,
     TRAILERS,
     RECOMMENDATIONS,
     ORGANIZATION_PERSON
@@ -50,8 +49,7 @@ enum class ResolvedField {
     REVIEWS,
     TRAILERS,
     RECOMMENDATIONS,
-    TRACKING,
-    SKIP_SEGMENTS
+    TRACKING
 }
 
 enum class FieldOwner {

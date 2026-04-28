@@ -27,6 +27,5 @@ class ResolverScheduleTraceTest {
         @Suppress("UNCHECKED_CAST")
         val skipped = payload["skipped"] as Map<String, String>
         assertTrue("REVIEWS skipped at DETAIL_CORE", skipped.containsKey("REVIEWS"))
-        assertTrue("SKIP_SEGMENTS skipped at DETAIL_CORE", skipped.containsKey("SKIP_SEGMENTS"))
     }
 }
