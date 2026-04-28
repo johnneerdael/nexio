@@ -7,7 +7,6 @@ import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
-import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -724,8 +723,7 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
             metadataRequest = MetadataRequest(
                 contentId = item.id,
                 contentType = item.type,
-                sourceContext = MetadataSourceContext(
-                    itemType = item.apiType,
+                sourceContext = item.toHomeMetadataSourceContext(
                     addonMetadata = item.toFirstPaintHomeDisplayMetadata()
                 ),
                 language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
@@ -744,8 +742,7 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
         metadataRequest = MetadataRequest(
             contentId = item.id,
             contentType = item.type,
-            sourceContext = MetadataSourceContext(
-                itemType = item.apiType,
+            sourceContext = item.toHomeMetadataSourceContext(
                 addonMetadata = item.toFirstPaintHomeDisplayMetadata()
             ),
             language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),

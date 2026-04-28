@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ProviderIds
 
 enum class MetadataPrimaryProvider { TMDB, TVDB, KITSU, IMDB, TRAKT, SIMKL }
 
@@ -175,7 +176,37 @@ data class MetadataSourceContext(
     val itemType: String? = null,
     val sourceName: String? = null,
     val addonMetadata: HomeDisplayMetadata? = null,
-    val rowItemIds: List<String> = emptyList()
+    val rowItemIds: List<String> = emptyList(),
+    val previewSourceRole: SourceRole = SourceRole.ADDON_PREVIEW,
+    val previewSourceProvider: String? = null,
+    val previewStableIds: ProviderIds = ProviderIds(),
+    val previewSourceItemId: String? = null,
+    val previewRailSource: String? = null
+)
+
+/**
+ * Optional pagination cursor threaded through the resolver pipeline so participating
+ * adapters (e.g. [com.nexio.tv.data.integration.metadata.TraktReviewMetadataAdapter])
+ * can fetch a specific page rather than always defaulting to page 1. Carried by
+ * [MetadataRequest], propagated through [NormalizedMetadataRequest] and
+ * [MetadataRoute], and consumed by adapters via `route.pagination`.
+ */
+data class PaginationCursor(
+    val page: Int = 1,
+    val limit: Int = 20
+)
+
+/**
+ * Aggregated paginated review result returned by
+ * [MetadataRouterFacade.fetchReviewsPage]. [hasMore] indicates whether at least one
+ * adapter reported a continuation token (for the simple/single-adapter case it's
+ * inferred from the page being full); [nextPage] is the cursor caller should pass on
+ * the next load-more invocation, or `null` if exhausted.
+ */
+data class ReviewsPage(
+    val reviews: List<com.nexio.tv.domain.model.MetaReview>,
+    val hasMore: Boolean,
+    val nextPage: Int?
 )
 
 data class MetadataRequest(
@@ -184,7 +215,8 @@ data class MetadataRequest(
     val sourceContext: MetadataSourceContext,
     val language: String? = null,
     val seasonNumber: Int? = null,
-    val depth: MetadataDepth = MetadataDepth.DETAIL_CORE
+    val depth: MetadataDepth = MetadataDepth.DETAIL_CORE,
+    val pagination: PaginationCursor? = null
 )
 
 data class NormalizedMetadataRequest(
@@ -195,7 +227,8 @@ data class NormalizedMetadataRequest(
     val sourceContext: MetadataSourceContext,
     val language: String?,
     val seasonNumber: Int?,
-    val depth: MetadataDepth
+    val depth: MetadataDepth,
+    val pagination: PaginationCursor? = null
 )
 
 data class MetadataRouteTrace(
@@ -213,7 +246,8 @@ data class MetadataRoute(
     val seasonNumber: Int? = null,
     val targetIds: Map<MetadataPrimaryProvider, String>,
     val targetIdRequiresIdentityResolution: Boolean = false,
-    val trace: List<MetadataRouteTrace>
+    val trace: List<MetadataRouteTrace>,
+    val pagination: PaginationCursor? = null
 )
 
 data class ProviderPlanStep(
