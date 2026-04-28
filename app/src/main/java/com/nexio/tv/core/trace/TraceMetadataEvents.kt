@@ -232,4 +232,39 @@ class TraceMetadataEvents(
             )
         )
     }
+
+    fun emitLocalizationPlan(
+        contentId: String,
+        provider: String,
+        policyVersion: Int,
+        requestedLanguage: String,
+        fallbackLanguage: String,
+        requestedIsFallback: Boolean,
+        allowProviderFallbackForMissingLocalizedFields: Boolean,
+        perEpisodeFallbacksAttempted: Int,
+        perEpisodeFallbacksAllowed: Int
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.localization_plan",
+                payload = mapOf(
+                    "contentId" to contentId,
+                    "provider" to provider,
+                    "policyVersion" to policyVersion,
+                    "requestedLanguage" to requestedLanguage,
+                    "fallbackLanguage" to fallbackLanguage,
+                    "requestedIsFallback" to requestedIsFallback,
+                    "allowProviderFallbackForMissingLocalizedFields" to allowProviderFallbackForMissingLocalizedFields,
+                    "perEpisodeFallbacksAttempted" to perEpisodeFallbacksAttempted,
+                    "perEpisodeFallbacksAllowed" to perEpisodeFallbacksAllowed
+                )
+            )
+        )
+    }
 }
