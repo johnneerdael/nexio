@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
@@ -145,7 +146,7 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "trakt:show:10"
         )
 
-        assertEquals("tvdb:81189", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "tvdb:81189", TvProvider.TVDB)
     }
 
     @Test
@@ -158,7 +159,7 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "trakt:movie:20"
         )
 
-        assertEquals("tmdb:550", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "tmdb:550", TvProvider.TMDB)
     }
 
     @Test
@@ -171,7 +172,7 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "mdblist:movie:603"
         )
 
-        assertEquals("tmdb:603", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "tmdb:603", TvProvider.TMDB)
     }
 
     @Test
@@ -184,7 +185,7 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "tmdb:tv:1399"
         )
 
-        assertEquals("tvdb:121361", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "tvdb:121361", TvProvider.TVDB)
     }
 
     @Test
@@ -197,7 +198,7 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "kitsu:anime:1"
         )
 
-        assertEquals("kitsu:1", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "kitsu:1", TvProvider.KITSU)
     }
 
     @Test
@@ -210,7 +211,7 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "simkl:movie:30"
         )
 
-        assertEquals("tmdb:27205", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "tmdb:27205", TvProvider.TMDB)
     }
 
     @Test
@@ -223,7 +224,31 @@ class RailPreviewHydrationCoordinatorTest {
             sourceItemId = "simkl:show:40"
         )
 
-        assertEquals("tvdb:305288", preview.bestRoutingId())
+        assertVisibleHydrationSelection(preview, "tvdb:305288", TvProvider.TVDB)
+    }
+
+    private fun assertVisibleHydrationSelection(
+        preview: RailItemPreview,
+        expectedRoutingId: String,
+        expectedProvider: TvProvider
+    ) {
+        val routingId = preview.bestRoutingId()
+
+        assertEquals(expectedRoutingId, routingId)
+        assertEquals(expectedProvider, preRouterVisibleHydrationProvider(routingId, preview.itemType))
+    }
+
+    /**
+     * Documents the pre-router contract for visible rail hydration. The production router graph is intentionally
+     * not constructed here; these tests pin the selected id plus the simple provider policy handed to that router.
+     */
+    private fun preRouterVisibleHydrationProvider(routingId: String, itemType: ContentType): TvProvider {
+        return when {
+            routingId.startsWith("kitsu:") -> TvProvider.KITSU
+            itemType == ContentType.SERIES && routingId.startsWith("tvdb:") -> TvProvider.TVDB
+            itemType == ContentType.MOVIE && routingId.startsWith("tmdb:") -> TvProvider.TMDB
+            else -> error("Unsupported visible hydration route: $itemType $routingId")
+        }
     }
 
     private fun railItemPreview(

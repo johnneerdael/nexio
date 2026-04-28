@@ -7,7 +7,10 @@ import com.nexio.tv.domain.model.RailDisplaySeed
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.SourcePayloadQuality
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RailPreviewFirstPaintContractTest {
@@ -43,43 +46,47 @@ class RailPreviewFirstPaintContractTest {
 
     @Test
     fun api_rail_first_paint_does_not_call_metadata_router() {
-        var metadataRouterCalls = 0
-
-        railPreviewsToCatalogRow(
-            addonId = "trakt",
-            addonName = "Trakt",
-            addonBaseUrl = "https://api.trakt.tv",
-            catalogId = "trakt_trending_shows",
-            catalogName = "Trending Shows",
-            type = ContentType.SERIES,
-            previews = listOf(preview())
-        )
-
-        assertEquals(0, metadataRouterCalls)
+        assertFirstPaintHelperOnlyAcceptsDisplayInputs()
+        assertFirstPaintHelperDoesNotReference("metadata router", "MetadataRouter", "metadataRouter", "Router")
+        assertFirstPaintConversionUsesPreviewDisplayDataOnly()
     }
 
     @Test
     fun api_rail_first_paint_does_not_call_provider_plan_runner() {
-        var providerPlanRunnerCalls = 0
-
-        railPreviewsToCatalogRow(
-            addonId = "trakt",
-            addonName = "Trakt",
-            addonBaseUrl = "https://api.trakt.tv",
-            catalogId = "trakt_trending_shows",
-            catalogName = "Trending Shows",
-            type = ContentType.SERIES,
-            previews = listOf(preview())
-        )
-
-        assertEquals(0, providerPlanRunnerCalls)
+        assertFirstPaintHelperOnlyAcceptsDisplayInputs()
+        assertFirstPaintHelperDoesNotReference("provider plan runner", "ProviderPlanRunner", "providerPlanRunner", "PlanRunner", "Runner")
+        assertFirstPaintConversionUsesPreviewDisplayDataOnly()
     }
 
     @Test
     fun api_rail_first_paint_does_not_execute_runtime_metadata_calls() {
-        var runtimeMetadataCalls = 0
+        assertFirstPaintHelperOnlyAcceptsDisplayInputs()
+        assertFirstPaintHelperDoesNotReference("runtime metadata calls", "runtimeMetadata", "fetchEnrichment", "fetchEpisodeEnrichment", "fetchSeasonEpisodes", ".fetch")
+        assertFirstPaintConversionUsesPreviewDisplayDataOnly()
+    }
 
-        railPreviewsToCatalogRow(
+    private fun assertFirstPaintHelperOnlyAcceptsDisplayInputs() {
+        val helperSource = railPreviewsToCatalogRowSource()
+
+        assertTrue(helperSource.contains("addonId: String"))
+        assertTrue(helperSource.contains("addonName: String"))
+        assertTrue(helperSource.contains("addonBaseUrl: String"))
+        assertTrue(helperSource.contains("catalogId: String"))
+        assertTrue(helperSource.contains("catalogName: String"))
+        assertTrue(helperSource.contains("type: ContentType"))
+        assertTrue(helperSource.contains("previews: List<RailItemPreview>"))
+    }
+
+    private fun assertFirstPaintHelperDoesNotReference(systemName: String, vararg prohibitedTerms: String) {
+        val helperSource = railPreviewsToCatalogRowSource()
+
+        prohibitedTerms.forEach { term ->
+            assertFalse("First-paint helper must not reference $systemName term '$term'", helperSource.contains(term))
+        }
+    }
+
+    private fun assertFirstPaintConversionUsesPreviewDisplayDataOnly() {
+        val row = railPreviewsToCatalogRow(
             addonId = "trakt",
             addonName = "Trakt",
             addonBaseUrl = "https://api.trakt.tv",
@@ -89,7 +96,20 @@ class RailPreviewFirstPaintContractTest {
             previews = listOf(preview())
         )
 
-        assertEquals(0, runtimeMetadataCalls)
+        assertEquals("Breaking Bad", row.items.single().name)
+        assertEquals("2008", row.items.single().releaseInfo)
+        assertEquals(null, row.items.single().poster)
+    }
+
+    private fun railPreviewsToCatalogRowSource(): String {
+        val source = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogUtils.kt").readText()
+        val start = source.indexOf("internal fun railPreviewsToCatalogRow(")
+        val end = source.indexOf("\n\ninternal fun HomeViewModel.catalogKey", start)
+
+        assertTrue("railPreviewsToCatalogRow source should exist", start >= 0)
+        assertTrue("railPreviewsToCatalogRow source boundary should exist", end > start)
+
+        return source.substring(start, end)
     }
 
     private fun preview(): RailItemPreview {
