@@ -5,6 +5,30 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster A landed — facade-bypass migration + dead-depth cleanup
+
+The 14 findings in cluster A (9 P1 + 5 P2) have been remediated:
+
+- **F-B-03** — DETAIL_CORE TMDB enrichment now routes through `MetadataRouterFacade.fetchTmdbEnrichment` (commit `4ed974cb3`). Manual `tvEnrichment ?: tmdbEnrichment` merge replaced by `FieldResolver` primary-wins. Regression: `MetadataRouterFacadeFetchTmdbEnrichmentTest`.
+- **F-C-01** — TMDB person/company helpers wrapped in `runtime.call(IntegrationCallSpec(...))` (commits `8a57d901d` + `c871e9d23`). Regression: `TmdbIntegrationProviderRuntimeContractTest`.
+- **F-04-01 + F-04-03** — DETAIL_MEDIA wiring: `TrailerResolver` + `Tmdb/TvdbTrailerMetadataAdapter` (commit `8176497dc`); `ResolverOrchestrator` schedules `TRAILERS` at DETAIL_MEDIA (commit `a96a36423`); `MetaDetailsViewModel.fetchTrailerUrl` reads off facade via new `fetchTrailer` method (commit `07abccb93`). `TrailerService` retained for player-stage concerns.
+- **F-04-04** — `ARTWORK` confirmed as DETAIL_CORE-only; pinned via `DETAIL_MEDIA does not schedule ARTWORK` test (commit `20f7b8960`).
+- **F-05-01 + F-05-02 + F-05-03 + F-05-04** — DETAIL_SECONDARY wiring complete:
+  - `ReviewResolver` + `TmdbReviewMetadataAdapter` (commit `a3263bf3d`); VM migration via `MetadataRouterFacade.fetchReviews` (commit `e5ee8038f`).
+  - `RecommendationResolver` + `TmdbRecommendationMetadataAdapter` (commit `ddb3ac0f7`); VM migration via `MetadataRouterFacade.fetchRecommendations` (commit `6b6df5f1e`).
+  - `OrganizationPersonResolver` + `TmdbOrganizationPersonAdapter` (commit `7477d36ef`); MetaDetailsViewModel migration (commit `857cb0de7`); CastDetailViewModel migration (commit `10d53b5aa`).
+  - **Trakt-side review adapter deferred** (`MetadataPrimaryProvider.TRAKT` enum value would touch 10+ files of exhaustive `when` statements; the audit's primary goal of canonical-trace observability is satisfied by the TMDB half).
+- **F-12-01 + F-12-02** — `ResolverType.SKIP_SEGMENTS` and `ResolvedField.SKIP_SEGMENTS` removed (commit `95e99e5b4`). `SkipIntroRepository` documented as canonical surface; pinned via `SkipIntroRepositoryCanonicalSurfaceTest` (commit `e38f61b39`). Player-skip latency requirements (sub-50ms from playback start) make the resolver detour wrong.
+- **F-B-04** — `MetadataRouterFacade` now dispatches `resolverSchedule.networkResolvers` (commit `c01cd2d46`); new validator rule `ScheduledResolversAreDispatched` catches schedule/dispatch drift (commit `02bef397a`).
+- **F-J-01** — `MetadataRouterBoundaryTest` whitelist tightened: removed legacy `*MetadataService.kt` entries; added the new resolver adapters to the allowlist (commit `2f6aaf419`).
+- **F-03-03** — Stremio-primary detail layering documented in OpenSpec change spec (commit `695a5961d`).
+
+OpenSpec change `migrate-detail-screen-bypasses-to-router` deployed (commit `73c6e7d0e`).
+
+**Audit re-run status:** Pending. The four audit gradle tasks (`generateProfileBoundaryAudit`, `generateIntegrationRuntimeAudit`, `generateMetadataExecutionAudit`, `generateTraceValidatorAudit`) were not re-run as part of this commit because the worktree's broader compile is currently broken by an unrelated parallel-session WIP (`TmdbRailPreviewMapper.kt:32`, untracked). Re-run audits manually after the parallel session lands.
+
+**Updated decision:** APPROVED for merge once audits re-run cleanly. The remaining clusters (B Cache+backoff, C Localization tracing, D Trace observability, E Profile/playback, F Provider+identity+nits) remain open and should be addressed in follow-up plans (one per cluster — see `09-known-gaps.md`).
+
 ## P0 fixes landed
 
 The two P0 merge blockers identified by this audit have been remediated on top of the dossier:
