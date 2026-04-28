@@ -25,6 +25,7 @@ object MetadataProviderAdapterShapeRegistry {
         TmdbApiShapes.COMPANY_FIND_BY_NAME,
         TvdbApiShapes.SERIES_EXTENDED,
         TvdbApiShapes.SERIES_EPISODES_LANGUAGE,
+        TvdbApiShapes.PERSON_EXTENDED,
         TvdbApiShapes.TV_TRAILERS,
         TraktApiShapes.MOVIE_COMMENTS,
         TraktApiShapes.SHOW_COMMENTS,

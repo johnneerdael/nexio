@@ -11,6 +11,7 @@ import com.nexio.tv.data.integration.metadata.TmdbReviewMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TmdbTrailerMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TraktReviewMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TvdbMetadataProviderAdapter
+import com.nexio.tv.data.integration.metadata.TvdbOrganizationPersonAdapter
 import com.nexio.tv.data.integration.metadata.TvdbTrailerMetadataAdapter
 import dagger.Binds
 import dagger.Module
@@ -56,6 +57,10 @@ abstract class MetadataExecutionModule {
     @Binds
     @IntoSet
     abstract fun bindTmdbOrganizationPersonAdapter(impl: TmdbOrganizationPersonAdapter): MetadataProviderAdapter
+
+    @Binds
+    @IntoSet
+    abstract fun bindTvdbOrganizationPersonAdapter(impl: TvdbOrganizationPersonAdapter): MetadataProviderAdapter
 
     @Binds
     abstract fun bindIdentityLookup(impl: RuntimeMetadataIdentityLookup): MetadataIdentityResolver.Lookup
