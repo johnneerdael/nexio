@@ -26,6 +26,11 @@ class ResolverOrchestrator @Inject constructor(
                 localResolvers += ResolverType.RATING
                 localResolvers += ResolverType.ARTWORK
             }
+            // ARTWORK belongs to DETAIL_CORE only (F-04-04). Backdrop/logo are returned by primary
+            // providers in their core response (TMDB *_CORE, TVDB SERIES); a separate DETAIL_MEDIA
+            // artwork pass would force a redundant network round-trip with no observable benefit.
+            // The pinning tests `DETAIL_MEDIA does not schedule ARTWORK` and
+            // `DETAIL_CORE still schedules ARTWORK` enforce this invariant.
             MetadataDepth.DETAIL_MEDIA -> {
                 networkResolvers += ResolverType.TRAILERS
             }
