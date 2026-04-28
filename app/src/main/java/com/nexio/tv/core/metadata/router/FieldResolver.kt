@@ -44,6 +44,7 @@ class FieldResolver @Inject constructor(
     ): ResolvedMetadataDocument {
         val fields = linkedMapOf<ResolvedField, Any>()
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
+        val providers = linkedMapOf<ResolvedField, String>()
         val sourceRoles = linkedMapOf<ResolvedField, SourceRole>()
         val sourceProviders = linkedMapOf<ResolvedField, String>()
         val localization = linkedMapOf<ResolvedField, MetadataLocalizationFieldTrace>()
@@ -55,6 +56,7 @@ class FieldResolver @Inject constructor(
                 candidate = candidate,
                 fields = fields,
                 owners = owners,
+                providers = providers,
                 sourceRoles = sourceRoles,
                 sourceProviders = sourceProviders,
                 localization = localization,
@@ -84,6 +86,7 @@ class FieldResolver @Inject constructor(
             selectField(
                 fields = fields,
                 owners = owners,
+                providers = providers,
                 sourceRoles = sourceRoles,
                 sourceProviders = sourceProviders,
                 localization = localization,
@@ -99,6 +102,7 @@ class FieldResolver @Inject constructor(
                 candidate = candidate,
                 fields = fields,
                 owners = owners,
+                providers = providers,
                 sourceRoles = sourceRoles,
                 sourceProviders = sourceProviders,
                 localization = localization,
@@ -127,6 +131,7 @@ class FieldResolver @Inject constructor(
     ): ResolvedMetadataDocument {
         val fields = linkedMapOf<ResolvedField, Any>()
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
+        val providers = linkedMapOf<ResolvedField, String>()
         val sourceRoles = linkedMapOf<ResolvedField, SourceRole>()
         val sourceProviders = linkedMapOf<ResolvedField, String>()
         val localization = linkedMapOf<ResolvedField, MetadataLocalizationFieldTrace>()
@@ -137,6 +142,7 @@ class FieldResolver @Inject constructor(
             selectField(
                 fields = fields,
                 owners = owners,
+                providers = providers,
                 sourceRoles = sourceRoles,
                 sourceProviders = sourceProviders,
                 localization = localization,
@@ -152,6 +158,7 @@ class FieldResolver @Inject constructor(
                 candidate = candidate,
                 fields = fields,
                 owners = owners,
+                providers = providers,
                 sourceRoles = sourceRoles,
                 sourceProviders = sourceProviders,
                 localization = localization,
@@ -165,6 +172,7 @@ class FieldResolver @Inject constructor(
                 candidate = candidate,
                 fields = fields,
                 owners = owners,
+                providers = providers,
                 sourceRoles = sourceRoles,
                 sourceProviders = sourceProviders,
                 localization = localization,
@@ -251,6 +259,7 @@ class FieldResolver @Inject constructor(
         candidate: MetadataCandidate,
         fields: MutableMap<ResolvedField, Any>,
         owners: MutableMap<ResolvedField, FieldOwner>,
+        providers: MutableMap<ResolvedField, String>,
         sourceRoles: MutableMap<ResolvedField, SourceRole>,
         sourceProviders: MutableMap<ResolvedField, String>,
         localization: MutableMap<ResolvedField, MetadataLocalizationFieldTrace>,
@@ -263,6 +272,7 @@ class FieldResolver @Inject constructor(
                 selectField(
                     fields = fields,
                     owners = owners,
+                    providers = providers,
                     sourceRoles = sourceRoles,
                     sourceProviders = sourceProviders,
                     localization = localization,
@@ -280,7 +290,7 @@ class FieldResolver @Inject constructor(
                 )
                 rejectedByField.getOrPut(field) { mutableListOf() }.add(
                     mapOf(
-                        "provider" to sourceProviders[field],
+                        "provider" to (providers[field] ?: sourceProviders[field]),
                         "sourceProvider" to sourceProviders[field],
                         "sourceRole" to SourceRole.RAIL_PREVIEW.name,
                         "reason" to "dedicated resolver field replaces rail preview"
@@ -289,6 +299,7 @@ class FieldResolver @Inject constructor(
                 selectField(
                     fields = fields,
                     owners = owners,
+                    providers = providers,
                     sourceRoles = sourceRoles,
                     sourceProviders = sourceProviders,
                     localization = localization,
@@ -335,6 +346,7 @@ class FieldResolver @Inject constructor(
     private fun selectField(
         fields: MutableMap<ResolvedField, Any>,
         owners: MutableMap<ResolvedField, FieldOwner>,
+        providers: MutableMap<ResolvedField, String>,
         sourceRoles: MutableMap<ResolvedField, SourceRole>,
         sourceProviders: MutableMap<ResolvedField, String>,
         localization: MutableMap<ResolvedField, MetadataLocalizationFieldTrace>,
@@ -345,6 +357,7 @@ class FieldResolver @Inject constructor(
     ) {
         fields[field] = fieldValue.value
         owners[field] = selectedOwner
+        providers[field] = candidate.provider.name
         sourceRoles[field] = effectiveSourceRole(candidate, fieldValue)
         sourceProviders[field] = candidate.sourceProvider
         candidate.localization[field]?.let { localization[field] = it }

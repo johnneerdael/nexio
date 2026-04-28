@@ -125,6 +125,17 @@ class RailPreviewFieldResolverTest {
         assertEquals("TVDB_ARTWORK", payload["selectedProvider"])
         assertEquals("ARTWORK", payload["sourceRole"])
         assertEquals("dedicated resolver field replaces rail preview", payload["ownershipRule"])
+        @Suppress("UNCHECKED_CAST")
+        val rejected = payload["rejectedCandidates"] as List<Map<String, Any?>>
+        assertEquals(
+            mapOf(
+                "provider" to "TVDB",
+                "sourceProvider" to "TRAKT",
+                "sourceRole" to "RAIL_PREVIEW",
+                "reason" to "dedicated resolver field replaces rail preview"
+            ),
+            rejected.single()
+        )
     }
 
     @Test
