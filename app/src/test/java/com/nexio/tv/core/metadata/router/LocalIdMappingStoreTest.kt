@@ -74,6 +74,35 @@ class LocalIdMappingStoreTest {
     }
 
     @Test
+    fun `fribb durable row wins over router observed mapping`() = runTest {
+        withDatabase { db ->
+            val sourceId = imdbSource()
+            val store = LocalIdMappingStore(db.mediaIdentityDao())
+
+            store.persist(
+                IdMapping(
+                    sourceId = sourceId,
+                    provider = MetadataPrimaryProvider.TMDB,
+                    providerId = "fribb",
+                    source = IdMappingSource.FRIBB,
+                    evidence = "curated"
+                )
+            )
+            store.persist(
+                IdMapping(
+                    sourceId = sourceId,
+                    provider = MetadataPrimaryProvider.TMDB,
+                    providerId = "observed",
+                    source = IdMappingSource.ROUTER_OBSERVED,
+                    evidence = "rail observed"
+                )
+            )
+
+            assertEquals("fribb", store.lookup(MetadataPrimaryProvider.TMDB, sourceId)?.providerId)
+        }
+    }
+
+    @Test
     fun `mixed-case imdb lookup resolves durable normalized mapping`() = runTest {
         withDatabase { db ->
             val store = LocalIdMappingStore(db.mediaIdentityDao())
