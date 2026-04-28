@@ -1,13 +1,12 @@
 package com.nexio.tv.ui.screens.home
 
-import android.util.Log
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.SourceRole
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
+import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -19,13 +18,10 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.CancellationException
 
-private const val HOME_PROVIDER_METADATA_TAG = "HomeProviderMetadata"
-
 internal suspend fun overlayProviderLocalizedMetadataForHome(
     item: MetaPreview,
     fallbackContentId: String? = null,
-    metadataRouterFacade: MetadataRouterFacade,
-    providerMetadataRouter: ProviderMetadataRouter,
+    providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
     profileBoundary: ProfileBoundary,
     onLog: (String, String?) -> Unit = { _, _ -> }
 ): MetaPreview {
@@ -33,8 +29,7 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
         val decision = fetchProviderLocalizedMetadataDecisionForHome(
             item = item,
             fallbackContentId = fallbackContentId,
-            metadataRouterFacade = metadataRouterFacade,
-            providerMetadataRouter = providerMetadataRouter,
+            providerLocalizedMetadataResolver = providerLocalizedMetadataResolver,
             profileBoundary = profileBoundary
         )
         logHomeProviderDecisionDiagnostics(item, decision.diagnostics, onLog)
@@ -52,8 +47,7 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
     item: MetaPreview,
     fallbackContentId: String? = null,
     addonMetadata: HomeDisplayMetadata = item.toHomeDisplayMetadata(),
-    metadataRouterFacade: MetadataRouterFacade,
-    providerMetadataRouter: ProviderMetadataRouter,
+    providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
     profileBoundary: ProfileBoundary
 ): TvMetadataDecision<TvMetadataEnrichment> {
     val language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
@@ -62,7 +56,9 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
         contentType = item.type,
         sourceContext = item.toHomeMetadataSourceContext(
             addonMetadata = addonMetadata
-        ),
+        ).let { sourceContext ->
+            if (fallbackContentId == null) sourceContext else sourceContext.copy(previewSourceItemId = fallbackContentId)
+        },
         language = language,
         depth = MetadataDepth.DETAIL_CORE
     )
@@ -73,18 +69,7 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
         language = language
     )
 
-    try {
-        metadataRouterFacade.resolveRequest(metadataRequest)
-    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Log.w(
-            HOME_PROVIDER_METADATA_TAG,
-            "Canonical home metadata routing failed for ${item.apiType}:${item.id}: ${e.message}",
-            e
-        )
-    }
-    return providerMetadataRouter.fetchEnrichment(tvRequest)
+    return providerLocalizedMetadataResolver.fetchDecision(metadataRequest, tvRequest)
 }
 
 internal suspend fun MetadataRouterFacade.resolveHomeRequest(
@@ -114,8 +99,8 @@ internal suspend fun MetadataRouterFacade.resolveHomeRequest(
 internal fun HomeViewModel.metadataRouterFacadeOrNull(): MetadataRouterFacade? =
     runCatching { metadataRouterFacade }.getOrNull()
 
-internal fun HomeViewModel.providerMetadataRouterOrNull(): ProviderMetadataRouter? =
-    runCatching { providerMetadataRouter }.getOrNull()
+internal fun HomeViewModel.providerLocalizedMetadataResolverOrNull(): ProviderLocalizedMetadataResolver? =
+    runCatching { providerLocalizedMetadataResolver }.getOrNull()
 
 internal suspend fun HomeViewModel.resolveHomeRequestIfAvailable(
     item: MetaPreview,

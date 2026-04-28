@@ -13,7 +13,7 @@ import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
-import com.nexio.tv.core.tvdb.ProviderMetadataRouter
+import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
@@ -69,7 +69,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val metadataRouterFacade: MetadataRouterFacade,
-    private val providerMetadataRouter: ProviderMetadataRouter,
+    private val providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val profileBoundary: ProfileBoundary,
     private val playbackActivityTracker: PlaybackActivityTracker,
@@ -89,8 +89,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     ): MetaPreview {
         return overlayProviderLocalizedMetadataForHome(
             item = item,
-            metadataRouterFacade = metadataRouterFacade,
-            providerMetadataRouter = providerMetadataRouter,
+            providerLocalizedMetadataResolver = providerLocalizedMetadataResolver,
             profileBoundary = profileBoundary,
             onLog = onLog
         )

@@ -13,6 +13,7 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -40,7 +41,10 @@ class HomeViewModelTvdbProviderRoutingTest {
         val profileBoundary = mockk<ProfileBoundary>()
         val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
-        every { viewModel.providerMetadataRouter } returns tvMetadataRouter
+        every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            providerMetadataRouter = tvMetadataRouter
+        )
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
         every { viewModel.titleRatingOverrideRepository } returns titleRatingOverrideRepository
@@ -69,7 +73,10 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
-        every { viewModel.providerMetadataRouter } returns tvMetadataRouter
+        every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            providerMetadataRouter = tvMetadataRouter
+        )
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
         every { profileBoundary.currentLanguageTag() } returns "en"
@@ -108,7 +115,10 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
-        every { viewModel.providerMetadataRouter } returns tvMetadataRouter
+        every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            providerMetadataRouter = tvMetadataRouter
+        )
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore
         every { viewModel.profileBoundary } returns profileBoundary
