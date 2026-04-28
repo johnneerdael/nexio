@@ -5,8 +5,12 @@ import com.nexio.tv.core.trace.FirstPaintTracer
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -75,5 +79,27 @@ class HomeFirstPaintMetadataMapperTest {
         assertTrue(fields.contains("background"))
         assertTrue(fields.contains("description"))
         assertTrue(fields.contains("releaseInfo"))
+    }
+
+    @Test
+    fun `home first paint tracer records rail preview source for rail derived meta previews`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "session-rail" })
+        FirstPaintTracer.install(events, profileHashProvider = { "profile-hash" })
+
+        val preview = preview().copy(
+            firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+            firstPaintSourceProvider = ProviderId.TRAKT,
+            firstPaintStableIds = ProviderIds(tvdb = "81189", trakt = "1"),
+            firstPaintRailSource = RailSource.BUILT_IN_TRAKT,
+            firstPaintSourceItemId = "trakt:show:1"
+        )
+
+        preview.toFirstPaintHomeDisplayMetadata()
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertEquals("RAIL_PREVIEW", payload["source"])
+        assertEquals(false, payload["routerExecuted"])
+        assertEquals(false, payload["networkExecuted"])
     }
 }
