@@ -147,7 +147,7 @@ class MetadataRouterFacadeTest {
 
         val overviewPayload = selectedTracePayload(sink, ResolvedField.OVERVIEW)
         assertEquals("ADDON_PREVIEW", overviewPayload["sourceRole"])
-        assertEquals("primary always wins", overviewPayload["ownershipRule"])
+        assertEquals("addon preview fills until canonical arrives", overviewPayload["ownershipRule"])
 
         val titlePayload = selectedTracePayload(sink, ResolvedField.TITLE)
         assertEquals("PRIMARY", titlePayload["sourceRole"])
