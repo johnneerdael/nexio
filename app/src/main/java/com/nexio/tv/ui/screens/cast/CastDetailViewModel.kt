@@ -45,23 +45,22 @@ class CastDetailViewModel @Inject constructor(
     private fun loadPersonDetail() {
         viewModelScope.launch {
             try {
-                val detail = if (provider.equals("tvdb", ignoreCase = true)) {
-                    // TODO(F-05-04 follow-up): route TVDB person fetch through MetadataRouterFacade once a TVDB-side
-                    //   facade method exists (TmdbOrganizationPersonAdapter only covers TMDB).
-                    tvdbPersonService.fetchPersonDetail(personId)
+                val contentIdPrefix = if (provider.equals("tvdb", ignoreCase = true)) {
+                    "tvdb:person:"
                 } else {
-                    metadataRouterFacade.fetchPersonDetail(
-                        metadataRequest = MetadataRequest(
-                            contentId = "tmdb:person:$personId",
-                            contentType = ContentType.MOVIE,  // sentinel; person-by-id has no canonical content type
-                            sourceContext = MetadataSourceContext(),
-                            language = "eng",
-                            depth = MetadataDepth.DETAIL_SECONDARY
-                        ),
-                        personId = personId,
-                        preferCrewCredits = preferCrew
-                    )
+                    "tmdb:person:"
                 }
+                val detail = metadataRouterFacade.fetchPersonDetail(
+                    metadataRequest = MetadataRequest(
+                        contentId = "$contentIdPrefix$personId",
+                        contentType = ContentType.MOVIE,  // sentinel; person-by-id has no canonical content type
+                        sourceContext = MetadataSourceContext(),
+                        language = "eng",
+                        depth = MetadataDepth.DETAIL_SECONDARY
+                    ),
+                    personId = personId,
+                    preferCrewCredits = preferCrew
+                )
                 if (detail != null) {
                     _uiState.value = CastDetailUiState.Success(detail)
                 } else {
