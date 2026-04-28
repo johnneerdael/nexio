@@ -14,39 +14,6 @@ class MetadataCacheKeys @Inject constructor() {
     ): String =
         "metadata:provider:${provider.name.lowercase()}:shape=$apiShapeId:operation=$operationKey"
 
-    fun localized(
-        provider: String,
-        apiShapeId: String,
-        contentId: String,
-        language: String,
-        policyVersion: Int,
-        qualifiers: List<String> = emptyList()
-    ): String {
-        require(provider.isNotBlank()) { "provider must not be blank" }
-        require(apiShapeId.isNotBlank()) { "apiShapeId must not be blank" }
-        require(contentId.isNotBlank()) { "contentId must not be blank" }
-        require(language.isNotBlank()) { "language must not be blank" }
-        require(policyVersion > 0) { "policyVersion must be positive" }
-
-        val normalizedLanguage = language.trim().lowercase(Locale.ROOT)
-        val deterministicQualifiers = qualifiers
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .sorted()
-
-        return IntegrationKeyFactory.build(
-            "metadata",
-            provider,
-            apiShapeId,
-            contentId,
-            *deterministicQualifiers.toTypedArray(),
-            "lang",
-            normalizedLanguage,
-            "policy",
-            policyVersion.toString()
-        )
-    }
-
     fun routerDecisionKey(
         parentId: String,
         sourceContext: MetadataSourceContext,
