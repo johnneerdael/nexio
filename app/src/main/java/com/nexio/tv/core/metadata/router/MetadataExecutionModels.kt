@@ -21,6 +21,32 @@ data class ProviderPlanRunResult(
     val trace: List<MetadataRouteTrace>
 )
 
+/**
+ * Returns the PRIMARY_CORE step's candidate iff that candidate carries the requested [field].
+ *
+ * Used by the resolver dispatch loop in [MetadataRouterFacade.resolveRequest] to feed
+ * `primary` into the per-field resolvers (TRAILERS / REVIEWS / RECOMMENDATIONS /
+ * ORGANIZATION_PERSON). Returns null when the primary step did not contribute the field —
+ * the resolver will then pick from secondaries only.
+ */
+fun ProviderPlanRunResult.primaryCandidateFor(field: ResolvedField): MetadataCandidate? =
+    stepResults.firstOrNull { stepResult ->
+        stepResult.step.role == ProviderPlanRole.PRIMARY_CORE &&
+            stepResult.candidate?.fields?.containsKey(field) == true
+    }?.candidate
+
+/**
+ * Returns every non-PRIMARY_CORE step candidate that carries the requested [field], in
+ * plan order. Includes MEDIA / SECONDARY / SEASON / PLAYER step candidates.
+ */
+fun ProviderPlanRunResult.secondaryCandidatesFor(field: ResolvedField): List<MetadataCandidate> =
+    stepResults.mapNotNull { stepResult ->
+        val candidate = stepResult.candidate ?: return@mapNotNull null
+        if (stepResult.step.role == ProviderPlanRole.PRIMARY_CORE) return@mapNotNull null
+        if (!candidate.fields.containsKey(field)) return@mapNotNull null
+        candidate
+    }
+
 data class MetadataResolutionResult(
     val route: MetadataRoute?,
     val plan: ProviderExecutionPlan?,

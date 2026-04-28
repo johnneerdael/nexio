@@ -1,5 +1,9 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
+import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
+import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
+import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDiagnosticEvent
@@ -29,7 +33,11 @@ class MetadataRouterFacade @Inject constructor(
     private val providerPlanRunner: ProviderPlanRunner,
     private val fieldResolver: FieldResolver,
     private val metadataSecondaryRepository: MetadataSecondaryRepository? = null,
-    private val trailerService: TrailerService? = null
+    private val trailerService: TrailerService? = null,
+    private val trailerResolver: TrailerResolver? = null,
+    private val reviewResolver: ReviewResolver? = null,
+    private val recommendationResolver: RecommendationResolver? = null,
+    private val organizationPersonResolver: OrganizationPersonResolver? = null
 ) {
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
         val routed = router.route(request)
@@ -64,6 +72,47 @@ class MetadataRouterFacade @Inject constructor(
             secondary = runResult.secondaryCandidates
         )
         val displayMetadata = resolvedDocument.toHomeDisplayMetadata(initialDisplay)
+
+        // F-B-04: dispatch scheduled networkResolvers and emit metadata.field_selected events for each.
+        // Each resolver consumes candidates produced by ProviderPlanRunner and either picks a winner
+        // (TrailerResolver, RecommendationResolver) or aggregates (ReviewResolver, OrganizationPersonResolver).
+        // ARTWORK / ADDON_DISPLAY / RATING / TRACKING participate via FieldResolver / orchestrator local
+        // pass — no separate dispatch needed. SKIP_SEGMENTS will be removed in Task 20.
+        resolverSchedule.networkResolvers.forEach { resolverType ->
+            when (resolverType) {
+                ResolverType.TRAILERS -> trailerResolver?.resolve(
+                    contentId = request.contentId,
+                    primary = runResult.primaryCandidateFor(ResolvedField.TRAILERS),
+                    secondary = runResult.secondaryCandidatesFor(ResolvedField.TRAILERS)
+                )
+                ResolverType.REVIEWS -> reviewResolver?.resolve(
+                    contentId = request.contentId,
+                    primary = runResult.primaryCandidateFor(ResolvedField.REVIEWS),
+                    secondary = runResult.secondaryCandidatesFor(ResolvedField.REVIEWS)
+                )
+                ResolverType.RECOMMENDATIONS -> recommendationResolver?.resolve(
+                    contentId = request.contentId,
+                    primary = runResult.primaryCandidateFor(ResolvedField.RECOMMENDATIONS),
+                    secondary = runResult.secondaryCandidatesFor(ResolvedField.RECOMMENDATIONS)
+                )
+                ResolverType.ORGANIZATION_PERSON -> organizationPersonResolver?.resolve(
+                    contentId = request.contentId,
+                    primary = runResult.primaryCandidateFor(ResolvedField.CAST)
+                        ?: runResult.primaryCandidateFor(ResolvedField.CREW)
+                        ?: runResult.primaryCandidateFor(ResolvedField.ORGANIZATION_LIST),
+                    secondary = (
+                        runResult.secondaryCandidatesFor(ResolvedField.CAST) +
+                            runResult.secondaryCandidatesFor(ResolvedField.CREW) +
+                            runResult.secondaryCandidatesFor(ResolvedField.ORGANIZATION_LIST)
+                        ).distinct()
+                )
+                ResolverType.ARTWORK,
+                ResolverType.ADDON_DISPLAY,
+                ResolverType.RATING,
+                ResolverType.TRACKING,
+                ResolverType.SKIP_SEGMENTS -> Unit
+            }
+        }
 
         return MetadataResolutionResult(
             route = route,
