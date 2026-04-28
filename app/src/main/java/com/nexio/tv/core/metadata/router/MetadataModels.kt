@@ -3,7 +3,7 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 
-enum class MetadataPrimaryProvider { TMDB, TVDB, KITSU }
+enum class MetadataPrimaryProvider { TMDB, TVDB, KITSU, IMDB, TRAKT, SIMKL }
 
 enum class MetadataDecisionReason {
     KITSU_PREFIX_DIRECT,

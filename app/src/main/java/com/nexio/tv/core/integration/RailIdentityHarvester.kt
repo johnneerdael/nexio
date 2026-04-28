@@ -1,5 +1,6 @@
 package com.nexio.tv.core.integration
 
+import com.nexio.tv.core.metadata.router.AnimeIdScheme
 import com.nexio.tv.core.metadata.router.IdMapping
 import com.nexio.tv.core.metadata.router.IdMappingSource
 import com.nexio.tv.core.metadata.router.IdMappingStore
@@ -23,26 +24,43 @@ class RailIdentityHarvester @Inject constructor(
     }
 
     private fun ProviderIds.directMappings(railId: String): List<IdMapping> {
-        val imdbSource = imdb?.let { parseMetadataId(it) ?: parseMetadataId("imdb:$it") }
-        val animeSources = listOfNotNull(
-            mal?.let { parseMetadataId("mal:$it") },
-            anilist?.let { parseMetadataId("anilist:$it") },
-            anidb?.let { parseMetadataId("anidb:$it") }
-        )
-        val kitsuTarget = kitsu.cleanId()
+        val explicitIds = directIds()
 
         return buildList {
-            imdbSource?.let { sourceId ->
-                tmdb.cleanId()?.let { add(sourceId.mappingTo(MetadataPrimaryProvider.TMDB, it, railId)) }
-                tvdb.cleanId()?.let { add(sourceId.mappingTo(MetadataPrimaryProvider.TVDB, it, railId)) }
-                kitsuTarget?.let { add(sourceId.mappingTo(MetadataPrimaryProvider.KITSU, it, railId)) }
-            }
-            kitsuTarget?.let { providerId ->
-                animeSources.forEach { sourceId ->
-                    add(sourceId.mappingTo(MetadataPrimaryProvider.KITSU, providerId, railId))
+            explicitIds.forEach { source ->
+                explicitIds.forEach { target ->
+                    val provider = target.provider
+                    if (provider != null && source.id != target.id) {
+                        add(source.id.mappingTo(provider, target.id.value, railId))
+                    }
                 }
             }
         }
+    }
+
+    private fun ProviderIds.directIds(): List<DirectStableId> =
+        listOfNotNull(
+            imdb.directId(AnimeIdScheme.IMDB, MetadataPrimaryProvider.IMDB, "imdb"),
+            tmdb.directId(AnimeIdScheme.TMDB, MetadataPrimaryProvider.TMDB, "tmdb"),
+            tvdb.directId(AnimeIdScheme.TVDB, MetadataPrimaryProvider.TVDB, "tvdb"),
+            trakt.directId(AnimeIdScheme.TRAKT, MetadataPrimaryProvider.TRAKT, "trakt"),
+            simkl.directId(AnimeIdScheme.SIMKL, MetadataPrimaryProvider.SIMKL, "simkl"),
+            kitsu.directId(AnimeIdScheme.KITSU, MetadataPrimaryProvider.KITSU, "kitsu"),
+            mal.directId(AnimeIdScheme.MAL, provider = null, prefix = "mal"),
+            anilist.directId(AnimeIdScheme.ANILIST, provider = null, prefix = "anilist"),
+            anidb.directId(AnimeIdScheme.ANIDB, provider = null, prefix = "anidb")
+        )
+
+    private fun String?.directId(
+        scheme: AnimeIdScheme,
+        provider: MetadataPrimaryProvider?,
+        prefix: String
+    ): DirectStableId? {
+        val clean = cleanId() ?: return null
+        val parsed = parseMetadataId(clean)?.takeIf { it.scheme == scheme }
+            ?: parseMetadataId("$prefix:$clean")?.takeIf { it.scheme == scheme }
+            ?: return null
+        return DirectStableId(id = parsed, provider = provider)
     }
 
     private fun ParsedMetadataId.mappingTo(
@@ -60,4 +78,9 @@ class RailIdentityHarvester @Inject constructor(
 
     private fun String?.cleanId(): String? =
         this?.trim()?.takeIf { it.isNotEmpty() }
+
+    private data class DirectStableId(
+        val id: ParsedMetadataId,
+        val provider: MetadataPrimaryProvider?
+    )
 }

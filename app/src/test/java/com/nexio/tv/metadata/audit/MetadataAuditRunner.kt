@@ -373,6 +373,7 @@ class MetadataAuditRunner private constructor(
                 com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> MetadataDecisionReason.ITEM_TYPE_SERIES
                 com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> MetadataDecisionReason.ITEM_TYPE_MOVIE
                 com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> MetadataDecisionReason.KITSU_PREFIX_DIRECT
+                else -> MetadataDecisionReason.ITEM_TYPE_MOVIE
             },
             targetIds = targetIds,
             preResolutionTargetIdRequiresIdentityResolution = false,
@@ -1042,6 +1043,7 @@ private class AuditMetadataProviderAdapter(
             com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> tvdbLanguage(route.language)
             com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> tmdbLanguage(route.language)
             com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> kitsuLanguage(route.language)
+            else -> tmdbLanguage(route.language)
         }
 
     private fun tvdbLanguage(language: String?): String {
@@ -1070,6 +1072,7 @@ private class AuditMetadataProviderAdapter(
             com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> "eng"
             com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> "en-US"
             com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> "en"
+            else -> "en-US"
         }
 }
 

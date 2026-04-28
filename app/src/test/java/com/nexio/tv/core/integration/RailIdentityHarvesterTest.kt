@@ -15,12 +15,11 @@ import com.nexio.tv.domain.model.SourcePayloadQuality
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RailIdentityHarvesterTest {
     @Test
-    fun `harvest persists explicit simkl imdb tmdb tvdb ids without invented mappings`() = runTest {
+    fun `harvest persists direct pairwise simkl imdb tmdb tvdb ids`() = runTest {
         val idMappingStore = InMemoryIdMappingStore()
         val harvester = RailIdentityHarvester(idMappingStore)
         val preview = RailItemPreview(
@@ -38,12 +37,61 @@ class RailIdentityHarvesterTest {
 
         val facts = harvester.harvest(preview)
 
-        assertEquals(2, facts.size)
+        assertEquals(12, facts.size)
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("simkl:12345")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tt1375666")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tt1375666")!!))
-        assertNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tvdb:999")!!))
-        assertNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tmdb:27205")!!))
-        assertNull(parseMetadataId("simkl:12345"))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.SIMKL, parseMetadataId("tt1375666")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tvdb:999")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tmdb:27205")!!))
+    }
+
+    @Test
+    fun `harvest persists direct pairwise trakt imdb tmdb tvdb ids`() = runTest {
+        val idMappingStore = InMemoryIdMappingStore()
+        val harvester = RailIdentityHarvester(idMappingStore)
+        val preview = RailItemPreview(
+            railId = "trakt_popular_movies",
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            sourceItemId = "trakt:67890",
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(trakt = "67890", imdb = "tt0133093", tmdb = "603", tvdb = "777"),
+            display = RailDisplaySeed(title = "The Matrix"),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash",
+            generatedAtMs = 1_000L
+        )
+
+        val facts = harvester.harvest(preview)
+
+        assertEquals(12, facts.size)
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TRAKT, parseMetadataId("tt0133093")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("trakt:67890")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tvdb:777")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tmdb:603")!!))
+    }
+
+    @Test
+    fun `harvest does not invent mappings when only tmdb id exists`() = runTest {
+        val idMappingStore = InMemoryIdMappingStore()
+        val harvester = RailIdentityHarvester(idMappingStore)
+        val preview = RailItemPreview(
+            railId = "tmdb_movie_popular",
+            railSource = RailSource.BUILT_IN_TMDB,
+            sourceProvider = ProviderId.TMDB,
+            sourceItemId = "tmdb:603",
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(tmdb = "603"),
+            display = RailDisplaySeed(title = "The Matrix"),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash",
+            generatedAtMs = 1_000L
+        )
+
+        val facts = harvester.harvest(preview)
+
+        assertEquals(0, facts.size)
     }
 
     @Test
@@ -65,11 +113,15 @@ class RailIdentityHarvesterTest {
 
         val facts = harvester.harvest(preview)
 
-        assertEquals(4, facts.size)
+        assertEquals(8, facts.size)
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.KITSU, parseMetadataId("tt0388629")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.KITSU, parseMetadataId("mal:21")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.KITSU, parseMetadataId("anilist:1")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.KITSU, parseMetadataId("anidb:2")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("kitsu:7442")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("mal:21")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("anilist:1")!!))
+        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("anidb:2")!!))
     }
 
     @Test

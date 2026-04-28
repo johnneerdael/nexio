@@ -7,7 +7,7 @@ import com.nexio.tv.core.anime.ContentMediaKind
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class AnimeIdScheme { KITSU, MAL, ANILIST, ANIDB, IMDB, TMDB, TVDB, UNKNOWN }
+enum class AnimeIdScheme { KITSU, MAL, ANILIST, ANIDB, IMDB, TMDB, TVDB, TRAKT, SIMKL, UNKNOWN }
 
 data class ParsedMetadataId(
     val scheme: AnimeIdScheme,
@@ -52,7 +52,9 @@ class AssetAnimeIdentityIndex @Inject constructor(
             AnimeIdScheme.ANIDB -> AnimeIdSource.ANIDB
             AnimeIdScheme.IMDB -> AnimeIdSource.IMDB
             AnimeIdScheme.TMDB,
-            AnimeIdScheme.TVDB -> null
+            AnimeIdScheme.TVDB,
+            AnimeIdScheme.TRAKT,
+            AnimeIdScheme.SIMKL -> null
             AnimeIdScheme.UNKNOWN -> null
         }
 }
@@ -69,6 +71,8 @@ object MetadataIdParser {
             lower.startsWith("imdb:") -> prefixed(AnimeIdScheme.IMDB, raw)
             lower.startsWith("tmdb:") -> prefixed(AnimeIdScheme.TMDB, raw)
             lower.startsWith("tvdb:") -> prefixed(AnimeIdScheme.TVDB, raw)
+            lower.startsWith("trakt:") -> prefixed(AnimeIdScheme.TRAKT, raw)
+            lower.startsWith("simkl:") -> prefixed(AnimeIdScheme.SIMKL, raw)
             lower.startsWith("tt") -> ParsedMetadataId(AnimeIdScheme.IMDB, normalizeMetadataIdValue(AnimeIdScheme.IMDB, raw), raw)
             else -> ParsedMetadataId(AnimeIdScheme.UNKNOWN, raw, raw)
         }
@@ -88,7 +92,9 @@ fun normalizeMetadataIdValue(scheme: AnimeIdScheme, value: String): String =
         AnimeIdScheme.ANIDB,
         AnimeIdScheme.IMDB,
         AnimeIdScheme.TMDB,
-        AnimeIdScheme.TVDB -> value.trim().lowercase()
+        AnimeIdScheme.TVDB,
+        AnimeIdScheme.TRAKT,
+        AnimeIdScheme.SIMKL -> value.trim().lowercase()
         AnimeIdScheme.UNKNOWN -> value.trim()
     }
 
