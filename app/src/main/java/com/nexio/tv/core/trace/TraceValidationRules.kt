@@ -196,6 +196,63 @@ object TraceValidationRules {
                 .map { fail(this, it, "${map(it)["provider"]} boundary_check verdict=FAIL") }
     }
 
+    /**
+     * F-B-04 (Task 22): catches drift between `metadata.resolver_schedule` (what the
+     * orchestrator scheduled) and `metadata.field_selected` (what the dispatch loop in
+     * MetadataRouterFacade actually emitted). If a future change drops a resolver
+     * dispatch, this rule fires.
+     *
+     * Reads both `scheduled` (real shape from [com.nexio.tv.core.metadata.router.ResolverOrchestrator])
+     * and `networkResolvers` (subset key used by some fixtures) so the rule is
+     * robust to future renames.
+     */
+    val ScheduledResolversAreDispatched: TraceValidationRule = object : TraceValidationRule {
+        override val id = "ScheduledResolversAreDispatched"
+
+        // Each scheduled resolver type must produce at least one `field_selected`
+        // event matching one of the listed fields. Local-pass resolvers (ARTWORK,
+        // RATING, ADDON_DISPLAY) are emitted by FieldResolver under POSTER/BACKDROP/
+        // LOGO, RATING, TITLE; network resolvers emit their own dedicated field name.
+        private val resolverTypeToField: Map<String, Set<String>> = mapOf(
+            "REVIEWS" to setOf("REVIEWS"),
+            "RECOMMENDATIONS" to setOf("RECOMMENDATIONS"),
+            "ORGANIZATION_PERSON" to setOf("CAST", "CREW", "ORGANIZATION_LIST"),
+            "TRAILERS" to setOf("TRAILERS"),
+            "ARTWORK" to setOf("POSTER", "BACKDROP", "LOGO"),
+            "RATING" to setOf("RATING"),
+            "ADDON_DISPLAY" to setOf("TITLE"),
+            "TRACKING" to setOf("TRACKING")
+        )
+
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            val scheduleEvents = events.filter { it.eventType == "metadata.resolver_schedule" }
+            if (scheduleEvents.isEmpty()) return emptyList()
+
+            val dispatchedFields: Set<String> = events
+                .filter { it.eventType == "metadata.field_selected" }
+                .mapNotNull { (map(it)["field"] as? String)?.uppercase() }
+                .toSet()
+
+            return scheduleEvents.flatMap { e ->
+                val payload = map(e)
+                @Suppress("UNCHECKED_CAST")
+                val scheduled: List<String> = (
+                    (payload["scheduled"] as? List<*>)
+                        ?: (payload["networkResolvers"] as? List<*>)
+                        ?: emptyList<Any?>()
+                    ).filterIsInstance<String>()
+                val missing = scheduled
+                    .map { it.uppercase() }
+                    .filter { type ->
+                        val expected = resolverTypeToField[type] ?: return@filter false
+                        expected.none { it in dispatchedFields }
+                    }
+                if (missing.isEmpty()) emptyList()
+                else listOf(fail(this, e, "scheduled resolvers not dispatched: $missing"))
+            }
+        }
+    }
+
     val NoStaleProfileWritesAfterSwitch: TraceValidationRule = object : TraceValidationRule {
         override val id = "NoStaleProfileWritesAfterSwitch"
         override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
@@ -235,6 +292,7 @@ object TraceValidationRules {
         FieldHasOwnershipRule,
         SecondaryDoesNotOverwritePrimary,
         TraktSimklUsesCorrectProfile,
-        NoStaleProfileWritesAfterSwitch
+        NoStaleProfileWritesAfterSwitch,
+        ScheduledResolversAreDispatched
     )
 }
