@@ -1,6 +1,8 @@
 package com.nexio.tv.core.di
 
 import com.nexio.tv.core.tvdb.TvdbLoginGateway
+import com.nexio.tv.data.integration.tmdb.DefaultTmdbExternalIdLookupProvider
+import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import com.nexio.tv.data.integration.tvdb.TvdbLoginIntegrationProvider
 import com.nexio.tv.data.repository.DefaultProviderSettingsRepository
 import com.nexio.tv.data.repository.DefaultReviewsRepository
@@ -32,4 +34,10 @@ abstract class IntegrationProviderModule {
     abstract fun bindTvdbLoginGateway(
         impl: TvdbLoginIntegrationProvider
     ): TvdbLoginGateway
+
+    @Binds
+    @Singleton
+    abstract fun bindTmdbExternalIdLookupProvider(
+        impl: DefaultTmdbExternalIdLookupProvider
+    ): TmdbExternalIdLookupProvider
 }
