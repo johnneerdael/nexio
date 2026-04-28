@@ -225,6 +225,65 @@ class RailItemPreviewTest {
     }
 
     @Test
+    fun `best supported routing id prefers kitsu for kitsu rail items`() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_KITSU,
+            sourceProvider = ProviderId.KITSU,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(kitsu = "42", tvdb = "11"),
+            sourceItemId = "kitsu:anime:42"
+        )
+
+        assertEquals("kitsu:42", preview.bestSupportedRoutingId())
+    }
+
+    @Test
+    fun `best supported routing id prefers tvdb over kitsu for non kitsu series items`() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(kitsu = "42", tvdb = "11"),
+            sourceItemId = "trakt:show:1"
+        )
+
+        assertEquals("tvdb:11", preview.bestSupportedRoutingId())
+    }
+
+    @Test
+    fun `best supported routing id uses movie tmdb id`() {
+        val preview = railItemPreview(
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(tmdb = "99", tvdb = "11", imdb = "tt99"),
+            sourceItemId = "source:movie:1"
+        )
+
+        assertEquals("tmdb:99", preview.bestSupportedRoutingId())
+    }
+
+    @Test
+    fun `best supported routing id uses series tvdb id`() {
+        val preview = railItemPreview(
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(tmdb = "99", tvdb = "11", imdb = "tt99"),
+            sourceItemId = "source:series:1"
+        )
+
+        assertEquals("tvdb:11", preview.bestSupportedRoutingId())
+    }
+
+    @Test
+    fun `best supported routing id falls back to source item id when only imdb is available`() {
+        val preview = railItemPreview(
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(imdb = "tt99"),
+            sourceItemId = "source:series:1"
+        )
+
+        assertEquals("source:series:1", preview.bestSupportedRoutingId())
+    }
+
+    @Test
     fun `rail preview omits unsupported rating provider from meta rating`() {
         val preview = RailItemPreview(
             railId = "mdblist_top_shows",
@@ -283,5 +342,26 @@ class RailItemPreviewTest {
         assertNull(meta.imdbRating)
         assertNull(meta.ratingSource)
         assertEquals(emptyList<String>(), meta.trailerYtIds)
+    }
+
+    private fun railItemPreview(
+        railSource: RailSource = RailSource.ADDON_CATALOG,
+        sourceProvider: ProviderId = ProviderId.ADDON,
+        itemType: ContentType,
+        stableIds: ProviderIds,
+        sourceItemId: String
+    ): RailItemPreview {
+        return RailItemPreview(
+            railId = "rail",
+            railSource = railSource,
+            sourceProvider = sourceProvider,
+            sourceItemId = sourceItemId,
+            itemType = itemType,
+            stableIds = stableIds,
+            display = RailDisplaySeed(title = "Title"),
+            sourcePayloadQuality = SourcePayloadQuality.SPARSE_IDENTITY,
+            sourcePayloadHash = "hash",
+            generatedAtMs = 1_000L
+        )
     }
 }
