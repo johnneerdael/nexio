@@ -1,5 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -54,6 +56,98 @@ class MetadataRouterFacadeTest {
         assertTrue(adapter.calls > 0)
         assertEquals("Runtime title", result.resolvedDocument.title)
         assertEquals("Runtime title", result.displayMetadata.title)
+    }
+
+    @Test
+    fun `rail preview source context participates in production field resolution`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+        val sink = RecordingTraceSink()
+
+        val result = facade(
+            adapter,
+            fieldResolver = FieldResolver(
+                traceEvents = TraceMetadataEvents(sink, sessionId = { "metadata-router-facade-test" })
+            )
+        ).resolveRequest(
+            MetadataRequest(
+                contentId = "tvdb:123",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        title = "Rail title",
+                        description = "Rail overview"
+                    ),
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.TRAKT.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("Runtime title", result.resolvedDocument.title)
+        assertEquals("Rail overview", result.resolvedDocument.overview)
+        assertEquals(SourceRole.PRIMARY, result.resolvedDocument.sourceRoles[ResolvedField.TITLE])
+        assertEquals(SourceRole.RAIL_PREVIEW, result.resolvedDocument.sourceRoles[ResolvedField.OVERVIEW])
+        assertEquals("TRAKT", result.resolvedDocument.sourceProviders[ResolvedField.OVERVIEW])
+        assertEquals(
+            IgnoredFieldOverwrite(
+                field = ResolvedField.TITLE,
+                existingOwner = FieldOwner.PRIMARY,
+                attemptedOwner = FieldOwner.PRIMARY,
+                attemptedValue = "Rail title"
+            ),
+            result.resolvedDocument.ignoredOverwrites.single()
+        )
+
+        val titlePayload = selectedTracePayload(sink, ResolvedField.TITLE)
+        assertEquals("PRIMARY", titlePayload["sourceRole"])
+        assertEquals("primary canonical field replaces rail preview", titlePayload["ownershipRule"])
+        @Suppress("UNCHECKED_CAST")
+        val rejectedCandidates = titlePayload["rejectedCandidates"] as List<Map<String, Any?>>
+        assertEquals(
+            mapOf(
+                "provider" to "TRAKT",
+                "sourceProvider" to "TRAKT",
+                "sourceRole" to "RAIL_PREVIEW",
+                "reason" to "primary canonical field available"
+            ),
+            rejectedCandidates.single()
+        )
+    }
+
+    @Test
+    fun `addon preview source context remains addon preview for production fallback fields`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+        val sink = RecordingTraceSink()
+
+        val result = facade(
+            adapter,
+            fieldResolver = FieldResolver(
+                traceEvents = TraceMetadataEvents(sink, sessionId = { "metadata-router-facade-test" })
+            )
+        ).resolveRequest(
+            MetadataRequest(
+                contentId = "tvdb:123",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    addonId = "cinemeta",
+                    addonMetadata = HomeDisplayMetadata(
+                        title = "Addon title",
+                        description = "Addon overview"
+                    )
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("Runtime title", result.resolvedDocument.title)
+        assertEquals("Addon overview", result.resolvedDocument.overview)
+        assertEquals(SourceRole.ADDON_PREVIEW, result.resolvedDocument.sourceRoles[ResolvedField.OVERVIEW])
+        assertEquals("cinemeta", result.resolvedDocument.sourceProviders[ResolvedField.OVERVIEW])
+
+        val overviewPayload = selectedTracePayload(sink, ResolvedField.OVERVIEW)
+        assertEquals("ADDON_PREVIEW", overviewPayload["sourceRole"])
+        assertEquals("primary always wins", overviewPayload["ownershipRule"])
     }
 
     @Test
@@ -181,7 +275,8 @@ class MetadataRouterFacadeTest {
         identityLookup: MetadataIdentityResolver.Lookup = object : MetadataIdentityResolver.Lookup {
             override suspend fun tmdbToTvdb(tmdbId: String): String? = null
             override suspend fun tvdbToTmdb(tvdbId: String): String? = null
-        }
+        },
+        fieldResolver: FieldResolver = FieldResolver()
     ): MetadataRouterFacade =
         MetadataRouterFacade(
             router = MetadataRouter(
@@ -193,8 +288,17 @@ class MetadataRouterFacadeTest {
             resolverOrchestrator = ResolverOrchestrator(),
             identityResolver = MetadataIdentityResolver(identityLookup),
             providerPlanRunner = ProviderPlanRunner(adapters.toSet()),
-            fieldResolver = FieldResolver()
+            fieldResolver = fieldResolver
         )
+
+    private fun selectedTracePayload(
+        sink: RecordingTraceSink,
+        field: ResolvedField
+    ): Map<*, *> {
+        val event = sink.events
+            .first { it.eventType == "metadata.field_selected" && (it.payload as Map<*, *>)["field"] == field.name }
+        return event.payload as Map<*, *>
+    }
 
     private class RecordingMetadataProviderAdapter(
         override val provider: MetadataPrimaryProvider

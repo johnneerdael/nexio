@@ -67,7 +67,9 @@ class MetadataRouterFacade @Inject constructor(
         val route = routeRequest(request)
         val plan = providerPlanExecutor.buildPlan(route = route, depth = request.depth)
         val runResult = providerPlanRunner.run(plan)
-        val resolvedDocument = fieldResolver.resolve(
+        val previewCandidate = request.sourceContext.toPreviewCandidate(route.provider)
+        val resolvedDocument = fieldResolver.resolveWithPreview(
+            preview = previewCandidate,
             primary = runResult.primaryCandidate,
             secondary = runResult.secondaryCandidates
         )
@@ -468,6 +470,41 @@ class MetadataRouterFacade @Inject constructor(
             fieldOwners = emptyMap(),
             ignoredOverwrites = emptyList()
         )
+
+    private fun MetadataSourceContext.toPreviewCandidate(
+        fallbackProvider: MetadataPrimaryProvider
+    ): MetadataCandidate? {
+        val metadata = addonMetadata ?: return null
+        val fields = metadata.toPreviewFields()
+        if (fields.isEmpty()) return null
+
+        return MetadataCandidate(
+            provider = previewSourceProvider.toMetadataPrimaryProvider() ?: fallbackProvider,
+            fields = fields,
+            sourceProvider = previewSourceProvider ?: addonId ?: sourceName ?: fallbackProvider.name,
+            sourceRole = previewSourceRole
+        )
+    }
+
+    private fun HomeDisplayMetadata.toPreviewFields(): Map<ResolvedField, FieldValue> =
+        buildMap {
+            title?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
+            description?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
+            poster?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            backdrop?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
+            logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
+            imdbRating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
+            runtime?.toIntOrNull()?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            releaseInfo?.let { put(ResolvedField.RELEASE_DATE, FieldValue(it, FieldOwner.PRIMARY)) }
+            if (genres.isNotEmpty()) put(ResolvedField.GENRES, FieldValue(genres, FieldOwner.PRIMARY))
+        }
+
+    private fun String?.toMetadataPrimaryProvider(): MetadataPrimaryProvider? =
+        this?.let { providerName ->
+            MetadataPrimaryProvider.entries.firstOrNull { provider ->
+                provider.name.equals(providerName, ignoreCase = true)
+            }
+        }
 
     private fun ResolvedMetadataDocument.toHomeDisplayMetadata(fallback: HomeDisplayMetadata): HomeDisplayMetadata =
         fallback.copy(
