@@ -104,6 +104,7 @@ internal object TvdbEpisodeLocalization {
             val localizedOverview = localized?.overview.cleanLocalizedValue()
             if (localizedTitle == null || localizedOverview == null) id else null
         }
+            .sorted()  // F-E-05: deterministic truncation order
             .take(policy.maxPerEpisodeTranslationFallbacksPerRequest)
     }
 
