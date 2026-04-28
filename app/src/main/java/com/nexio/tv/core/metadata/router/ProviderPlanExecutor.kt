@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.KitsuApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
+import com.nexio.tv.core.integration.TraktApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -83,6 +84,17 @@ class ProviderPlanExecutor @Inject constructor() {
                 provider = MetadataPrimaryProvider.TMDB,
                 role = ProviderPlanRole.SECONDARY
             )
+            // F-05-02: when an IMDB id is available on the route, append a Trakt comments step
+            // alongside the TMDB reviews step. TraktReviewMetadataAdapter handles dispatch and
+            // emits a REVIEWS candidate the resolver merges into the aggregated review page.
+            if (route.targetIds.containsKey(MetadataPrimaryProvider.IMDB)) {
+                steps += step(
+                    apiShapeId = if (isSeries) TraktApiShapes.SHOW_COMMENTS else TraktApiShapes.MOVIE_COMMENTS,
+                    provider = MetadataPrimaryProvider.TRAKT,
+                    role = ProviderPlanRole.SECONDARY,
+                    required = false
+                )
+            }
         }
 
         return steps
