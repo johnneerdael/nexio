@@ -66,7 +66,8 @@ class FieldResolver @Inject constructor(
         }
 
         primary?.fields?.forEach { (field, fieldValue) ->
-            if (sourceRoles[field] == SourceRole.RAIL_PREVIEW) {
+            val previewSourceRole = sourceRoles[field]
+            if (previewSourceRole.isPreviewRole()) {
                 val previewValue = fields[field]
                 ignoredOverwrites += IgnoredFieldOverwrite(
                     field = field,
@@ -78,7 +79,7 @@ class FieldResolver @Inject constructor(
                     mapOf(
                         "provider" to (preview?.provider?.name ?: sourceProviders[field]),
                         "sourceProvider" to sourceProviders[field],
-                        "sourceRole" to SourceRole.RAIL_PREVIEW.name,
+                        "sourceRole" to previewSourceRole?.name,
                         "reason" to "primary canonical field available"
                     )
                 )
@@ -208,13 +209,13 @@ class FieldResolver @Inject constructor(
         fields.forEach { (field, value) ->
             val owner = owners[field] ?: FieldOwner.PRIMARY
             val selectedProvider = sourceProviders[field] ?: fallbackSourceProvider
-            val sourceRole = sourceRoles[field] ?: owner.defaultSourceRole()
-            val replacedRailPreview = rejectedByField[field]
-                ?.any { it["reason"] == "primary canonical field available" } == true
+            val sourceRole = sourceRoles[field] ?: defaultSourceRole(owner)
+            val replacedPreview = rejectedByField[field]
+                ?.firstOrNull { it["reason"] == "primary canonical field available" }
             val resolverReplacedRailPreview = rejectedByField[field]
                 ?.any { it["reason"] == "dedicated resolver field replaces rail preview" } == true
-            val rule = if (replacedRailPreview) {
-                "primary canonical field replaces rail preview"
+            val rule = if (replacedPreview != null) {
+                "primary canonical field replaces ${previewRoleLabel(replacedPreview["sourceRole"] as? String)}"
             } else if (resolverReplacedRailPreview) {
                 "dedicated resolver field replaces rail preview"
             } else if (sourceRole == SourceRole.RAIL_PREVIEW) {
@@ -254,6 +255,29 @@ class FieldResolver @Inject constructor(
             sourceProviders = sourceProviders
         )
     }
+
+    private fun SourceRole?.isPreviewRole(): Boolean =
+        this == SourceRole.RAIL_PREVIEW || this == SourceRole.ADDON_PREVIEW
+
+    private fun previewRoleLabel(sourceRole: String?): String =
+        when (sourceRole) {
+            SourceRole.RAIL_PREVIEW.name -> "rail preview"
+            SourceRole.ADDON_PREVIEW.name -> "addon preview"
+            else -> "preview"
+        }
+
+    private fun defaultSourceRole(owner: FieldOwner): SourceRole =
+        when (owner) {
+            FieldOwner.PRIMARY -> SourceRole.PRIMARY
+            FieldOwner.ARTWORK -> SourceRole.ARTWORK
+            FieldOwner.RATING -> SourceRole.RATING
+            FieldOwner.TRACKING -> SourceRole.TRACKING
+            FieldOwner.REVIEWS,
+            FieldOwner.TRAILERS,
+            FieldOwner.RECOMMENDATIONS,
+            FieldOwner.SKIP_SEGMENTS,
+            FieldOwner.ORGANIZATION_PERSON -> SourceRole.SECONDARY
+        }
 
     private fun applyMissingCandidate(
         candidate: MetadataCandidate,
@@ -369,7 +393,7 @@ class FieldResolver @Inject constructor(
     ): SourceRole {
         return if (
             candidate.sourceRole != SourceRole.PRIMARY &&
-            fieldValue.sourceRole == fieldValue.owner.defaultSourceRole()
+            fieldValue.sourceRole == defaultSourceRole(fieldValue.owner)
         ) {
             candidate.sourceRole
         } else {
