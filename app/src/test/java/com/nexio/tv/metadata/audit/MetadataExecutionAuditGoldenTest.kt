@@ -225,12 +225,16 @@ class MetadataExecutionAuditGoldenTest {
             .items
             .single()
         val title = item.selectedFieldsAfterHydration.single { it.field == "title" }
+        val poster = item.selectedFieldsAfterHydration.single { it.field == "poster" }
+        val overview = item.selectedFieldsAfterHydration.single { it.field == "overview" }
 
         assertTrue(title.rejectedCandidates.any { candidate ->
             candidate.provider == item.sourceProvider &&
                 candidate.sourceRole == "RAIL_PREVIEW" &&
                 candidate.reason == "primary canonical field available"
         })
+        assertTrue(poster.rejectedCandidates.isEmpty())
+        assertTrue(overview.rejectedCandidates.isEmpty())
     }
 
     @Test

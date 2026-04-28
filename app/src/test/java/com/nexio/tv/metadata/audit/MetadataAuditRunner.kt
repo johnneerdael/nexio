@@ -291,7 +291,8 @@ class MetadataAuditRunner private constructor(
                 fields = spec.hydratedFields,
                 sourceRole = "PRIMARY",
                 rejectedProvider = spec.sourceProvider,
-                rejectedSourceRole = "RAIL_PREVIEW"
+                rejectedSourceRole = "RAIL_PREVIEW",
+                rejectedFields = spec.previewFields.filterValues { value -> value != null }.keys
             )
         }.orEmpty()
         val runtimeCalls = route?.let {
@@ -393,7 +394,8 @@ class MetadataAuditRunner private constructor(
         fields: Map<String, String?>,
         sourceRole: String,
         rejectedProvider: String? = null,
-        rejectedSourceRole: String? = null
+        rejectedSourceRole: String? = null,
+        rejectedFields: Set<String> = emptySet()
     ): List<FieldSelectedEvent> =
         fields.mapNotNull { (field, value) ->
             value?.let {
@@ -403,7 +405,7 @@ class MetadataAuditRunner private constructor(
                     selectedProvider = provider,
                     sourceRole = sourceRole,
                     valuePreview = it,
-                    rejectedCandidates = if (rejectedProvider != null && rejectedSourceRole != null) {
+                    rejectedCandidates = if (field in rejectedFields && rejectedProvider != null && rejectedSourceRole != null) {
                         listOf(
                             RejectedCandidateReport(
                                 provider = rejectedProvider,
