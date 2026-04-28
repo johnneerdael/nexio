@@ -203,8 +203,12 @@ class FieldResolver @Inject constructor(
             val sourceRole = sourceRoles[field] ?: owner.defaultSourceRole()
             val replacedRailPreview = rejectedByField[field]
                 ?.any { it["reason"] == "primary canonical field available" } == true
+            val resolverReplacedRailPreview = rejectedByField[field]
+                ?.any { it["reason"] == "dedicated resolver field replaces rail preview" } == true
             val rule = if (replacedRailPreview) {
                 "primary canonical field replaces rail preview"
+            } else if (resolverReplacedRailPreview) {
+                "dedicated resolver field replaces rail preview"
             } else if (sourceRole == SourceRole.RAIL_PREVIEW) {
                 "rail preview fills field before canonical hydration"
             } else if (owner == FieldOwner.PRIMARY) {

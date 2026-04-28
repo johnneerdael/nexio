@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.RailItemPreview
 
@@ -35,6 +36,15 @@ object RailPreviewHydrationCoordinator {
         return targetIndices
             .sorted()
             .map(itemKeys::get)
+    }
+
+    fun providerForVisibleHydration(routingId: String, itemType: ContentType): TvProvider {
+        return when {
+            routingId.startsWith("kitsu:") -> TvProvider.KITSU
+            itemType == ContentType.SERIES && routingId.startsWith("tvdb:") -> TvProvider.TVDB
+            itemType == ContentType.MOVIE && routingId.startsWith("tmdb:") -> TvProvider.TMDB
+            else -> error("Unsupported visible hydration route: $itemType $routingId")
+        }
     }
 }
 

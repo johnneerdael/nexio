@@ -235,20 +235,10 @@ class RailPreviewHydrationCoordinatorTest {
         val routingId = preview.bestRoutingId()
 
         assertEquals(expectedRoutingId, routingId)
-        assertEquals(expectedProvider, preRouterVisibleHydrationProvider(routingId, preview.itemType))
-    }
-
-    /**
-     * Documents the pre-router contract for visible rail hydration. The production router graph is intentionally
-     * not constructed here; these tests pin the selected id plus the simple provider policy handed to that router.
-     */
-    private fun preRouterVisibleHydrationProvider(routingId: String, itemType: ContentType): TvProvider {
-        return when {
-            routingId.startsWith("kitsu:") -> TvProvider.KITSU
-            itemType == ContentType.SERIES && routingId.startsWith("tvdb:") -> TvProvider.TVDB
-            itemType == ContentType.MOVIE && routingId.startsWith("tmdb:") -> TvProvider.TMDB
-            else -> error("Unsupported visible hydration route: $itemType $routingId")
-        }
+        assertEquals(
+            expectedProvider,
+            RailPreviewHydrationCoordinator.providerForVisibleHydration(routingId, preview.itemType)
+        )
     }
 
     private fun railItemPreview(

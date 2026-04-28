@@ -94,6 +94,10 @@ class RailPreviewFieldResolverTest {
 
     @Test
     fun rail_preview_poster_replaced_by_primary_or_artwork_router() {
+        val sink = RecordingTraceSink()
+        val resolver = FieldResolver(
+            traceEvents = TraceMetadataEvents(sink, sessionId = { "rail-preview-test" })
+        )
         val preview = previewCandidate(
             ResolvedField.POSTER to FieldValue("https://preview.example/poster.jpg", FieldOwner.PRIMARY, SourceRole.RAIL_PREVIEW)
         )
@@ -116,6 +120,11 @@ class RailPreviewFieldResolverTest {
         assertEquals("https://artwork.example/poster.jpg", document.poster)
         assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
         assertEquals("TVDB_ARTWORK", document.sourceProviders[ResolvedField.POSTER])
+
+        val payload = selectedTracePayload(sink, ResolvedField.POSTER)
+        assertEquals("TVDB_ARTWORK", payload["selectedProvider"])
+        assertEquals("ARTWORK", payload["sourceRole"])
+        assertEquals("dedicated resolver field replaces rail preview", payload["ownershipRule"])
     }
 
     @Test
@@ -195,5 +204,14 @@ class RailPreviewFieldResolverTest {
             sourceRole = SourceRole.RAIL_PREVIEW,
             fields = mapOf(*fields)
         )
+    }
+
+    private fun selectedTracePayload(
+        sink: RecordingTraceSink,
+        field: ResolvedField
+    ): Map<*, *> {
+        val event = sink.events
+            .first { it.eventType == "metadata.field_selected" && (it.payload as Map<*, *>)["field"] == field.name }
+        return event.payload as Map<*, *>
     }
 }
