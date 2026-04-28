@@ -82,6 +82,11 @@ fun buildMetaDetailsViewModel(
     val titleRatingOverrideRepository = mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>()
     coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
 
+    val metadataSecondaryRepository = MetadataSecondaryRepository(
+        tmdbMetadataService = tmdbMetadataService,
+        kitsuMetadataService = kitsuMetadataService
+    )
+
     return MetaDetailsViewModel(
         context = context,
         metaRepository = metaRepository,
@@ -89,11 +94,8 @@ fun buildMetaDetailsViewModel(
         reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         tmdbService = tmdbService,
-        metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-        metadataSecondaryRepository = MetadataSecondaryRepository(
-            tmdbMetadataService = tmdbMetadataService,
-            kitsuMetadataService = kitsuMetadataService
-        ),
+        metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter, metadataSecondaryRepository),
+        metadataSecondaryRepository = metadataSecondaryRepository,
         profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),
         titleRatingOverrideRepository = titleRatingOverrideRepository,
