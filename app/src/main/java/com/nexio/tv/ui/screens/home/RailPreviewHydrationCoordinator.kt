@@ -16,8 +16,8 @@ object RailPreviewHydrationCoordinator {
         val targetIndices = mutableSetOf<Int>()
 
         val distance = adjacentCount.coerceAtLeast(0)
-        val visibleStart = (visibleRange.first - distance).coerceAtLeast(0)
-        val visibleEnd = (visibleRange.last + distance).coerceAtMost(lastIndex)
+        val visibleStart = visibleRange.first.coerceAtLeast(0)
+        val visibleEnd = visibleRange.last.coerceAtMost(lastIndex)
         if (visibleStart <= visibleEnd) {
             for (index in visibleStart..visibleEnd) {
                 targetIndices += index

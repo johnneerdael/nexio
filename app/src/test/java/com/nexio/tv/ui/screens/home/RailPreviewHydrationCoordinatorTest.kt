@@ -20,11 +20,11 @@ class RailPreviewHydrationCoordinatorTest {
             adjacentCount = 2
         )
 
-        assertEquals((8..16).map { "movie:tmdb:$it" }, targets)
+        assertEquals((10..14).map { "movie:tmdb:$it" }, targets)
     }
 
     @Test
-    fun `hydration targets visible range with adjacent margins when no item is focused`() {
+    fun `hydration targets visible range only when no item is focused`() {
         val targets = RailPreviewHydrationCoordinator.targetsForVisibleWindow(
             itemKeys = (0 until 20).map { "movie:tmdb:$it" },
             visibleRange = 10..14,
@@ -32,7 +32,7 @@ class RailPreviewHydrationCoordinatorTest {
             adjacentCount = 2
         )
 
-        assertEquals((8..16).map { "movie:tmdb:$it" }, targets)
+        assertEquals((10..14).map { "movie:tmdb:$it" }, targets)
     }
 
     @Test
@@ -52,8 +52,8 @@ class RailPreviewHydrationCoordinatorTest {
             adjacentCount = 2
         )
 
-        assertEquals((0..3).map { "movie:tmdb:$it" }, startTargets)
-        assertEquals((1..4).map { "movie:tmdb:$it" }, endTargets)
+        assertEquals((0..2).map { "movie:tmdb:$it" }, startTargets)
+        assertEquals((2..4).map { "movie:tmdb:$it" }, endTargets)
     }
 
     @Test
