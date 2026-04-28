@@ -205,13 +205,12 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         val localizedPreview = overlayProviderLocalizedMetadataForHome(
             item = item.toContinueWatchingProviderPreview(),
             fallbackContentId = item.providerFallbackContentId(),
-            metadataRouterFacade = metadataRouterFacadeOrNull()
-                ?: defaultMetadataRouterFacadeForManualConstruction(),
+            metadataRouterFacade = metadataRouterFacadeOrNull() ?: return item,
+            providerMetadataRouter = providerMetadataRouterOrNull() ?: return item,
             profileBoundary = profileBoundary
         )
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
-            metadataRouterFacade = metadataRouterFacadeOrNull()
-                ?: defaultMetadataRouterFacadeForManualConstruction(),
+            metadataRouterFacade = metadataRouterFacadeOrNull() ?: return item,
             item = item,
             language = tvdbLanguage
         )
@@ -335,7 +334,7 @@ private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPrevie
 }
 
 internal suspend fun localizedContinueWatchingEpisodeDescription(
-    metadataRouterFacade: com.nexio.tv.core.metadata.router.MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
+    metadataRouterFacade: com.nexio.tv.core.metadata.router.MetadataRouterFacade,
     item: ContinueWatchingItem,
     language: String? = null
 ): String? {

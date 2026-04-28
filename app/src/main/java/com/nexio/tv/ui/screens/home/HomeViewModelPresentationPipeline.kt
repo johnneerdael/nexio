@@ -3,15 +3,10 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
-import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.metadata.router.MetadataDepth
-import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
-import com.nexio.tv.core.tvdb.TvMetadataRequest
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -719,42 +714,13 @@ internal fun HomeViewModel.mergeFocusedItemEnrichment(
 }
 
 internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaPreview): TvMetadataEnrichment? {
-    if (item.type.isHomeTvContent() || AnimeStremioId.parse(item.id) != null) {
-        return metadataRouterFacade.fetchTvEnrichment(
-            metadataRequest = MetadataRequest(
-                contentId = item.id,
-                contentType = item.type,
-                sourceContext = item.toHomeMetadataSourceContext(
-                    addonMetadata = item.toHomeDisplayMetadata()
-                ),
-                language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
-                depth = MetadataDepth.DETAIL_CORE
-            ),
-            tvRequest = TvMetadataRequest(
-                contentId = item.id,
-                fallbackContentId = null,
-                contentType = item.type,
-                language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
-            )
-        ).value
-    }
-
-    return metadataRouterFacade.fetchTvEnrichment(
-        metadataRequest = MetadataRequest(
-            contentId = item.id,
-            contentType = item.type,
-            sourceContext = item.toHomeMetadataSourceContext(
-                addonMetadata = item.toHomeDisplayMetadata()
-            ),
-            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
-            depth = MetadataDepth.DETAIL_CORE
-        ),
-        tvRequest = TvMetadataRequest(
-            contentId = item.id,
-            fallbackContentId = null,
-            contentType = item.type,
-            language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
-        )
+    return fetchProviderLocalizedMetadataDecisionForHome(
+        item = item,
+        fallbackContentId = null,
+        addonMetadata = item.toHomeDisplayMetadata(),
+        metadataRouterFacade = metadataRouterFacade,
+        providerMetadataRouter = providerMetadataRouter,
+        profileBoundary = profileBoundary
     ).value
 }
 
