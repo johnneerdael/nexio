@@ -220,6 +220,8 @@ class FieldResolver @Inject constructor(
                 "dedicated resolver field replaces rail preview"
             } else if (sourceRole == SourceRole.RAIL_PREVIEW) {
                 "rail preview fills field before canonical hydration"
+            } else if (sourceRole == SourceRole.ADDON_PREVIEW) {
+                "addon preview fills until canonical arrives"
             } else if (owner == FieldOwner.PRIMARY) {
                 "primary always wins"
             } else {
