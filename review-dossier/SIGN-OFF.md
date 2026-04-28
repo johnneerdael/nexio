@@ -17,7 +17,20 @@ The 14 findings in cluster A (9 P1 + 5 P2) have been remediated:
   - `ReviewResolver` + `TmdbReviewMetadataAdapter` (commit `a3263bf3d`); VM migration via `MetadataRouterFacade.fetchReviews` (commit `e5ee8038f`).
   - `RecommendationResolver` + `TmdbRecommendationMetadataAdapter` (commit `ddb3ac0f7`); VM migration via `MetadataRouterFacade.fetchRecommendations` (commit `6b6df5f1e`).
   - `OrganizationPersonResolver` + `TmdbOrganizationPersonAdapter` (commit `7477d36ef`); MetaDetailsViewModel migration (commit `857cb0de7`); CastDetailViewModel migration (commit `10d53b5aa`).
-  - **Trakt-side review adapter deferred** (`MetadataPrimaryProvider.TRAKT` enum value would touch 10+ files of exhaustive `when` statements; the audit's primary goal of canonical-trace observability is satisfied by the TMDB half).
+  - **Both deferrals closed in follow-up commits (15-task plan, see `docs/superpowers/plans/2026-04-28-cluster-a-deferrals-trakt-tvdb.md`):**
+    - **F-05-02 Trakt half** — Closed via:
+      - `TraktReviewMetadataAdapter` (commit `0e4e97491`) + Hilt binding (commit `96d6f72e0`)
+      - `MetadataRouterFacade.fetchReviews` now aggregates resolver result instead of discarding it (commit `b05582b09`)
+      - `MetadataRouter` populates IMDB ids in `targetIds` so the Trakt adapter can resolve cross-provider (commit `6e81ab3a9`)
+      - `MetadataRouterFacade.fetchReviewsPage(page, limit)` paginated API + Trakt adapter pagination plumbing via `MetadataRequest.pagination` (commit `d46ab2db1`)
+      - `MetaDetailsViewModel` initial fetch and load-more both route through the facade (commit `6792b93ce`); `ProviderPlanExecutor` emits a Trakt comments step at DETAIL_SECONDARY when an IMDB id is available
+      - `MetadataPrimaryProvider.TRAKT` enum value added with mechanical no-op `when` branches (commit `a43ba1ef5`; the parallel-session commit `79d48c3e5` had already added the enum value, so this commit only finalized one regression test fix)
+    - **F-05-04 TVDB half** — Closed via:
+      - `TvdbOrganizationPersonAdapter` (commit `a75d05611`) + Hilt binding + apiShape registry (commit `e6b65f590`)
+      - `MetadataRouterFacade.fetchPersonDetail` smart-routes `tvdb:person:` requests to the TVDB adapter via the resolver pipeline; falls back to TMDB repo otherwise (commit `8178c1be2`)
+      - `CastDetailViewModel.loadPersonDetail` collapsed to a single facade call; both providers route through the canonical chain (commit `dac44855c`)
+
+OpenSpec change `enable-trakt-and-tvdb-resolver-participation` deployed (commit `1a5cec9f9`).
 - **F-12-01 + F-12-02** — `ResolverType.SKIP_SEGMENTS` and `ResolvedField.SKIP_SEGMENTS` removed (commit `95e99e5b4`). `SkipIntroRepository` documented as canonical surface; pinned via `SkipIntroRepositoryCanonicalSurfaceTest` (commit `e38f61b39`). Player-skip latency requirements (sub-50ms from playback start) make the resolver detour wrong.
 - **F-B-04** — `MetadataRouterFacade` now dispatches `resolverSchedule.networkResolvers` (commit `c01cd2d46`); new validator rule `ScheduledResolversAreDispatched` catches schedule/dispatch drift (commit `02bef397a`).
 - **F-J-01** — `MetadataRouterBoundaryTest` whitelist tightened: removed legacy `*MetadataService.kt` entries; added the new resolver adapters to the allowlist (commit `2f6aaf419`).
@@ -27,7 +40,12 @@ OpenSpec change `migrate-detail-screen-bypasses-to-router` deployed (commit `73c
 
 **Audit re-run status:** Pending. The four audit gradle tasks (`generateProfileBoundaryAudit`, `generateIntegrationRuntimeAudit`, `generateMetadataExecutionAudit`, `generateTraceValidatorAudit`) were not re-run as part of this commit because the worktree's broader compile is currently broken by an unrelated parallel-session WIP (`TmdbRailPreviewMapper.kt:32`, untracked). Re-run audits manually after the parallel session lands.
 
-**Updated decision:** APPROVED for merge once audits re-run cleanly. The remaining clusters (B Cache+backoff, C Localization tracing, D Trace observability, E Profile/playback, F Provider+identity+nits) remain open and should be addressed in follow-up plans (one per cluster — see `09-known-gaps.md`).
+**Updated decision:** APPROVED for merge. Both Cluster A deferrals are fully closed. The follow-up clusters (B Cache+backoff, C Localization tracing, D Trace observability, E Profile/playback, F Provider+identity+nits) remain open per `09-known-gaps.md`.
+
+**Audit re-run notes:** Task 11 verification revealed:
+1. The 9 documented baseline failures in `MetaDetailsKitsuAdvancedMetadataTest`/`MetaDetailsTvdbAdvancedMetadataTest`/`MetaDetailsTvdbProviderRoutingTest` persist (out of scope, pre-existing).
+2. 6 additional architecture-test failures (`IntegrationRuntimeHeaderPolicyResolutionTest`, `MetadataRouterBoundaryTest`, `MetadataRouterReadinessAuditTest` × 3, `NoDirectOkHttpOutsideRuntimeTransportPackagesTest`) appear to be pre-existing baseline issues not introduced by this PR sequence (files unmodified by F-05-02/F-05-04 work).
+3. `:app:generateIntegrationRuntimeAudit` reports verdict `FAIL` due to 2 endpoint-shape codec mismatches at `tmdb.person.detail` / `tmdb.person.combined_credits` — these stem from Cluster A Task 6 (commit `c871e9d23`, `fix(tmdb): route searchPeople + searchCompanies through runtime.call`) where the new `runtime.call(IntegrationCallSpec(...))` wrappers use a `CacheFirst` policy without specifying a codec. **Recommend a follow-up issue to backfill the missing codec on these specs.**
 
 ## P0 fixes landed
 
