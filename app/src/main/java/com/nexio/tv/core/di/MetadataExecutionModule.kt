@@ -5,7 +5,9 @@ import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.data.integration.metadata.KitsuMetadataProviderAdapter
 import com.nexio.tv.data.integration.metadata.RuntimeMetadataIdentityLookup
 import com.nexio.tv.data.integration.metadata.TmdbMetadataProviderAdapter
+import com.nexio.tv.data.integration.metadata.TmdbTrailerMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TvdbMetadataProviderAdapter
+import com.nexio.tv.data.integration.metadata.TvdbTrailerMetadataAdapter
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -26,6 +28,14 @@ abstract class MetadataExecutionModule {
     @Binds
     @IntoSet
     abstract fun bindKitsuAdapter(impl: KitsuMetadataProviderAdapter): MetadataProviderAdapter
+
+    @Binds
+    @IntoSet
+    abstract fun bindTmdbTrailerAdapter(impl: TmdbTrailerMetadataAdapter): MetadataProviderAdapter
+
+    @Binds
+    @IntoSet
+    abstract fun bindTvdbTrailerAdapter(impl: TvdbTrailerMetadataAdapter): MetadataProviderAdapter
 
     @Binds
     abstract fun bindIdentityLookup(impl: RuntimeMetadataIdentityLookup): MetadataIdentityResolver.Lookup

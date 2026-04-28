@@ -154,6 +154,7 @@ object TvdbApiShapes {
     const val REFERENCE_CONTENT_RATINGS = "tvdb.reference.content_ratings"
     const val REFERENCE_SEASON_TYPES = "tvdb.reference.season_types"
     const val PERSON_EXTENDED = "tvdb.person.extended"
+    const val TV_TRAILERS = "tvdb.tv.trailers"
 }
 
 object YouTubeTrailerApiShapes {
