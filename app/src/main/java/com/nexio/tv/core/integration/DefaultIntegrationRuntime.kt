@@ -384,6 +384,12 @@ class DefaultIntegrationRuntime @Inject constructor(
                 }
             } catch (exception: Exception) {
                 if (exception is CancellationException) throw exception
+                noteSyntheticNetworkFailure(
+                    provider = spec.provider,
+                    scope = spec.scope,
+                    retryAfterMs = null,
+                    reason = exception.message
+                )
                 record(spec, traceId, IntegrationAuditPhase.FAILED, IntegrationOutcome.NETWORK_ERROR, networkStarted = true, loaderInvoked = true)
                 null
             }
