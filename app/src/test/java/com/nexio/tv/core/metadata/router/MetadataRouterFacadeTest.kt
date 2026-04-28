@@ -148,6 +148,21 @@ class MetadataRouterFacadeTest {
         val overviewPayload = selectedTracePayload(sink, ResolvedField.OVERVIEW)
         assertEquals("ADDON_PREVIEW", overviewPayload["sourceRole"])
         assertEquals("primary always wins", overviewPayload["ownershipRule"])
+
+        val titlePayload = selectedTracePayload(sink, ResolvedField.TITLE)
+        assertEquals("PRIMARY", titlePayload["sourceRole"])
+        assertEquals("primary canonical field replaces addon preview", titlePayload["ownershipRule"])
+        @Suppress("UNCHECKED_CAST")
+        val rejectedCandidates = titlePayload["rejectedCandidates"] as List<Map<String, Any?>>
+        assertEquals(
+            mapOf(
+                "provider" to "TVDB",
+                "sourceProvider" to "cinemeta",
+                "sourceRole" to "ADDON_PREVIEW",
+                "reason" to "primary canonical field available"
+            ),
+            rejectedCandidates.single()
+        )
     }
 
     @Test
