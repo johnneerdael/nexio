@@ -742,29 +742,32 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) {
             return IntegrationLoadResult.HttpError(statusCode = 401, reason = "tmdb_api_key_missing")
         }
-        val result = runtime.call(
-            IntegrationCallSpec(
-                provider = IntegrationProvider.TMDB,
-                apiShapeId = TmdbApiShapes.PERSON_DETAIL,
-                operationKey = "tmdb.person.detail",
-                workClass = IntegrationWorkClass.USER_VISIBLE,
-                call = {
-                    val response = runCatching {
-                        tmdbApi.getPersonDetails(personId = personId, apiKey = credential.apiKey)
-                    }.getOrElse { exception ->
-                        if (exception is CancellationException) throw exception
-                        return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
+        return when (
+            val result = runtime.get(
+                IntegrationSpec(
+                    provider = IntegrationProvider.TMDB,
+                    apiShapeId = TmdbApiShapes.PERSON_DETAIL,
+                    operationKey = "tmdb.person.detail",
+                    cacheKey = "tmdb:person:$personId:detail",
+                    codec = gsonCodec<TmdbPersonResponse>(),
+                    cachePolicy = IntegrationCachePolicy.CacheFirst(
+                        ttlMs = 7L * 24L * 60L * 60L * 1000L,
+                        staleAfterExpiryMs = 30L * 24L * 60L * 60L * 1000L
+                    ),
+                    workClass = IntegrationWorkClass.USER_VISIBLE,
+                    load = {
+                        loadResponse("tmdb_person_details") {
+                            tmdbApi.getPersonDetails(personId = personId, apiKey = credential.apiKey)
+                        }
                     }
-                    if (!response.isSuccessful) {
-                        IntegrationCallResult.HttpError(response.code(), reason = "tmdb_person_details")
-                    } else {
-                        response.body()?.let { IntegrationCallResult.Success(it) }
-                            ?: IntegrationCallResult.HttpError(response.code(), reason = "tmdb_person_details:empty_body")
-                    }
-                }
+                )
             )
-        )
-        return result.toLoadResult(httpReason = "tmdb_person_details")
+        ) {
+            is IntegrationFetchResult.Fresh -> IntegrationLoadResult.Success(result.value)
+            is IntegrationFetchResult.Updated -> IntegrationLoadResult.Success(result.value)
+            is IntegrationFetchResult.Stale -> IntegrationLoadResult.Success(result.value)
+            IntegrationFetchResult.Missing -> IntegrationLoadResult.HttpError(404, reason = "tmdb_person_details:missing")
+        }
     }
 
     suspend fun loadPersonCombinedCredits(personId: Int): IntegrationLoadResult<TmdbPersonCreditsResponse> {
