@@ -152,6 +152,112 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
+    fun `report writer omits nullable rejected candidate source roles`() {
+        val selectedField = FieldSelectedEvent(
+            itemId = "item-1",
+            field = "title",
+            selectedProvider = "TMDB",
+            sourceRole = "PRIMARY",
+            valuePreview = "Selected title",
+            rejectedCandidates = listOf(
+                RejectedCandidateReport(
+                    provider = "KITSU",
+                    reason = "owner selected higher priority value"
+                ),
+                RejectedCandidateReport(
+                    provider = "TRAKT",
+                    sourceRole = "RAIL_PREVIEW",
+                    reason = "primary canonical field available"
+                )
+            ),
+            ownershipRule = "title selected from PRIMARY"
+        )
+        val report = MetadataExecutionReport(
+            schemaVersion = 1,
+            provenance = MetadataAuditProvenance(
+                gitSha = "test-sha",
+                gitWorktree = GitWorktreeState(
+                    state = "CLEAN",
+                    dirtyFileCount = 0,
+                    untrackedFileCount = 0
+                )
+            ),
+            verdict = AuditVerdict.PASS,
+            scenario = MetadataAuditScenario(
+                name = "writer-regression",
+                depth = MetadataDepth.DETAIL_CORE
+            ),
+            fixtureName = "writer-regression.json",
+            generatedAtEpochMs = 0,
+            items = listOf(
+                ItemExecutionReport(
+                    itemId = "item-1",
+                    itemType = "movie",
+                    addonFields = emptyMap(),
+                    firstPaint = FirstPaintEvent(
+                        itemId = "item-1",
+                        itemType = "movie",
+                        fieldsUsed = emptySet(),
+                        routerExecuted = false,
+                        networkExecuted = false
+                    ),
+                    routing = null,
+                    providerPlan = null,
+                    runtimeCalls = emptyList(),
+                    cacheDecisions = emptyList(),
+                    resolverSchedule = null,
+                    selectedFields = listOf(selectedField),
+                    forbiddenOverwrites = emptyList(),
+                    continueWatchingSnapshot = null,
+                    identityResolution = null,
+                    productionCallerOwnership = emptyList(),
+                    localization = null,
+                    violations = emptyList(),
+                    events = emptyList(),
+                    selectedFieldsAfterHydration = listOf(selectedField)
+                )
+            ),
+            summaries = AuditSummaries(
+                totalItems = 1,
+                routedItems = 0,
+                networkCalls = 0,
+                cacheHits = 0,
+                cacheMisses = 0,
+                staleHits = 0,
+                forbiddenOverwrites = 0,
+                policyViolations = 0,
+                providersUsed = emptyMap(),
+                apiShapesUsed = emptyMap()
+            ),
+            policyViolations = emptyList()
+        )
+        val outputDir = File("build/reports/metadata-audit/writer-regression")
+        val jsonFile = File(outputDir, "metadata-execution-single-report.json")
+        val markdownFile = File(outputDir, "metadata-execution-single-report.md")
+
+        MetadataAuditReportWriter().writeJson(report, jsonFile)
+        MetadataAuditReportWriter().writeMarkdown(report, markdownFile)
+
+        val jsonText = jsonFile.readText()
+        val rejectedCandidates = JSONObject(jsonText)
+            .getJSONArray("items")
+            .getJSONObject(0)
+            .getJSONArray("selectedFieldsAfterHydration")
+            .getJSONObject(0)
+            .getJSONArray("rejectedCandidates")
+        val nonRailCandidate = rejectedCandidates.getJSONObject(0)
+        val railCandidate = rejectedCandidates.getJSONObject(1)
+        val markdownText = markdownFile.readText()
+
+        assertFalse(jsonText.contains("\"sourceRole\":\"\""))
+        assertFalse(nonRailCandidate.has("sourceRole"))
+        assertEquals("RAIL_PREVIEW", railCandidate.getString("sourceRole"))
+        assertTrue(markdownText.contains("KITSU: owner selected higher priority value"))
+        assertFalse(markdownText.contains("KITSU::"))
+        assertTrue(markdownText.contains("TRAKT/RAIL_PREVIEW: primary canonical field available"))
+    }
+
+    @Test
     fun `metadata audit bundle exports full production readiness scenario matrix`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
         val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
