@@ -14,10 +14,13 @@ import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
 import com.nexio.tv.core.metadata.router.ProviderPlanRunner
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
+import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
+import com.nexio.tv.domain.model.FirstPaintSource
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.CancellationException
@@ -34,10 +37,7 @@ internal suspend fun overlayProviderLocalizedMetadataForHome(
             metadataRequest = MetadataRequest(
                 contentId = item.id,
                 contentType = item.type,
-                sourceContext = MetadataSourceContext(
-                    itemType = item.apiType,
-                    addonMetadata = item.toHomeDisplayMetadata()
-                ),
+                sourceContext = item.toHomeMetadataSourceContext(),
                 language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
                 depth = MetadataDepth.DETAIL_CORE
             ),
@@ -87,10 +87,7 @@ internal suspend fun MetadataRouterFacade.resolveHomeRequest(
             MetadataRequest(
                 contentId = item.id,
                 contentType = item.type,
-                sourceContext = MetadataSourceContext(
-                    itemType = item.apiType,
-                    addonMetadata = item.toHomeDisplayMetadata()
-                ),
+                sourceContext = item.toHomeMetadataSourceContext(),
                 language = language,
                 seasonNumber = seasonNumber,
                 depth = depth
@@ -119,6 +116,22 @@ internal suspend fun HomeViewModel.resolveHomeRequestIfAvailable(
         seasonNumber = seasonNumber
     )
 }
+
+internal fun MetaPreview.toHomeMetadataSourceContext(
+    addonMetadata: HomeDisplayMetadata = toHomeDisplayMetadata()
+): MetadataSourceContext =
+    MetadataSourceContext(
+        itemType = apiType,
+        addonMetadata = addonMetadata,
+        previewSourceRole = when (firstPaintSource) {
+            FirstPaintSource.ADDON_META_PREVIEW -> SourceRole.ADDON_PREVIEW
+            FirstPaintSource.RAIL_PREVIEW -> SourceRole.RAIL_PREVIEW
+        },
+        previewSourceProvider = firstPaintSourceProvider?.name,
+        previewStableIds = firstPaintStableIds,
+        previewSourceItemId = firstPaintSourceItemId,
+        previewRailSource = firstPaintRailSource?.name
+    )
 
 private fun logHomeProviderDecisionDiagnostics(
     item: MetaPreview,
