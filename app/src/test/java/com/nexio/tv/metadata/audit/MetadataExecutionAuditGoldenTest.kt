@@ -202,6 +202,38 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
+    fun `rail audit scenarios use shared first paint provenance shape`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val railReport = bundle.reports.first { it.scenario.name == "trakt-rail-first-paint-title-year" }
+        val item = railReport.items.single()
+
+        assertEquals("RAIL_PREVIEW", item.firstPaint.source)
+        assertFalse(item.firstPaint.routerExecuted)
+        assertFalse(item.firstPaint.networkExecuted)
+        assertEquals("BUILT_IN_TRAKT", item.railSource)
+        assertEquals("TRAKT", item.sourceProvider)
+        assertTrue(item.events.any { event ->
+            event is AuditEvent.FirstPaint && event.event.source == "RAIL_PREVIEW"
+        })
+    }
+
+    @Test
+    fun `hydrated rail audit fields reject rail preview candidates when primary fields replace them`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val item = bundle.reports
+            .first { it.scenario.name == "trakt-rail-visible-hydrates-tvdb" }
+            .items
+            .single()
+        val title = item.selectedFieldsAfterHydration.single { it.field == "title" }
+
+        assertTrue(title.rejectedCandidates.any { candidate ->
+            candidate.provider == item.sourceProvider &&
+                candidate.sourceRole == "RAIL_PREVIEW" &&
+                candidate.reason == "primary canonical field available"
+        })
+    }
+
+    @Test
     fun `localized audit scenarios record same provider english fallback policy`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
 

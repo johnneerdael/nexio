@@ -125,6 +125,7 @@ data class FieldSelectedEvent(
 
 data class RejectedCandidateReport(
     val provider: String,
+    val sourceRole: String? = null,
     val reason: String
 )
 

@@ -258,6 +258,16 @@ class MetadataAuditRunner private constructor(
             depth = if (spec.routeProvider == null) MetadataDepth.PREVIEW else MetadataDepth.DETAIL_CORE,
             visibleItemIds = setOf(spec.itemId)
         )
+        val trace = RecordingMetadataAuditTraceCollector()
+        val firstPaint = FirstPaintEvent(
+            itemId = spec.itemId,
+            itemType = spec.itemType,
+            source = "RAIL_PREVIEW",
+            fieldsUsed = spec.previewFields.filterValues { it != null }.keys,
+            routerExecuted = false,
+            networkExecuted = false
+        )
+        trace.onFirstPaint(firstPaint)
         val beforeHydration = railFields(
             itemId = spec.itemId,
             provider = spec.sourceProvider,
@@ -279,7 +289,9 @@ class MetadataAuditRunner private constructor(
                 itemId = spec.itemId,
                 provider = it.provider.name,
                 fields = spec.hydratedFields,
-                sourceRole = "PRIMARY"
+                sourceRole = "PRIMARY",
+                rejectedProvider = spec.sourceProvider,
+                rejectedSourceRole = "RAIL_PREVIEW"
             )
         }.orEmpty()
         val runtimeCalls = route?.let {
@@ -312,14 +324,7 @@ class MetadataAuditRunner private constructor(
             itemId = spec.itemId,
             itemType = spec.itemType,
             addonFields = spec.previewFields,
-            firstPaint = FirstPaintEvent(
-                itemId = spec.itemId,
-                itemType = spec.itemType,
-                source = "RAIL_PREVIEW",
-                fieldsUsed = spec.previewFields.filterValues { it != null }.keys,
-                routerExecuted = false,
-                networkExecuted = false
-            ),
+            firstPaint = firstPaint,
             routing = route,
             providerPlan = null,
             runtimeCalls = runtimeCalls,
@@ -332,7 +337,7 @@ class MetadataAuditRunner private constructor(
             productionCallerOwnership = emptyList(),
             localization = null,
             violations = emptyList(),
-            events = emptyList(),
+            events = trace.events,
             railSource = spec.railSource,
             sourceProvider = spec.sourceProvider,
             sourcePayloadFieldsUsed = spec.previewFields.filterValues { it != null }.keys,
@@ -386,7 +391,9 @@ class MetadataAuditRunner private constructor(
         itemId: String,
         provider: String,
         fields: Map<String, String?>,
-        sourceRole: String
+        sourceRole: String,
+        rejectedProvider: String? = null,
+        rejectedSourceRole: String? = null
     ): List<FieldSelectedEvent> =
         fields.mapNotNull { (field, value) ->
             value?.let {
@@ -396,7 +403,17 @@ class MetadataAuditRunner private constructor(
                     selectedProvider = provider,
                     sourceRole = sourceRole,
                     valuePreview = it,
-                    rejectedCandidates = emptyList(),
+                    rejectedCandidates = if (rejectedProvider != null && rejectedSourceRole != null) {
+                        listOf(
+                            RejectedCandidateReport(
+                                provider = rejectedProvider,
+                                sourceRole = rejectedSourceRole,
+                                reason = "primary canonical field available"
+                            )
+                        )
+                    } else {
+                        emptyList()
+                    },
                     ownershipRule = "$field selected from $sourceRole"
                 )
             }
@@ -693,7 +710,7 @@ class MetadataAuditRunner private constructor(
         private val railScenarioSpecs = listOf(
             RailScenarioSpec(
                 name = "trakt-rail-first-paint-title-year",
-                railSource = "TRAKT",
+                railSource = "BUILT_IN_TRAKT",
                 sourceProvider = "TRAKT",
                 itemId = "trakt:movie:hope-2026",
                 itemType = "movie",
@@ -702,7 +719,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "trakt-rail-visible-hydrates-tvdb",
-                railSource = "TRAKT",
+                railSource = "BUILT_IN_TRAKT",
                 sourceProvider = "TRAKT",
                 itemId = "trakt:show:signal-2026",
                 itemType = "series",
