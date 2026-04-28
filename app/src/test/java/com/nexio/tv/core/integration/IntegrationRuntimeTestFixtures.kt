@@ -223,4 +223,8 @@ class InMemoryIntegrationProviderBackoffDao : IntegrationProviderBackoffDao {
 
     override suspend fun get(provider: String, scopeKey: String): IntegrationProviderBackoffEntity? =
         values["$provider:$scopeKey"]
+
+    override suspend fun clear(provider: String, scopeKey: String) {
+        values.remove("$provider:$scopeKey")
+    }
 }

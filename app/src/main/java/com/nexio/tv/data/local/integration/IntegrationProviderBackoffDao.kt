@@ -18,4 +18,12 @@ interface IntegrationProviderBackoffDao {
         """
     )
     suspend fun get(provider: String, scopeKey: String): IntegrationProviderBackoffEntity?
+
+    @Query(
+        """
+        DELETE FROM integration_provider_backoff
+        WHERE provider = :provider AND scopeKey = :scopeKey
+        """
+    )
+    suspend fun clear(provider: String, scopeKey: String)
 }
