@@ -42,6 +42,9 @@ class MetadataAuditReportWriter {
                 appendLine("      \"itemId\": \"${item.itemId}\",")
                 appendLine("      \"itemType\": \"${item.itemType}\",")
                 appendLine("      \"provider\": \"${item.routing?.provider ?: ""}\",")
+                appendLine("      \"railSource\": ${nullableStringJson(item.railSource)},")
+                appendLine("      \"sourceProvider\": ${nullableStringJson(item.sourceProvider)},")
+                appendLine("      \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
                 appendLine("      \"apiShapes\": [${item.runtimeCalls.joinToString { "\"${it.apiShapeId}\"" }}]")
                 append("    }")
                 if (index != report.items.lastIndex) append(",")
@@ -78,6 +81,13 @@ class MetadataAuditReportWriter {
                     appendLine("            \"networkExecuted\": ${item.firstPaint.networkExecuted}")
                     appendLine("          },")
                     appendLine("          \"routing\": ${routeJson(item.routing, indent = "          ")},")
+                    appendLine("          \"railSource\": ${nullableStringJson(item.railSource)},")
+                    appendLine("          \"sourceProvider\": ${nullableStringJson(item.sourceProvider)},")
+                    appendLine("          \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
+                    appendLine("          \"routingAfterVisible\": ${routeJson(item.routingAfterVisible, indent = "          ")},")
+                    appendLine("          \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
+                    appendLine("          \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
+                    appendLine("          \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
                     appendLine("          \"providerPlan\": ${providerPlanJson(item.providerPlan, indent = "          ")},")
                     appendLine("          \"runtimeCalls\": [${item.runtimeCalls.joinToString { runtimeCallJson(it) }}],")
                     appendLine("          \"cacheDecisions\": [${item.cacheDecisions.joinToString { cacheDecisionJson(it) }}],")
@@ -134,6 +144,7 @@ class MetadataAuditReportWriter {
                 appendLine("- Router executed: `${item.firstPaint.routerExecuted}`")
                 appendLine("- Network executed: `${item.firstPaint.networkExecuted}`")
                 appendLine()
+                appendRailPreview(item)
 
                 item.routing?.let { route ->
                     appendLine("### Routing")
@@ -207,6 +218,7 @@ class MetadataAuditReportWriter {
                     appendLine("|---|---:|---:|")
                     appendLine("| `${item.firstPaint.source}` | `${item.firstPaint.routerExecuted}` | `${item.firstPaint.networkExecuted}` |")
                     appendLine()
+                    appendRailPreview(item)
                     item.routing?.let { route ->
                         appendLine("#### Routing")
                         appendLine("| Provider | Media kind | Reason | Used inputs | Ignored inputs | Pre-resolution identity required | Execution identity resolved |")
@@ -278,6 +290,33 @@ class MetadataAuditReportWriter {
         appendLine("|---|---|---:|---:|---:|")
         appendLine("| `${snapshot.parentId}` | `${snapshot.provider}` | `${snapshot.routingVersion}` | `${snapshot.hasClickTimeMetadata}` | `${snapshot.reroutedDueToVersionMismatch}` |")
         appendLine()
+    }
+
+    private fun StringBuilder.appendRailPreview(item: ItemExecutionReport) {
+        if (item.railSource == null && item.sourceProvider == null && item.sourcePayloadFieldsUsed.isEmpty()) return
+        appendLine("#### Rail preview")
+        appendLine("| Rail source | Source provider | Payload fields used | Routing after visible | Identity mappings harvested |")
+        appendLine("|---|---|---|---|---|")
+        appendLine("| `${item.railSource.orEmpty()}` | `${item.sourceProvider.orEmpty()}` | `${item.sourcePayloadFieldsUsed.joinToString()}` | `${item.routingAfterVisible?.provider ?: ""}` | `${item.identityMappingsHarvested.entries.joinToString { "${it.key}:${it.value}" }}` |")
+        appendLine()
+        if (item.selectedFieldsBeforeHydration.isNotEmpty()) {
+            appendLine("##### Fields before hydration")
+            appendLine("| Field | Provider | Value |")
+            appendLine("|---|---|---|")
+            item.selectedFieldsBeforeHydration.forEach {
+                appendLine("| `${it.field}` | `${it.selectedProvider}` | `${it.valuePreview.orEmpty()}` |")
+            }
+            appendLine()
+        }
+        if (item.selectedFieldsAfterHydration.isNotEmpty()) {
+            appendLine("##### Fields after hydration")
+            appendLine("| Field | Provider | Value |")
+            appendLine("|---|---|---|")
+            item.selectedFieldsAfterHydration.forEach {
+                appendLine("| `${it.field}` | `${it.selectedProvider}` | `${it.valuePreview.orEmpty()}` |")
+            }
+            appendLine()
+        }
     }
 
     private fun StringBuilder.appendIdentityResolution(event: IdentityResolutionEvent?) {
@@ -368,4 +407,13 @@ class MetadataAuditReportWriter {
 
     private fun gitWorktreeJson(state: GitWorktreeState): String =
         """{"state":"${state.state}","dirtyFileCount":${state.dirtyFileCount},"untrackedFileCount":${state.untrackedFileCount}}"""
+
+    private fun nullableStringJson(value: String?): String =
+        value?.let { "\"$it\"" } ?: "null"
+
+    private fun stringArrayJson(values: Iterable<String>): String =
+        "[${values.joinToString { "\"$it\"" }}]"
+
+    private fun stringMapJson(values: Map<String, String>): String =
+        "{${values.entries.joinToString { "\"${it.key}\":\"${it.value}\"" }}}"
 }

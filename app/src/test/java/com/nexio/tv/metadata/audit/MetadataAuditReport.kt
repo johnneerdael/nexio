@@ -235,7 +235,14 @@ data class ItemExecutionReport(
     val productionCallerOwnership: List<ProductionCallerOwnershipEvent>,
     val localization: LocalizationEvent?,
     val violations: List<PolicyViolationEvent>,
-    val events: List<AuditEvent>
+    val events: List<AuditEvent>,
+    val railSource: String? = null,
+    val sourceProvider: String? = null,
+    val sourcePayloadFieldsUsed: Set<String> = emptySet(),
+    val routingAfterVisible: RouteEvent? = null,
+    val selectedFieldsBeforeHydration: List<FieldSelectedEvent> = emptyList(),
+    val selectedFieldsAfterHydration: List<FieldSelectedEvent> = emptyList(),
+    val identityMappingsHarvested: Map<String, String> = emptyMap()
 )
 
 data class AuditSummaries(
