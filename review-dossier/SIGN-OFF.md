@@ -5,6 +5,31 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster B landed — cache + backoff hardening
+
+The 11 cluster-B findings (4 P1 + 4 P2 + 3 nits) have been remediated:
+
+- **F-A-01** — `openInternal` failures engage backoff via `noteSyntheticNetworkFailure`. Test `8b9134ddc`; fix `dcbde6603`.
+- **F-D-01** — `executeProviderLoad` HttpError + NetworkError branches fall back to stale cache and emit `STALE_HIT` cache decision. Test `96ffb1b0c`; fix `55590ca02` (also threaded `traceContext` through `executeProviderLoad`/`executeWithoutCache`/`executeObserveOnly`/`executeMutation`).
+- **F-D-02** — Atomic cache write via `tmp+rename` + Room `@Transaction` (`atomicRenameAndUpsert`); tolerant `readFresh`/`readStale`. Helper `7e58270fd` (with interface→abstract DAO conversion); fixture fix `e0742ad54`; atomicity test `bafb4ce96`; impl `80495cdb8`.
+- **F-TM-02** — `IntegrationSingleFlightTest` regression suite (loader-once, key isolation, exception propagation). `2271fecf1`.
+- **F-D-05** — `TypedSingleFlightKey(cacheKey, mimeType)` closes ClassCastException risk on shared keys with different `T` types. `35a235d74`.
+- **F-A-02** — `IntegrationCallSpec.coalesceConcurrent: Boolean = false` opt-in for non-cache single-flight; new `IntegrationSingleFlight.runCall(...)` parallel structure. `d28c598c4`.
+- **F-D-06** — `IntegrationBackoffManager` schedule grows `min(baseMs × 2^n, capMs) ± jitter`; new `consecutiveFailures` column (Room version 6→7, fallbackToDestructiveMigration); `clear(provider, scope)` invoked on Success. `faa8204f6`.
+- **F-D-03** — Removed `TraceCacheDecision.INVALIDATED` + `EVICTED` (no production emission site). `fe07b14ba`.
+- **F-D-04** — Removed `MetadataCacheKeys.localized(...)` (zero callers). `de2cbcedb`.
+- **F-A-03 + F-A-04** — Dropped Noop-sink short-circuit + unused `policy` param. `36178dc23`.
+
+OpenSpec change `harden-cache-and-backoff` deployed (`6c8c58e4b`).
+
+**Audit status:** Re-run of 4 audit gradle tasks: 3 of 4 BUILD SUCCESSFUL (`generateProfileBoundaryAudit`, `generateMetadataExecutionAudit`, `generateTraceValidatorAudit`); `generateIntegrationRuntimeAudit` reports verdict FAIL with control-plane gate FAIL — driven by 2 endpoint-shape mismatches (pre-existing audit drift; MetadataRouter-readiness gate PASS_WITH_WARNINGS, no boundary violations, no missing policy entries/fields/operation keys, no direct-bypass calls). Out of scope for Cluster B.
+
+**Updated decision:** APPROVED for merge. Remaining clusters per `09-known-gaps.md`:
+- Cluster C (Localization tracing): F-E-01..05
+- Cluster D (Trace observability): F-I-01..05, F-F-02, F-G-01..03, F-02-01
+- Cluster E (Profile/playback hardening): F-F-03..05, F-H-01..02, F-J-02..04
+- Cluster F (Provider contracts + identity + nits): F-B-01..02, F-B-05..07, F-C-02..06
+
 ## Cluster A landed — facade-bypass migration + dead-depth cleanup
 
 The 14 findings in cluster A (9 P1 + 5 P2) have been remediated:
