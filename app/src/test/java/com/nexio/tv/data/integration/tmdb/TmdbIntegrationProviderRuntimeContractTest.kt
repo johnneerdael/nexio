@@ -1,6 +1,8 @@
 package com.nexio.tv.data.integration.tmdb
 
+import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.core.integration.IntegrationFetchResult
 import com.nexio.tv.core.integration.RecordingIntegrationRuntime
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.metadata.MetadataCredentialSource
@@ -14,15 +16,16 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
 class TmdbIntegrationProviderRuntimeContractTest {
 
     @Test
-    fun `loadPersonDetails routes through runtime call with PERSON_DETAIL apiShape`() = runTest {
+    fun `loadPersonDetails routes through runtime get with CacheFirst PERSON_DETAIL apiShape`() = runTest {
         val runtime = RecordingIntegrationRuntime<TmdbPersonResponse>(
-            nextCallResult = IntegrationCallResult.Success(personDetailFixture())
+            nextResult = IntegrationFetchResult.Updated(personDetailFixture())
         )
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         coEvery {
@@ -33,8 +36,15 @@ class TmdbIntegrationProviderRuntimeContractTest {
 
         provider.loadPersonDetails(personId = 287)
 
-        assertEquals(1, runtime.callSpecs.size)
-        assertEquals(TmdbApiShapes.PERSON_DETAIL, runtime.callSpecs.single().apiShapeId)
+        assertEquals(0, runtime.callSpecs.size)
+        assertEquals(1, runtime.specs.size)
+        val spec = runtime.specs.single()
+        assertEquals(TmdbApiShapes.PERSON_DETAIL, spec.apiShapeId)
+        assertEquals("tmdb.person.detail", spec.operationKey)
+        assertTrue(
+            "expected CacheFirst, was ${spec.cachePolicy}",
+            spec.cachePolicy is IntegrationCachePolicy.CacheFirst
+        )
     }
 
     @Test
