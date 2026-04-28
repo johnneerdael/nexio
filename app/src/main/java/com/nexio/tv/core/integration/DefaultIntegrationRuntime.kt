@@ -633,6 +633,7 @@ class DefaultIntegrationRuntime @Inject constructor(
 
             when (result) {
                 is IntegrationLoadResult.Success -> {
+                    backoffManager.clear(spec.provider, spec.scope)
                     record(spec, traceId, IntegrationAuditPhase.NETWORK_END, IntegrationOutcome.SUCCESS, networkStarted = true, loaderInvoked = true)
                     IntegrationFetchResult.Updated(result.value)
                 }

@@ -11,5 +11,6 @@ data class IntegrationProviderBackoffEntity(
     val blockedUntilEpochMs: Long,
     val statusCode: Int?,
     val reason: String?,
-    val updatedAtEpochMs: Long
+    val updatedAtEpochMs: Long,
+    val consecutiveFailures: Int = 0
 )
