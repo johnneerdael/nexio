@@ -35,11 +35,15 @@ Aggregate verdict tally: APPROVED 0, CHANGES_REQUESTED 8, ⚠️ PARTIAL 2.
 
 ## Aggregate findings
 
-- **Total unique findings:** 53 (after cross-reference deduplication; source files contain 60 raw `### F-` headings — 7 duplicates folded into primary owners)
+Reconciled against the canonical register `09-known-gaps.md` (Task 39 sign-off pass):
+
+- **Total unique findings:** 60 (48 enumerated under `### F-` headings in P0/P1/P2 sections + 12 Nits enumerated as bullets in the dedicated `## Nits` section). Folded duplicates (12 raw IDs that collapse into primary owners — listed in the register's "Folded duplicates" table) are not counted.
 - **P0 (merge blockers):** 2
-- **P1 (strongly recommended pre-merge):** 21
-- **P2 (follow-up):** 18
+- **P1 (strongly recommended pre-merge):** 20
+- **P2 (follow-up):** 26
 - **Nits:** 12
+
+Note: the lane-verdict table above shows Lane-level severity tallies as logged at lane-review time. The canonical, post-deduplication aggregate is the four numbers immediately above; minor lane vs. register drift is expected because (a) some findings span two lanes and the register attributes them to a single primary owner, and (b) cross-ref folds (e.g. F-09-1 → F-G-01, F-10-1 → F-F-01) collapse multiple lane-level entries into one register entry.
 
 See `09-known-gaps.md` for the full register.
 
@@ -65,7 +69,7 @@ The branch successfully clears all four generated gates (runtime, metadata-execu
 1. **F-F-01** — UI callers of `ProfileManager.setActiveProfile` don't catch `ProfileBoundaryException`, so triggering a profile switch during active playback can crash the activity. This is a user-visible crash on a real interactive flow.
 2. **F-H-03** — The scrobble path never invokes `assertCanWriteProfileState`, so the contract "late scrobble after profile switch is rejected via `STALE_SESSION_WRITE_REJECTED`" is structurally unreachable. No test catches it. A late scrobble result will write to the wrong profile in production despite the spec saying otherwise.
 
-Beyond P0s, 21 P1 findings cluster around three themes:
+Beyond P0s, 20 P1 findings cluster around three themes:
 - **Facade bypass** — significant production paths (`MetaDetailsViewModel.kt:1406` for movie DETAIL_CORE TMDB enrichment, `SkipIntroRepository`, the trailer pipeline, reviews/recommendations, cast/person, premium poster URL-rewrite) call repositories/services directly instead of `MetadataRouterFacade`. The "facade owns metadata execution" contract has implementation gaps.
 - **Resolver orchestration dead-or-half-wired** — `ResolverOrchestrator.schedule()` is invoked from `MetadataRouterFacade.kt:34`, but the schedule it produces is never dispatched. `metadata.resolver_schedule` event fires but nothing acts on it. DETAIL_MEDIA / DETAIL_SECONDARY depths have no production callers.
 - **Trace event emission placement** — `metadata.first_paint` fires from a router-invoking site (`fetchProviderEnrichmentForPreview`), violating its `routerExecuted = false` claim. The validator rule `PreviewMustNotRouteOrNetwork` would fail on real traces.
@@ -89,7 +93,7 @@ The full P1 list is in `09-known-gaps.md`. Top priorities for a follow-up code p
 
 ### Follow-up (P2 + Nit)
 
-18 P2 + 12 Nit findings. Defer to a polish PR or sweep them as separate small commits. None blocks merge.
+26 P2 + 12 Nit findings. Defer to a polish PR or sweep them as separate small commits. None blocks merge.
 
 ## What to do next
 
