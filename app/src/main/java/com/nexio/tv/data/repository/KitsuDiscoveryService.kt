@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.railpreview.KitsuRailPreviewMapper
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
 import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
@@ -8,9 +9,9 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +22,7 @@ class KitsuDiscoveryService @Inject constructor(
     private val client: KitsuDiscoveryClient
 ) {
     private val snapshot = MutableStateFlow(KitsuDiscoverySnapshot())
+    private val railPreviewMapper = KitsuRailPreviewMapper()
 
     fun observeSnapshot(): Flow<KitsuDiscoverySnapshot> = snapshot
 
@@ -76,7 +78,11 @@ class KitsuDiscoveryService @Inject constructor(
         val title = kitsuCatalogTitle(catalogId) ?: return null
         val results = runCatching { client.fetchCatalog(catalogId, preferences) }
             .getOrDefault(emptyList())
-        val items = results.take(MAX_ITEMS_PER_SOURCE).mapNotNull(::mapResult)
+        val items = mapCatalogResults(
+            railId = catalogId,
+            results = results,
+            generatedAtMs = System.currentTimeMillis()
+        )
         if (items.isEmpty()) return null
         return CatalogRow(
             addonId = ADDON_ID,
@@ -92,48 +98,26 @@ class KitsuDiscoveryService @Inject constructor(
         )
     }
 
-    private fun mapResult(result: KitsuAnimeResource): MetaPreview? {
-        val attributes = result.attributes ?: return null
-        val title = firstNonBlank(
-            attributes.canonicalTitle,
-            attributes.titles?.values?.firstOrNull { !it.isNullOrBlank() }
-        ) ?: return null
-        val backdrop = attributes.coverImage.bestUrl()
-        val poster = backdrop ?: attributes.posterImage.bestUrl()
-        val contentType = if (attributes.subtype.equals("movie", ignoreCase = true)) {
-            ContentType.MOVIE
-        } else {
-            ContentType.SERIES
-        }
-        val rating = attributes.averageRating
-            ?.toDoubleOrNull()
-            ?.div(10.0)
-            ?.let { ((it * 100.0).roundToInt() / 100f) }
-        return MetaPreview(
-            id = "kitsu:${result.id.orEmpty()}",
-            type = contentType,
-            rawType = contentType.toApiString(),
-            name = title,
-            poster = poster,
-            posterShape = if (backdrop != null) PosterShape.LANDSCAPE else PosterShape.POSTER,
-            background = backdrop,
-            logo = null,
-            description = firstNonBlank(attributes.synopsis, attributes.description),
-            releaseInfo = attributes.startDate,
-            imdbRating = rating,
-            genres = emptyList(),
-            language = "ja"
-        )
-    }
-
-    private fun firstNonBlank(vararg values: String?): String? {
-        return values.firstNotNullOfOrNull { value ->
-            value?.trim()?.takeIf { it.isNotBlank() }
-        }
-    }
-
-    private fun com.nexio.tv.data.remote.api.KitsuImage?.bestUrl(): String? {
-        return this?.original ?: this?.large ?: this?.medium ?: this?.small ?: this?.tiny
+    private fun mapCatalogResults(
+        railId: String,
+        results: List<KitsuAnimeResource>,
+        generatedAtMs: Long
+    ): List<MetaPreview> {
+        return results.take(MAX_ITEMS_PER_SOURCE)
+            .mapIndexedNotNull { index, result ->
+                railPreviewMapper.mapAnime(
+                    railId = railId,
+                    anime = result,
+                    position = index,
+                    generatedAtMs = generatedAtMs
+                )?.let { preview ->
+                    preview.toMetaPreview().copy(
+                        posterShape = if (preview.display.backdropUrl != null) PosterShape.LANDSCAPE else PosterShape.POSTER,
+                        releaseInfo = preview.display.releaseDate,
+                        imdbRating = preview.display.rating?.value?.toFloat()
+                    )
+                }
+            }
     }
 
     companion object {

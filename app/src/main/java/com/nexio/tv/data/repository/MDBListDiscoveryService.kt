@@ -2,17 +2,20 @@ package com.nexio.tv.data.repository
 
 import android.os.SystemClock
 import android.util.Log
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.integration.mdblist.MDBListIntegrationProvider
+import com.nexio.tv.data.integration.railpreview.MDBListRailPreviewMapper
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
-import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,6 +74,7 @@ class MDBListDiscoveryService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val profileSnapshots = MutableStateFlow<Map<Int, MDBListDiscoverySnapshot>>(emptyMap())
     private val refreshMutex = Mutex()
+    private val railPreviewMapper = MDBListRailPreviewMapper()
     private val lastRefreshByProfile = mutableMapOf<Int, Long>()
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
@@ -258,6 +262,10 @@ class MDBListDiscoveryService @Inject constructor(
             detailOptions.firstOrNull()?.title,
             option.title
         )
+        val catalogBase = "mdblist_list_${slugify(option.key)}"
+        val movieRailId = "${catalogBase}_movies"
+        val showRailId = "${catalogBase}_shows"
+        val generatedAtMs = System.currentTimeMillis()
         val payloads = listOfNotNull(
             *resolvedListIds
                 .mapNotNull { resolvedId ->
@@ -269,7 +277,7 @@ class MDBListDiscoveryService @Inject constructor(
                             "apikey" to apiKey,
                             "limit" to maxItemsPerRail.toString(),
                             "offset" to "0",
-                            "append_to_response" to "poster"
+                            "append_to_response" to "genres,poster,description,ratings"
                         )
                     )
                 }
@@ -283,7 +291,14 @@ class MDBListDiscoveryService @Inject constructor(
         )
 
         val parsedItems = payloads.asSequence()
-            .flatMap { payload -> parseListItemsPayload(payload).asSequence() }
+            .flatMap { payload ->
+                parseListItemsPayload(
+                    raw = payload,
+                    movieRailId = movieRailId,
+                    showRailId = showRailId,
+                    generatedAtMs = generatedAtMs
+                ).asSequence()
+            }
             .distinctBy { "${it.type}:${it.preview.id}" }
             .take(maxItemsPerRail * 2)
             .toList()
@@ -303,11 +318,10 @@ class MDBListDiscoveryService @Inject constructor(
             .take(maxItemsPerRail)
 
         val catalogs = mutableListOf<MDBListCustomCatalog>()
-        val catalogBase = "mdblist_list_${slugify(option.key)}"
         if (movies.isNotEmpty()) {
             catalogs += MDBListCustomCatalog(
                 key = option.key,
-                catalogId = "${catalogBase}_movies",
+                catalogId = movieRailId,
                 catalogName = "$displayTitle (Movies)",
                 type = ContentType.MOVIE,
                 items = movies
@@ -316,7 +330,7 @@ class MDBListDiscoveryService @Inject constructor(
         if (shows.isNotEmpty()) {
             catalogs += MDBListCustomCatalog(
                 key = option.key,
-                catalogId = "${catalogBase}_shows",
+                catalogId = showRailId,
                 catalogName = "$displayTitle (Shows)",
                 type = ContentType.SERIES,
                 items = shows
@@ -518,7 +532,14 @@ class MDBListDiscoveryService @Inject constructor(
         val preview: MetaPreview
     )
 
-    private fun parseListItems(array: JSONArray): List<ParsedListItem> {
+    private fun parseListItems(
+        array: JSONArray,
+        movieRailId: String,
+        showRailId: String,
+        generatedAtMs: Long
+    ): List<ParsedListItem> {
+        var moviePosition = 0
+        var showPosition = 0
         return buildList {
             for (i in 0 until array.length()) {
                 val raw = array.optJSONObject(i) ?: continue
@@ -543,81 +564,91 @@ class MDBListDiscoveryService @Inject constructor(
                 val idsObj = itemObj.optJSONObject("ids")
                 val imdbId = firstNonBlank(
                     itemObj.optString("imdb_id"),
-                    idsObj?.optString("imdb")
+                    itemObj.optString("imdb"),
+                    idsObj?.optString("imdb"),
+                    raw.optString("imdb_id"),
+                    raw.optString("imdb")
                 ).takeIf { it.startsWith("tt", ignoreCase = true) }
                 val tmdbId = firstNonBlank(
                     itemObj.optString("tmdb_id"),
-                    idsObj?.optString("tmdb")
+                    itemObj.optString("tmdb"),
+                    idsObj?.optString("tmdb"),
+                    raw.optString("tmdb_id"),
+                    raw.optString("tmdb")
+                )
+                val tvdbId = firstNonBlank(
+                    itemObj.optString("tvdb_id"),
+                    itemObj.optString("tvdb"),
+                    idsObj?.optString("tvdb"),
+                    raw.optString("tvdb_id"),
+                    raw.optString("tvdb")
                 )
                 val contentId = imdbId
                     ?: tmdbId.takeIf { it.isNotBlank() }?.let { "tmdb:$it" }
+                    ?: tvdbId.takeIf { it.isNotBlank() }?.let { "tvdb:$it" }
                     ?: firstNonBlank(
                         itemObj.optString("id"),
                         itemObj.optString("slug"),
                         idsObj?.optString("slug"),
-                        idsObj?.optString("trakt")
+                        idsObj?.optString("trakt"),
+                        raw.optString("id"),
+                        raw.optString("slug")
                     )
                 if (contentId.isBlank()) continue
 
-                val title = firstNonBlank(
-                    itemObj.optString("title"),
-                    itemObj.optString("name"),
-                    contentId
+                val railId = if (type == ContentType.MOVIE) movieRailId else showRailId
+                val position = if (type == ContentType.MOVIE) moviePosition++ else showPosition++
+                val itemJson = normalizedMdbListItemJson(
+                    raw = raw,
+                    itemObj = itemObj,
+                    type = type,
+                    contentId = contentId,
+                    imdbId = imdbId,
+                    tmdbId = tmdbId,
+                    tvdbId = tvdbId
                 )
-                val year = itemObj.optInt("year", 0).takeIf { it > 0 }?.toString()
-                val poster = firstNonBlank(
-                    itemObj.optString("poster"),
-                    itemObj.optString("poster_url"),
-                    itemObj.optString("image"),
-                    itemObj.optString("backdrop")
-                ).takeIf { it.isNotBlank() }
+                val preview = railPreviewMapper.mapJsonObject(
+                    railId = railId,
+                    item = itemJson,
+                    position = position,
+                    generatedAtMs = generatedAtMs
+                )?.toMetaPreview() ?: continue
 
                 add(
                     ParsedListItem(
                         type = type,
-                        preview = posterRatingsUrlResolver.apply(
-                            MetaPreview(
-                            id = contentId,
-                            type = type,
-                            rawType = if (type == ContentType.MOVIE) "movie" else "series",
-                            name = title,
-                            poster = poster,
-                            posterShape = PosterShape.POSTER,
-                            background = null,
-                            logo = null,
-                            description = null,
-                            releaseInfo = year,
-                            imdbRating = null,
-                            genres = emptyList()
-                        ),
-                            activePosterProvider
-                        )
+                        preview = posterRatingsUrlResolver.apply(preview, activePosterProvider)
                     )
                 )
             }
         }
     }
 
-    private fun parseListItemsPayload(raw: String): List<ParsedListItem> {
+    private fun parseListItemsPayload(
+        raw: String,
+        movieRailId: String,
+        showRailId: String,
+        generatedAtMs: Long
+    ): List<ParsedListItem> {
         if (raw.isBlank()) return emptyList()
 
         return try {
             when {
-                raw.startsWith("[") -> parseListItems(JSONArray(raw))
+                raw.startsWith("[") -> parseListItems(JSONArray(raw), movieRailId, showRailId, generatedAtMs)
                 raw.startsWith("{") -> {
                     val obj = JSONObject(raw)
                     val groupedItems = buildList {
-                        obj.optJSONArray("movies")?.let { addAll(parseListItems(it)) }
-                        obj.optJSONArray("shows")?.let { addAll(parseListItems(it)) }
-                        obj.optJSONArray("items")?.let { addAll(parseListItems(it)) }
-                        obj.optJSONArray("results")?.let { addAll(parseListItems(it)) }
+                        obj.optJSONArray("movies")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
+                        obj.optJSONArray("shows")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
+                        obj.optJSONArray("items")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
+                        obj.optJSONArray("results")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
                         when (val data = obj.opt("data")) {
-                            is JSONArray -> addAll(parseListItems(data))
+                            is JSONArray -> addAll(parseListItems(data, movieRailId, showRailId, generatedAtMs))
                             is JSONObject -> {
-                                data.optJSONArray("movies")?.let { addAll(parseListItems(it)) }
-                                data.optJSONArray("shows")?.let { addAll(parseListItems(it)) }
-                                data.optJSONArray("items")?.let { addAll(parseListItems(it)) }
-                                data.optJSONArray("results")?.let { addAll(parseListItems(it)) }
+                                data.optJSONArray("movies")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
+                                data.optJSONArray("shows")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
+                                data.optJSONArray("items")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
+                                data.optJSONArray("results")?.let { addAll(parseListItems(it, movieRailId, showRailId, generatedAtMs)) }
                             }
                         }
                     }
@@ -625,13 +656,97 @@ class MDBListDiscoveryService @Inject constructor(
                     if (groupedItems.isNotEmpty()) {
                         groupedItems
                     } else {
-                        parseJsonArray(raw)?.let(::parseListItems).orEmpty()
+                        parseJsonArray(raw)
+                            ?.let { parseListItems(it, movieRailId, showRailId, generatedAtMs) }
+                            .orEmpty()
                     }
                 }
                 else -> emptyList()
             }
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    private fun normalizedMdbListItemJson(
+        raw: JSONObject,
+        itemObj: JSONObject,
+        type: ContentType,
+        contentId: String,
+        imdbId: String?,
+        tmdbId: String,
+        tvdbId: String
+    ): JsonObject {
+        val json = runCatching {
+            JsonParser.parseString(itemObj.toString()).asJsonObject
+        }.getOrElse { JsonObject() }
+
+        setStringIfMissing(json, "id", firstNonBlank(itemObj.optString("id"), raw.optString("id"), contentId))
+        json.addProperty("type", if (type == ContentType.MOVIE) "movie" else "series")
+        setStringIfMissing(
+            json,
+            "title",
+            firstNonBlank(
+                itemObj.optString("title"),
+                itemObj.optString("name"),
+                raw.optString("title"),
+                raw.optString("name"),
+                contentId
+            )
+        )
+        setIntIfMissing(json, "year", positiveInt(itemObj.optInt("year", -1), raw.optInt("year", -1)))
+        setStringIfMissing(
+            json,
+            "poster",
+            firstNonBlank(
+                itemObj.optString("poster"),
+                itemObj.optString("poster_url"),
+                itemObj.optString("image"),
+                itemObj.optString("backdrop"),
+                raw.optString("poster"),
+                raw.optString("poster_url"),
+                raw.optString("image"),
+                raw.optString("backdrop")
+            )
+        )
+        setStringIfMissing(
+            json,
+            "description",
+            firstNonBlank(
+                itemObj.optString("description"),
+                itemObj.optString("overview"),
+                raw.optString("description"),
+                raw.optString("overview")
+            )
+        )
+        setStringIfMissing(json, "imdb_id", imdbId.orEmpty())
+        setStringIfMissing(json, "tmdb_id", tmdbId)
+        setStringIfMissing(json, "tvdb_id", tvdbId)
+
+        return json
+    }
+
+    private fun setStringIfMissing(json: JsonObject, key: String, value: String) {
+        if (!json.hasNonBlankPrimitive(key) && value.isNotBlank()) {
+            json.addProperty(key, value)
+        }
+    }
+
+    private fun setIntIfMissing(json: JsonObject, key: String, value: Int) {
+        if (!json.has(key) && value > 0) {
+            json.addProperty(key, value)
+        }
+    }
+
+    private fun JsonObject.hasNonBlankPrimitive(key: String): Boolean {
+        val element = get(key) ?: return false
+        if (!element.isJsonPrimitive || element.isJsonNull) return false
+        val primitive = element.asJsonPrimitive
+        return when {
+            primitive.isString -> primitive.asString.isNotBlank()
+            primitive.isNumber -> true
+            primitive.isBoolean -> true
+            else -> false
         }
     }
 

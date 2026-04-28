@@ -30,6 +30,15 @@ import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailDisplaySeed
+import com.nexio.tv.domain.model.RailHydrationState
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.RailSource
+import com.nexio.tv.domain.model.SourcePayloadQuality
+import com.nexio.tv.domain.model.toMetaPreview
 import org.json.JSONObject
 
 class MetadataAuditRunner private constructor(
@@ -259,25 +268,22 @@ class MetadataAuditRunner private constructor(
             visibleItemIds = setOf(spec.itemId)
         )
         val trace = RecordingMetadataAuditTraceCollector()
-        val firstPaint = FirstPaintEvent(
-            itemId = spec.itemId,
-            itemType = spec.itemType,
-            source = "RAIL_PREVIEW",
-            fieldsUsed = spec.previewFields.filterValues { it != null }.keys,
-            routerExecuted = false,
-            networkExecuted = false
+        val railPreview = spec.toRailItemPreview(generatedAtMs = System.currentTimeMillis())
+        val metaPreview = railPreview.toMetaPreview()
+        val firstPaint = metaPreview.toAuditFirstPaintEvent(
+            fieldsUsed = spec.previewFields.filterValues { it != null }.keys
         )
         trace.onFirstPaint(firstPaint)
         val beforeHydration = railFields(
-            itemId = spec.itemId,
-            provider = spec.sourceProvider,
+            itemId = metaPreview.id,
+            provider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
             fields = spec.previewFields,
             sourceRole = "RAIL_PREVIEW"
         )
         val route = spec.routeProvider?.let { provider ->
             railRoute(
-                itemId = spec.itemId,
-                itemType = spec.itemType,
+                itemId = metaPreview.id,
+                itemType = metaPreview.apiType,
                 provider = provider,
                 mediaKind = spec.mediaKind,
                 targetIds = spec.targetIds,
@@ -286,11 +292,11 @@ class MetadataAuditRunner private constructor(
         }
         val afterHydration = route?.let {
             railFields(
-                itemId = spec.itemId,
+                itemId = metaPreview.id,
                 provider = it.provider.name,
                 fields = spec.hydratedFields,
                 sourceRole = "PRIMARY",
-                rejectedProvider = spec.sourceProvider,
+                rejectedProvider = metaPreview.firstPaintSourceProvider?.name ?: spec.sourceProvider,
                 rejectedSourceRole = "RAIL_PREVIEW",
                 rejectedFields = spec.previewFields.filterValues { value -> value != null }.keys
             )
@@ -298,7 +304,7 @@ class MetadataAuditRunner private constructor(
         val runtimeCalls = route?.let {
             listOf(
                 RuntimeCallEvent(
-                    itemId = spec.itemId,
+                    itemId = metaPreview.id,
                     provider = it.provider.name,
                     apiShapeId = spec.apiShapeId,
                     operationKey = "${spec.apiShapeId}:${it.targetIds[it.provider] ?: it.parentId}",
@@ -322,8 +328,8 @@ class MetadataAuditRunner private constructor(
             )
         }
         val item = ItemExecutionReport(
-            itemId = spec.itemId,
-            itemType = spec.itemType,
+            itemId = metaPreview.id,
+            itemType = metaPreview.apiType,
             addonFields = spec.previewFields,
             firstPaint = firstPaint,
             routing = route,
@@ -339,8 +345,8 @@ class MetadataAuditRunner private constructor(
             localization = null,
             violations = emptyList(),
             events = trace.events,
-            railSource = spec.railSource,
-            sourceProvider = spec.sourceProvider,
+            railSource = metaPreview.firstPaintRailSource?.name,
+            sourceProvider = metaPreview.firstPaintSourceProvider?.name,
             sourcePayloadFieldsUsed = spec.previewFields.filterValues { it != null }.keys,
             routingAfterVisible = route,
             selectedFieldsBeforeHydration = beforeHydration,
@@ -352,13 +358,84 @@ class MetadataAuditRunner private constructor(
             provenance = provenanceProvider.current(),
             verdict = AuditVerdict.PASS,
             scenario = scenario,
-            fixtureName = "metadata/rails/${spec.name}.synthetic",
+            fixtureName = "metadata/rails/${spec.name}.json",
             generatedAtEpochMs = System.currentTimeMillis(),
             items = listOf(item),
             summaries = buildSummary(listOf(item)),
             policyViolations = emptyList()
         )
         return report
+    }
+
+    private fun RailScenarioSpec.toRailItemPreview(generatedAtMs: Long): RailItemPreview {
+        return RailItemPreview(
+            railId = name,
+            railSource = railSource.toAuditRailSource(),
+            sourceProvider = sourceProvider.toAuditProviderId(),
+            sourceItemId = itemId,
+            itemType = ContentType.fromString(itemType),
+            stableIds = stableIds(),
+            display = previewDisplaySeed(),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "${name}:${previewFields.filterValues { it != null }.keys.sorted().joinToString(",")}",
+            generatedAtMs = generatedAtMs,
+            hydrationState = RailHydrationState.PREVIEW_ONLY
+        )
+    }
+
+    private fun RailScenarioSpec.previewDisplaySeed(): RailDisplaySeed {
+        val year = previewFields["year"]?.toIntOrNull()
+        return RailDisplaySeed(
+            title = previewFields["title"],
+            year = year,
+            releaseDate = previewFields["year"]?.takeIf { year == null },
+            overview = previewFields["overview"],
+            posterUrl = previewFields["poster"],
+            backdropUrl = previewFields["backdrop"]
+        )
+    }
+
+    private fun RailScenarioSpec.stableIds(): ProviderIds {
+        val targetValues = targetIds.values
+        return ProviderIds(
+            tmdb = targetValues.idValue("tmdb"),
+            tvdb = targetValues.idValue("tvdb"),
+            trakt = itemId.takeIf { sourceProvider == "TRAKT" },
+            simkl = itemId.takeIf { sourceProvider == "SIMKL" },
+            kitsu = itemId.removePrefix("kitsu:").takeIf { sourceProvider == "KITSU" }
+        )
+    }
+
+    private fun Iterable<String>.idValue(prefix: String): String? {
+        return firstNotNullOfOrNull { value ->
+            value.removePrefix("$prefix:").takeIf { it != value }
+        }
+    }
+
+    private fun String.toAuditRailSource(): RailSource {
+        return when (this) {
+            "BUILT_IN_TRAKT" -> RailSource.BUILT_IN_TRAKT
+            "BUILT_IN_MDBLIST", "MDBLIST" -> RailSource.BUILT_IN_MDBLIST
+            "BUILT_IN_TMDB", "TMDB" -> RailSource.BUILT_IN_TMDB
+            "BUILT_IN_KITSU", "KITSU" -> RailSource.BUILT_IN_KITSU
+            "BUILT_IN_SIMKL_DISCOVERY", "SIMKL_JSON" -> RailSource.BUILT_IN_SIMKL_DISCOVERY
+            else -> RailSource.ADDON_CATALOG
+        }
+    }
+
+    private fun String.toAuditProviderId(): ProviderId? {
+        return runCatching { ProviderId.valueOf(this) }.getOrNull()
+    }
+
+    private fun MetaPreview.toAuditFirstPaintEvent(fieldsUsed: Set<String>): FirstPaintEvent {
+        return FirstPaintEvent(
+            itemId = id,
+            itemType = apiType,
+            source = firstPaintSource.name,
+            fieldsUsed = fieldsUsed,
+            routerExecuted = false,
+            networkExecuted = false
+        )
     }
 
     private fun railRoute(
@@ -740,7 +817,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "mdblist-rail-first-paint-rich-preview",
-                railSource = "MDBLIST",
+                railSource = "BUILT_IN_MDBLIST",
                 sourceProvider = "MDBLIST",
                 itemId = "mdblist:movie:aurora",
                 itemType = "movie",
@@ -754,7 +831,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "tmdb-movie-rail-first-paint-rich-preview",
-                railSource = "TMDB",
+                railSource = "BUILT_IN_TMDB",
                 sourceProvider = "TMDB",
                 itemId = "tmdb:movie:501",
                 itemType = "movie",
@@ -768,7 +845,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "tmdb-tv-rail-preview-then-tvdb-hydration",
-                railSource = "TMDB",
+                railSource = "BUILT_IN_TMDB",
                 sourceProvider = "TMDB",
                 itemId = "tmdb:tv:1399",
                 itemType = "series",
@@ -793,7 +870,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "kitsu-rail-first-paint-rich-preview",
-                railSource = "KITSU",
+                railSource = "BUILT_IN_KITSU",
                 sourceProvider = "KITSU",
                 itemId = "kitsu:7442",
                 itemType = "series",
@@ -806,7 +883,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "simkl-json-rail-first-paint-rich-preview",
-                railSource = "SIMKL_JSON",
+                railSource = "BUILT_IN_SIMKL_DISCOVERY",
                 sourceProvider = "SIMKL",
                 itemId = "simkl:movie:77",
                 itemType = "movie",
@@ -820,7 +897,7 @@ class MetadataAuditRunner private constructor(
             ),
             RailScenarioSpec(
                 name = "simkl-json-rail-visible-hydrates-tmdb",
-                railSource = "SIMKL_JSON",
+                railSource = "BUILT_IN_SIMKL_DISCOVERY",
                 sourceProvider = "SIMKL",
                 itemId = "simkl:movie:88",
                 itemType = "movie",

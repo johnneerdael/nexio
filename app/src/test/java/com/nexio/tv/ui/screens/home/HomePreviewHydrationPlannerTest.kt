@@ -112,6 +112,30 @@ class HomePreviewHydrationPlannerTest {
     }
 
     @Test
+    fun `focused visible target selection is source-neutral for addon and rail previews`() {
+        val addonPreview = metaPreview(
+            id = "tt0111161",
+            firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
+        )
+        val railPreview = metaPreview(
+            id = "tmdb:603",
+            firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+            firstPaintSourceProvider = ProviderId.TMDB,
+            firstPaintRailSource = RailSource.BUILT_IN_TMDB,
+            firstPaintSourceItemId = "tmdb:movie:603"
+        )
+
+        val targets = HomePreviewHydrationPlanner.targetsForVisibleWindow(
+            items = listOf(addonPreview, railPreview),
+            visibleRange = 0..1,
+            focusedIndex = 1,
+            adjacentCount = 1
+        )
+
+        assertEquals(listOf(addonPreview, railPreview), targets)
+    }
+
+    @Test
     fun `negative adjacent count behaves like focused item only`() {
         val items = previews(5)
 

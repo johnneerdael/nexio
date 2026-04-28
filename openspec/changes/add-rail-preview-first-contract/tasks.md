@@ -13,3 +13,14 @@
 - [ ] Carry rail preview stable IDs through existing `MetadataSourceContext` requests.
 - [ ] Replace rail-specific hydration helper logic with source-neutral preview hydration planning or the existing focus/preload entrypoint.
 - [ ] Add architecture tests preventing provider DTOs, rail mappers, or rail-specific hydration schedulers from entering Home renderer code.
+
+## Production Wiring Guard Pass
+
+- [ ] Wire Trakt discovery rows through `TraktRailPreviewMapper` before shared `MetaPreview` first paint.
+- [ ] Wire MDBList discovery rows through `MDBListRailPreviewMapper` before shared `MetaPreview` first paint.
+- [ ] Wire TMDB discovery rows through `TmdbRailPreviewMapper` before shared `MetaPreview` first paint.
+- [ ] Wire Kitsu discovery rows through `KitsuRailPreviewMapper` before shared `MetaPreview` first paint.
+- [ ] Wire Simkl discovery rows through `SimklRailPreviewMapper` before shared `MetaPreview` first paint.
+- [x] Add architecture guards proving built-in rail providers enter Home through the shared preview bridge.
+- [x] Prove built-in rail audit scenarios construct `RailItemPreview` and convert through shared `MetaPreview` first paint.
+- [x] Prove visible hydration target selection is source-neutral for addon and built-in rail previews.

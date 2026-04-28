@@ -7,15 +7,18 @@ import com.google.gson.JsonObject
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.integration.railpreview.SimklRailPreviewMapper
 import com.nexio.tv.data.integration.simkl.SimklIntegrationProvider
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
+import com.nexio.tv.data.remote.dto.simkl.SimklDiscoveryItemDto
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.toMetaPreview
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -128,6 +131,7 @@ class SimklDiscoveryService @Inject constructor(
     private val profileSnapshots = MutableStateFlow<Map<Int, SimklDiscoverySnapshot>>(emptyMap())
     private val refreshMutex = Mutex()
     private val gson = Gson()
+    private val railPreviewMapper = SimklRailPreviewMapper()
     private val lastRefreshByProfile = mutableMapOf<Int, Long>()
     private val snapshotTtlMs = 6L * 60L * 60L * 1_000L
     private val minRefreshIntervalMs = 30_000L
@@ -254,7 +258,7 @@ class SimklDiscoveryService @Inject constructor(
             val results = linkedMapOf<String, List<MetaPreview>>()
             prefs.enabledCatalogs.forEach { catalogId ->
                 val source = catalogSources[catalogId] ?: return@forEach
-                results[catalogId] = fetchCatalog(source)
+                results[catalogId] = fetchCatalog(railId = catalogId, source = source)
             }
             val refreshed = SimklDiscoverySnapshot(
                 itemsByCatalog = results,
@@ -274,10 +278,19 @@ class SimklDiscoveryService @Inject constructor(
         }
     }
 
-    private suspend fun fetchCatalog(source: SimklCatalogSource): List<MetaPreview> {
+    private suspend fun fetchCatalog(railId: String, source: SimklCatalogSource): List<MetaPreview> {
         val body = executeGet(source.url) ?: return emptyList()
         val array = runCatching { gson.fromJson(body, JsonArray::class.java) }.getOrNull() ?: return emptyList()
-        return array.mapNotNull { element -> mapDiscoveryItem(element.asJsonObject, source.kind) }
+        val generatedAtMs = System.currentTimeMillis()
+        return array.mapIndexedNotNull { index, element ->
+            mapDiscoveryItem(
+                railId = railId,
+                dto = element.asJsonObject,
+                kind = source.kind,
+                position = index,
+                generatedAtMs = generatedAtMs
+            )
+        }
             .take(maxItemsPerRail)
     }
 
@@ -285,50 +298,44 @@ class SimklDiscoveryService @Inject constructor(
         simklIntegrationProvider.fetchDiscoveryBody(url)
     }
 
-    private suspend fun mapDiscoveryItem(dto: JsonObject, kind: String): MetaPreview? {
+    private fun mapDiscoveryItem(
+        railId: String,
+        dto: JsonObject,
+        kind: String,
+        position: Int,
+        generatedAtMs: Long
+    ): MetaPreview? {
         val media = extractSimklDiscoveryMediaObject(dto, kind)
-        val ids = media.getAsJsonObject("ids") ?: dto.getAsJsonObject("ids") ?: return null
-        val contentId = resolveSimklCanonicalContentId(
-            kind = kind,
-            ids = ids,
-            externalIdCache = externalIdCache,
-            fetchExternalContentId = ::fetchExternalContentId
-        ) ?: return null
-
         val isMovie = kind == "movies" ||
             media.get("anime_type")?.asString?.equals("movie", ignoreCase = true) == true
         val type = if (isMovie) ContentType.MOVIE else ContentType.SERIES
-        val rawType = when {
-            kind == "anime" -> "anime"
-            type == ContentType.MOVIE -> "movie"
-            else -> "series"
+        val discoveryItem = mapSimklDiscoveryItemDto(dto = dto, media = media) ?: return null
+
+        return railPreviewMapper.mapDiscoveryItem(
+            railId = railId,
+            item = discoveryItem,
+            itemType = type,
+            position = position,
+            generatedAtMs = generatedAtMs
+        )
+            ?.toMetaPreview()
+            ?.let { preview -> posterRatingsUrlResolver.apply(preview, activePosterProvider) }
+    }
+
+    private fun mapSimklDiscoveryItemDto(
+        dto: JsonObject,
+        media: JsonObject
+    ): SimklDiscoveryItemDto? {
+        val merged = JsonObject()
+        dto.entrySet().forEach { (key, value) ->
+            if (key != "show" && key != "anime" && key != "movie") {
+                merged.add(key, value)
+            }
         }
-        val title = media.get("title")?.asString?.takeIf { it.isNotBlank() } ?: contentId
-        val releaseInfo = dto.get("date")?.asString
-            ?: media.get("date")?.asString
-            ?: media.get("release_date")?.asString
-            ?: media.get("first_aired")?.asString
-        val enriched = resolveMetaPreview(
-            type = if (type == ContentType.MOVIE) "movie" else "series",
-            contentId = contentId
-        )
-        return enriched ?: posterRatingsUrlResolver.apply(
-            MetaPreview(
-                id = contentId,
-                type = type,
-                rawType = rawType,
-                name = title,
-                poster = null,
-                posterShape = PosterShape.POSTER,
-                background = null,
-                logo = null,
-                description = null,
-                releaseInfo = releaseInfo,
-                imdbRating = null,
-                genres = emptyList()
-            ),
-            activePosterProvider
-        )
+        media.entrySet().forEach { (key, value) ->
+            merged.add(key, value)
+        }
+        return runCatching { gson.fromJson(merged, SimklDiscoveryItemDto::class.java) }.getOrNull()
     }
 
     private suspend fun fetchExternalContentId(
