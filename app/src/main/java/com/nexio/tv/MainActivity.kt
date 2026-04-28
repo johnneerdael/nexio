@@ -343,7 +343,20 @@ class MainActivity : ComponentActivity() {
     private fun switchProfileAndApplyLocale(profileId: Int) {
         lifecycleScope.launch {
             val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
-            profileManager.setActiveProfile(profileId)
+            try {
+                profileManager.setActiveProfile(profileId)
+            } catch (e: com.nexio.tv.core.integration.ProfileBoundaryException) {
+                if (e.violation == com.nexio.tv.core.integration.ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) {
+                    android.widget.Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.profile_switch_blocked_by_playback),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                } else {
+                    throw e
+                }
+            }
             val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
             if (beforeLocale != afterLocale) {
                 recreate()
@@ -520,7 +533,20 @@ class MainActivity : ComponentActivity() {
                             onProfileSelected = { profileId ->
                                 profileSelectionScope.launch {
                                     val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
-                                    profileManager.setActiveProfile(profileId)
+                                    try {
+                                        profileManager.setActiveProfile(profileId)
+                                    } catch (e: com.nexio.tv.core.integration.ProfileBoundaryException) {
+                                        if (e.violation == com.nexio.tv.core.integration.ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) {
+                                            android.widget.Toast.makeText(
+                                                this@MainActivity,
+                                                getString(R.string.profile_switch_blocked_by_playback),
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                            return@launch
+                                        } else {
+                                            throw e
+                                        }
+                                    }
                                     val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
                                     processProfileSelectionGatePassed = true
                                     hasPassedProfileSelectionGate = true
