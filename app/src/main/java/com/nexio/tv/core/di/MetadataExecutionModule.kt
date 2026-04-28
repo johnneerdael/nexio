@@ -5,6 +5,7 @@ import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.data.integration.metadata.KitsuMetadataProviderAdapter
 import com.nexio.tv.data.integration.metadata.RuntimeMetadataIdentityLookup
 import com.nexio.tv.data.integration.metadata.TmdbMetadataProviderAdapter
+import com.nexio.tv.data.integration.metadata.TmdbOrganizationPersonAdapter
 import com.nexio.tv.data.integration.metadata.TmdbRecommendationMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TmdbReviewMetadataAdapter
 import com.nexio.tv.data.integration.metadata.TmdbTrailerMetadataAdapter
@@ -46,6 +47,10 @@ abstract class MetadataExecutionModule {
     @Binds
     @IntoSet
     abstract fun bindTmdbRecommendationAdapter(impl: TmdbRecommendationMetadataAdapter): MetadataProviderAdapter
+
+    @Binds
+    @IntoSet
+    abstract fun bindTmdbOrganizationPersonAdapter(impl: TmdbOrganizationPersonAdapter): MetadataProviderAdapter
 
     @Binds
     abstract fun bindIdentityLookup(impl: RuntimeMetadataIdentityLookup): MetadataIdentityResolver.Lookup
