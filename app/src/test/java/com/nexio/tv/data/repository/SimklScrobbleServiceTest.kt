@@ -1,11 +1,16 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -24,10 +29,15 @@ class SimklScrobbleServiceTest {
         )
         coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
 
+        val profileManager = mockk<ProfileManager> {
+            every { activeProfileId } returns MutableStateFlow(1)
+        }
         val service = SimklScrobbleService(
             trackingProviderStateService = trackingProviderStateService,
             watchingNowStateController = controller,
-            traktMutationOutboxCoordinator = coordinator
+            traktMutationOutboxCoordinator = coordinator,
+            profileManager = profileManager,
+            traceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink, sessionId = { null })
         )
         val item = movieItem("simkl:12345", "Arrival")
 
