@@ -30,6 +30,8 @@ private data class EpisodeRatingsCacheDto(
     val ratings: Map<String, Double>
 )
 
+private const val MDBLIST_RAIL_APPEND_TO_RESPONSE = "genres,poster,description,ratings"
+
 @Singleton
 class MDBListIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
@@ -67,7 +69,10 @@ class MDBListIntegrationProvider @Inject constructor(
                 profileId = profileId,
                 operation = "mdblist.get_raw_with_query"
             ) {
-                getRawWithQueryWithinRuntimeLoad(relativeUrl = relativeUrl, query = query)
+                getRawWithQueryWithinRuntimeLoad(
+                    relativeUrl = relativeUrl,
+                    query = query.withRailAppendToResponse()
+                )
             }
         )
 
@@ -98,6 +103,13 @@ class MDBListIntegrationProvider @Inject constructor(
             IntegrationCallResult.HttpError(response.code())
         } else {
             IntegrationCallResult.Success(response.body()?.string().orEmpty())
+        }
+
+    private fun Map<String, String>.withRailAppendToResponse(): Map<String, String> =
+        if (containsKey("append_to_response")) {
+            this
+        } else {
+            this + ("append_to_response" to MDBLIST_RAIL_APPEND_TO_RESPONSE)
         }
 
     private fun accountCallSpec(
