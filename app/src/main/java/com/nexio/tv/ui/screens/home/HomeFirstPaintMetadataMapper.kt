@@ -17,6 +17,7 @@ fun MetaPreview.toFirstPaintHomeDisplayMetadata(): HomeDisplayMetadata {
     FirstPaintTracer.recordHomePreview(
         contentId = id,
         itemType = apiType,
+        source = firstPaintSource.name,
         fieldsUsed = collectFirstPaintFieldsUsed(display)
     )
     return display

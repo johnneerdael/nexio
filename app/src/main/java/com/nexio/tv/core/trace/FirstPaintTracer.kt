@@ -26,13 +26,14 @@ object FirstPaintTracer {
     fun recordHomePreview(
         contentId: String,
         itemType: String,
+        source: String = "ADDON_META_PREVIEW",
         fieldsUsed: Set<String>
     ) {
         events.emitFirstPaint(
             contentId = contentId,
             itemType = itemType,
             surface = SourceSurface.HOME,
-            source = "ADDON_META_PREVIEW",
+            source = source,
             fieldsUsed = fieldsUsed.toList(),
             routerExecuted = false,
             networkExecuted = false,

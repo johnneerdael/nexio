@@ -6,8 +6,9 @@ import java.util.concurrent.atomic.AtomicLong
  * Helper for metadata-layer instrumentation.
  *
  * `emitFirstPaint` is wired in production via [FirstPaintTracer], invoked from
- * the canonical addon-preview boundary `MetaPreview.toHomeDisplayMetadata()` so
- * the validator rule `PreviewMustNotRouteOrNetwork` has a real event to evaluate.
+ * the canonical Home first-paint boundary so the validator rule
+ * `PreviewMustNotRouteOrNetwork` has a real event to evaluate for both addon
+ * previews and rail previews.
  *
  * `emitRouteDecision` is invoked from [com.nexio.tv.core.metadata.router.MetadataRouter]
  * at its single private route() builder, so every MetadataRoute construction emits
