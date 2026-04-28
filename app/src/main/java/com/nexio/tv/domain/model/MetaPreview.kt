@@ -2,6 +2,11 @@ package com.nexio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
 
+enum class FirstPaintSource {
+    ADDON_META_PREVIEW,
+    RAIL_PREVIEW
+}
+
 @Immutable
 data class MetaPreview(
     val id: String,
@@ -21,7 +26,12 @@ data class MetaPreview(
     val genres: List<String>,
     val trailerYtIds: List<String> = emptyList(),
     val language: String? = null,
-    val posterProviderTag: String? = null
+    val posterProviderTag: String? = null,
+    val firstPaintSource: FirstPaintSource = FirstPaintSource.ADDON_META_PREVIEW,
+    val firstPaintSourceProvider: ProviderId? = null,
+    val firstPaintStableIds: ProviderIds = ProviderIds(),
+    val firstPaintRailSource: RailSource? = null,
+    val firstPaintSourceItemId: String? = null
 ) {
     val apiType: String
         get() = type.toApiString(rawType)
