@@ -154,6 +154,11 @@ class TmdbMetadataProviderAdapter @Inject constructor(
         policy: LocalizationPolicy,
         english: TmdbSeasonResponse? = null
     ): TmdbEpisodeLocalizationResult {
+        // F-E-03: TMDB does not have per-episode localization decisions like TVDB. Episode language
+        // is determined by the request-level `language` parameter; episodes either come back in the
+        // requested locale or fall back to TMDB's response default. There is no per-(episode, field)
+        // winner to emit via field_selected. The series-level localization decision is captured by
+        // emitLocalizationPlan (see Task 4).
         val season = this?.seasonNumber ?: english?.seasonNumber ?: return TmdbEpisodeLocalizationResult()
         val primaryEpisodes = this?.episodes ?: english?.episodes ?: return TmdbEpisodeLocalizationResult()
         val englishByNumber = english?.episodes.orEmpty().mapNotNull { episode ->
