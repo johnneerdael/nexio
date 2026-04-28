@@ -105,6 +105,33 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                         source.toMetadataTrace(field = field, provider = this.provider)
                     }
                 }
+                // F-E-03: emit metadata.field_selected for each per-episode field winner.
+                bundle.episodes.forEach { (seasonEp, localizedEpisode) ->
+                    val (season, episode) = seasonEp
+                    localizedEpisode.fieldSources.forEach { (fieldName, source) ->
+                        val resolvedField = when (fieldName) {
+                            "title" -> ResolvedField.TITLE
+                            "overview" -> ResolvedField.OVERVIEW
+                            else -> return@forEach
+                        }
+                        traceEvents.emitFieldSelected(
+                            contentId = "tvdb:$tvdbId:s${season}e${episode}",
+                            field = resolvedField.name,
+                            selectedProvider = this.provider.name,
+                            sourceRole = source.fallbackRole.name,
+                            valuePreview = "<episode-$fieldName>",
+                            ownershipRule = "localization-resolver: ${source.fallbackRole.name}",
+                            rejectedCandidates = source.rejectedCandidates.map { rejection ->
+                                mapOf(
+                                    "provider" to rejection.provider.name,
+                                    "language" to rejection.language.providerCode,
+                                    "fallbackRole" to rejection.fallbackRole.name,
+                                    "reason" to rejection.reason
+                                )
+                            }
+                        )
+                    }
+                }
                 return ProviderStepResult(
                     step = step,
                     candidate = emptyCandidate(this.provider),
