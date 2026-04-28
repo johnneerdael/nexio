@@ -15,7 +15,14 @@ internal data class LocalizationPolicy(
     val provider: MetadataPrimaryProvider,
     val policyVersion: Int,
     val allowProviderFallbackForMissingLocalizedFields: Boolean,
-    val maxPerEpisodeTranslationFallbacksPerRequest: Int
+    val maxPerEpisodeTranslationFallbacksPerRequest: Int,
+    /**
+     * F-E-04: when `true`, the provider's own response is expected to embed BOTH the requested
+     * and fallback languages within a single fetch (e.g. Kitsu's `attributes.titles` map carries
+     * `en`, `en_jp`, `ja`, ...). When `false`, the adapter must issue a second fetch in the
+     * fallback language to satisfy the policy contract.
+     */
+    val fallbackLanguageEmbeddedInResponse: Boolean = false
 ) {
     val requestedIsFallback: Boolean
         get() = requestedLanguage.providerCode == fallbackLanguage.providerCode
@@ -70,7 +77,8 @@ internal data class LocalizationPolicy(
                 provider = MetadataPrimaryProvider.KITSU,
                 policyVersion = CURRENT_VERSION,
                 allowProviderFallbackForMissingLocalizedFields = false,
-                maxPerEpisodeTranslationFallbacksPerRequest = 0
+                maxPerEpisodeTranslationFallbacksPerRequest = 0,
+                fallbackLanguageEmbeddedInResponse = true  // F-E-04
             )
         }
 
