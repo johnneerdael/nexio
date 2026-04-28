@@ -135,15 +135,108 @@ class RailPreviewHydrationCoordinatorTest {
         assertEquals("source:series:1", preview.bestRoutingId())
     }
 
+    @Test
+    fun trakt_tv_rail_visible_item_hydrates_tvdb() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(trakt = "10", tvdb = "81189", tmdb = "1396"),
+            sourceItemId = "trakt:show:10"
+        )
+
+        assertEquals("tvdb:81189", preview.bestRoutingId())
+    }
+
+    @Test
+    fun trakt_movie_rail_visible_item_hydrates_tmdb() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(trakt = "20", tmdb = "550", imdb = "tt0137523"),
+            sourceItemId = "trakt:movie:20"
+        )
+
+        assertEquals("tmdb:550", preview.bestRoutingId())
+    }
+
+    @Test
+    fun mdblist_movie_rail_visible_item_hydrates_tmdb() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_MDBLIST,
+            sourceProvider = ProviderId.MDBLIST,
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(tmdb = "603", imdb = "tt0133093"),
+            sourceItemId = "mdblist:movie:603"
+        )
+
+        assertEquals("tmdb:603", preview.bestRoutingId())
+    }
+
+    @Test
+    fun tmdb_tv_rail_visible_item_resolves_tvdb_primary() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TMDB,
+            sourceProvider = ProviderId.TMDB,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(tmdb = "1399", tvdb = "121361"),
+            sourceItemId = "tmdb:tv:1399"
+        )
+
+        assertEquals("tvdb:121361", preview.bestRoutingId())
+    }
+
+    @Test
+    fun kitsu_rail_visible_item_hydrates_kitsu() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_KITSU,
+            sourceProvider = ProviderId.KITSU,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(kitsu = "1", tmdb = "37854", tvdb = "78874"),
+            sourceItemId = "kitsu:anime:1"
+        )
+
+        assertEquals("kitsu:1", preview.bestRoutingId())
+    }
+
+    @Test
+    fun simkl_movie_rail_visible_item_hydrates_tmdb() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_SIMKL_DISCOVERY,
+            sourceProvider = ProviderId.SIMKL,
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(simkl = "30", tmdb = "27205", imdb = "tt1375666"),
+            sourceItemId = "simkl:movie:30"
+        )
+
+        assertEquals("tmdb:27205", preview.bestRoutingId())
+    }
+
+    @Test
+    fun simkl_tv_rail_visible_item_hydrates_tvdb() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_SIMKL_DISCOVERY,
+            sourceProvider = ProviderId.SIMKL,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(simkl = "40", tmdb = "66732", tvdb = "305288"),
+            sourceItemId = "simkl:show:40"
+        )
+
+        assertEquals("tvdb:305288", preview.bestRoutingId())
+    }
+
     private fun railItemPreview(
+        railSource: RailSource = RailSource.ADDON_CATALOG,
+        sourceProvider: ProviderId = ProviderId.ADDON,
         itemType: ContentType,
         stableIds: ProviderIds,
         sourceItemId: String
     ): RailItemPreview {
         return RailItemPreview(
             railId = "rail",
-            railSource = RailSource.ADDON_CATALOG,
-            sourceProvider = ProviderId.ADDON,
+            railSource = railSource,
+            sourceProvider = sourceProvider,
             sourceItemId = sourceItemId,
             itemType = itemType,
             stableIds = stableIds,

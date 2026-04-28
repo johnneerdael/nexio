@@ -267,6 +267,32 @@ class FieldResolver @Inject constructor(
                     fieldValue = fieldValue,
                     selectedOwner = fieldValue.owner
                 )
+            } else if (canReplaceRailPreview(field, sourceRoles[field], fieldValue)) {
+                ignoredOverwrites += IgnoredFieldOverwrite(
+                    field = field,
+                    existingOwner = existingOwner,
+                    attemptedOwner = existingOwner,
+                    attemptedValue = fields[field] ?: fieldValue.value
+                )
+                rejectedByField.getOrPut(field) { mutableListOf() }.add(
+                    mapOf(
+                        "provider" to sourceProviders[field],
+                        "sourceProvider" to sourceProviders[field],
+                        "sourceRole" to SourceRole.RAIL_PREVIEW.name,
+                        "reason" to "dedicated resolver field replaces rail preview"
+                    )
+                )
+                selectField(
+                    fields = fields,
+                    owners = owners,
+                    sourceRoles = sourceRoles,
+                    sourceProviders = sourceProviders,
+                    localization = localization,
+                    candidate = candidate,
+                    field = field,
+                    fieldValue = fieldValue,
+                    selectedOwner = fieldValue.owner
+                )
             } else {
                 ignoredOverwrites += IgnoredFieldOverwrite(
                     field = field,
@@ -283,6 +309,22 @@ class FieldResolver @Inject constructor(
                     )
                 )
             }
+        }
+    }
+
+    private fun canReplaceRailPreview(
+        field: ResolvedField,
+        existingSourceRole: SourceRole?,
+        fieldValue: FieldValue
+    ): Boolean {
+        if (existingSourceRole != SourceRole.RAIL_PREVIEW) return false
+
+        return when (field) {
+            ResolvedField.POSTER,
+            ResolvedField.BACKDROP,
+            ResolvedField.LOGO -> fieldValue.owner == FieldOwner.ARTWORK
+            ResolvedField.RATING -> fieldValue.owner == FieldOwner.RATING
+            else -> false
         }
     }
 
