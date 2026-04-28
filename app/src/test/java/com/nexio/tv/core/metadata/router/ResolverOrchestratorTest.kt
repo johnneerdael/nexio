@@ -112,4 +112,22 @@ class ResolverOrchestratorTest {
             assertTrue(schedule.networkResolvers == schedule.networkResolvers.distinct())
         }
     }
+
+    @Test
+    fun `DETAIL_MEDIA does not schedule ARTWORK (F-04-04 pin)`() {
+        val schedule = orchestrator.schedule(MetadataDepth.DETAIL_MEDIA)
+        assertFalse(
+            "ARTWORK should be DETAIL_CORE only (collapsed into core response per F-04-04). Found in DETAIL_MEDIA: ${schedule.localResolvers + schedule.networkResolvers}",
+            ResolverType.ARTWORK in (schedule.localResolvers + schedule.networkResolvers)
+        )
+    }
+
+    @Test
+    fun `DETAIL_CORE still schedules ARTWORK (regression guard)`() {
+        val schedule = orchestrator.schedule(MetadataDepth.DETAIL_CORE)
+        assertTrue(
+            "ARTWORK must remain in DETAIL_CORE schedule (it's the canonical artwork pass)",
+            ResolverType.ARTWORK in (schedule.localResolvers + schedule.networkResolvers)
+        )
+    }
 }
