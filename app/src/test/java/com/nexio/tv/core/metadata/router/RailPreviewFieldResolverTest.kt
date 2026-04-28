@@ -71,6 +71,7 @@ class RailPreviewFieldResolverTest {
             ),
             document.ignoredOverwrites.single()
         )
+        assertEquals("Preview Title", document.ignoredOverwrites.single().attemptedValue)
 
         val titleEvent = sink.events
             .first { it.eventType == "metadata.field_selected" && (it.payload as Map<*, *>)["field"] == "TITLE" }
