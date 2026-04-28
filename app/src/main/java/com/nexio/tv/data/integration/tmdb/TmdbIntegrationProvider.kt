@@ -742,10 +742,29 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) {
             return IntegrationLoadResult.HttpError(statusCode = 401, reason = "tmdb_api_key_missing")
         }
-        return loadResponse(
-            request = "tmdb_person_details",
-            call = { tmdbApi.getPersonDetails(personId = personId, apiKey = credential.apiKey) }
+        val result = runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.PERSON_DETAIL,
+                operationKey = "tmdb.person.detail",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                call = {
+                    val response = runCatching {
+                        tmdbApi.getPersonDetails(personId = personId, apiKey = credential.apiKey)
+                    }.getOrElse { exception ->
+                        if (exception is CancellationException) throw exception
+                        return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
+                    }
+                    if (!response.isSuccessful) {
+                        IntegrationCallResult.HttpError(response.code(), reason = "tmdb_person_details")
+                    } else {
+                        response.body()?.let { IntegrationCallResult.Success(it) }
+                            ?: IntegrationCallResult.HttpError(response.code(), reason = "tmdb_person_details:empty_body")
+                    }
+                }
+            )
         )
+        return result.toLoadResult(httpReason = "tmdb_person_details")
     }
 
     suspend fun loadPersonCombinedCredits(personId: Int): IntegrationLoadResult<TmdbPersonCreditsResponse> {
@@ -753,10 +772,29 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) {
             return IntegrationLoadResult.HttpError(statusCode = 401, reason = "tmdb_api_key_missing")
         }
-        return loadResponse(
-            request = "tmdb_person_credits",
-            call = { tmdbApi.getPersonCombinedCredits(personId = personId, apiKey = credential.apiKey) }
+        val result = runtime.call(
+            IntegrationCallSpec(
+                provider = IntegrationProvider.TMDB,
+                apiShapeId = TmdbApiShapes.PERSON_COMBINED_CREDITS,
+                operationKey = "tmdb.person.combined_credits",
+                workClass = IntegrationWorkClass.USER_VISIBLE,
+                call = {
+                    val response = runCatching {
+                        tmdbApi.getPersonCombinedCredits(personId = personId, apiKey = credential.apiKey)
+                    }.getOrElse { exception ->
+                        if (exception is CancellationException) throw exception
+                        return@IntegrationCallSpec IntegrationCallResult.NetworkError(exception)
+                    }
+                    if (!response.isSuccessful) {
+                        IntegrationCallResult.HttpError(response.code(), reason = "tmdb_person_credits")
+                    } else {
+                        response.body()?.let { IntegrationCallResult.Success(it) }
+                            ?: IntegrationCallResult.HttpError(response.code(), reason = "tmdb_person_credits:empty_body")
+                    }
+                }
+            )
         )
+        return result.toLoadResult(httpReason = "tmdb_person_credits")
     }
 
     suspend fun searchPeople(query: String): IntegrationLoadResult<TmdbPersonSearchResponse> {
@@ -1381,6 +1419,14 @@ class TmdbIntegrationProvider private constructor(
             )
         ).valueOrNull()
     }
+
+    private fun <T> IntegrationCallResult<T>.toLoadResult(httpReason: String): IntegrationLoadResult<T> =
+        when (this) {
+            is IntegrationCallResult.Success -> IntegrationLoadResult.Success(value)
+            is IntegrationCallResult.HttpError -> IntegrationLoadResult.HttpError(statusCode, reason = reason ?: httpReason)
+            is IntegrationCallResult.NetworkError -> IntegrationLoadResult.NetworkError(throwable)
+            IntegrationCallResult.Missing -> IntegrationLoadResult.HttpError(404, reason = "$httpReason:missing")
+        }
 
     private suspend fun <T : Any> loadResponse(
         request: String,

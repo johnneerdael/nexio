@@ -2,6 +2,7 @@ package com.nexio.tv.core.tmdb
 
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationLoadResult
+import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
@@ -91,7 +92,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `loadPersonDetails returns person response from success response`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.getPersonDetails(personId = 555, apiKey = "tmdb-key", language = null)
@@ -121,7 +122,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `loadPersonCombinedCredits returns credits response from success response`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.getPersonCombinedCredits(personId = 555, apiKey = "tmdb-key", language = null)
