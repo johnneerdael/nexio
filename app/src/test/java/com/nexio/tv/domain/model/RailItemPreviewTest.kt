@@ -66,7 +66,7 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `movie preview falls back to imdb routeable meta id when tmdb is unavailable`() {
+    fun `movie preview falls back to source item id when tmdb is unavailable`() {
         val preview = RailItemPreview(
             railId = "trakt_recommended_movies",
             railSource = RailSource.BUILT_IN_TRAKT,
@@ -85,8 +85,32 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("imdb:tt0137523", meta.id)
+        assertEquals("trakt:movie:7", meta.id)
         assertEquals("Fight Club", meta.name)
+    }
+
+    @Test
+    fun `non kitsu series preview prefers tvdb over kitsu meta id`() {
+        val preview = RailItemPreview(
+            railId = "trakt_trending_anime",
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            sourceItemId = "trakt:show:99",
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(
+                kitsu = "7442",
+                tvdb = "79481"
+            ),
+            display = RailDisplaySeed(title = "Fullmetal Alchemist", year = 2003),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash-trakt-fma",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals("tvdb:79481", meta.id)
+        assertEquals("Fullmetal Alchemist", meta.name)
     }
 
     @Test

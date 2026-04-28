@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.bestSupportedRoutingId
 
 object RailPreviewHydrationCoordinator {
     fun targetsForVisibleWindow(
@@ -48,10 +49,4 @@ object RailPreviewHydrationCoordinator {
     }
 }
 
-fun RailItemPreview.bestRoutingId(): String = when {
-    stableIds.kitsu != null -> "kitsu:${stableIds.kitsu}"
-    itemType == ContentType.MOVIE && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
-    itemType == ContentType.SERIES && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
-    stableIds.imdb != null -> stableIds.imdb
-    else -> sourceItemId
-}
+fun RailItemPreview.bestRoutingId(): String = bestSupportedRoutingId()
