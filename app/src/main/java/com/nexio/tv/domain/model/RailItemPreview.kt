@@ -113,7 +113,7 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
     val title = display.title
         ?: display.originalTitle
         ?: stableIds.imdb
-        ?: stableIds.tmdb?.let { "TMDB " }
+        ?: stableIds.tmdb?.let { "TMDB $it" }
         ?: sourceItemId
     val ratingSource = display.rating?.provider.toTitleRatingSource()
 
