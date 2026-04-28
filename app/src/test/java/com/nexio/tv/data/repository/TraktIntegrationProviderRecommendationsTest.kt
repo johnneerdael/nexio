@@ -264,7 +264,7 @@ private fun authServiceForProfile(profileId: Int): TraktAuthService =
         every { currentTraktProfileId() } returns profileId
     }
 
-private class InMemoryIntegrationCacheDao : IntegrationCacheDao {
+private class InMemoryIntegrationCacheDao : IntegrationCacheDao() {
     private val entries = linkedMapOf<String, IntegrationCacheEntity>()
 
     override suspend fun upsertCacheEntry(entity: IntegrationCacheEntity) {
