@@ -27,6 +27,7 @@ class ProviderPlanExecutor @Inject constructor() {
             MetadataPrimaryProvider.TMDB -> tmdbSteps(route, depth)
             MetadataPrimaryProvider.TVDB -> tvdbSteps(route, depth)
             MetadataPrimaryProvider.KITSU -> kitsuSteps(route, depth)
+            else -> error("No provider execution adapter for ${route.provider}")
         }
 
         return ProviderExecutionPlan(route = route, depth = depth, steps = steps)

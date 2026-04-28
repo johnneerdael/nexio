@@ -45,6 +45,8 @@ class MetadataRouter @Inject constructor(
                 conflictFallbackProvider = MetadataPrimaryProvider.TMDB,
                 trace = trace
             )
+            AnimeIdScheme.TRAKT,
+            AnimeIdScheme.SIMKL,
             AnimeIdScheme.UNKNOWN -> fallbackByItemType(normalized, trace)
         }
     }

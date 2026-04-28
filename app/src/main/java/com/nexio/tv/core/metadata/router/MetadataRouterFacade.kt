@@ -424,6 +424,9 @@ class MetadataRouterFacade @Inject constructor(
             MetadataPrimaryProvider.KITSU -> TvProvider.KITSU
             MetadataPrimaryProvider.TMDB -> TvProvider.TMDB
             MetadataPrimaryProvider.TVDB,
+            MetadataPrimaryProvider.IMDB,
+            MetadataPrimaryProvider.TRAKT,
+            MetadataPrimaryProvider.SIMKL,
             null -> TvProvider.TVDB
         }
 }
