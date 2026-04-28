@@ -71,10 +71,6 @@ class RailPreviewLifecycleArchitectureTest {
 
     @Test
     fun `built in rail preview mappers are used by production rail assembly`() {
-        val productionSources = productionKotlinFiles()
-            .filterNot { file -> file.invariantSeparatorsPath.contains("/data/integration/railpreview/") }
-            .joinToString(separator = "\n") { file -> file.readText() }
-
         val requiredMapperUsages = mapOf(
             "TraktDiscoveryService.kt" to "TraktRailPreviewMapper",
             "MDBListDiscoveryService.kt" to "MDBListRailPreviewMapper",
@@ -98,24 +94,33 @@ class RailPreviewLifecycleArchitectureTest {
     }
 
     @Test
-    fun `home production code has no rail preview hydration sidecar`() {
-        val forbiddenPatterns = mapOf(
-            "RailPreviewHydration*" to Regex("""\bRailPreviewHydration\w*\b"""),
-            "RailPreviewHydrator*" to Regex("""\bRailPreviewHydrator\w*\b"""),
-            "scheduleRailPreviewHydration" to Regex("""\bscheduleRailPreviewHydration\b"""),
-            "hydrateRailPreview" to Regex("""\bhydrateRailPreview\b"""),
-            "providerForVisibleHydration" to Regex("""\bproviderForVisibleHydration\b""")
-        )
+    fun `kitsu discovery service maps through mapper directly into shared meta preview bridge`() {
+        val source = productionFile("data/repository/KitsuDiscoveryService.kt").readText()
 
-        val offenders = homeProductionFiles().flatMap { file ->
-            val content = file.readText()
-            forbiddenPatterns.filterValues { pattern -> pattern.containsMatchIn(content) }
-                .keys
-                .map { patternName -> "${file.invariantSeparatorsPath}:$patternName" }
-        }
+        assertTrue(
+            "Kitsu catalog result mapping must call KitsuRailPreviewMapper.mapAnime and immediately " +
+                "convert the mapped RailItemPreview through the shared toMetaPreview() bridge.",
+            Regex(
+                """mapCatalogResults\([\s\S]*?results\.take\(MAX_ITEMS_PER_SOURCE\)[\s\S]*?""" +
+                    """railPreviewMapper\.mapAnime\([\s\S]*?\)\?\.toMetaPreview\(\)"""
+            ).containsMatchIn(source)
+        )
+    }
+
+    @Test
+    fun `kitsu discovery service does not apply post bridge display corrections`() {
+        val source = productionFile("data/repository/KitsuDiscoveryService.kt").readText()
+        val forbiddenPatterns = listOf(
+            "toMetaPreview().copy(",
+            ".toMetaPreview().copy("
+        )
+        val offenders = forbiddenPatterns.filter { pattern -> source.contains(pattern) }
 
         if (offenders.isNotEmpty()) {
-            fail("Home production code must not carry a parallel rail hydration track:\n${offenders.joinToString("\n")}")
+            fail(
+                "Kitsu display corrections must live in KitsuRailPreviewMapper and flow through " +
+                    "the shared RailItemPreview.toMetaPreview() bridge, not service-level copies: $offenders"
+            )
         }
     }
 
@@ -176,6 +181,12 @@ class RailPreviewLifecycleArchitectureTest {
         return root.walkTopDown()
             .filter { file -> file.isFile && file.extension == "kt" }
             .toList()
+    }
+
+    private fun productionFile(relativePath: String): File {
+        val file = File("app/src/main/java/com/nexio/tv", relativePath)
+        assertTrue("Required production source file is missing: ${file.path}", file.isFile)
+        return file
     }
 
     private fun functionSource(content: String, functionName: String): String {

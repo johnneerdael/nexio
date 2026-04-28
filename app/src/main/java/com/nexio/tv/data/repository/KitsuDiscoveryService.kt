@@ -2,13 +2,11 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.integration.railpreview.KitsuRailPreviewMapper
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
-import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
-import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -110,13 +108,7 @@ class KitsuDiscoveryService @Inject constructor(
                     anime = result,
                     position = index,
                     generatedAtMs = generatedAtMs
-                )?.let { preview ->
-                    preview.toMetaPreview().copy(
-                        posterShape = if (preview.display.backdropUrl != null) PosterShape.LANDSCAPE else PosterShape.POSTER,
-                        releaseInfo = preview.display.releaseDate,
-                        imdbRating = preview.display.rating?.value?.toFloat()
-                    )
-                }
+                )?.toMetaPreview()
             }
     }
 
