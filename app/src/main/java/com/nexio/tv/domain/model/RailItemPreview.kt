@@ -136,7 +136,12 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
             is TrailerHint.YouTube -> listOf(hint.videoId)
             null -> emptyList()
         },
-        posterProviderTag = sourceProvider?.name?.lowercase()
+        posterProviderTag = sourceProvider?.name?.lowercase(),
+        firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+        firstPaintSourceProvider = sourceProvider,
+        firstPaintStableIds = stableIds,
+        firstPaintRailSource = railSource,
+        firstPaintSourceItemId = sourceItemId
     )
 }
 
