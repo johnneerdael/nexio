@@ -62,9 +62,9 @@ class CastDetailViewModelTest {
     }
 
     @Test
-    fun `fetchPersonDetail TVDB path calls tvdbPersonService directly`() = runTest {
+    fun `fetchPersonDetail TVDB path routes through MetadataRouterFacade with tvdb prefix`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
-        val tvdbPersonService = mockk<TvdbPersonService>()
+        val tvdbPersonService = mockk<TvdbPersonService>(relaxed = true)
 
         val fakePersonDetail = PersonDetail(
             tmdbId = 287,
@@ -80,7 +80,7 @@ class CastDetailViewModelTest {
         )
 
         coEvery {
-            tvdbPersonService.fetchPersonDetail(any())
+            facade.fetchPersonDetail(any(), any(), any())
         } returns fakePersonDetail
 
         val vm = CastDetailViewModel(
@@ -96,9 +96,14 @@ class CastDetailViewModelTest {
             )
         )
 
-        coVerify(exactly = 0) {
-            facade.fetchPersonDetail(any(), any(), any())
+        coVerify(atLeast = 1) {
+            facade.fetchPersonDetail(
+                metadataRequest = match { it.contentId == "tvdb:person:287" },
+                personId = 287,
+                preferCrewCredits = false
+            )
         }
-        coVerify(atLeast = 1) { tvdbPersonService.fetchPersonDetail(287) }
+        coVerify(exactly = 0) { tvdbPersonService.fetchPersonDetail(any(), any()) }
+        coVerify(exactly = 0) { tvdbPersonService.fetchPersonDetail(any()) }
     }
 }
