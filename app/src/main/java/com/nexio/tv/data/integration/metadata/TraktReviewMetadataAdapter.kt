@@ -41,11 +41,15 @@ class TraktReviewMetadataAdapter @Inject constructor(
             TraktApiShapes.SHOW_COMMENTS -> true
             else -> return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         }
+        // F-05-02 Task 6c: read page/limit from the route's pagination cursor when supplied
+        // by MetadataRouterFacade.fetchReviewsPage(...); otherwise default to first page.
+        val pageNumber = route.pagination?.page ?: DEFAULT_PAGE
+        val limit = route.pagination?.limit ?: DEFAULT_LIMIT
         val page = reviewsRepository.fetchTraktReviewPage(
             pathId = pathId,
             isShow = isShow,
-            page = DEFAULT_PAGE,
-            limit = DEFAULT_LIMIT
+            page = pageNumber,
+            limit = limit
         ) ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         if (page.reviews.isEmpty()) {
             return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))

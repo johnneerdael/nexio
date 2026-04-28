@@ -7,6 +7,7 @@ import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.PaginationCursor
 import com.nexio.tv.core.metadata.router.ProviderPlanRole
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ResolvedField
@@ -137,6 +138,39 @@ class TraktReviewMetadataAdapterTest {
             step = step(TraktApiShapes.MOVIE_COMMENTS)
         )
         assertTrue(result.candidate?.fields.isNullOrEmpty())
+    }
+
+    @Test
+    fun `pagination cursor on route threads page and limit through to repository`() = runTest {
+        val repo = mockk<ReviewsRepository>()
+        coEvery {
+            repo.fetchTraktReviewPage(pathId = "tt0133093", isShow = false, page = 3, limit = 5)
+        } returns TraktReviewPage(reviews = listOf(sampleReview), hasMore = true)
+        val adapter = TraktReviewMetadataAdapter(repo)
+
+        val result = adapter.execute(
+            route = movieRoute().copy(pagination = PaginationCursor(page = 3, limit = 5)),
+            step = step(TraktApiShapes.MOVIE_COMMENTS)
+        )
+
+        assertEquals(listOf(sampleReview), result.candidate?.fields?.get(ResolvedField.REVIEWS)?.value)
+    }
+
+    @Test
+    fun `missing pagination cursor falls back to page=1 limit=20`() = runTest {
+        val repo = mockk<ReviewsRepository>()
+        coEvery {
+            repo.fetchTraktReviewPage(pathId = "tt0133093", isShow = false, page = 1, limit = 20)
+        } returns TraktReviewPage(reviews = listOf(sampleReview), hasMore = false)
+        val adapter = TraktReviewMetadataAdapter(repo)
+
+        // No `.copy(pagination = ...)` — exercises the default branch.
+        val result = adapter.execute(
+            route = movieRoute(),
+            step = step(TraktApiShapes.MOVIE_COMMENTS)
+        )
+
+        assertEquals(listOf(sampleReview), result.candidate?.fields?.get(ResolvedField.REVIEWS)?.value)
     }
 
     @Test

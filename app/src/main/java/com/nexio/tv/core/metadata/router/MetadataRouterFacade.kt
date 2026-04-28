@@ -215,18 +215,47 @@ class MetadataRouterFacade @Inject constructor(
         metadataRequest: MetadataRequest,
         tmdbId: String,
         contentType: ContentType
-    ): List<MetaReview> {
+    ): List<MetaReview> = fetchReviewsPage(
+        metadataRequest = metadataRequest,
+        tmdbId = tmdbId,
+        contentType = contentType,
+        page = DEFAULT_REVIEWS_PAGE,
+        limit = DEFAULT_REVIEWS_LIMIT
+    ).reviews
+
+    /**
+     * Paginated variant of [fetchReviews]. Routes through the canonical resolver pipeline
+     * just like [fetchReviews] (firing the same `metadata.route_decision` /
+     * `metadata.field_selected` trace events), but additionally threads [page] and [limit]
+     * to participating adapters via [MetadataRequest.pagination] -> [MetadataRoute.pagination].
+     *
+     * Returns the aggregated [ReviewsPage] with continuation state so the VM load-more flow
+     * (Task 6d) can request page N+1 without losing track of pagination.
+     *
+     * Backwards-compat fallback: when no resolver candidate produces reviews (e.g. plan didn't
+     * include a review step yet), falls back to the direct
+     * [MetadataSecondaryRepository.fetchReviews] TMDB call — the same fallback the existing
+     * non-paginated [fetchReviews] uses — and returns it as a single page with `hasMore=false`.
+     */
+    suspend fun fetchReviewsPage(
+        metadataRequest: MetadataRequest,
+        tmdbId: String,
+        contentType: ContentType,
+        page: Int = DEFAULT_REVIEWS_PAGE,
+        limit: Int = DEFAULT_REVIEWS_LIMIT
+    ): ReviewsPage {
         val repo = checkNotNull(metadataSecondaryRepository) {
-            "fetchReviews requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+            "fetchReviewsPage requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
         }
+        val paginatedRequest = metadataRequest.copy(
+            pagination = PaginationCursor(page = page, limit = limit)
+        )
         // Resolve through the canonical pipeline (depth = DETAIL_SECONDARY) — fires
         // metadata.route_decision + per-step provider_plan + per-field field_selected events.
-        val resolution = resolveRequest(metadataRequest)
+        val resolution = resolveRequest(paginatedRequest)
 
         // Collect REVIEWS-bearing candidates from every adapter that produced one
-        // (TmdbReviewMetadataAdapter, TraktReviewMetadataAdapter, etc.). The resolver's
-        // aggregation contract merges these via ReviewResolver; we flatten the per-step
-        // REVIEWS lists here so the call site receives the union.
+        // (TmdbReviewMetadataAdapter, TraktReviewMetadataAdapter, etc.).
         val resolverReviews: List<MetaReview> = resolution.providerRunResult
             ?.stepResults
             ?.mapNotNull { stepResult ->
@@ -236,12 +265,22 @@ class MetadataRouterFacade @Inject constructor(
             ?.flatten()
             .orEmpty()
 
-        // Backwards-compat fallback: if the plan didn't include any review step yet,
-        // fall back to the direct repo call so existing TMDB-only flows keep working.
         if (resolverReviews.isEmpty()) {
-            return repo.fetchReviews(tmdbId, contentType)
+            // Backwards-compat fallback: legacy TMDB-only flow with no continuation state.
+            val fallback = repo.fetchReviews(tmdbId, contentType)
+            return ReviewsPage(reviews = fallback, hasMore = false, nextPage = null)
         }
-        return resolverReviews
+
+        // Single-adapter "full page" heuristic: if any adapter returned exactly `limit`
+        // reviews, assume there's at least one more page available. The VM is the source
+        // of truth for the cursor it next requests; this just exposes whether load-more
+        // should be offered.
+        val hasMore = resolverReviews.size >= limit
+        return ReviewsPage(
+            reviews = resolverReviews,
+            hasMore = hasMore,
+            nextPage = if (hasMore) page + 1 else null
+        )
     }
 
     /**
@@ -447,4 +486,9 @@ class MetadataRouterFacade @Inject constructor(
             MetadataPrimaryProvider.SIMKL,
             null -> TvProvider.TVDB
         }
+
+    private companion object {
+        const val DEFAULT_REVIEWS_PAGE = 1
+        const val DEFAULT_REVIEWS_LIMIT = 20
+    }
 }

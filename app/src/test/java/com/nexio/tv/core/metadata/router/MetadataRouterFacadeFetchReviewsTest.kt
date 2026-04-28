@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.domain.model.ContentType
@@ -198,6 +199,181 @@ class MetadataRouterFacadeFetchReviewsTest {
         )
         // Backwards-compat fallback must NOT trigger when resolver produced reviews.
         coVerify(exactly = 0) { secondaryRepo.fetchReviews(any(), any()) }
+    }
+
+    @Test
+    fun `fetchReviewsPage threads page and limit and reports hasMore when full page returned`() = runTest {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s1" })
+
+        // Adapter returns exactly `limit` reviews, simulating a "full page" so the facade
+        // should infer hasMore=true and nextPage=page+1.
+        val limit = 5
+        val pageReviews = (1..limit).map { idx ->
+            MetaReview(
+                id = "r-$idx",
+                author = "a-$idx",
+                content = "c-$idx",
+                source = MetaReviewSource.TRAKT
+            )
+        }
+        val candidateWithReviews = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            resolverType = ResolverType.REVIEWS,
+            fields = mapOf(
+                ResolvedField.REVIEWS to FieldValue(pageReviews, FieldOwner.REVIEWS)
+            )
+        )
+
+        // Capture what the adapter saw on `route.pagination` so we can assert page/limit
+        // were threaded through. Restrict to the MOVIE_REVIEWS shape so it doesn't also
+        // attach REVIEWS to every other plan step (PRIMARY_CORE, VIDEOS, RECOMMENDATIONS).
+        var observedPagination: PaginationCursor? = null
+        // The planner requires every plan step to have a supporting adapter, so we
+        // claim support on all steps but only emit the REVIEWS candidate for the
+        // MOVIE_REVIEWS shape. Other steps return an empty candidate.
+        val capturingAdapter = object : MetadataProviderAdapter {
+            override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TMDB
+            override fun supports(step: ProviderPlanStep): Boolean = true
+            override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
+                if (step.apiShapeId != TmdbApiShapes.MOVIE_REVIEWS) {
+                    return ProviderStepResult(
+                        step = step,
+                        candidate = MetadataCandidate(
+                            provider = MetadataPrimaryProvider.TMDB,
+                            fields = emptyMap()
+                        ),
+                        episodeMetadata = emptyMap()
+                    )
+                }
+                observedPagination = route.pagination
+                return ProviderStepResult(
+                    step = step,
+                    candidate = candidateWithReviews,
+                    episodeMetadata = emptyMap()
+                )
+            }
+        }
+
+        // Secondary repo must NOT be hit because the resolver produced reviews.
+        val secondaryRepo = mockk<MetadataSecondaryRepository>()
+
+        val facade = MetadataRouterFacade(
+            router = MetadataRouter(
+                normalizer = MetadataRequestNormalizer(),
+                animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+                idMappingStore = InMemoryIdMappingStore(),
+                traceEvents = events
+            ),
+            providerPlanExecutor = ProviderPlanExecutor(),
+            resolverOrchestrator = ResolverOrchestrator(events),
+            identityResolver = MetadataIdentityResolver(
+                object : MetadataIdentityResolver.Lookup {
+                    override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+                    override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+                }
+            ),
+            providerPlanRunner = ProviderPlanRunner(setOf(capturingAdapter)),
+            fieldResolver = FieldResolver(events),
+            metadataSecondaryRepository = secondaryRepo
+        )
+
+        val result = facade.fetchReviewsPage(
+            metadataRequest = MetadataRequest(
+                contentId = "tmdb:603",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(),
+                language = "eng",
+                depth = MetadataDepth.DETAIL_SECONDARY
+            ),
+            tmdbId = "603",
+            contentType = ContentType.MOVIE,
+            page = 2,
+            limit = limit
+        )
+
+        assertEquals(pageReviews, result.reviews)
+        assertEquals(true, result.hasMore)
+        assertEquals(3, result.nextPage)
+        // Pagination cursor was threaded MetadataRequest -> MetadataRoute -> adapter.
+        assertEquals(PaginationCursor(page = 2, limit = limit), observedPagination)
+        // Backwards-compat fallback must NOT trigger when resolver produced reviews.
+        coVerify(exactly = 0) { secondaryRepo.fetchReviews(any(), any()) }
+    }
+
+    @Test
+    fun `fetchReviewsPage reports hasMore=false and nextPage=null when partial page`() = runTest {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s1" })
+
+        // Only 2 reviews returned for a limit of 5 — adapter has exhausted its results.
+        val limit = 5
+        val partialPage = listOf(
+            MetaReview(id = "r-1", author = "a", content = "c", source = MetaReviewSource.TRAKT),
+            MetaReview(id = "r-2", author = "b", content = "d", source = MetaReviewSource.TRAKT)
+        )
+        val candidate = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            resolverType = ResolverType.REVIEWS,
+            fields = mapOf(
+                ResolvedField.REVIEWS to FieldValue(partialPage, FieldOwner.REVIEWS)
+            )
+        )
+
+        // Restrict to the MOVIE_REVIEWS step so it doesn't also attach REVIEWS to every
+        // other DETAIL_SECONDARY plan step (PRIMARY_CORE, MOVIE_VIDEOS, MOVIE_RECOMMENDATIONS),
+        // which would inflate the aggregated count beyond the simulated partial page.
+        val reviewOnlyAdapter = object : MetadataProviderAdapter {
+            override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TMDB
+            override fun supports(step: ProviderPlanStep): Boolean = true
+            override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+                ProviderStepResult(
+                    step = step,
+                    candidate = if (step.apiShapeId == TmdbApiShapes.MOVIE_REVIEWS) candidate
+                    else MetadataCandidate(provider = MetadataPrimaryProvider.TMDB, fields = emptyMap()),
+                    episodeMetadata = emptyMap()
+                )
+        }
+
+        val secondaryRepo = mockk<MetadataSecondaryRepository>()
+
+        val facade = MetadataRouterFacade(
+            router = MetadataRouter(
+                normalizer = MetadataRequestNormalizer(),
+                animeIdentityIndex = InMemoryAnimeIdentityIndex(),
+                idMappingStore = InMemoryIdMappingStore(),
+                traceEvents = events
+            ),
+            providerPlanExecutor = ProviderPlanExecutor(),
+            resolverOrchestrator = ResolverOrchestrator(events),
+            identityResolver = MetadataIdentityResolver(
+                object : MetadataIdentityResolver.Lookup {
+                    override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+                    override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+                }
+            ),
+            providerPlanRunner = ProviderPlanRunner(setOf(reviewOnlyAdapter)),
+            fieldResolver = FieldResolver(events),
+            metadataSecondaryRepository = secondaryRepo
+        )
+
+        val result = facade.fetchReviewsPage(
+            metadataRequest = MetadataRequest(
+                contentId = "tmdb:603",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(),
+                language = "eng",
+                depth = MetadataDepth.DETAIL_SECONDARY
+            ),
+            tmdbId = "603",
+            contentType = ContentType.MOVIE,
+            page = 1,
+            limit = limit
+        )
+
+        assertEquals(partialPage, result.reviews)
+        assertEquals(false, result.hasMore)
+        assertEquals(null, result.nextPage)
     }
 
     private class CannedCandidateAdapter(
