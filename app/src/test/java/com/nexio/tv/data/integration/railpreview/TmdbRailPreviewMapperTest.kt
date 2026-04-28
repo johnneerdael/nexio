@@ -5,6 +5,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.SourcePayloadQuality
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TmdbRailPreviewMapperTest {
@@ -34,6 +35,30 @@ class TmdbRailPreviewMapperTest {
         assertEquals(ContentType.MOVIE, preview.itemType)
         assertEquals("https://image.tmdb.org/t/p/w500/poster.jpg", preview.display.posterUrl)
         assertEquals(ProviderId.TMDB, preview.display.rating?.provider)
+        assertEquals(SourcePayloadQuality.RICH_PREVIEW, preview.sourcePayloadQuality)
+    }
+
+    @Test
+    fun `tmdb tv preview keeps tmdb identity without implying tvdb canonical identity`() {
+        val preview = TmdbRailPreviewMapper().mapResult(
+            railId = "tmdb_trending_tv",
+            result = TmdbMediaResult(
+                id = 1399,
+                name = "Game of Thrones",
+                originalName = "Game of Thrones",
+                posterPath = "/poster.jpg",
+                overview = "Seven noble families fight for control of Westeros.",
+                firstAirDate = "2011-04-17"
+            ),
+            itemType = ContentType.SERIES,
+            position = 0,
+            generatedAtMs = 1_000L
+        )
+
+        assertEquals("tmdb:1399", preview.sourceItemId)
+        assertEquals("1399", preview.stableIds.tmdb)
+        assertNull(preview.stableIds.tvdb)
+        assertEquals(ContentType.SERIES, preview.itemType)
         assertEquals(SourcePayloadQuality.RICH_PREVIEW, preview.sourcePayloadQuality)
     }
 }

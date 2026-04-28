@@ -38,12 +38,12 @@ object RailPreviewHydrationCoordinator {
             .map(itemKeys::get)
     }
 
-    fun providerForVisibleHydration(routingId: String, itemType: ContentType): TvProvider {
+    fun providerForVisibleHydration(routingId: String, itemType: ContentType): TvProvider? {
         return when {
             routingId.startsWith("kitsu:") -> TvProvider.KITSU
             itemType == ContentType.SERIES && routingId.startsWith("tvdb:") -> TvProvider.TVDB
             itemType == ContentType.MOVIE && routingId.startsWith("tmdb:") -> TvProvider.TMDB
-            else -> error("Unsupported visible hydration route: $itemType $routingId")
+            else -> null
         }
     }
 }

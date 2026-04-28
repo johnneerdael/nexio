@@ -9,6 +9,7 @@ import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.SourcePayloadQuality
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RailPreviewHydrationCoordinatorTest {
@@ -137,6 +138,21 @@ class RailPreviewHydrationCoordinatorTest {
     }
 
     @Test
+    fun `tmdb tv rail visible item without tvdb identity is not routeable`() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TMDB,
+            sourceProvider = ProviderId.TMDB,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(tmdb = "1399"),
+            sourceItemId = "tmdb:1399"
+        )
+        val routingId = preview.bestRoutingId()
+
+        assertEquals("tmdb:1399", routingId)
+        assertNull(RailPreviewHydrationCoordinator.providerForVisibleHydration(routingId, preview.itemType))
+    }
+
+    @Test
     fun trakt_tv_rail_visible_item_hydrates_tvdb() {
         val preview = railItemPreview(
             railSource = RailSource.BUILT_IN_TRAKT,
@@ -176,7 +192,7 @@ class RailPreviewHydrationCoordinatorTest {
     }
 
     @Test
-    fun tmdb_tv_rail_visible_item_resolves_tvdb_primary() {
+    fun tmdb_tv_rail_visible_item_with_explicit_tvdb_identity_hydrates_tvdb() {
         val preview = railItemPreview(
             railSource = RailSource.BUILT_IN_TMDB,
             sourceProvider = ProviderId.TMDB,
@@ -186,6 +202,17 @@ class RailPreviewHydrationCoordinatorTest {
         )
 
         assertVisibleHydrationSelection(preview, "tvdb:121361", TvProvider.TVDB)
+    }
+
+    @Test
+    fun sparse_imdb_and_source_native_visible_items_are_not_routeable() {
+        assertNull(RailPreviewHydrationCoordinator.providerForVisibleHydration("tt99", ContentType.SERIES))
+        assertNull(
+            RailPreviewHydrationCoordinator.providerForVisibleHydration(
+                "source:series:1",
+                ContentType.SERIES
+            )
+        )
     }
 
     @Test
