@@ -22,14 +22,12 @@ fun stablePayloadHash(value: String): String =
         .digest(value.toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte) }
 
-fun tmdbImageUrl(path: String?, size: String): String? {
+fun tmdbImageUrl(path: String?, size: String = "w500"): String? {
     val normalizedPath = path?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val normalizedSize = size.trim().takeIf { it.isNotEmpty() } ?: "w500"
     if (normalizedPath.startsWith("http://") || normalizedPath.startsWith("https://")) return normalizedPath
     return "https://image.tmdb.org/t/p/$normalizedSize/${normalizedPath.trimStart('/')}"
 }
-
-fun tmdbImageUrl(path: String?): String? = tmdbImageUrl(path, "w500")
 
 fun simklImageUrl(fragment: String?): String? {
     val normalizedFragment = fragment?.trim()?.takeIf { it.isNotEmpty() } ?: return null
