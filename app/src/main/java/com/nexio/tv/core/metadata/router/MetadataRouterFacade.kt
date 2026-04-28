@@ -14,6 +14,7 @@ import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -173,6 +174,26 @@ class MetadataRouterFacade @Inject constructor(
         resolveRequest(metadataRequest)
         // Delegate to the secondary repository for the TMDB review list.
         return repo.fetchReviews(tmdbId, contentType)
+    }
+
+    /**
+     * Routes a TMDB recommendations (more-like-this) fetch through the canonical resolve pipeline
+     * at depth [MetadataDepth.DETAIL_SECONDARY] so that `metadata.route_decision` and
+     * `metadata.field_selected` trace events fire, then delegates the actual recommendations
+     * list fetch to [MetadataSecondaryRepository].
+     */
+    suspend fun fetchRecommendations(
+        metadataRequest: MetadataRequest,
+        tmdbId: String,
+        contentType: ContentType
+    ): List<MetaPreview> {
+        val repo = checkNotNull(metadataSecondaryRepository) {
+            "fetchRecommendations requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        }
+        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
+        resolveRequest(metadataRequest)
+        // Delegate to the secondary repository for the TMDB recommendations list.
+        return repo.fetchMoreLikeThis(tmdbId, contentType)
     }
 
     suspend fun fetchTvEpisodeEnrichment(

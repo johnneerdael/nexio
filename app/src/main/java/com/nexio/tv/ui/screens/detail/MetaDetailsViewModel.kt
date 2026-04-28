@@ -872,7 +872,14 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val rawRecommendations = runCatching {
-                metadataSecondaryRepository.fetchMoreLikeThis(
+                metadataRouterFacade.fetchRecommendations(
+                    metadataRequest = MetadataRequest(
+                        contentId = "tmdb:$tmdbId",
+                        contentType = tmdbContentType,
+                        sourceContext = MetadataSourceContext(itemType = tmdbLookupType),
+                        language = currentTvdbLanguageTag(),
+                        depth = MetadataDepth.DETAIL_SECONDARY
+                    ),
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
                 )
