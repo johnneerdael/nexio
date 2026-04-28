@@ -14,7 +14,8 @@ class MetadataRequestNormalizer @Inject constructor() {
             sourceContext = request.sourceContext,
             language = request.language,
             seasonNumber = request.seasonNumber,
-            depth = request.depth
+            depth = request.depth,
+            pagination = request.pagination
         )
     }
 

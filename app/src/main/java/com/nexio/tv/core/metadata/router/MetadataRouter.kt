@@ -283,7 +283,8 @@ class MetadataRouter @Inject constructor(
             seasonNumber = normalized.seasonNumber,
             targetIds = targetIds,
             targetIdRequiresIdentityResolution = requiresIdentityResolution,
-            trace = trace.toList()
+            trace = trace.toList(),
+            pagination = normalized.pagination
         )
     }
 
