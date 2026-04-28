@@ -19,51 +19,85 @@ class FieldResolver @Inject constructor(
     fun resolve(
         primary: MetadataCandidate,
         secondary: List<MetadataCandidate>
+    ): ResolvedMetadataDocument = resolveInternal(
+        preview = null,
+        primary = primary,
+        secondary = secondary
+    )
+
+    fun resolveWithPreview(
+        preview: MetadataCandidate?,
+        primary: MetadataCandidate?,
+        secondary: List<MetadataCandidate>
+    ): ResolvedMetadataDocument {
+        return resolveInternal(
+            preview = preview,
+            primary = primary,
+            secondary = secondary
+        )
+    }
+
+    private fun resolveInternal(
+        preview: MetadataCandidate?,
+        primary: MetadataCandidate?,
+        secondary: List<MetadataCandidate>
     ): ResolvedMetadataDocument {
         val fields = linkedMapOf<ResolvedField, Any>()
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
+        val sourceRoles = linkedMapOf<ResolvedField, SourceRole>()
+        val sourceProviders = linkedMapOf<ResolvedField, String>()
         val localization = linkedMapOf<ResolvedField, MetadataLocalizationFieldTrace>()
         val ignoredOverwrites = mutableListOf<IgnoredFieldOverwrite>()
         val rejectedByField = linkedMapOf<ResolvedField, MutableList<Map<String, Any?>>>()
-        val sourceProviderByField = linkedMapOf<ResolvedField, MetadataPrimaryProvider>()
 
-        primary.fields.forEach { (field, fieldValue) ->
-            fields[field] = fieldValue.value
-            owners[field] = FieldOwner.PRIMARY
-            sourceProviderByField[field] = primary.provider
-            primary.localization[field]?.let { localization[field] = it }
+        primary?.fields?.forEach { (field, fieldValue) ->
+            selectField(
+                fields = fields,
+                owners = owners,
+                sourceRoles = sourceRoles,
+                sourceProviders = sourceProviders,
+                localization = localization,
+                candidate = primary,
+                field = field,
+                fieldValue = fieldValue,
+                selectedOwner = FieldOwner.PRIMARY
+            )
+        }
+
+        preview?.let { candidate ->
+            applyMissingCandidate(
+                candidate = candidate,
+                fields = fields,
+                owners = owners,
+                sourceRoles = sourceRoles,
+                sourceProviders = sourceProviders,
+                localization = localization,
+                ignoredOverwrites = ignoredOverwrites,
+                rejectedByField = rejectedByField
+            )
         }
 
         secondary.forEach { candidate ->
-            candidate.fields.forEach { (field, fieldValue) ->
-                val existingOwner = owners[field]
-                if (existingOwner == null) {
-                    fields[field] = fieldValue.value
-                    owners[field] = fieldValue.owner
-                    sourceProviderByField[field] = candidate.provider
-                    candidate.localization[field]?.let { localization[field] = it }
-                } else {
-                    ignoredOverwrites += IgnoredFieldOverwrite(
-                        field = field,
-                        existingOwner = existingOwner,
-                        attemptedOwner = fieldValue.owner,
-                        attemptedValue = fieldValue.value
-                    )
-                    rejectedByField.getOrPut(field) { mutableListOf() }.add(
-                        mapOf(
-                            "provider" to candidate.provider.name,
-                            "reason" to "primary already filled the field"
-                        )
-                    )
-                }
-            }
+            applyMissingCandidate(
+                candidate = candidate,
+                fields = fields,
+                owners = owners,
+                sourceRoles = sourceRoles,
+                sourceProviders = sourceProviders,
+                localization = localization,
+                ignoredOverwrites = ignoredOverwrites,
+                rejectedByField = rejectedByField
+            )
         }
 
+        val traceContentId = primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN"
         fields.forEach { (field, value) ->
             val owner = owners[field] ?: FieldOwner.PRIMARY
-            val selectedProvider = (sourceProviderByField[field] ?: primary.provider).name
-            val sourceRole = owner.name
-            val rule = if (owner == FieldOwner.PRIMARY) {
+            val selectedProvider = sourceProviders[field] ?: primary?.sourceProvider ?: preview?.sourceProvider ?: "UNKNOWN"
+            val sourceRole = sourceRoles[field] ?: owner.defaultSourceRole()
+            val rule = if (sourceRole == SourceRole.RAIL_PREVIEW) {
+                "rail preview fills field before canonical hydration"
+            } else if (owner == FieldOwner.PRIMARY) {
                 "primary always wins"
             } else {
                 "secondary fills missing field"
@@ -72,10 +106,10 @@ class FieldResolver @Inject constructor(
             val preview = if (valueStr.length > 80) valueStr.substring(0, 80) + "…" else valueStr
 
             traceEvents.emitFieldSelected(
-                contentId = primary.provider.name,
+                contentId = traceContentId,
                 field = field.name,
                 selectedProvider = selectedProvider,
-                sourceRole = sourceRole,
+                sourceRole = sourceRole.name,
                 valuePreview = preview,
                 ownershipRule = rule,
                 rejectedCandidates = rejectedByField[field] ?: emptyList()
@@ -93,7 +127,84 @@ class FieldResolver @Inject constructor(
             runtimeMinutes = fields[ResolvedField.RUNTIME] as? Int,
             fieldOwners = owners,
             ignoredOverwrites = ignoredOverwrites,
-            localization = localization
+            localization = localization,
+            sourceRoles = sourceRoles,
+            sourceProviders = sourceProviders
         )
+    }
+
+    private fun applyMissingCandidate(
+        candidate: MetadataCandidate,
+        fields: MutableMap<ResolvedField, Any>,
+        owners: MutableMap<ResolvedField, FieldOwner>,
+        sourceRoles: MutableMap<ResolvedField, SourceRole>,
+        sourceProviders: MutableMap<ResolvedField, String>,
+        localization: MutableMap<ResolvedField, MetadataLocalizationFieldTrace>,
+        ignoredOverwrites: MutableList<IgnoredFieldOverwrite>,
+        rejectedByField: MutableMap<ResolvedField, MutableList<Map<String, Any?>>>
+    ) {
+        candidate.fields.forEach { (field, fieldValue) ->
+            val existingOwner = owners[field]
+            if (existingOwner == null) {
+                selectField(
+                    fields = fields,
+                    owners = owners,
+                    sourceRoles = sourceRoles,
+                    sourceProviders = sourceProviders,
+                    localization = localization,
+                    candidate = candidate,
+                    field = field,
+                    fieldValue = fieldValue,
+                    selectedOwner = fieldValue.owner
+                )
+            } else {
+                ignoredOverwrites += IgnoredFieldOverwrite(
+                    field = field,
+                    existingOwner = existingOwner,
+                    attemptedOwner = fieldValue.owner,
+                    attemptedValue = fieldValue.value
+                )
+                rejectedByField.getOrPut(field) { mutableListOf() }.add(
+                    mapOf(
+                        "provider" to candidate.provider.name,
+                        "sourceProvider" to candidate.sourceProvider,
+                        "sourceRole" to effectiveSourceRole(candidate, fieldValue).name,
+                        "reason" to "field already filled"
+                    )
+                )
+            }
+        }
+    }
+
+    private fun selectField(
+        fields: MutableMap<ResolvedField, Any>,
+        owners: MutableMap<ResolvedField, FieldOwner>,
+        sourceRoles: MutableMap<ResolvedField, SourceRole>,
+        sourceProviders: MutableMap<ResolvedField, String>,
+        localization: MutableMap<ResolvedField, MetadataLocalizationFieldTrace>,
+        candidate: MetadataCandidate,
+        field: ResolvedField,
+        fieldValue: FieldValue,
+        selectedOwner: FieldOwner
+    ) {
+        fields[field] = fieldValue.value
+        owners[field] = selectedOwner
+        sourceRoles[field] = effectiveSourceRole(candidate, fieldValue)
+        sourceProviders[field] = candidate.sourceProvider
+        candidate.localization[field]?.let { localization[field] = it }
+    }
+
+    private fun effectiveSourceRole(
+        candidate: MetadataCandidate,
+        fieldValue: FieldValue
+    ): SourceRole {
+        return if (
+            candidate.sourceRole != SourceRole.PRIMARY &&
+            fieldValue.sourceRole == fieldValue.owner.defaultSourceRole()
+        ) {
+            candidate.sourceRole
+        } else {
+            fieldValue.sourceRole
+        }
     }
 }
