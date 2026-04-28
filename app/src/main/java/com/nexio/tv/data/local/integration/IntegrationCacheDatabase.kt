@@ -10,10 +10,11 @@ import androidx.room.RoomDatabase
         IntegrationProviderBackoffEntity::class,
         RailCacheEntity::class,
         RailItemEntity::class,
+        RailItemPreviewEntity::class,
         MediaIdentityEntity::class,
         ExternalIdEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class IntegrationCacheDatabase : RoomDatabase() {
