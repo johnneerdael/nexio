@@ -83,14 +83,29 @@ class RailPreviewHydrationCoordinatorTest {
     }
 
     @Test
-    fun `best routing id prefers kitsu over other stable ids`() {
+    fun `best routing id prefers kitsu for kitsu rail items`() {
         val preview = railItemPreview(
-            itemType = ContentType.MOVIE,
-            stableIds = ProviderIds(kitsu = "42", tmdb = "99", imdb = "tt99"),
-            sourceItemId = "source:movie:1"
+            railSource = RailSource.BUILT_IN_KITSU,
+            sourceProvider = ProviderId.KITSU,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(kitsu = "42", tvdb = "11"),
+            sourceItemId = "kitsu:anime:42"
         )
 
         assertEquals("kitsu:42", preview.bestRoutingId())
+    }
+
+    @Test
+    fun `best routing id prefers tvdb over kitsu for non kitsu series items`() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(kitsu = "42", tvdb = "11"),
+            sourceItemId = "trakt:show:1"
+        )
+
+        assertEquals("tvdb:11", preview.bestRoutingId())
     }
 
     @Test
@@ -116,14 +131,14 @@ class RailPreviewHydrationCoordinatorTest {
     }
 
     @Test
-    fun `best routing id falls back to imdb id`() {
+    fun `best routing id falls back to source item id when only imdb is available`() {
         val preview = railItemPreview(
             itemType = ContentType.SERIES,
             stableIds = ProviderIds(imdb = "tt99"),
             sourceItemId = "source:series:1"
         )
 
-        assertEquals("tt99", preview.bestRoutingId())
+        assertEquals("source:series:1", preview.bestRoutingId())
     }
 
     @Test
@@ -216,6 +231,21 @@ class RailPreviewHydrationCoordinatorTest {
     }
 
     @Test
+    fun movie_visible_item_with_imdb_but_without_tmdb_falls_back_to_non_routeable_source_id() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(trakt = "20", imdb = "tt0137523"),
+            sourceItemId = "trakt:movie:20"
+        )
+        val routingId = preview.bestRoutingId()
+
+        assertEquals("trakt:movie:20", routingId)
+        assertNull(RailPreviewHydrationCoordinator.providerForVisibleHydration(routingId, preview.itemType))
+    }
+
+    @Test
     fun kitsu_rail_visible_item_hydrates_kitsu() {
         val preview = railItemPreview(
             railSource = RailSource.BUILT_IN_KITSU,
@@ -226,6 +256,19 @@ class RailPreviewHydrationCoordinatorTest {
         )
 
         assertVisibleHydrationSelection(preview, "kitsu:1", TvProvider.KITSU)
+    }
+
+    @Test
+    fun non_kitsu_series_visible_item_with_tvdb_and_kitsu_hydrates_tvdb() {
+        val preview = railItemPreview(
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(kitsu = "1", tvdb = "78874"),
+            sourceItemId = "trakt:show:1"
+        )
+
+        assertVisibleHydrationSelection(preview, "tvdb:78874", TvProvider.TVDB)
     }
 
     @Test

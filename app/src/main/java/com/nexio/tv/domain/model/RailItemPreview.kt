@@ -118,7 +118,7 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
     val ratingSource = display.rating?.provider.toTitleRatingSource()
 
     return MetaPreview(
-        id = routeableMetaPreviewId(),
+        id = bestSupportedRoutingId(),
         type = itemType,
         rawType = itemType.toApiString(),
         name = title,
@@ -140,13 +140,11 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
     )
 }
 
-private fun RailItemPreview.routeableMetaPreviewId(): String = when {
+fun RailItemPreview.bestSupportedRoutingId(): String = when {
     stableIds.kitsu != null && prefersKitsuRouting() -> "kitsu:${stableIds.kitsu}"
     itemType == ContentType.MOVIE && stableIds.tmdb != null -> "tmdb:${stableIds.tmdb}"
-    itemType == ContentType.MOVIE && stableIds.imdb != null -> "imdb:${stableIds.imdb}"
     itemType == ContentType.SERIES && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
     itemType == ContentType.TV && stableIds.tvdb != null -> "tvdb:${stableIds.tvdb}"
-    stableIds.kitsu != null -> "kitsu:${stableIds.kitsu}"
     else -> sourceItemId
 }
 
