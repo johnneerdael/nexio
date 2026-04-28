@@ -19,6 +19,7 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.ProviderMetadataRouter
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -116,7 +117,8 @@ class HomeViewModel @Inject constructor(
     internal val mdbListRepository: MDBListRepository,
     internal val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     internal val tmdbService: TmdbService,
-    internal val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
+    internal val metadataRouterFacade: MetadataRouterFacade,
+    internal val providerMetadataRouter: ProviderMetadataRouter,
     internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,

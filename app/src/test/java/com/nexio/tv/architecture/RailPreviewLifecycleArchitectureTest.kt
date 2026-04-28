@@ -204,9 +204,79 @@ class RailPreviewLifecycleArchitectureTest {
         }
     }
 
+    @Test
+    fun `dead home preview hydration planner is removed`() {
+        val planner = homeFileOrNull("HomePreviewHydrationPlanner.kt")
+
+        if (planner != null) {
+            fail("HomePreviewHydrationPlanner is dead production architecture and must not exist: ${planner.path}")
+        }
+    }
+
+    @Test
+    fun `home production does not contain rail preview sidecar scheduler names`() {
+        val forbiddenNames = listOf(
+            "HomePreviewHydrationPlanner",
+            "RailPreviewHydrationPlanner",
+            "RailPreviewHydrationScheduler",
+            "HomeRailPreviewHydrationScheduler"
+        )
+        val offenders = homeProductionFiles().flatMap { file ->
+            val source = file.readText()
+            forbiddenNames.filter { name -> source.contains(name) }
+                .map { name -> "${file.invariantSeparatorsPath}:$name" }
+        }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Home production must not grow a rail-preview-specific hydration planner/scheduler:\n" +
+                    offenders.joinToString("\n")
+            )
+        }
+    }
+
+    @Test
+    fun `home production does not manually construct metadata router sidecars`() {
+        val forbiddenConstructors = listOf(
+            Regex("""\bMetadataRouterFacade\s*\("""),
+            Regex("""\bFieldResolver\s*\(""")
+        )
+        val offenders = homeProductionFiles().flatMap { file ->
+            val source = file.readText()
+            forbiddenConstructors.flatMap { pattern ->
+                pattern.findAll(source).map { match ->
+                    "${file.invariantSeparatorsPath}:${match.value.trim()}"
+                }
+            }
+        }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Home production must use injected/canonical metadata routing dependencies and must not " +
+                    "manually construct MetadataRouterFacade or FieldResolver fallback sidecars:\n" +
+                    offenders.joinToString("\n")
+            )
+        }
+    }
+
+    @Test
+    fun `home visible focused enrichment keeps source neutral meta preview entrypoint`() {
+        val source = homeFile("HomeViewModelPresentationPipeline.kt").readText()
+        val fetchProviderEnrichment = functionSource(source, "fetchProviderEnrichmentForPreview")
+
+        assertTrue(
+            "Visible/focused Home enrichment must keep using the source-neutral MetaPreview entrypoint.",
+            Regex("""fetchProviderEnrichmentForPreview\s*\(\s*item\s*:\s*MetaPreview\s*\)""")
+                .containsMatchIn(fetchProviderEnrichment)
+        )
+    }
+
     private fun homeFile(name: String): File = File(homeDirectory, name).also { file ->
         assertTrue("Required Home source file is missing: ${file.path}", file.isFile)
     }
+
+    private fun homeFileOrNull(name: String): File? =
+        File(homeDirectory, name).takeIf { file -> file.isFile }
 
     private fun homeProductionFiles(): List<File> {
         assertTrue("Required Home source directory is missing: ${homeDirectory.path}", homeDirectory.isDirectory)

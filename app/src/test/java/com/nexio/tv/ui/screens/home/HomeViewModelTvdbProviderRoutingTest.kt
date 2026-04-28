@@ -40,6 +40,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val profileBoundary = mockk<ProfileBoundary>()
         val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
+        every { viewModel.providerMetadataRouter } returns tvMetadataRouter
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
         every { viewModel.titleRatingOverrideRepository } returns titleRatingOverrideRepository
@@ -55,9 +56,9 @@ class HomeViewModelTvdbProviderRoutingTest {
             settings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
         )
 
-        assertEquals("Test title", result.single().name)
-        assertEquals("Fallback description", result.single().description)
-        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        assertEquals("TVDB title", result.single().name)
+        assertEquals("TVDB description", result.single().description)
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 
@@ -68,6 +69,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
+        every { viewModel.providerMetadataRouter } returns tvMetadataRouter
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
         every { profileBoundary.currentLanguageTag() } returns "en"
@@ -79,8 +81,8 @@ class HomeViewModelTvdbProviderRoutingTest {
 
         val enrichment = viewModel.fetchProviderEnrichmentForPreview(seriesPreview())
 
-        assertEquals("Test title", enrichment?.localizedTitle)
-        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        assertEquals("TVDB title", enrichment?.localizedTitle)
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 
@@ -106,6 +108,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
+        every { viewModel.providerMetadataRouter } returns tvMetadataRouter
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore
         every { viewModel.profileBoundary } returns profileBoundary
@@ -114,7 +117,19 @@ class HomeViewModelTvdbProviderRoutingTest {
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TMDB,
             reason = TvMetadataDecisionReason.TVDB_INACTIVE,
-            value = null
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "Nederlandse titel",
+                description = "Nederlandse omschrijving",
+                genres = listOf("Animatie"),
+                backdrop = "tmdb-backdrop",
+                logo = "tmdb-logo",
+                poster = "tmdb-poster",
+                releaseInfo = "2025",
+                rating = 7.4,
+                runtimeMinutes = 107,
+                language = "nl"
+            )
         )
         coEvery { tmdbService.ensureTmdbId("tt1375666", "movie") } returns "27205"
 
@@ -122,7 +137,7 @@ class HomeViewModelTvdbProviderRoutingTest {
             item = continueWatchingMovieItem()
         ) as ContinueWatchingItem.InProgress
 
-        assertEquals("Test title", result.displayMetadata?.title)
+        assertEquals("Nederlandse titel", result.displayMetadata?.title)
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
 

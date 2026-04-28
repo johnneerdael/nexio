@@ -13,6 +13,7 @@ import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.core.profile.ProfileManager
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -89,5 +90,82 @@ class HomeRailHydrationExecutorTest {
         coVerify(exactly = 0) { simklDiscovery.ensureFresh(any(), any()) }
         coVerify(exactly = 0) { mdbListDiscovery.ensureFresh(any(), any()) }
         coVerify(exactly = 0) { continueWatching.ensureFresh(any()) }
+    }
+
+    @Test
+    fun `executor isolates independent provider group failures`() = runTest {
+        val tmdbDiscovery = mockk<TmdbDiscoveryService>(relaxed = true)
+        val kitsuDiscovery = mockk<KitsuDiscoveryService>(relaxed = true)
+        val traktDiscovery = mockk<TraktDiscoveryService>(relaxed = true)
+        val simklDiscovery = mockk<SimklDiscoveryService>(relaxed = true)
+        val mdbListDiscovery = mockk<MDBListDiscoveryService>(relaxed = true)
+        val continueWatching = mockk<ContinueWatchingSnapshotService>(relaxed = true)
+        val tmdbSettings = mockk<TmdbCatalogSettingsDataStore>()
+        val kitsuSettings = mockk<KitsuCatalogSettingsDataStore>()
+        val profileManager = mockk<ProfileManager> {
+            every { activeProfileId } returns MutableStateFlow(7)
+            every { profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+        every { tmdbSettings.catalogPreferences } returns flowOf(
+            TmdbCatalogPreferences(enabledCatalogs = setOf("tmdb_trending_movies"))
+        )
+        every { kitsuSettings.catalogPreferences } returns flowOf(
+            KitsuCatalogPreferences(enabledCatalogs = setOf("kitsu_trending_anime"))
+        )
+        coEvery {
+            tmdbDiscovery.refreshCatalogs(any(), force = true, catalogIds = setOf("tmdb_trending_movies"))
+        } throws RuntimeException("tmdb down")
+
+        val executor = DefaultHomeRailHydrationExecutor(
+            tmdbDiscoveryService = tmdbDiscovery,
+            tmdbCatalogSettingsDataStore = tmdbSettings,
+            kitsuDiscoveryService = kitsuDiscovery,
+            kitsuCatalogSettingsDataStore = kitsuSettings,
+            traktDiscoveryService = traktDiscovery,
+            simklDiscoveryService = simklDiscovery,
+            mdbListDiscoveryService = mdbListDiscovery,
+            continueWatchingSnapshotService = continueWatching,
+            profileManager = profileManager
+        )
+
+        executor.hydrate(
+            listOf(
+                RailCacheEntity(
+                    railKey = RailKeyFactory.homeCatalog(7, "tmdb_trending_movies"),
+                    provider = "TMDB",
+                    kind = "MOVIE",
+                    paramsHash = "tmdb",
+                    fetchedAtEpochMs = 0L,
+                    expiresAtEpochMs = 0L,
+                    staleUntilEpochMs = 0L
+                ),
+                RailCacheEntity(
+                    railKey = RailKeyFactory.homeCatalog(7, "kitsu_trending_anime"),
+                    provider = "KITSU",
+                    kind = "SERIES",
+                    paramsHash = "kitsu",
+                    fetchedAtEpochMs = 0L,
+                    expiresAtEpochMs = 0L,
+                    staleUntilEpochMs = 0L
+                ),
+                RailCacheEntity(
+                    railKey = RailKeyFactory.homeCatalog(7, "trakt_trending_shows"),
+                    provider = "TRAKT",
+                    kind = "SERIES",
+                    paramsHash = "trakt",
+                    fetchedAtEpochMs = 0L,
+                    expiresAtEpochMs = 0L,
+                    staleUntilEpochMs = 0L
+                )
+            )
+        )
+
+        coVerify(exactly = 1) {
+            tmdbDiscovery.refreshCatalogs(any(), force = true, catalogIds = setOf("tmdb_trending_movies"))
+        }
+        coVerify(exactly = 1) {
+            kitsuDiscovery.refreshCatalogs(any(), force = true, catalogIds = setOf("kitsu_trending_anime"))
+        }
+        coVerify(exactly = 1) { traktDiscovery.ensureFresh(force = true, profileId = 7) }
     }
 }

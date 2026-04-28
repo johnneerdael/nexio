@@ -92,21 +92,10 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val tmdbService = mockk<TmdbService>()
         val tmdbMetadataService = mockk<TmdbMetadataService>()
-        coEvery { tmdbService.ensureTmdbId("tt0133093", "movie") } returns "603"
-        coEvery {
-            tmdbMetadataService.fetchEnrichment(
-                tmdbId = "603",
-                contentType = ContentType.MOVIE
-            )
-        } returns tmdbEnrichment(
-            localizedTitle = "The Matrix",
-            description = "Movie description",
-            genres = listOf("Sci-Fi"),
-            backdrop = "tmdb-backdrop",
-            logo = "tmdb-logo",
-            poster = "tmdb-poster",
-            releaseInfo = "1999",
-            rating = 8.7
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+            value = tmdbBackedTvEnrichment()
         )
         val coordinator = coordinator(
             tvMetadataRouter = tvMetadataRouter,
@@ -124,7 +113,60 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         assertEquals("tmdb-backdrop", result.background)
         assertEquals("tmdb-logo", result.logo)
         assertEquals("tmdb-poster", result.poster)
-        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        coVerify(exactly = 1) {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = "tt0133093",
+                    fallbackContentId = null,
+                    contentType = ContentType.MOVIE,
+                    language = "eng"
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `home provider overlay forwards fallback id and logs tmdb fallback diagnostics`() = runTest {
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val profileBoundary = mockk<ProfileBoundary>()
+        every { profileBoundary.currentLanguageTag() } returns "en"
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_RECORD_MISSING,
+            value = tmdbBackedTvEnrichment(),
+            diagnostics = listOf(
+                TvMetadataDiagnosticEvent(
+                    reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                    contentId = "tt0133093",
+                    provider = TvProvider.TMDB,
+                    fallbackProvider = TvProvider.TMDB
+                )
+            )
+        )
+        val logs = mutableListOf<Pair<String, String?>>()
+
+        val result = overlayProviderLocalizedMetadataForHome(
+            item = moviePreview(),
+            fallbackContentId = "fallback-video-id",
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            providerMetadataRouter = tvMetadataRouter,
+            profileBoundary = profileBoundary
+        ) { event, details ->
+            logs += event to details
+        }
+
+        assertEquals("The Matrix", result.name)
+        assertTrue(logs.contains("tvdb_fallback_tmdb" to "itemKey=movie:tt0133093"))
+        coVerify(exactly = 1) {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = "tt0133093",
+                    fallbackContentId = "fallback-video-id",
+                    contentType = ContentType.MOVIE,
+                    language = "eng"
+                )
+            )
+        }
     }
 
     private fun coordinator(
@@ -144,6 +186,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            providerMetadataRouter = tvMetadataRouter,
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
             profileBoundary = profileBoundary,
             appContext = mockk<Context>(relaxed = true),
@@ -194,6 +237,20 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             poster = "tvdb-poster",
             releaseInfo = "2011",
             rating = 8.9
+        )
+    }
+
+    private fun tmdbBackedTvEnrichment(): TvMetadataEnrichment {
+        return TvMetadataEnrichment(
+            seriesTvdbId = null,
+            localizedTitle = "The Matrix",
+            description = "Movie description",
+            genres = listOf("Sci-Fi"),
+            backdrop = "tmdb-backdrop",
+            logo = "tmdb-logo",
+            poster = "tmdb-poster",
+            releaseInfo = "1999",
+            rating = 8.7
         )
     }
 

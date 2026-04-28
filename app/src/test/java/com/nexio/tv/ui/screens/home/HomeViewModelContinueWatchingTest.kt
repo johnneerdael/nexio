@@ -7,6 +7,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.repository.ContinueWatchingMetadataSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.domain.model.WatchProgress
@@ -27,13 +28,24 @@ class HomeViewModelContinueWatchingTest {
     fun `localized episode description uses matching in progress episode overview`() = runTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         coEvery {
+            tvMetadataRouter.fetchSeasonEpisodes("tt0944947", "tt0944947", 2, null)
+        } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = listOf(
+                TvSeasonEpisode(
+                    episodeNumber = 5,
+                    airDate = null,
+                    metadata = episodeEnrichment("Nederlandse aflevering")
+                )
+            )
+        )
+        coEvery {
             tvMetadataRouter.fetchEpisodeEnrichment(any())
         } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-            value = mapOf(
-            (2 to 5) to episodeEnrichment("Nederlandse aflevering")
-            )
+            value = mapOf((2 to 5) to episodeEnrichment("Nederlandse aflevering"))
         )
         val item = ContinueWatchingItem.InProgress(
             progress = WatchProgress(
@@ -69,13 +81,24 @@ class HomeViewModelContinueWatchingTest {
     fun `localized episode description uses matching next up episode overview`() = runTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         coEvery {
+            tvMetadataRouter.fetchSeasonEpisodes("tt0944947", "tt0944947", 3, null)
+        } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = listOf(
+                TvSeasonEpisode(
+                    episodeNumber = 1,
+                    airDate = null,
+                    metadata = episodeEnrichment("Nederlandse volgende aflevering")
+                )
+            )
+        )
+        coEvery {
             tvMetadataRouter.fetchEpisodeEnrichment(any())
         } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-            value = mapOf(
-            (3 to 1) to episodeEnrichment("Nederlandse volgende aflevering")
-            )
+            value = mapOf((3 to 1) to episodeEnrichment("Nederlandse volgende aflevering"))
         )
         val item = ContinueWatchingItem.NextUp(
             NextUpInfo(
@@ -164,7 +187,7 @@ class HomeViewModelContinueWatchingTest {
                 lastWatched = 42L
             )
         )
-        every { viewModel.metadataRouterFacade } returns defaultMetadataRouterFacadeForManualConstruction()
+        every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(mockk(relaxed = true))
         every { viewModel.continueWatchingSnapshotService } returns snapshotService
         coJustRun { snapshotService.recordMetadataSnapshot("series:tvdb:121361", capture(snapshotSlot)) }
 

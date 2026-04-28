@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import android.util.Log
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
@@ -13,7 +14,13 @@ import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.core.profile.ProfileManager
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.supervisorScope
+
+private const val HOME_RAIL_HYDRATION_TAG = "HomeRailHydration"
 
 interface HomeRailHydrationExecutor {
     suspend fun hydrate(rails: List<RailCacheEntity>)
@@ -45,35 +52,76 @@ class DefaultHomeRailHydrationExecutor @Inject constructor(
                 .takeIf { it != rail.railKey }
         }
 
-        val tmdbCatalogIds = catalogIds.filter { it.startsWith("tmdb_") }.toSet()
-        if (tmdbCatalogIds.isNotEmpty()) {
-            tmdbDiscoveryService.refreshCatalogs(
-                preferences = tmdbCatalogSettingsDataStore.catalogPreferences.first(),
-                force = true,
-                catalogIds = tmdbCatalogIds
-            )
-        }
+        supervisorScope {
+            buildList {
+                val tmdbCatalogIds = catalogIds.filter { it.startsWith("tmdb_") }.toSet()
+                if (tmdbCatalogIds.isNotEmpty()) {
+                    add(async {
+                        refreshProviderGroup("tmdb") {
+                            tmdbDiscoveryService.refreshCatalogs(
+                                preferences = tmdbCatalogSettingsDataStore.catalogPreferences.first(),
+                                force = true,
+                                catalogIds = tmdbCatalogIds
+                            )
+                        }
+                    })
+                }
 
-        val kitsuCatalogIds = catalogIds.filter { it.startsWith("kitsu_") }.toSet()
-        if (kitsuCatalogIds.isNotEmpty()) {
-            kitsuDiscoveryService.refreshCatalogs(
-                preferences = kitsuCatalogSettingsDataStore.catalogPreferences.first(),
-                force = true,
-                catalogIds = kitsuCatalogIds
-            )
-        }
+                val kitsuCatalogIds = catalogIds.filter { it.startsWith("kitsu_") }.toSet()
+                if (kitsuCatalogIds.isNotEmpty()) {
+                    add(async {
+                        refreshProviderGroup("kitsu") {
+                            kitsuDiscoveryService.refreshCatalogs(
+                                preferences = kitsuCatalogSettingsDataStore.catalogPreferences.first(),
+                                force = true,
+                                catalogIds = kitsuCatalogIds
+                            )
+                        }
+                    })
+                }
 
-        if (catalogIds.any { it.startsWith("trakt_") }) {
-            traktDiscoveryService.ensureFresh(force = true, profileId = profileId)
+                if (catalogIds.any { it.startsWith("trakt_") }) {
+                    add(async {
+                        refreshProviderGroup("trakt") {
+                            traktDiscoveryService.ensureFresh(force = true, profileId = profileId)
+                        }
+                    })
+                }
+                if (catalogIds.any { it.startsWith("simkl_") }) {
+                    add(async {
+                        refreshProviderGroup("simkl") {
+                            simklDiscoveryService.ensureFresh(force = true, profileId = profileId)
+                        }
+                    })
+                }
+                if (catalogIds.any { it.startsWith("mdblist_") }) {
+                    add(async {
+                        refreshProviderGroup("mdblist") {
+                            mdbListDiscoveryService.ensureFresh(force = true, profileId = profileId)
+                        }
+                    })
+                }
+                if (rails.any { it.railKey == RailKeyFactory.continueWatching(profileId) }) {
+                    add(async {
+                        refreshProviderGroup("continue_watching") {
+                            continueWatchingSnapshotService.ensureFresh(force = true)
+                        }
+                    })
+                }
+            }.awaitAll()
         }
-        if (catalogIds.any { it.startsWith("simkl_") }) {
-            simklDiscoveryService.ensureFresh(force = true, profileId = profileId)
-        }
-        if (catalogIds.any { it.startsWith("mdblist_") }) {
-            mdbListDiscoveryService.ensureFresh(force = true, profileId = profileId)
-        }
-        if (rails.any { it.railKey == RailKeyFactory.continueWatching(profileId) }) {
-            continueWatchingSnapshotService.ensureFresh(force = true)
+    }
+
+    private suspend fun refreshProviderGroup(
+        providerGroup: String,
+        block: suspend () -> Unit
+    ) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(HOME_RAIL_HYDRATION_TAG, "Active rail refresh failed for $providerGroup: ${e.message}", e)
         }
     }
 }
