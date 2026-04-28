@@ -113,8 +113,9 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
     val title = display.title
         ?: display.originalTitle
         ?: stableIds.imdb
-        ?: stableIds.tmdb?.let { "TMDB $it" }
+        ?: stableIds.tmdb?.let { "TMDB " }
         ?: sourceItemId
+    val ratingSource = display.rating?.provider.toTitleRatingSource()
 
     return MetaPreview(
         id = sourceItemId,
@@ -128,8 +129,8 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         description = display.overview,
         releaseInfo = display.year?.toString() ?: display.releaseDate,
         runtime = display.runtimeText,
-        imdbRating = display.rating?.value?.toFloat(),
-        ratingSource = display.rating?.provider.toTitleRatingSource(),
+        imdbRating = display.rating?.value?.toFloat()?.takeIf { ratingSource != null },
+        ratingSource = ratingSource,
         genres = display.genres,
         trailerYtIds = when (val hint = display.trailerHint) {
             is TrailerHint.YouTube -> listOf(hint.videoId)
@@ -140,10 +141,7 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
 }
 
 private fun ProviderId?.toTitleRatingSource(): TitleRatingSource? = when (this) {
+    ProviderId.IMDB -> TitleRatingSource.IMDB
     ProviderId.TMDB -> TitleRatingSource.TMDB
-    ProviderId.IMDB,
-    ProviderId.MDBLIST,
-    ProviderId.TRAKT,
-    ProviderId.SIMKL -> TitleRatingSource.IMDB
     else -> null
 }
