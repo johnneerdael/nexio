@@ -41,6 +41,7 @@ enum class ResolvedField {
     AGE_RATING,
     CAST,
     CREW,
+    ORGANIZATION_LIST,
     EPISODES,
     POSTER,
     BACKDROP,
