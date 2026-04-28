@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.detail
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -54,7 +55,9 @@ fun buildMetaDetailsViewModel(
     profileBoundary: ProfileBoundary = defaultProfileBoundary(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
-    libraryRepository: LibraryRepository = defaultLibraryRepository()
+    libraryRepository: LibraryRepository = defaultLibraryRepository(),
+    trailerService: TrailerService? = null,
+    metadataRouterFacade: MetadataRouterFacade? = null
 ): MetaDetailsViewModel {
     val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
     every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
@@ -68,9 +71,10 @@ fun buildMetaDetailsViewModel(
     every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(false)
     every { traktAuthDataStore.state } returns flowOf(TraktAuthState())
 
-    val trailerService = mockk<TrailerService>(relaxed = true)
-    coEvery { trailerService.getTitleMediaAvailability(any(), any(), any(), any()) } returns false
-    coEvery { trailerService.getSeasonMediaAvailability(any(), any(), any(), any()) } returns SeasonMediaAvailability()
+    val effectiveTrailerService = trailerService ?: mockk<TrailerService>(relaxed = true).also {
+        coEvery { it.getTitleMediaAvailability(any(), any(), any(), any()) } returns false
+        coEvery { it.getSeasonMediaAvailability(any(), any(), any(), any()) } returns SeasonMediaAvailability()
+    }
 
     val addonRepository = mockk<AddonRepository>()
     every { addonRepository.getInstalledAddons() } returns flowOf(emptyList())
@@ -94,7 +98,11 @@ fun buildMetaDetailsViewModel(
         reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
         tmdbService = tmdbService,
-        metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter, metadataSecondaryRepository),
+        metadataRouterFacade = metadataRouterFacade ?: testMetadataRouterFacade(
+            providerMetadataRouter = tvMetadataRouter,
+            metadataSecondaryRepository = metadataSecondaryRepository,
+            trailerService = effectiveTrailerService
+        ),
         metadataSecondaryRepository = metadataSecondaryRepository,
         profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),
@@ -107,7 +115,7 @@ fun buildMetaDetailsViewModel(
         trackingScrobbleService = mockk<TrackingScrobbleService>(relaxed = true),
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         playerSettingsDataStore = playerSettingsDataStore,
-        trailerService = trailerService,
+        trailerService = effectiveTrailerService,
         savedStateHandle = SavedStateHandle(
             mapOf(
                 "itemId" to itemId,

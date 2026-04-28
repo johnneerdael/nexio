@@ -2691,7 +2691,15 @@ class MetaDetailsViewModel @Inject constructor(
                 null
             }
 
-            val trailerResult = trailerService.resolveTrailer(
+            val trailerContentType = resolveTmdbContentType(meta)
+            val trailerResult = metadataRouterFacade.fetchTrailer(
+                metadataRequest = MetadataRequest(
+                    contentId = if (!tmdbId.isNullOrBlank()) "tmdb:$tmdbId" else meta.id,
+                    contentType = trailerContentType,
+                    sourceContext = MetadataSourceContext(itemType = trailerContentType.toApiString()),
+                    language = currentTvdbLanguageTag(),
+                    depth = MetadataDepth.DETAIL_MEDIA
+                ),
                 title = meta.name,
                 year = year,
                 tmdbId = tmdbId,

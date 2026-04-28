@@ -10,6 +10,8 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.trailer.TrailerResolutionResult
+import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import javax.inject.Inject
@@ -23,7 +25,8 @@ class MetadataRouterFacade @Inject constructor(
     private val identityResolver: MetadataIdentityResolver,
     private val providerPlanRunner: ProviderPlanRunner,
     private val fieldResolver: FieldResolver,
-    private val metadataSecondaryRepository: MetadataSecondaryRepository? = null
+    private val metadataSecondaryRepository: MetadataSecondaryRepository? = null,
+    private val trailerService: TrailerService? = null
 ) {
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
         val routed = router.route(request)
@@ -105,6 +108,44 @@ class MetadataRouterFacade @Inject constructor(
         resolveRequest(metadataRequest)
         // Delegate to the secondary repository for the rich TMDB shape.
         return repo.fetchTmdbEnrichment(tmdbId, contentType)
+    }
+
+    /**
+     * Routes a trailer fetch through the canonical resolve pipeline at depth
+     * [MetadataDepth.DETAIL_MEDIA] so that `metadata.route_decision` and
+     * `metadata.field_selected` trace events fire, then delegates the actual
+     * playback-ready resolution to [TrailerService].
+     *
+     * The resolved document from [resolveRequest] is intentionally discarded —
+     * the trailer pipeline produces a player-ready [TrailerResolutionResult]
+     * (with In-App YouTube extraction, separate video/audio adaptive URLs)
+     * which is richer than the resolver's `ResolvedField.TRAILERS` carry-set.
+     */
+    suspend fun fetchTrailer(
+        metadataRequest: MetadataRequest,
+        title: String,
+        year: String? = null,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null,
+        fallbackYtIds: List<String> = emptyList()
+    ): TrailerResolutionResult? {
+        val service = checkNotNull(trailerService) {
+            "fetchTrailer requires MetadataRouterFacade to be constructed with a non-null TrailerService"
+        }
+        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_MEDIA).
+        resolveRequest(metadataRequest)
+        // Delegate to TrailerService for the actual playback-ready resolution.
+        return service.resolveTrailer(
+            title = title,
+            year = year,
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId,
+            fallbackYtIds = fallbackYtIds
+        )
     }
 
     suspend fun fetchTvEpisodeEnrichment(
