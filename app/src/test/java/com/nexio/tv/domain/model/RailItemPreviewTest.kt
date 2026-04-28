@@ -71,7 +71,7 @@ class RailItemPreviewTest {
             sourceProvider = ProviderId.ADDON,
             sourceItemId = "addon:item:missing-title",
             itemType = ContentType.MOVIE,
-            stableIds = ProviderIds(imdb = "tt1375666"),
+            stableIds = ProviderIds(tmdb = "27205"),
             display = RailDisplaySeed(
                 title = null,
                 posterUrl = null,
@@ -88,7 +88,7 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("tt1375666", meta.name)
+        assertEquals("TMDB 27205", meta.name)
         assertNull(meta.poster)
         assertNull(meta.background)
         assertNull(meta.logo)
