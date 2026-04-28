@@ -26,8 +26,8 @@ object FirstPaintTracer {
     fun recordHomePreview(
         contentId: String,
         itemType: String,
-        source: String = "ADDON_META_PREVIEW",
-        fieldsUsed: Set<String>
+        fieldsUsed: Set<String>,
+        source: String = "ADDON_META_PREVIEW"
     ) {
         events.emitFirstPaint(
             contentId = contentId,

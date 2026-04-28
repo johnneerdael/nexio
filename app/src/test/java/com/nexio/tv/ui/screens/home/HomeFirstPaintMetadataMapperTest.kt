@@ -102,4 +102,17 @@ class HomeFirstPaintMetadataMapperTest {
         assertEquals(false, payload["routerExecuted"])
         assertEquals(false, payload["networkExecuted"])
     }
+
+    @Test
+    fun `home first paint tracer keeps positional fieldsUsed compatibility`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "session-positional" })
+        FirstPaintTracer.install(events, profileHashProvider = { null })
+
+        FirstPaintTracer.recordHomePreview("tt-positional", "movie", setOf("title"))
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertEquals("ADDON_META_PREVIEW", payload["source"])
+        assertEquals(listOf("title"), payload["fieldsUsed"])
+    }
 }
