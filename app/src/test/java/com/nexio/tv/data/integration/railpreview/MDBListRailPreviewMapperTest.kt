@@ -2,6 +2,7 @@ package com.nexio.tv.data.integration.railpreview
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.nexio.tv.data.integration.mdblist.withRailAppendToResponse
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.RailSource
@@ -98,6 +99,28 @@ class MDBListRailPreviewMapperTest {
 
         assertEquals(ProviderId.MDBLIST, preview.display.rating?.provider)
         assertEquals(7.4, preview.display.rating?.value ?: 0.0, 0.01)
+    }
+
+    @Test
+    fun `mdblist rail append response merges missing rich preview fields`() {
+        val query = withRailAppendToResponse(mapOf("append_to_response" to "ratings"))
+
+        assertEquals("ratings,genres,poster,description", query["append_to_response"])
+    }
+
+    @Test
+    fun `mdblist rail append response preserves existing fields and avoids duplicates`() {
+        val query = withRailAppendToResponse(
+            mapOf(
+                "apikey" to "mdb-key",
+                "limit" to "20",
+                "append_to_response" to "details,poster"
+            )
+        )
+
+        assertEquals("mdb-key", query["apikey"])
+        assertEquals("20", query["limit"])
+        assertEquals("details,poster,genres,description,ratings", query["append_to_response"])
     }
 
     private fun jsonObject(vararg values: Pair<String, String>): JsonObject {
