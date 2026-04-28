@@ -73,4 +73,20 @@ class IntegrationSingleFlightTest {
         assertEquals(2, attempted.get())
         assertEquals(IntegrationFetchResult.Updated("recovered"), second)
     }
+
+    @Test
+    fun `same key with different result types does not produce ClassCastException`() = runTest {
+        val singleFlight = IntegrationSingleFlight()
+        // First call returns Updated(Int)
+        val intResult = singleFlight.run<Int>(
+            key = TypedSingleFlightKey(cacheKey = "clash-key", mimeType = "application/int")
+        ) { IntegrationFetchResult.Updated(42) }
+        // Second call with same cacheKey but different mimeType (different T) must NOT reuse the slot
+        val stringResult = singleFlight.run<String>(
+            key = TypedSingleFlightKey(cacheKey = "clash-key", mimeType = "application/string")
+        ) { IntegrationFetchResult.Updated("forty-two") }
+
+        assertEquals(IntegrationFetchResult.Updated(42), intResult)
+        assertEquals(IntegrationFetchResult.Updated("forty-two"), stringResult)
+    }
 }
