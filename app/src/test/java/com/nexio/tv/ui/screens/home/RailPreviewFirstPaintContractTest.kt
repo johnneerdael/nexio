@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailDisplaySeed
@@ -43,6 +44,9 @@ class RailPreviewFirstPaintContractTest {
         assertEquals("tvdb:81189", item.id)
         assertEquals("Breaking Bad", item.name)
         assertEquals("2008", item.releaseInfo)
+        assertEquals(FirstPaintSource.RAIL_PREVIEW, item.firstPaintSource)
+        assertEquals(ProviderId.TRAKT, item.firstPaintSourceProvider)
+        assertEquals(ProviderIds(trakt = "1", imdb = "tt0903747", tmdb = "1396", tvdb = "81189"), item.firstPaintStableIds)
         assertEquals(null, item.poster)
     }
 
@@ -129,6 +133,9 @@ class RailPreviewFirstPaintContractTest {
         assertEquals("tvdb:81189", item.id)
         assertEquals("Breaking Bad", item.name)
         assertEquals("2008", item.releaseInfo)
+        assertEquals(FirstPaintSource.RAIL_PREVIEW, item.firstPaintSource)
+        assertEquals(ProviderId.TRAKT, item.firstPaintSourceProvider)
+        assertEquals(ProviderIds(trakt = "1", imdb = "tt0903747", tmdb = "1396", tvdb = "81189"), item.firstPaintStableIds)
         assertEquals(null, item.poster)
     }
 

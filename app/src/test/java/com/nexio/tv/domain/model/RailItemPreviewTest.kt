@@ -36,7 +36,45 @@ class RailItemPreviewTest {
         assertEquals(ContentType.SERIES, meta.type)
         assertEquals("Breaking Bad", meta.name)
         assertEquals("2008", meta.releaseInfo)
+        assertEquals(FirstPaintSource.RAIL_PREVIEW, meta.firstPaintSource)
+        assertEquals(ProviderId.TRAKT, meta.firstPaintSourceProvider)
+        assertEquals(preview.stableIds, meta.firstPaintStableIds)
+        assertEquals(RailSource.BUILT_IN_TRAKT, meta.firstPaintRailSource)
+        assertEquals("trakt:show:1", meta.firstPaintSourceItemId)
         assertNull(meta.poster)
+    }
+
+    @Test
+    fun `rail preview conversion preserves provenance and stable ids`() {
+        val stableIds = ProviderIds(
+            trakt = "1",
+            imdb = "tt0903747",
+            tmdb = "1396",
+            tvdb = "81189",
+            slug = "breaking-bad"
+        )
+        val preview = RailItemPreview(
+            railId = "trakt_trending_shows",
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            sourceItemId = "trakt:show:1",
+            itemType = ContentType.SERIES,
+            stableIds = stableIds,
+            display = RailDisplaySeed(title = "Breaking Bad", year = 2008),
+            sourcePayloadQuality = SourcePayloadQuality.SPARSE_IDENTITY,
+            sourcePayloadHash = "hash-trakt-breaking-bad",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals(FirstPaintSource.RAIL_PREVIEW, meta.firstPaintSource)
+        assertEquals(ProviderId.TRAKT, meta.firstPaintSourceProvider)
+        assertEquals(stableIds, meta.firstPaintStableIds)
+        assertEquals("81189", meta.firstPaintStableIds.tvdb)
+        assertEquals("1396", meta.firstPaintStableIds.tmdb)
+        assertEquals(RailSource.BUILT_IN_TRAKT, meta.firstPaintRailSource)
+        assertEquals("trakt:show:1", meta.firstPaintSourceItemId)
     }
 
     @Test
