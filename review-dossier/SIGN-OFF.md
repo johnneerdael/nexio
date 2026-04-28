@@ -5,6 +5,15 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## P0 fixes landed
+
+The two P0 merge blockers identified by this audit have been remediated on top of the dossier:
+
+- **F-F-01** — Fixed in commits `67b50a0f3` (ViewModel) + `8795e1202` (MainActivity), with string resource in `b24b49139`. `ProfileSelectionViewModel.selectProfile` and both `MainActivity` `setActiveProfile` call sites now catch `ProfileBoundaryException(PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK)` and surface a "Stop playback first" message. Regression test: `ProfileSelectionViewModelSwitchDuringPlaybackTest`.
+- **F-H-03** — Fixed in commits `09b6d7d64` (helper) + `1d7087b56` (Trakt) + `68c885523` (Simkl). `TraktScrobbleService` and `SimklScrobbleService` now compare envelope profile to active profile at `enqueueScrobble` / `enqueueCheckin` start, and emit `playback.scrobble_rejected` when they differ (informational trace; preserves existing enqueue behavior). Regression tests: `TraktScrobbleServiceProfileBoundaryTest`, `SimklScrobbleServiceProfileBoundaryTest`.
+
+**Updated decision:** APPROVED for merge. The 20 P1 findings remain open and should be addressed in follow-up plans (one per cluster — see `09-known-gaps.md` for the canonical list).
+
 ## Findings count (per `09-known-gaps.md`, post Task-39 reconciliation)
 
 - P0 (merge blockers): **2**
