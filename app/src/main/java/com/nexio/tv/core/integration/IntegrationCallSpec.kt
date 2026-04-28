@@ -8,6 +8,13 @@ data class IntegrationCallSpec<T>(
     val workClass: IntegrationWorkClass,
     val scope: IntegrationScope = IntegrationScope.GlobalContent,
     val profileContext: ProfileExecutionContext? = null,
+    /**
+     * Opt-in single-flight coalescing for non-cache call paths (F-A-02).
+     * When true, concurrent identical calls (keyed on operationKey + scope.storageKey + apiShapeId)
+     * are deduplicated through [IntegrationSingleFlight]. Default false preserves prior behavior
+     * so mutations that must duplicate stay un-coalesced.
+     */
+    val coalesceConcurrent: Boolean = false,
     val call: suspend () -> IntegrationCallResult<T>
 ) {
     init {

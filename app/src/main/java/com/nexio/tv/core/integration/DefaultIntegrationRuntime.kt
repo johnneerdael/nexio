@@ -244,6 +244,19 @@ class DefaultIntegrationRuntime @Inject constructor(
     }
 
     private suspend fun <T> callInternal(spec: IntegrationCallSpec<T>, traceId: String): IntegrationCallResult<T> {
+        return if (spec.coalesceConcurrent) {
+            // F-A-02: opt-in single-flight on operationKey + scope.storageKey + apiShapeId.
+            val key = TypedSingleFlightKey(
+                cacheKey = "call:${spec.operationKey}:${spec.scope.storageKey}",
+                mimeType = spec.apiShapeId
+            )
+            singleFlight.runCall(key) { doCallInternal(spec, traceId) }
+        } else {
+            doCallInternal(spec, traceId)
+        }
+    }
+
+    private suspend fun <T> doCallInternal(spec: IntegrationCallSpec<T>, traceId: String): IntegrationCallResult<T> {
         record(
             spec = spec,
             traceId = traceId,
