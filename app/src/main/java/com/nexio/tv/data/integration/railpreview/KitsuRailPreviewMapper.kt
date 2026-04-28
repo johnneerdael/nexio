@@ -5,6 +5,7 @@ import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.RailDisplaySeed
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.RailRankingMetadata
@@ -12,6 +13,7 @@ import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.RatingSeed
 import com.nexio.tv.domain.model.SourcePayloadQuality
 import com.nexio.tv.domain.model.TrailerHint
+import java.util.Locale
 
 class KitsuRailPreviewMapper {
     fun mapAnime(
@@ -29,6 +31,9 @@ class KitsuRailPreviewMapper {
         } else {
             ContentType.SERIES
         }
+        val posterUrl = attributes?.posterImage.bestKitsuImage()
+        val backdropUrl = attributes?.coverImage.bestKitsuImage()
+        val rating = attributes?.averageRating?.toDoubleOrNull()?.div(10.0)
         val display = RailDisplaySeed(
             title = firstNonBlank(
                 attributes?.canonicalTitle,
@@ -40,11 +45,11 @@ class KitsuRailPreviewMapper {
             releaseDate = firstNonBlank(attributes?.startDate),
             overview = firstNonBlank(attributes?.synopsis, attributes?.description),
             runtimeText = attributes?.episodeLength?.let { "$it min" },
-            posterUrl = attributes?.posterImage.bestKitsuImage(),
-            backdropUrl = attributes?.coverImage.bestKitsuImage(),
-            rating = attributes?.averageRating?.toDoubleOrNull()?.div(10.0)?.let {
-                RatingSeed(provider = ProviderId.KITSU, value = it)
-            },
+            posterUrl = posterUrl,
+            posterShape = if (backdropUrl != null) PosterShape.LANDSCAPE else PosterShape.POSTER,
+            backdropUrl = backdropUrl,
+            rating = rating?.let { RatingSeed(provider = ProviderId.KITSU, value = it) },
+            ratingText = rating?.let { String.format(Locale.US, "%.1f", it) },
             trailerHint = attributes?.youtubeVideoId
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }

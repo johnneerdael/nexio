@@ -46,8 +46,8 @@ class KitsuDiscoveryServiceTest {
         assertEquals("kitsu:1", row.items.single().id)
         assertEquals(ContentType.SERIES, row.items.single().type)
         assertEquals(PosterShape.LANDSCAPE, row.items.single().posterShape)
-        assertEquals("1998-04-03", row.items.single().releaseInfo)
-        assertEquals(8.52f, row.items.single().imdbRating)
+        assertEquals("1998", row.items.single().releaseInfo)
+        assertEquals(8.5f, row.items.single().imdbRating)
     }
 
     @Test
