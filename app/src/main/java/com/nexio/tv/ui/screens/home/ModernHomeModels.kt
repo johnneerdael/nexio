@@ -15,7 +15,6 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
-import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 internal const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
@@ -567,7 +566,7 @@ internal fun buildCatalogItem(
     occurrence: Int,
     previousCachedItem: ModernCarouselItem? = null
 ): ModernCarouselItem {
-    val displayMetadata = item.toHomeDisplayMetadata()
+    val displayMetadata = item.toFirstPaintHomeDisplayMetadata()
     val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
         ?: firstNonBlank(item.background, displayMetadata.backdrop)
     val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }

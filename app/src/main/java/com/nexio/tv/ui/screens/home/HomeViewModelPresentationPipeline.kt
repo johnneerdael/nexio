@@ -20,6 +20,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -724,7 +725,7 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
                 contentId = item.id,
                 contentType = item.type,
                 sourceContext = item.toHomeMetadataSourceContext(
-                    addonMetadata = item.toFirstPaintHomeDisplayMetadata()
+                    addonMetadata = item.toHomeDisplayMetadata()
                 ),
                 language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
                 depth = MetadataDepth.DETAIL_CORE
@@ -743,7 +744,7 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
             contentId = item.id,
             contentType = item.type,
             sourceContext = item.toHomeMetadataSourceContext(
-                addonMetadata = item.toFirstPaintHomeDisplayMetadata()
+                addonMetadata = item.toHomeDisplayMetadata()
             ),
             language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()),
             depth = MetadataDepth.DETAIL_CORE
