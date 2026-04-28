@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import com.nexio.tv.domain.model.ContentType
 import javax.inject.Inject
 
@@ -12,7 +13,8 @@ class MetadataRouter @Inject constructor(
     private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
         sink = NoopRuntimeTraceSink,
         sessionId = { null }
-    )
+    ),
+    private val tmdbExternalIdLookup: TmdbExternalIdLookupProvider? = null
 ) {
     suspend fun route(request: MetadataRequest): MetadataRoute {
         require(request.depth != MetadataDepth.PREVIEW) {
@@ -51,7 +53,7 @@ class MetadataRouter @Inject constructor(
         }
     }
 
-    private fun kitsuDirect(
+    private suspend fun kitsuDirect(
         normalized: NormalizedMetadataRequest,
         parsedId: ParsedMetadataId,
         trace: MutableList<MetadataRouteTrace>
@@ -163,7 +165,7 @@ class MetadataRouter @Inject constructor(
         return fallbackByItemType(normalized, trace)
     }
 
-    private fun providerNativeOrConflict(
+    private suspend fun providerNativeOrConflict(
         normalized: NormalizedMetadataRequest,
         parsedId: ParsedMetadataId,
         nativeType: ContentType,
@@ -198,7 +200,7 @@ class MetadataRouter @Inject constructor(
         )
     }
 
-    private fun fallbackByItemType(
+    private suspend fun fallbackByItemType(
         normalized: NormalizedMetadataRequest,
         trace: MutableList<MetadataRouteTrace>,
         conflictFallbackProvider: MetadataPrimaryProvider? = null,
@@ -245,7 +247,7 @@ class MetadataRouter @Inject constructor(
             }
         }
 
-    private fun route(
+    private suspend fun route(
         normalized: NormalizedMetadataRequest,
         provider: MetadataPrimaryProvider,
         mediaKind: MetadataMediaKind,
@@ -254,6 +256,11 @@ class MetadataRouter @Inject constructor(
         trace: List<MetadataRouteTrace>,
         requiresIdentityResolution: Boolean = false
     ): MetadataRoute {
+        val targetIds = buildTargetIds(
+            normalized = normalized,
+            provider = provider,
+            targetId = targetId
+        )
         traceEvents.emitRouteDecision(
             contentId = normalized.originalContentId,
             parentId = normalized.parentId,
@@ -264,7 +271,7 @@ class MetadataRouter @Inject constructor(
             usedInputs = listOf("item.id", "item.type", "AnimeIdentityIndex", "IdMappingStore"),
             ignoredInputs = listOf("catalog.type", "addon.name", "genre", "animeType", "links", "trend"),
             targetIdRequiresIdentityResolution = requiresIdentityResolution,
-            targetIds = mapOf(provider.name to targetId)
+            targetIds = targetIds.mapKeys { it.key.name }
         )
         return MetadataRoute(
             provider = provider,
@@ -274,9 +281,52 @@ class MetadataRouter @Inject constructor(
             sourceContext = normalized.sourceContext,
             language = normalized.language,
             seasonNumber = normalized.seasonNumber,
-            targetIds = mapOf(provider to targetId),
+            targetIds = targetIds,
             targetIdRequiresIdentityResolution = requiresIdentityResolution,
             trace = trace.toList()
         )
+    }
+
+    /**
+     * Build the [MetadataRoute.targetIds] map starting with the primary provider's id and,
+     * when possible, surface a cross-provider IMDB id so adapters that prefer IMDB
+     * (e.g. Trakt) can use the route directly without a second identity-resolution hop.
+     */
+    private suspend fun buildTargetIds(
+        normalized: NormalizedMetadataRequest,
+        provider: MetadataPrimaryProvider,
+        targetId: String
+    ): Map<MetadataPrimaryProvider, String> {
+        val builder = mutableMapOf(provider to targetId)
+
+        // Surface IMDB id directly from the request when the contentId already carries one.
+        val originalParsed = MetadataIdParser.parse(normalized.originalContentId)
+        if (originalParsed.scheme == AnimeIdScheme.IMDB) {
+            builder.putIfAbsent(MetadataPrimaryProvider.IMDB, originalParsed.value)
+        }
+
+        // For TMDB-primary routes, attempt to resolve the matching IMDB id via the TMDB
+        // external-ids endpoint so cross-provider adapters (e.g. Trakt review fetch) can
+        // operate without an extra identity round-trip.
+        val lookup = tmdbExternalIdLookup
+        if (provider == MetadataPrimaryProvider.TMDB &&
+            !builder.containsKey(MetadataPrimaryProvider.IMDB) &&
+            lookup != null
+        ) {
+            val parsedTarget = MetadataIdParser.parse(targetId)
+            val tmdbInt = parsedTarget.value.toIntOrNull()
+            if (tmdbInt != null) {
+                val mediaType = when (normalized.contentType) {
+                    ContentType.SERIES, ContentType.TV -> "tv"
+                    else -> "movie"
+                }
+                runCatching { lookup.findImdbIdByTmdbId(tmdbInt, mediaType) }
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { imdb -> builder[MetadataPrimaryProvider.IMDB] = imdb }
+            }
+        }
+
+        return builder.toMap()
     }
 }
