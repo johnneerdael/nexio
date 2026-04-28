@@ -146,12 +146,14 @@ class RailPreviewFirstPaintContractTest {
     private fun railItemPreviewToMetaPreviewSource(): String {
         val source = File("app/src/main/java/com/nexio/tv/domain/model/RailItemPreview.kt").readText()
         val start = source.indexOf("fun RailItemPreview.toMetaPreview(): MetaPreview")
-        val end = source.indexOf("\n\nprivate fun ProviderId?.toTitleRatingSource()", start)
+        val ratingSourceHelperStart = source.indexOf("\n\nprivate fun ProviderId?.toTitleRatingSource()", start)
+        val end = source.indexOf("\n}", ratingSourceHelperStart)
 
         assertTrue("RailItemPreview.toMetaPreview source should exist", start >= 0)
-        assertTrue("RailItemPreview.toMetaPreview source boundary should exist", end > start)
+        assertTrue("ProviderId?.toTitleRatingSource source should exist", ratingSourceHelperStart > start)
+        assertTrue("ProviderId?.toTitleRatingSource source boundary should exist", end > ratingSourceHelperStart)
 
-        return source.substring(start, end)
+        return source.substring(start, end + "\n}".length)
     }
 
     private fun preview(): RailItemPreview {
