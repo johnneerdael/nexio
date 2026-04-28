@@ -488,7 +488,7 @@ class DefaultIntegrationRuntime @Inject constructor(
         }
 
         record(spec, traceId, IntegrationAuditPhase.LANE_QUEUED)
-        return singleFlight.run(spec.requiredCacheKey) {
+        return singleFlight.run(TypedSingleFlightKey(spec.requiredCacheKey, spec.codec.mimeType)) {
             cacheStore.readFresh(spec)?.let {
                 record(spec, traceId, IntegrationAuditPhase.FRESH_CACHE_HIT, IntegrationOutcome.SUCCESS)
                 emitCacheDecision(
