@@ -1,5 +1,6 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDiagnosticEvent
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -8,6 +9,8 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
+import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,7 +22,8 @@ class MetadataRouterFacade @Inject constructor(
     private val resolverOrchestrator: ResolverOrchestrator,
     private val identityResolver: MetadataIdentityResolver,
     private val providerPlanRunner: ProviderPlanRunner,
-    private val fieldResolver: FieldResolver
+    private val fieldResolver: FieldResolver,
+    private val metadataSecondaryRepository: MetadataSecondaryRepository? = null
 ) {
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
         val routed = router.route(request)
@@ -77,6 +81,30 @@ class MetadataRouterFacade @Inject constructor(
             value = result.resolvedDocument.toTvMetadataEnrichment(),
             diagnostics = emptyList()
         )
+    }
+
+    /**
+     * Routes a TMDB enrichment fetch through the canonical resolve pipeline so that
+     * `metadata.route_decision` and `metadata.field_selected` trace events fire, then
+     * delegates the actual rich-shape data fetch to [MetadataSecondaryRepository].
+     *
+     * The resolved document from [resolveRequest] is intentionally discarded — its TMDB
+     * carry-set is narrower than the 22-field [TmdbEnrichment] that downstream
+     * `enrichMeta(...)` sites depend on. Migrating naively to the resolved document
+     * would silently drop director/writer/cast/companies/networks/collection.
+     */
+    suspend fun fetchTmdbEnrichment(
+        metadataRequest: MetadataRequest,
+        tmdbId: String,
+        contentType: ContentType
+    ): TmdbEnrichment? {
+        val repo = checkNotNull(metadataSecondaryRepository) {
+            "fetchTmdbEnrichment requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        }
+        // Fire canonical trace events via the resolve pipeline.
+        resolveRequest(metadataRequest)
+        // Delegate to the secondary repository for the rich TMDB shape.
+        return repo.fetchTmdbEnrichment(tmdbId, contentType)
     }
 
     suspend fun fetchTvEpisodeEnrichment(

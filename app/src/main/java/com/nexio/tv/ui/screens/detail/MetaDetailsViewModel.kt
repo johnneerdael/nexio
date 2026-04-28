@@ -1388,7 +1388,14 @@ class MetaDetailsViewModel @Inject constructor(
                 settings.isActive &&
                 shouldSupplementTvdbDetailWithTmdb(tvEnrichment, settings)
             ) {
-                metadataSecondaryRepository.fetchTmdbEnrichment(
+                metadataRouterFacade.fetchTmdbEnrichment(
+                    metadataRequest = MetadataRequest(
+                        contentId = "tmdb:$tmdbId",
+                        contentType = tmdbContentType,
+                        sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
+                        language = tvdbLanguage,
+                        depth = MetadataDepth.DETAIL_CORE
+                    ),
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
                 )
@@ -1403,7 +1410,14 @@ class MetaDetailsViewModel @Inject constructor(
                 val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
                     ?: tmdbService.ensureTmdbId(itemId, itemType)
                     ?: return result(meta)
-                metadataSecondaryRepository.fetchTmdbEnrichment(
+                metadataRouterFacade.fetchTmdbEnrichment(
+                    metadataRequest = MetadataRequest(
+                        contentId = "tmdb:$tmdbId",
+                        contentType = tmdbContentType,
+                        sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
+                        language = tvdbLanguage,
+                        depth = MetadataDepth.DETAIL_CORE
+                    ),
                     tmdbId = tmdbId,
                     contentType = tmdbContentType
                 )

@@ -1052,6 +1052,11 @@ class MetaDetailsSeasonMediaViewModelTest {
         every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
 
+        val metadataSecondaryRepositoryInstance = MetadataSecondaryRepository(
+            tmdbMetadataService = resolvedTmdbMetadataService,
+            kitsuMetadataService = mockk(relaxed = true)
+        )
+
         return MetaDetailsViewModel(
             context = context,
             metaRepository = metaRepository,
@@ -1059,11 +1064,8 @@ class MetaDetailsSeasonMediaViewModelTest {
             reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            metadataSecondaryRepository = MetadataSecondaryRepository(
-                tmdbMetadataService = resolvedTmdbMetadataService,
-                kitsuMetadataService = mockk(relaxed = true)
-            ),
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter, metadataSecondaryRepositoryInstance),
+            metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
             profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
             titleRatingOverrideRepository = titleRatingOverrideRepository,
