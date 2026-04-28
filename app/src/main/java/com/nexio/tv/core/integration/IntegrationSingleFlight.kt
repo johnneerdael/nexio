@@ -20,6 +20,51 @@ data class TypedSingleFlightKey(
 class IntegrationSingleFlight @Inject constructor() {
     private val mutex = Mutex()
     private val inFlight = mutableMapOf<String, CompletableDeferred<IntegrationFetchResult<*>>>()
+    private val inFlightCalls = mutableMapOf<String, CompletableDeferred<IntegrationCallResult<*>>>()
+
+    /**
+     * Single-flight entry point for non-cache call paths (F-A-02). Mirrors [run] but operates on
+     * [IntegrationCallResult] so callers like [DefaultIntegrationRuntime.callInternal] can opt in
+     * via [IntegrationCallSpec.coalesceConcurrent] without wrapping their results in fetch shapes.
+     */
+    @Suppress("UNCHECKED_CAST")
+    suspend fun <T> runCall(
+        key: TypedSingleFlightKey,
+        block: suspend () -> IntegrationCallResult<T>
+    ): IntegrationCallResult<T> {
+        val composedKey = "${key.cacheKey}|${key.mimeType}"
+        val existing = mutex.withLock {
+            inFlightCalls[composedKey] as? CompletableDeferred<IntegrationCallResult<T>>
+        }
+        if (existing != null) return existing.await()
+
+        val deferred = CompletableDeferred<IntegrationCallResult<T>>()
+        val shouldRun = mutex.withLock {
+            val found = inFlightCalls[composedKey] as? CompletableDeferred<IntegrationCallResult<T>>
+            if (found != null) {
+                false
+            } else {
+                @Suppress("UNCHECKED_CAST")
+                val typed = deferred as CompletableDeferred<IntegrationCallResult<*>>
+                inFlightCalls[composedKey] = typed
+                true
+            }
+        }
+        if (!shouldRun) {
+            return mutex.withLock {
+                inFlightCalls[composedKey] as CompletableDeferred<IntegrationCallResult<T>>
+            }.await()
+        }
+
+        return try {
+            block().also { deferred.complete(it) }
+        } catch (error: Throwable) {
+            deferred.completeExceptionally(error)
+            throw error
+        } finally {
+            mutex.withLock { inFlightCalls.remove(composedKey) }
+        }
+    }
 
     /**
      * Typed entry point: composes a string key from [TypedSingleFlightKey] so that
