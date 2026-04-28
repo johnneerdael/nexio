@@ -124,7 +124,8 @@ class RailPreviewLifecycleArchitectureTest {
         val fetchProviderEnrichment = functionSource(presentationPipeline, "fetchProviderEnrichmentForPreview")
         assertTrue(
             "metadata hydration request construction must use pure addon metadata and must not emit first-paint tracing.",
-            fetchProviderEnrichment.contains("addonMetadata = item.toHomeDisplayMetadata()")
+            Regex("""addonMetadata\s*=\s*item\.toHomeDisplayMetadata\(\)""")
+                .containsMatchIn(fetchProviderEnrichment)
         )
         if (fetchProviderEnrichment.contains("toFirstPaintHomeDisplayMetadata")) {
             fail("metadata hydration request construction must not call toFirstPaintHomeDisplayMetadata.")
@@ -143,7 +144,9 @@ class RailPreviewLifecycleArchitectureTest {
     }
 
     private fun functionSource(content: String, functionName: String): String {
-        val functionMatch = Regex("""\b${Regex.escape(functionName)}\s*\(""").find(content)
+        val functionMatch = Regex(
+            """(?m)^(?:internal|private|public)?\s*(?:suspend\s+)?fun\s+(?:[\w.<>]+\.)?${Regex.escape(functionName)}\s*\("""
+        ).find(content)
         if (functionMatch == null) {
             fail("Required function is missing: $functionName")
             throw AssertionError("unreachable")
