@@ -47,7 +47,11 @@ data class ProviderIds(
     val anilist: String? = null,
     val anidb: String? = null
 ) {
-    fun bestStableItemKey(itemType: ContentType, sourceItemId: String): String {
+    fun bestStableItemKey(
+        itemType: ContentType,
+        sourceItemId: String,
+        rawNamespace: String? = null
+    ): String {
         val type = itemType.toApiString()
         return when {
             imdb != null -> "$type:imdb:$imdb"
@@ -56,7 +60,13 @@ data class ProviderIds(
             kitsu != null -> "$type:kitsu:$kitsu"
             trakt != null -> "$type:trakt:$trakt"
             simkl != null -> "$type:simkl:$simkl"
-            else -> "$type:raw:${sourceItemId.trim()}"
+            else -> {
+                val namespace = rawNamespace
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: "source-item"
+                "$type:raw:$namespace:${sourceItemId.trim()}"
+            }
         }
     }
 }
@@ -70,9 +80,11 @@ data class RailDisplaySeed(
     val runtimeText: String? = null,
     val genres: List<String> = emptyList(),
     val posterUrl: String? = null,
+    val posterShape: PosterShape? = null,
     val backdropUrl: String? = null,
     val logoUrl: String? = null,
     val rating: RatingSeed? = null,
+    val ratingText: String? = null,
     val trailerHint: TrailerHint? = null
 )
 
@@ -116,6 +128,8 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         ?: stableIds.tmdb?.let { "TMDB $it" }
         ?: sourceItemId
     val ratingSource = display.rating?.provider.toTitleRatingSource()
+    val rating = display.ratingText?.toFloatOrNull()
+        ?: display.rating?.value?.toFloat()
 
     return MetaPreview(
         id = bestSupportedRoutingId(),
@@ -123,13 +137,13 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         rawType = itemType.toApiString(),
         name = title,
         poster = display.posterUrl,
-        posterShape = PosterShape.POSTER,
+        posterShape = display.posterShape ?: PosterShape.POSTER,
         background = display.backdropUrl,
         logo = display.logoUrl,
         description = display.overview,
-        releaseInfo = display.year?.toString() ?: display.releaseDate,
+        releaseInfo = display.year?.toString() ?: display.releaseDate?.take(4),
         runtime = display.runtimeText,
-        imdbRating = display.rating?.value?.toFloat()?.takeIf { ratingSource != null },
+        imdbRating = rating,
         ratingSource = ratingSource,
         genres = display.genres,
         trailerYtIds = when (val hint = display.trailerHint) {
