@@ -63,7 +63,6 @@ class DefaultIntegrationRuntime @Inject constructor(
         ctx: RuntimeTraceContext,
         extra: Map<String, Any?> = emptyMap()
     ) {
-        if (traceSink === NoopRuntimeTraceSink) return
         val payload = mapOf(
             "runtimeOperationId" to ctx.runtimeOperationId,
             "provider" to ctx.provider.name,
@@ -92,7 +91,6 @@ class DefaultIntegrationRuntime @Inject constructor(
         decision: TraceCacheDecision,
         extra: Map<String, Any?> = emptyMap()
     ) {
-        if (traceSink === NoopRuntimeTraceSink) return
         emitTrace(
             "runtime.cache_decision",
             ctx,
@@ -186,7 +184,7 @@ class DefaultIntegrationRuntime @Inject constructor(
                     TraceCacheDecision.OBSERVE_ONLY,
                     mapOf("reason" to "policy-observe-only", "networkSuppressed" to false)
                 )
-                executeObserveOnly(spec, policy, options, traceId, traceContext)
+                executeObserveOnly(spec, options, traceId, traceContext)
             }
             is IntegrationCachePolicy.CacheFirst -> executeCacheFirst(spec, policy, options, traceId, traceContext)
             IntegrationCachePolicy.Mutation -> {
@@ -424,7 +422,6 @@ class DefaultIntegrationRuntime @Inject constructor(
 
     private suspend fun <T> executeObserveOnly(
         spec: IntegrationSpec<T>,
-        policy: IntegrationCachePolicy.ObserveOnly,
         options: IntegrationFetchOptions,
         traceId: String,
         traceContext: RuntimeTraceContext
