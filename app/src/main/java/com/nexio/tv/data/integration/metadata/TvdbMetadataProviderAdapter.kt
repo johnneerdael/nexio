@@ -9,11 +9,13 @@ import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import javax.inject.Inject
 
 class TvdbMetadataProviderAdapter @Inject constructor(
-    private val integrationProvider: TvdbIntegrationProvider
+    private val integrationProvider: TvdbIntegrationProvider,
+    private val traceEvents: TraceMetadataEvents
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
 
@@ -24,6 +26,18 @@ class TvdbMetadataProviderAdapter @Inject constructor(
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val language = route.language.orEmpty()
         val policy = LocalizationPolicy.tvdb(language)
+        // F-E-02: emit localization_plan immediately after policy construction.
+        traceEvents.emitLocalizationPlan(
+            contentId = "tvdb:$tvdbId",
+            provider = "TVDB",
+            policyVersion = policy.policyVersion,
+            requestedLanguage = policy.requestedLanguage.providerCode,
+            fallbackLanguage = policy.fallbackLanguage.providerCode,
+            requestedIsFallback = policy.requestedIsFallback,
+            allowProviderFallbackForMissingLocalizedFields = policy.allowProviderFallbackForMissingLocalizedFields,
+            perEpisodeFallbacksAttempted = 0,
+            perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest
+        )
         val episodeMetadata = mutableMapOf<Pair<Int, Int>, com.nexio.tv.core.tvdb.TvEpisodeMetadata>()
         val localizationPayloads = mutableListOf<MetadataLocalizationPayloadTrace>()
         val candidate = when (step.apiShapeId) {
@@ -65,6 +79,18 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                     seasonType = "default",
                     requestedLanguage = language,
                     season = route.seasonNumber
+                )
+                // F-E-01: surface the per-episode fallback counter from the bundle
+                traceEvents.emitLocalizationPlan(
+                    contentId = "tvdb:$tvdbId",
+                    provider = "TVDB",
+                    policyVersion = bundle.policy.policyVersion,
+                    requestedLanguage = bundle.policy.requestedLanguage.providerCode,
+                    fallbackLanguage = bundle.policy.fallbackLanguage.providerCode,
+                    requestedIsFallback = bundle.policy.requestedIsFallback,
+                    allowProviderFallbackForMissingLocalizedFields = bundle.policy.allowProviderFallbackForMissingLocalizedFields,
+                    perEpisodeFallbacksAttempted = bundle.perEpisodeTranslationFallbacksAttempted,
+                    perEpisodeFallbacksAllowed = bundle.maxPerEpisodeTranslationFallbacksAllowed
                 )
                 episodeMetadata += bundle.episodes.mapValues { it.value.metadata }
                 localizationPayloads += bundle.localizationPayloads
