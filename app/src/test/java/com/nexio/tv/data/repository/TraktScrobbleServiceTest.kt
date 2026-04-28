@@ -82,7 +82,14 @@ class TraktScrobbleServiceTest {
         val service = TraktScrobbleService(
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
-            traktMutationOutboxCoordinator = coordinator
+            traktMutationOutboxCoordinator = coordinator,
+            profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
+                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+            },
+            traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
+                com.nexio.tv.core.trace.NoopRuntimeTraceSink,
+                sessionId = { null }
+            )
         )
 
         val mutation = async { service.checkin(movieItem("Arrival")) }
@@ -125,7 +132,14 @@ class TraktScrobbleServiceTest {
         val service = TraktScrobbleService(
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
-            traktMutationOutboxCoordinator = coordinator
+            traktMutationOutboxCoordinator = coordinator,
+            profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
+                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+            },
+            traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
+                com.nexio.tv.core.trace.NoopRuntimeTraceSink,
+                sessionId = { null }
+            )
         )
         val item = movieItem("Heat")
 
@@ -161,7 +175,14 @@ class TraktScrobbleServiceTest {
         val service = TraktScrobbleService(
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
-            traktMutationOutboxCoordinator = coordinator
+            traktMutationOutboxCoordinator = coordinator,
+            profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
+                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+            },
+            traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
+                com.nexio.tv.core.trace.NoopRuntimeTraceSink,
+                sessionId = { null }
+            )
         )
 
         service.scrobbleStart(movieItem("Arrival"), progressPercent = 12f, ownerProfileId = 2)
@@ -186,7 +207,14 @@ class TraktScrobbleServiceTest {
         val service = TraktScrobbleService(
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
-            traktMutationOutboxCoordinator = coordinator
+            traktMutationOutboxCoordinator = coordinator,
+            profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
+                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+            },
+            traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
+                com.nexio.tv.core.trace.NoopRuntimeTraceSink,
+                sessionId = { null }
+            )
         )
         val item = movieItem("Arrival")
 

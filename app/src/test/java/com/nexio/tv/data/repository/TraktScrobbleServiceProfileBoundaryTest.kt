@@ -1,0 +1,122 @@
+package com.nexio.tv.data.repository
+
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.data.local.TraktAuthState
+import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
+import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
+import com.nexio.tv.domain.model.TrackingProvider
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class TraktScrobbleServiceProfileBoundaryTest {
+
+    @Test
+    fun `enqueueScrobble with envelope profile differing from active emits playback_scrobble_rejected`() = runTest {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s1" })
+        val activeProfileIdFlow = MutableStateFlow(2) // active = 2
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileIdFlow
+        }
+        val authService = mockk<TraktAuthService> {
+            coEvery { getAuthState(any()) } returns authenticatedState()
+            every { hasRequiredCredentials() } returns true
+            every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 2)
+        }
+        val authGateway = TraktRepositoryAuthGateway(authService)
+        val watchingNow = TraktWatchingNowStateController()
+        val outbox = mockk<ProviderMutationOutboxCoordinator>(relaxed = true)
+        coEvery { outbox.enqueueAndDrain(any()) } answers { firstArg() }
+
+        val service = TraktScrobbleService(
+            traktAuthService = authGateway,
+            watchingNowStateController = watchingNow,
+            traktMutationOutboxCoordinator = outbox,
+            profileManager = profileManager,
+            traceMetadataEvents = events
+        )
+
+        // Simulate scrobbleStart with ownerProfileId=1 (envelope owner) while active=2.
+        service.scrobbleStart(
+            item = movieItem("X"),
+            progressPercent = 10f,
+            ownerProfileId = 1
+        )
+
+        val rejected = sink.events.filter { it.eventType == "playback.scrobble_rejected" }
+        assertTrue(
+            "expected playback.scrobble_rejected event, got: ${sink.events.map { it.eventType }}",
+            rejected.isNotEmpty()
+        )
+        val payload = rejected.first().payload as Map<*, *>
+        assertEquals(1, payload["envelopeProfileId"])
+        assertEquals(2, payload["activeProfileId"])
+        assertTrue(
+            "operation contains 'scrobble' got=${payload["operation"]}",
+            (payload["operation"] as String).contains("scrobble")
+        )
+
+        // The enqueue still proceeds (informational trace, not behavior change).
+        coVerify { outbox.enqueueAndDrain(any()) }
+    }
+
+    @Test
+    fun `enqueueScrobble with matching profile does not emit playback_scrobble_rejected`() = runTest {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s1" })
+        val activeProfileIdFlow = MutableStateFlow(1) // active = 1
+        val profileManager = mockk<ProfileManager> {
+            every { this@mockk.activeProfileId } returns activeProfileIdFlow
+        }
+        val authService = mockk<TraktAuthService> {
+            coEvery { getAuthState(any()) } returns authenticatedState()
+            every { hasRequiredCredentials() } returns true
+            every { currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
+        }
+        val authGateway = TraktRepositoryAuthGateway(authService)
+        val watchingNow = TraktWatchingNowStateController()
+        val outbox = mockk<ProviderMutationOutboxCoordinator>(relaxed = true)
+        coEvery { outbox.enqueueAndDrain(any()) } answers { firstArg() }
+
+        val service = TraktScrobbleService(
+            traktAuthService = authGateway,
+            watchingNowStateController = watchingNow,
+            traktMutationOutboxCoordinator = outbox,
+            profileManager = profileManager,
+            traceMetadataEvents = events
+        )
+
+        service.scrobbleStart(
+            item = movieItem("X"),
+            progressPercent = 10f,
+            ownerProfileId = 1
+        )
+
+        val rejected = sink.events.filter { it.eventType == "playback.scrobble_rejected" }
+        assertTrue(
+            "must not emit when matching, got ${sink.events.map { it.eventType }}",
+            rejected.isEmpty()
+        )
+    }
+
+    private fun movieItem(title: String) = TraktScrobbleItem.Movie(
+        title = title,
+        year = 2020,
+        ids = TraktIdsDto(imdb = "tt1")
+    )
+
+    private fun authenticatedState() = TraktAuthState(
+        accessToken = "access",
+        refreshToken = "refresh"
+    )
+}
