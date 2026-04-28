@@ -35,7 +35,7 @@ class SimklRailPreviewMapper {
             runtimeText = item.runtime?.let { "$it min" },
             genres = item.genres.orEmpty().mapNotNull { it.trim().takeIf(String::isNotEmpty) },
             posterUrl = simklImageUrl(item.poster),
-            backdropUrl = simklImageUrl(item.fanart),
+            backdropUrl = simklFanartUrl(item.fanart),
             rating = item.ratings.toRatingSeed(),
             trailerHint = item.trailer
                 ?.trim()

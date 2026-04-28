@@ -35,6 +35,12 @@ fun simklImageUrl(fragment: String?): String? {
     return "https://simkl.in/posters/${normalizedFragment.trimStart('/')}"
 }
 
+fun simklFanartUrl(fragment: String?): String? {
+    val normalizedFragment = fragment?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    if (normalizedFragment.startsWith("http://") || normalizedFragment.startsWith("https://")) return normalizedFragment
+    return "https://simkl.in/fanart/${normalizedFragment.trimStart('/')}"
+}
+
 fun yearFromDate(value: String?): Int? {
     val trimmed = value?.trim()?.takeIf { it.length >= 4 } ?: return null
     return trimmed.take(4).toIntOrNull()

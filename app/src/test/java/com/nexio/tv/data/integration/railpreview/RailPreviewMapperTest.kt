@@ -70,6 +70,8 @@ class RailPreviewMapperTest {
         assertNull(tmdbImageUrl("   "))
         assertNull(simklImageUrl(null))
         assertNull(simklImageUrl("   "))
+        assertNull(simklFanartUrl(null))
+        assertNull(simklFanartUrl("   "))
     }
 
     @Test
