@@ -66,9 +66,33 @@ enum class FieldOwner {
     ORGANIZATION_PERSON
 }
 
+enum class SourceRole {
+    PRIMARY,
+    SECONDARY,
+    ARTWORK,
+    RATING,
+    TRACKING,
+    ADDON_PREVIEW,
+    RAIL_PREVIEW,
+    LANGUAGE_FALLBACK
+}
+
+internal fun FieldOwner.defaultSourceRole(): SourceRole = when (this) {
+    FieldOwner.PRIMARY -> SourceRole.PRIMARY
+    FieldOwner.ARTWORK -> SourceRole.ARTWORK
+    FieldOwner.RATING -> SourceRole.RATING
+    FieldOwner.TRACKING -> SourceRole.TRACKING
+    FieldOwner.REVIEWS,
+    FieldOwner.TRAILERS,
+    FieldOwner.RECOMMENDATIONS,
+    FieldOwner.SKIP_SEGMENTS,
+    FieldOwner.ORGANIZATION_PERSON -> SourceRole.SECONDARY
+}
+
 data class FieldValue(
     val value: Any,
-    val owner: FieldOwner
+    val owner: FieldOwner,
+    val sourceRole: SourceRole = owner.defaultSourceRole()
 )
 
 enum class MetadataLocalizationFallbackRole {
@@ -110,7 +134,9 @@ data class MetadataCandidate(
     val provider: MetadataPrimaryProvider,
     val resolverType: ResolverType? = null,
     val fields: Map<ResolvedField, FieldValue>,
-    val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap()
+    val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),
+    val sourceProvider: String = provider.name,
+    val sourceRole: SourceRole = SourceRole.PRIMARY
 )
 
 data class IgnoredFieldOverwrite(
@@ -131,7 +157,9 @@ data class ResolvedMetadataDocument(
     val runtimeMinutes: Int?,
     val fieldOwners: Map<ResolvedField, FieldOwner>,
     val ignoredOverwrites: List<IgnoredFieldOverwrite>,
-    val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap()
+    val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),
+    val sourceRoles: Map<ResolvedField, SourceRole> = emptyMap(),
+    val sourceProviders: Map<ResolvedField, String> = emptyMap()
 )
 
 data class ResolverSchedule(
