@@ -1,38 +1,34 @@
 ## ADDED Requirements
 
 ### Requirement: Rail items render from source payload before canonical hydration
-Every catalog rail item SHALL produce a rail preview payload before metadata routing or provider-plan execution.
+Every catalog rail item SHALL produce a rail preview payload that source/storage records can retain until Home/catalog boundary adaptation.
 
-#### Scenario: Built-in rail first paint does not route
+#### Scenario: Built-in rail first paint uses retained source preview data
 - **GIVEN** a built-in Trakt, MDBList, TMDB, Kitsu, or Simkl rail response item contains display fields
 - **WHEN** Home first paint renders the rail item
-- **THEN** Home uses the rail preview display fields
-- **AND** MetadataRouter is not executed
-- **AND** ProviderPlanRunner is not executed
-- **AND** metadata runtime calls are not executed
+- **THEN** the published source/storage record still contains the rail preview display fields
+- **AND** the Home/catalog boundary adapter uses those retained source fields for first-paint preview data
 
 #### Scenario: Sparse rail payload still renders
 - **GIVEN** a built-in rail response item contains only title, year, and stable identifiers
 - **WHEN** Home first paint renders the rail item
 - **THEN** Home shows title and year with an artwork placeholder
-- **AND** Home does not block on canonical metadata hydration
+- **AND** the source/storage record remains publishable without canonical metadata fields
 
 ### Requirement: Built-in rail payload fields use rail preview source role
-Provider list payload fields from built-in API rails SHALL be represented as `SourceRole.RAIL_PREVIEW` unless the selected canonical route primary provider is the same provider and canonical detail has succeeded.
+Provider list payload fields from built-in API rails SHALL be retained in source/storage records as `SourceRole.RAIL_PREVIEW` data.
 
-#### Scenario: Rail preview is replaced by primary canonical metadata
+#### Scenario: Rail preview source role is retained in storage
 - **GIVEN** a rail preview supplied title, poster, and overview
-- **AND** visible-item hydration later returns primary canonical fields
-- **WHEN** FieldResolver resolves the final display document
-- **THEN** primary-owned canonical fields replace rail preview fields
-- **AND** rejected rail preview candidates are traced with the reason `primary canonical field available`
+- **WHEN** the provider payload is stored as a rail preview source record
+- **THEN** the stored title, poster, and overview retain `SourceRole.RAIL_PREVIEW`
+- **AND** the source/storage record preserves provider and payload provenance
 
-#### Scenario: Rail preview remains after hydration failure
+#### Scenario: Rail preview storage preserves fallback display fields
 - **GIVEN** a rail preview supplied title and poster
-- **AND** visible-item canonical hydration fails
-- **WHEN** Home resolves the rail item display document
-- **THEN** the rail preview fields remain visible
-- **AND** the rail item exposes `HYDRATION_FAILED_USING_PREVIEW`
+- **WHEN** the provider payload is stored as a rail preview source record
+- **THEN** the stored source record retains the title and poster
+- **AND** the Home/catalog boundary can adapt the retained source fields into first-paint preview data
 
 ### Requirement: Rail preview storage is separate from canonical metadata storage
 The system SHALL persist rail records, rail item membership, rail item preview records, and media identity records as separate ownership roots.
@@ -54,7 +50,7 @@ Rail preview mappers SHALL harvest only stable identifier facts explicitly prese
 - **AND** IDs not present in the source payload are not invented
 
 ### Requirement: Rail previews must extend the existing first-paint lifecycle
-Built-in rail preview data SHALL enter Home through the same first-paint UI model and hydration request path used by addon previews. Provider-specific rail code SHALL be limited to page fetch, preview mapping, and identity harvesting.
+Built-in rail preview source/storage data SHALL remain provider-owned until the Home/catalog boundary adapts it into the existing shared first-paint UI model. Provider-specific rail code SHALL be limited to page fetch, preview mapping, identity harvesting, and source/storage persistence.
 
 #### Scenario: Rail preview uses existing Home renderer
 - **GIVEN** a built-in Trakt, MDBList, TMDB, Kitsu, or Simkl rail item has been mapped to a source preview
@@ -62,21 +58,37 @@ Built-in rail preview data SHALL enter Home through the same first-paint UI mode
 - **THEN** the rendered item is a shared Home preview item
 - **AND** the Home renderer does not import provider rail DTOs or rail preview mappers
 - **AND** the first-paint trace source is `RAIL_PREVIEW`
-- **AND** MetadataRouter and ProviderPlanRunner are not executed during first paint
 
-#### Scenario: Rail preview uses existing visible hydration path
-- **GIVEN** a rail-derived Home preview becomes visible, focused, adjacent, hero, or stale active
-- **WHEN** hydration is scheduled
-- **THEN** the same Home preview hydration entrypoint used by addon previews is used
-- **AND** provider-specific hydration schedulers are not used
-- **AND** MetadataRouter receives the preview content id, item type, source role, source provider, and stable IDs through `MetadataSourceContext`
+#### Scenario: Rail preview source records stop at the Home boundary
+- **GIVEN** a built-in rail source/storage record contains source role, source provider, and stable IDs
+- **WHEN** the repository publishes a `CatalogRow` to Home
+- **THEN** the Home/catalog boundary adapts the source/storage record into the existing shared first-paint UI model
+- **AND** Home renderer code does not depend on provider-specific source/storage record types
 
-### Requirement: Built-in rail providers enter the shared first-paint lifecycle
-Trakt, MDBList, TMDB, Kitsu, and Simkl home rails MUST map provider payload items through provider-specific `RailPreviewMapper` implementations into `RailItemPreview`, then into the same shared `MetaPreview` first-paint model used by addon catalog previews.
+### Requirement: Built-in rail storage supports the shared first-paint lifecycle
+Source/storage proof MUST rely on the shared first-paint lifecycle requirement defined for built-in rail providers, and this spec MUST add only source/storage retention requirements.
 
-#### Scenario: Built-in provider mapper feeds shared home renderer
+#### Scenario: Storage proof does not introduce provider-specific lifecycle paths
 - **WHEN** a built-in rail page response is available
-- **THEN** each item is mapped by its provider-specific mapper
-- **AND** the resulting item is converted through `RailItemPreview.toMetaPreview()`
-- **AND** the Home renderer receives only shared preview/card models
-- **AND** no provider-specific renderer, hydration scheduler, router, or field merge path is used
+- **THEN** source/storage proof MUST rely on the shared first-paint lifecycle requirement
+- **AND** no provider-specific renderer, hydration scheduler, router, or field merge path is introduced here
+
+### Requirement: Built-in rail snapshots MUST retain source preview records
+
+Built-in rail services MUST persist rail source payload previews as `RailItemPreview` or source row records containing `RailItemPreview` values until the Home/catalog boundary converts them into the shared first-paint UI model.
+
+#### Scenario: Discovery snapshot stores rail preview source data
+- **GIVEN** a built-in rail provider mapper returns `RailItemPreview` values
+- **WHEN** Trakt, MDBList, TMDB, Kitsu, or Simkl discovery state is cached
+- **THEN** the cached snapshot MUST retain `sourcePayloadHash`
+- **AND** the cached snapshot MUST retain `sourcePayloadQuality`
+- **AND** the cached snapshot MUST retain `ranking`
+- **AND** the cached snapshot MUST retain `hydrationState`
+- **AND** the cached snapshot MUST NOT collapse the provider source payload into a `MetaPreview` list before row publication
+
+#### Scenario: Home boundary adapts source records into first-paint previews
+- **GIVEN** a cached built-in rail snapshot contains rail preview source records
+- **WHEN** the repository publishes a `CatalogRow` to Home
+- **THEN** each rail preview source record MUST convert through the shared Home/catalog boundary adapter into the existing first-paint preview model
+- **AND** the resulting `MetaPreview` MUST preserve `FirstPaintSource.RAIL_PREVIEW`
+- **AND** Home card rendering MUST not import provider DTOs or provider-specific rail records
