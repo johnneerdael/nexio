@@ -25,7 +25,9 @@ import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.Job
 
 internal const val TRAKT_HOME_ADDON_ID = "trakt"
@@ -65,6 +67,28 @@ internal data class ConfiguredHomeCatalogDescriptor(
         )
     }
 }
+
+internal fun railPreviewsToCatalogRow(
+    addonId: String,
+    addonName: String,
+    addonBaseUrl: String,
+    catalogId: String,
+    catalogName: String,
+    type: ContentType,
+    previews: List<RailItemPreview>
+): CatalogRow = CatalogRow(
+    addonId = addonId,
+    addonName = addonName,
+    addonBaseUrl = addonBaseUrl,
+    catalogId = catalogId,
+    catalogName = catalogName,
+    type = type,
+    rawType = type.toApiString("catalog"),
+    items = previews.map { it.toMetaPreview() },
+    isLoading = false,
+    hasMore = false,
+    supportsSkip = false
+)
 
 internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: String): String {
     return addonCatalogKey(addonId, type, catalogId)
