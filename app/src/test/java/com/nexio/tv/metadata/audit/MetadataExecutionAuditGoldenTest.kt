@@ -399,21 +399,21 @@ class MetadataExecutionAuditGoldenTest {
 
     @Test
     fun `single report writer marks artifacts as smoke only`() = runTest {
-        val report = MetadataAuditRunner.default().runCatalogFixture(
-            fixtureName = "netflix_movie_nfx.json",
-            fixtureJson = fixture("metadata/addons/netflix_movie_nfx.json"),
-            scenario = MetadataAuditScenario(
-                name = "netflix-movie-detail-core",
-                depth = MetadataDepth.DETAIL_CORE,
-                visibleItemIds = setOf("tt16431404")
-            )
-        )
+        val report = MetadataAuditRunner.default()
+            .runDefaultScenarioBundle()
+            .reports
+            .single { it.scenario.name == "trakt-rail-visible-hydrates-tvdb" }
         val outputDir = File("build/reports/metadata-audit")
 
         MetadataAuditReportWriter().writeJson(report, File(outputDir, "metadata-execution-single-report.json"))
         MetadataAuditReportWriter().writeMarkdown(report, File(outputDir, "metadata-execution-single-report.md"))
 
-        assertTrue(File(outputDir, "metadata-execution-single-report.json").readText().contains("SMOKE_DEBUG_ONLY"))
+        val json = File(outputDir, "metadata-execution-single-report.json").readText()
+        assertTrue(json.contains("SMOKE_DEBUG_ONLY"))
+        assertTrue(json.contains("routingAfterVisible"))
+        assertTrue(json.contains("selectedFieldsBeforeHydration"))
+        assertTrue(json.contains("selectedFieldsAfterHydration"))
+        assertTrue(json.contains("identityMappingsHarvested"))
         assertTrue(File(outputDir, "metadata-execution-single-report.md").readText().contains("Smoke/debug artifact only"))
     }
 
