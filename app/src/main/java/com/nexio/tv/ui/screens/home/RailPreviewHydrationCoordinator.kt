@@ -24,8 +24,7 @@ object RailPreviewHydrationCoordinator {
             }
         }
 
-        if (focusedIndex != null) {
-            val focused = focusedIndex.coerceIn(0, lastIndex)
+        focusedIndex?.takeIf { it in itemKeys.indices }?.let { focused ->
             val start = (focused - distance).coerceAtLeast(0)
             val end = (focused + distance).coerceAtMost(lastIndex)
             for (index in start..end) {

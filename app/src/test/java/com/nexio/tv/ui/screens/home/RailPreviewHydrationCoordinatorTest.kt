@@ -36,6 +36,30 @@ class RailPreviewHydrationCoordinatorTest {
     }
 
     @Test
+    fun `hydration targets visible range only when focused index is negative`() {
+        val targets = RailPreviewHydrationCoordinator.targetsForVisibleWindow(
+            itemKeys = (0 until 20).map { "movie:tmdb:$it" },
+            visibleRange = 10..14,
+            focusedIndex = -1,
+            adjacentCount = 2
+        )
+
+        assertEquals((10..14).map { "movie:tmdb:$it" }, targets)
+    }
+
+    @Test
+    fun `hydration targets visible range only when focused index is too large`() {
+        val targets = RailPreviewHydrationCoordinator.targetsForVisibleWindow(
+            itemKeys = (0 until 20).map { "movie:tmdb:$it" },
+            visibleRange = 10..14,
+            focusedIndex = 20,
+            adjacentCount = 2
+        )
+
+        assertEquals((10..14).map { "movie:tmdb:$it" }, targets)
+    }
+
+    @Test
     fun `hydration targets clamp focused adjacent range at row boundaries`() {
         val itemKeys = (0 until 5).map { "movie:tmdb:$it" }
 
