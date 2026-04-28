@@ -111,6 +111,26 @@ class RailPreviewLifecycleArchitectureTest {
         }
     }
 
+    @Test
+    fun `home first paint tracing happens at card construction not hydration request construction`() {
+        val modernHomeModels = homeFile("ModernHomeModels.kt").readText()
+        val buildCatalogItem = functionSource(modernHomeModels, "buildCatalogItem")
+        assertTrue(
+            "buildCatalogItem is the canonical Home card construction boundary and must emit first-paint tracing.",
+            buildCatalogItem.contains("item.toFirstPaintHomeDisplayMetadata()")
+        )
+
+        val presentationPipeline = homeFile("HomeViewModelPresentationPipeline.kt").readText()
+        val fetchProviderEnrichment = functionSource(presentationPipeline, "fetchProviderEnrichmentForPreview")
+        assertTrue(
+            "metadata hydration request construction must use pure addon metadata and must not emit first-paint tracing.",
+            fetchProviderEnrichment.contains("addonMetadata = item.toHomeDisplayMetadata()")
+        )
+        if (fetchProviderEnrichment.contains("toFirstPaintHomeDisplayMetadata")) {
+            fail("metadata hydration request construction must not call toFirstPaintHomeDisplayMetadata.")
+        }
+    }
+
     private fun homeFile(name: String): File = File(homeDirectory, name).also { file ->
         assertTrue("Required Home source file is missing: ${file.path}", file.isFile)
     }
