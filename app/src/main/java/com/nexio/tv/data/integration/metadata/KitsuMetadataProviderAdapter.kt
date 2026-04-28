@@ -12,12 +12,14 @@ import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.integration.kitsu.KitsuIntegrationProvider
 import javax.inject.Inject
 
 class KitsuMetadataProviderAdapter @Inject constructor(
-    private val integrationProvider: KitsuIntegrationProvider
+    private val integrationProvider: KitsuIntegrationProvider,
+    private val traceEvents: TraceMetadataEvents
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.KITSU
 
@@ -28,6 +30,19 @@ class KitsuMetadataProviderAdapter @Inject constructor(
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         val mediaKind = route.mediaKind.toContentMediaKind()
         val policy = LocalizationPolicy.kitsu(route.language)
+        // F-E-02: emit localization_plan after policy construction. Kitsu has no per-episode
+        // localization bundle, so perEpisodeFallbacksAttempted stays 0.
+        traceEvents.emitLocalizationPlan(
+            contentId = "kitsu:$kitsuId",
+            provider = "KITSU",
+            policyVersion = policy.policyVersion,
+            requestedLanguage = policy.requestedLanguage.providerCode,
+            fallbackLanguage = policy.fallbackLanguage.providerCode,
+            requestedIsFallback = policy.requestedIsFallback,
+            allowProviderFallbackForMissingLocalizedFields = policy.allowProviderFallbackForMissingLocalizedFields,
+            perEpisodeFallbacksAttempted = 0,
+            perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest
+        )
         var titleField: SelectedLocalizedField? = null
         var synopsisField: SelectedLocalizedField? = null
         val candidate = when (step.apiShapeId) {
