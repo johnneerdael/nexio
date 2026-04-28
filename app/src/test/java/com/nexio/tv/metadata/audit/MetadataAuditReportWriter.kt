@@ -188,7 +188,7 @@ class MetadataAuditReportWriter {
                     appendLine("| Field | Source provider | Role | Value | Ownership rule | Rejected candidates |")
                     appendLine("|---|---|---|---|---|---|")
                     item.selectedFields.forEach {
-                        appendLine("| `${it.field}` | `${it.selectedProvider}` | `${it.sourceRole}` | `${it.valuePreview.orEmpty()}` | `${it.ownershipRule}` | `${it.rejectedCandidates.joinToString { rejected -> "${rejected.provider}:${rejected.sourceRole.orEmpty()}:${rejected.reason}" }}` |")
+                        appendLine("| `${it.field}` | `${it.selectedProvider}` | `${it.sourceRole}` | `${it.valuePreview.orEmpty()}` | `${it.ownershipRule}` | `${it.rejectedCandidates.joinToString { rejected -> rejectedCandidateMarkdown(rejected) }}` |")
                     }
                     appendLine()
                 }
@@ -253,7 +253,7 @@ class MetadataAuditReportWriter {
                         appendLine("| Field | Selected provider | Role | Value | Ownership rule | Rejected candidates |")
                         appendLine("|---|---|---|---|---|---|")
                         item.selectedFields.forEach {
-                            appendLine("| `${it.field}` | `${it.selectedProvider}` | `${it.sourceRole}` | `${it.valuePreview.orEmpty()}` | `${it.ownershipRule}` | `${it.rejectedCandidates.joinToString { rejected -> "${rejected.provider}:${rejected.sourceRole.orEmpty()}:${rejected.reason}" }}` |")
+                            appendLine("| `${it.field}` | `${it.selectedProvider}` | `${it.sourceRole}` | `${it.valuePreview.orEmpty()}` | `${it.ownershipRule}` | `${it.rejectedCandidates.joinToString { rejected -> rejectedCandidateMarkdown(rejected) }}` |")
                         }
                         appendLine()
                     }
@@ -383,7 +383,21 @@ class MetadataAuditReportWriter {
         """{"provider":${jsonString(decision.provider)},"apiShapeId":${jsonString(decision.apiShapeId)},"cacheKey":${jsonString(decision.cacheKey)},"decision":${jsonString(decision.decision.name)},"ttlMs":${decision.ttlMs},"staleWindowMs":${decision.staleWindowMs},"reason":${jsonString(decision.reason)}}"""
 
     private fun selectedFieldJson(field: FieldSelectedEvent): String =
-        """{"field":${jsonString(field.field)},"selectedProvider":${jsonString(field.selectedProvider)},"sourceRole":${jsonString(field.sourceRole)},"valuePreview":${jsonString(field.valuePreview.orEmpty())},"ownershipRule":${jsonString(field.ownershipRule)},"rejectedCandidates":[${field.rejectedCandidates.joinToString { rejected -> "{\"provider\":${jsonString(rejected.provider)},\"sourceRole\":${jsonString(rejected.sourceRole.orEmpty())},\"reason\":${jsonString(rejected.reason)}}" }}]}"""
+        """{"field":${jsonString(field.field)},"selectedProvider":${jsonString(field.selectedProvider)},"sourceRole":${jsonString(field.sourceRole)},"valuePreview":${jsonString(field.valuePreview.orEmpty())},"ownershipRule":${jsonString(field.ownershipRule)},"rejectedCandidates":[${field.rejectedCandidates.joinToString { rejected -> rejectedCandidateJson(rejected) }}]}"""
+
+    private fun rejectedCandidateJson(rejected: RejectedCandidateReport): String =
+        buildString {
+            append("""{"provider":${jsonString(rejected.provider)}""")
+            rejected.sourceRole?.let { sourceRole ->
+                append(""","sourceRole":${jsonString(sourceRole)}""")
+            }
+            append(""","reason":${jsonString(rejected.reason)}}""")
+        }
+
+    private fun rejectedCandidateMarkdown(rejected: RejectedCandidateReport): String {
+        val source = rejected.sourceRole?.let { sourceRole -> "${rejected.provider}/$sourceRole" } ?: rejected.provider
+        return "$source: ${rejected.reason}"
+    }
 
     private fun forbiddenOverwriteJson(overwrite: ForbiddenOverwriteEvent): String =
         """{"field":${jsonString(overwrite.field)},"primaryProvider":${jsonString(overwrite.primaryProvider)},"rejectedProvider":${jsonString(overwrite.rejectedProvider)},"reason":${jsonString(overwrite.reason)}}"""
