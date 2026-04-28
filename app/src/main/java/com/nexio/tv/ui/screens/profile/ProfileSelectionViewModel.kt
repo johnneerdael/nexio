@@ -28,6 +28,8 @@ class ProfileSelectionViewModel @Inject constructor(
 ) : ViewModel() {
     private val pinVerificationLock = Any()
     private val _pinUnlockedProfile = MutableSharedFlow<PinUnlockEvent>(extraBufferCapacity = 1)
+    private val _switchBlockedByPlayback = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val switchBlockedByPlayback: SharedFlow<Unit> = _switchBlockedByPlayback.asSharedFlow()
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
@@ -46,7 +48,15 @@ class ProfileSelectionViewModel @Inject constructor(
 
     fun selectProfile(profileId: Int) {
         viewModelScope.launch {
-            profileManager.setActiveProfile(profileId)
+            try {
+                profileManager.setActiveProfile(profileId)
+            } catch (e: com.nexio.tv.core.integration.ProfileBoundaryException) {
+                if (e.violation == com.nexio.tv.core.integration.ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) {
+                    _switchBlockedByPlayback.tryEmit(Unit)
+                } else {
+                    throw e
+                }
+            }
         }
     }
 
