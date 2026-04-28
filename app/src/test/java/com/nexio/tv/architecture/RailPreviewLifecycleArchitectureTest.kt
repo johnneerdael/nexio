@@ -47,7 +47,8 @@ class RailPreviewLifecycleArchitectureTest {
     @Test
     fun `rail preview catalog row bridge maps previews into catalog row meta previews`() {
         val content = homeFile("HomeViewModelCatalogUtils.kt").readText()
-        val normalized = content.replace(Regex("""\s+"""), " ")
+        val functionBody = functionSource(content, "railPreviewsToCatalogRow")
+        val normalized = functionBody.replace(Regex("""\s+"""), " ")
         val forbiddenRenderers = listOf(
             "renderTrakt",
             "renderMDBList",
@@ -62,7 +63,7 @@ class RailPreviewLifecycleArchitectureTest {
         )
 
         val offenders = forbiddenRenderers.filter { renderer ->
-            Regex("""\b${Regex.escape(renderer)}\b""").containsMatchIn(content)
+            Regex("""\b${Regex.escape(renderer)}\b""").containsMatchIn(functionBody)
         }
         if (offenders.isNotEmpty()) {
             fail("railPreviewsToCatalogRow must not grow provider-specific render methods: $offenders")
@@ -72,7 +73,10 @@ class RailPreviewLifecycleArchitectureTest {
     @Test
     fun `home production code has no rail preview hydration sidecar`() {
         val forbiddenPatterns = mapOf(
-            "object RailPreviewHydrationCoordinator" to Regex("""\bobject\s+RailPreviewHydrationCoordinator\b"""),
+            "RailPreviewHydration*" to Regex("""\bRailPreviewHydration\w*\b"""),
+            "RailPreviewHydrator*" to Regex("""\bRailPreviewHydrator\w*\b"""),
+            "scheduleRailPreviewHydration" to Regex("""\bscheduleRailPreviewHydration\b"""),
+            "hydrateRailPreview" to Regex("""\bhydrateRailPreview\b"""),
             "providerForVisibleHydration" to Regex("""\bproviderForVisibleHydration\b""")
         )
 
@@ -116,6 +120,46 @@ class RailPreviewLifecycleArchitectureTest {
         return homeDirectory.walkTopDown()
             .filter { file -> file.isFile && file.extension == "kt" }
             .toList()
+    }
+
+    private fun functionSource(content: String, functionName: String): String {
+        val functionMatch = Regex("""\b${Regex.escape(functionName)}\s*\(""").find(content)
+        if (functionMatch == null) {
+            fail("Required function is missing: $functionName")
+            throw AssertionError("unreachable")
+        }
+
+        val functionStart = content.lastIndexOf('\n', functionMatch.range.first)
+            .let { index -> if (index == -1) 0 else index + 1 }
+        val expressionBodyStart = content.indexOf('=', functionMatch.range.last)
+        val bodyStart = content.indexOf('{', functionMatch.range.first)
+
+        if (expressionBodyStart != -1 && (bodyStart == -1 || expressionBodyStart < bodyStart)) {
+            val nextDeclaration = Regex("""\n(?:internal|private|public)?\s*(?:fun|class|data\s+class|object)\b""")
+                .find(content, expressionBodyStart + 1)
+            return content.substring(functionStart, nextDeclaration?.range?.first ?: content.length)
+        }
+
+        if (bodyStart == -1) {
+            fail("Required function must have a block body: $functionName")
+            throw AssertionError("unreachable")
+        }
+
+        var depth = 0
+        for (index in bodyStart until content.length) {
+            when (content[index]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        return content.substring(functionStart, index + 1)
+                    }
+                }
+            }
+        }
+
+        fail("Required function body is unterminated: $functionName")
+        throw AssertionError("unreachable")
     }
 
     private companion object {
