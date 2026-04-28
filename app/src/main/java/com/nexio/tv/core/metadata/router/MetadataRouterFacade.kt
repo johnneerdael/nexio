@@ -14,6 +14,7 @@ import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaReview
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -146,6 +147,32 @@ class MetadataRouterFacade @Inject constructor(
             contentId = contentId,
             fallbackYtIds = fallbackYtIds
         )
+    }
+
+    /**
+     * Routes a TMDB review fetch through the canonical resolve pipeline at depth
+     * [MetadataDepth.DETAIL_SECONDARY] so that `metadata.route_decision` and
+     * `metadata.field_selected` trace events fire, then delegates the actual
+     * review-list fetch to [MetadataSecondaryRepository].
+     *
+     * The Trakt review path (see `ReviewsRepository.fetchTraktReviewPage`) is intentionally
+     * NOT migrated here yet — that requires adding `MetadataPrimaryProvider.TRAKT` to the
+     * provider enum, which would touch 10+ exhaustive `when` statements (deferred per
+     * Task 12 scope decision). Routing the TMDB half through the facade still delivers
+     * the canonical trace observability for the audit's primary goal.
+     */
+    suspend fun fetchReviews(
+        metadataRequest: MetadataRequest,
+        tmdbId: String,
+        contentType: ContentType
+    ): List<MetaReview> {
+        val repo = checkNotNull(metadataSecondaryRepository) {
+            "fetchReviews requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
+        }
+        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
+        resolveRequest(metadataRequest)
+        // Delegate to the secondary repository for the TMDB review list.
+        return repo.fetchReviews(tmdbId, contentType)
     }
 
     suspend fun fetchTvEpisodeEnrichment(

@@ -1071,7 +1071,14 @@ class MetaDetailsViewModel @Inject constructor(
     ): List<MetaReview> {
         if (tmdbId.isNullOrBlank()) return emptyList()
         return runCatching {
-            metadataSecondaryRepository.fetchReviews(
+            metadataRouterFacade.fetchReviews(
+                metadataRequest = MetadataRequest(
+                    contentId = "tmdb:$tmdbId",
+                    contentType = tmdbContentType,
+                    sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
+                    language = currentTvdbLanguageTag(),
+                    depth = MetadataDepth.DETAIL_SECONDARY
+                ),
                 tmdbId = tmdbId,
                 contentType = tmdbContentType
             )
@@ -1115,6 +1122,8 @@ class MetaDetailsViewModel @Inject constructor(
         page: Int
     ): TraktReviewsPageResult? {
         val endpointLabel = if (query.isShowEndpoint) "show" else "movie"
+        // TODO(F-05-02 follow-up): route Trakt reviews through MetadataRouterFacade.fetchReviews once
+        //   MetadataPrimaryProvider.TRAKT is added to the enum (deferred per Task 12 scope decision).
         val reviewPage = runCatching {
             reviewsRepository.fetchTraktReviewPage(
                 pathId = query.pathId,
