@@ -186,6 +186,21 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
+    fun `built in rail preview scenarios are present in aggregate report`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
+
+        assertTrue(scenarioNames.contains("trakt-rail-first-paint-title-year"))
+        assertTrue(scenarioNames.contains("trakt-rail-visible-hydrates-tvdb"))
+        assertTrue(scenarioNames.contains("mdblist-rail-first-paint-rich-preview"))
+        assertTrue(scenarioNames.contains("tmdb-movie-rail-first-paint-rich-preview"))
+        assertTrue(scenarioNames.contains("tmdb-tv-rail-preview-then-tvdb-hydration"))
+        assertTrue(scenarioNames.contains("kitsu-rail-first-paint-rich-preview"))
+        assertTrue(scenarioNames.contains("simkl-json-rail-first-paint-rich-preview"))
+        assertTrue(scenarioNames.contains("simkl-json-rail-visible-hydrates-tmdb"))
+    }
+
+    @Test
     fun `localized audit scenarios record same provider english fallback policy`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
 

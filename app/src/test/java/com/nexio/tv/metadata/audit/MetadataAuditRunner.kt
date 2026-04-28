@@ -8,6 +8,7 @@ import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
 import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataCandidate
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
 import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
@@ -72,7 +73,7 @@ class MetadataAuditRunner private constructor(
                 fixtureJson = fixture(spec.fixtureName),
                 scenario = spec.scenario
             )
-        }
+        } + railScenarioSpecs.map(::runRailScenario)
         val violations = reports.flatMap { it.policyViolations }
         return MetadataExecutionReportBundle(
             schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
@@ -250,6 +251,155 @@ class MetadataAuditRunner private constructor(
             events = trace.events
         )
     }
+
+    private fun runRailScenario(spec: RailScenarioSpec): MetadataExecutionReport {
+        val scenario = MetadataAuditScenario(
+            name = spec.name,
+            depth = if (spec.routeProvider == null) MetadataDepth.PREVIEW else MetadataDepth.DETAIL_CORE,
+            visibleItemIds = setOf(spec.itemId)
+        )
+        val beforeHydration = railFields(
+            itemId = spec.itemId,
+            provider = spec.sourceProvider,
+            fields = spec.previewFields,
+            sourceRole = "RAIL_PREVIEW"
+        )
+        val route = spec.routeProvider?.let { provider ->
+            railRoute(
+                itemId = spec.itemId,
+                itemType = spec.itemType,
+                provider = provider,
+                mediaKind = spec.mediaKind,
+                targetIds = spec.targetIds,
+                usedInputs = spec.usedInputs
+            )
+        }
+        val afterHydration = route?.let {
+            railFields(
+                itemId = spec.itemId,
+                provider = it.provider.name,
+                fields = spec.hydratedFields,
+                sourceRole = "PRIMARY"
+            )
+        }.orEmpty()
+        val runtimeCalls = route?.let {
+            listOf(
+                RuntimeCallEvent(
+                    itemId = spec.itemId,
+                    provider = it.provider.name,
+                    apiShapeId = spec.apiShapeId,
+                    operationKey = "${spec.apiShapeId}:${it.targetIds[it.provider] ?: it.parentId}",
+                    cacheKey = "metadata:${it.provider}:${spec.apiShapeId}:${it.parentId}",
+                    workClass = "USER_VISIBLE",
+                    executedNetwork = true
+                )
+            )
+        }.orEmpty()
+        val cacheDecisions = runtimeCalls.map { call ->
+            val cachePolicy = MetadataAuditCachePolicy.forShape(call.apiShapeId)
+            CacheDecisionEvent(
+                itemId = spec.itemId,
+                provider = call.provider,
+                apiShapeId = call.apiShapeId,
+                cacheKey = call.cacheKey,
+                decision = CacheDecision.MISS_THEN_NETWORK,
+                ttlMs = cachePolicy.ttlMs,
+                staleWindowMs = cachePolicy.staleWindowMs,
+                reason = cachePolicy.name
+            )
+        }
+        val item = ItemExecutionReport(
+            itemId = spec.itemId,
+            itemType = spec.itemType,
+            addonFields = spec.previewFields,
+            firstPaint = FirstPaintEvent(
+                itemId = spec.itemId,
+                itemType = spec.itemType,
+                source = "RAIL_PREVIEW",
+                fieldsUsed = spec.previewFields.filterValues { it != null }.keys,
+                routerExecuted = false,
+                networkExecuted = false
+            ),
+            routing = route,
+            providerPlan = null,
+            runtimeCalls = runtimeCalls,
+            cacheDecisions = cacheDecisions,
+            resolverSchedule = null,
+            selectedFields = afterHydration.ifEmpty { beforeHydration },
+            forbiddenOverwrites = emptyList(),
+            continueWatchingSnapshot = null,
+            identityResolution = null,
+            productionCallerOwnership = emptyList(),
+            localization = null,
+            violations = emptyList(),
+            events = emptyList(),
+            railSource = spec.railSource,
+            sourceProvider = spec.sourceProvider,
+            sourcePayloadFieldsUsed = spec.previewFields.filterValues { it != null }.keys,
+            routingAfterVisible = route,
+            selectedFieldsBeforeHydration = beforeHydration,
+            selectedFieldsAfterHydration = afterHydration,
+            identityMappingsHarvested = spec.identityMappingsHarvested
+        )
+        val report = MetadataExecutionReport(
+            schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
+            provenance = provenanceProvider.current(),
+            verdict = AuditVerdict.PASS,
+            scenario = scenario,
+            fixtureName = "metadata/rails/${spec.name}.synthetic",
+            generatedAtEpochMs = System.currentTimeMillis(),
+            items = listOf(item),
+            summaries = buildSummary(listOf(item)),
+            policyViolations = emptyList()
+        )
+        return report
+    }
+
+    private fun railRoute(
+        itemId: String,
+        itemType: String,
+        provider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider,
+        mediaKind: MetadataMediaKind,
+        targetIds: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String>,
+        usedInputs: Set<String>
+    ): RouteEvent =
+        RouteEvent(
+            itemId = itemId,
+            parentId = targetIds[provider] ?: itemId,
+            itemType = itemType,
+            provider = provider,
+            mediaKind = mediaKind,
+            reason = when (provider) {
+                com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB -> MetadataDecisionReason.ITEM_TYPE_SERIES
+                com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB -> MetadataDecisionReason.ITEM_TYPE_MOVIE
+                com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU -> MetadataDecisionReason.KITSU_PREFIX_DIRECT
+            },
+            targetIds = targetIds,
+            preResolutionTargetIdRequiresIdentityResolution = false,
+            targetIdRequiresIdentityResolution = false,
+            usedInputs = usedInputs,
+            ignoredInputs = setOf("catalog.id", "addon.name")
+        )
+
+    private fun railFields(
+        itemId: String,
+        provider: String,
+        fields: Map<String, String?>,
+        sourceRole: String
+    ): List<FieldSelectedEvent> =
+        fields.mapNotNull { (field, value) ->
+            value?.let {
+                FieldSelectedEvent(
+                    itemId = itemId,
+                    field = field,
+                    selectedProvider = provider,
+                    sourceRole = sourceRole,
+                    valuePreview = it,
+                    rejectedCandidates = emptyList(),
+                    ownershipRule = "$field selected from $sourceRole"
+                )
+            }
+        }
 
     private fun rejectedCandidatesFor(
         field: ResolvedField,
@@ -539,6 +689,136 @@ class MetadataAuditRunner private constructor(
             )
         )
 
+        private val railScenarioSpecs = listOf(
+            RailScenarioSpec(
+                name = "trakt-rail-first-paint-title-year",
+                railSource = "TRAKT",
+                sourceProvider = "TRAKT",
+                itemId = "trakt:movie:hope-2026",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf("title" to "Hope", "year" to "2026")
+            ),
+            RailScenarioSpec(
+                name = "trakt-rail-visible-hydrates-tvdb",
+                railSource = "TRAKT",
+                sourceProvider = "TRAKT",
+                itemId = "trakt:show:signal-2026",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.SERIES,
+                previewFields = mapOf("title" to "Signal", "year" to "2026"),
+                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB,
+                apiShapeId = "tvdb.series.extended",
+                targetIds = mapOf(com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB to "tvdb:1001"),
+                usedInputs = setOf("railSource", "sourceProvider", "trakt.ids.tvdb"),
+                hydratedFields = mapOf(
+                    "title" to "Signal TVDB Canonical",
+                    "poster" to "https://example.test/tvdb-signal.jpg",
+                    "overview" to "Hydrated TVDB series overview"
+                ),
+                identityMappingsHarvested = mapOf("trakt:show:signal-2026" to "tvdb:1001")
+            ),
+            RailScenarioSpec(
+                name = "mdblist-rail-first-paint-rich-preview",
+                railSource = "MDBLIST",
+                sourceProvider = "MDBLIST",
+                itemId = "mdblist:movie:aurora",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf(
+                    "title" to "Aurora",
+                    "year" to "2026",
+                    "poster" to "https://example.test/mdblist-aurora.jpg",
+                    "overview" to "MDBList rich preview"
+                )
+            ),
+            RailScenarioSpec(
+                name = "tmdb-movie-rail-first-paint-rich-preview",
+                railSource = "TMDB",
+                sourceProvider = "TMDB",
+                itemId = "tmdb:movie:501",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf(
+                    "title" to "TMDB Preview Movie",
+                    "year" to "2026",
+                    "poster" to "https://example.test/tmdb-movie.jpg",
+                    "backdrop" to "https://example.test/tmdb-backdrop.jpg"
+                )
+            ),
+            RailScenarioSpec(
+                name = "tmdb-tv-rail-preview-then-tvdb-hydration",
+                railSource = "TMDB",
+                sourceProvider = "TMDB",
+                itemId = "tmdb:tv:1399",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.SERIES,
+                previewFields = mapOf(
+                    "title" to "TMDB TV Preview",
+                    "poster" to "https://example.test/tmdb-tv.jpg"
+                ),
+                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB,
+                apiShapeId = "tvdb.series.extended",
+                targetIds = mapOf(
+                    com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB to "tmdb:1399",
+                    com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB to "tvdb:121361"
+                ),
+                usedInputs = setOf("railSource", "sourceProvider", "tmdb.ids.tvdb"),
+                hydratedFields = mapOf(
+                    "title" to "TVDB Hydrated Series",
+                    "poster" to "https://example.test/tvdb-tv.jpg",
+                    "overview" to "TVDB replaced rail preview fields"
+                ),
+                identityMappingsHarvested = mapOf("tmdb:tv:1399" to "tvdb:121361")
+            ),
+            RailScenarioSpec(
+                name = "kitsu-rail-first-paint-rich-preview",
+                railSource = "KITSU",
+                sourceProvider = "KITSU",
+                itemId = "kitsu:7442",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.SERIES,
+                previewFields = mapOf(
+                    "title" to "Kitsu Preview Anime",
+                    "poster" to "https://example.test/kitsu-anime.jpg",
+                    "overview" to "Kitsu rich preview"
+                )
+            ),
+            RailScenarioSpec(
+                name = "simkl-json-rail-first-paint-rich-preview",
+                railSource = "SIMKL_JSON",
+                sourceProvider = "SIMKL",
+                itemId = "simkl:movie:77",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf(
+                    "title" to "Simkl JSON Movie",
+                    "year" to "2026",
+                    "poster" to "https://example.test/simkl-json.jpg",
+                    "overview" to "Simkl JSON rich preview"
+                )
+            ),
+            RailScenarioSpec(
+                name = "simkl-json-rail-visible-hydrates-tmdb",
+                railSource = "SIMKL_JSON",
+                sourceProvider = "SIMKL",
+                itemId = "simkl:movie:88",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf("title" to "Simkl JSON Hydration", "year" to "2026"),
+                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB,
+                apiShapeId = "tmdb.movie.core",
+                targetIds = mapOf(com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB to "tmdb:5088"),
+                usedInputs = setOf("railSource", "sourceProvider", "simkl.ids.tmdb"),
+                hydratedFields = mapOf(
+                    "title" to "TMDB Hydrated Movie",
+                    "poster" to "https://example.test/tmdb-simkl.jpg",
+                    "overview" to "TMDB replaced Simkl rail preview fields"
+                ),
+                identityMappingsHarvested = mapOf("simkl:movie:88" to "tmdb:5088")
+            )
+        )
+
         private fun fixture(name: String): String {
             val resource = MetadataAuditRunner::class.java.classLoader?.getResource("metadata/addons/$name")
                 ?: error("Missing fixture metadata/addons/$name")
@@ -582,6 +862,22 @@ private class GitMetadataAuditProvenanceProvider : MetadataAuditProvenanceProvid
 private data class ScenarioSpec(
     val fixtureName: String,
     val scenario: MetadataAuditScenario
+)
+
+private data class RailScenarioSpec(
+    val name: String,
+    val railSource: String,
+    val sourceProvider: String,
+    val itemId: String,
+    val itemType: String,
+    val mediaKind: MetadataMediaKind,
+    val previewFields: Map<String, String?>,
+    val routeProvider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider? = null,
+    val apiShapeId: String = "",
+    val targetIds: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String> = emptyMap(),
+    val usedInputs: Set<String> = emptySet(),
+    val hydratedFields: Map<String, String?> = emptyMap(),
+    val identityMappingsHarvested: Map<String, String> = emptyMap()
 )
 
 private class AuditMetadataProviderAdapter(
