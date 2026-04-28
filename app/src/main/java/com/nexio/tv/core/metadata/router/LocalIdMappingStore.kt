@@ -8,12 +8,15 @@ import javax.inject.Inject
 class LocalIdMappingStore @Inject constructor(
     private val dao: MediaIdentityDao
 ) : IdMappingStore {
+    override suspend fun lookup(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping? =
+        bestDurableMapping(provider, sourceId, includeNegative = false)
+
     override suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping? =
-        bestDurableKitsuMapping(sourceId, includeNegative = false)
+        lookup(MetadataPrimaryProvider.KITSU, sourceId)
 
     override suspend fun persist(mapping: IdMapping) {
         val mediaKey = mapping.sourceId.mappingKey()
-        val existing = bestDurableKitsuMapping(mapping.sourceId, includeNegative = true)
+        val existing = bestDurableMapping(mapping.provider, mapping.sourceId, includeNegative = true)
         if (existing != null && IdMappingTtlPolicy.comparePriority(mapping.source, existing.source) > 0) {
             return
         }
@@ -44,14 +47,15 @@ class LocalIdMappingStore @Inject constructor(
         )
     }
 
-    private suspend fun bestDurableKitsuMapping(
+    private suspend fun bestDurableMapping(
+        provider: MetadataPrimaryProvider,
         sourceId: ParsedMetadataId,
         includeNegative: Boolean
     ): IdMapping? {
         val now = System.currentTimeMillis()
         return dao.externalIdsForMedia(sourceId.mappingKey())
             .asSequence()
-            .filter { entity -> entity.provider.equals(MetadataPrimaryProvider.KITSU.name, ignoreCase = true) }
+            .filter { entity -> entity.provider.equals(provider.name, ignoreCase = true) }
             .filterNot { entity -> entity.expiresAtEpochMs?.let { it <= now } == true }
             .map { entity -> entity.toIdMapping(sourceId) }
             .filter { mapping -> includeNegative || mapping.source != IdMappingSource.NEGATIVE }
@@ -61,12 +65,16 @@ class LocalIdMappingStore @Inject constructor(
     private fun ExternalIdEntity.toIdMapping(sourceId: ParsedMetadataId): IdMapping =
         IdMapping(
             sourceId = sourceId,
-            provider = MetadataPrimaryProvider.KITSU,
+            provider = provider.toMetadataPrimaryProvider(),
             providerId = externalId,
             source = mappingSource(),
             evidence = evidence ?: "local external id",
             expiresAtEpochMs = expiresAtEpochMs
         )
+
+    private fun String.toMetadataPrimaryProvider(): MetadataPrimaryProvider =
+        MetadataPrimaryProvider.entries.firstOrNull { it.name.equals(this, ignoreCase = true) }
+            ?: MetadataPrimaryProvider.KITSU
 
     private fun ExternalIdEntity.mappingSource(): IdMappingSource =
         mappingSource.toIdMappingSource()
