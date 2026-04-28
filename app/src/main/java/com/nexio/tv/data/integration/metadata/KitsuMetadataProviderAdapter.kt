@@ -79,6 +79,11 @@ class KitsuMetadataProviderAdapter @Inject constructor(
                     .withKitsuCanonicalId(kitsuId)
                     .withLocalizationTrace(titleField, synopsisField)
             KitsuApiShapes.ANIME_EPISODES -> {
+                // F-E-03: Kitsu does not have per-episode localization decisions like TVDB. The Kitsu API
+                // returns a single `attributes.titles` map at the series level (e.g. `en`, `en_jp`, `ja`)
+                // and `attributes.synopsis` for the description; there is no per-(episode, field) winner
+                // to emit. The series-level localization decision is captured by emitLocalizationPlan
+                // (see Task 5 / commit 974a7fd4b).
                 integrationProvider.fetchEpisodeEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { emptyMap() }
                 emptyCandidate(this.provider)
             }
