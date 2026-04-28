@@ -45,7 +45,7 @@ OpenSpec change `migrate-detail-screen-bypasses-to-router` deployed (commit `73c
 **Audit re-run notes:** Task 11 verification revealed:
 1. The 9 documented baseline failures in `MetaDetailsKitsuAdvancedMetadataTest`/`MetaDetailsTvdbAdvancedMetadataTest`/`MetaDetailsTvdbProviderRoutingTest` persist (out of scope, pre-existing).
 2. 6 additional architecture-test failures (`IntegrationRuntimeHeaderPolicyResolutionTest`, `MetadataRouterBoundaryTest`, `MetadataRouterReadinessAuditTest` × 3, `NoDirectOkHttpOutsideRuntimeTransportPackagesTest`) appear to be pre-existing baseline issues not introduced by this PR sequence (files unmodified by F-05-02/F-05-04 work).
-3. `:app:generateIntegrationRuntimeAudit` reports verdict `FAIL` due to 2 endpoint-shape codec mismatches at `tmdb.person.detail` / `tmdb.person.combined_credits` — these stem from Cluster A Task 6 (commit `c871e9d23`, `fix(tmdb): route searchPeople + searchCompanies through runtime.call`) where the new `runtime.call(IntegrationCallSpec(...))` wrappers use a `CacheFirst` policy without specifying a codec. **Recommend a follow-up issue to backfill the missing codec on these specs.**
+3. **Partial closure of `:app:generateIntegrationRuntimeAudit` FAIL:** the production code change converting `loadPersonDetails` (commit `26b66de1a`) and `loadPersonCombinedCredits` (commit `a21354a73`) from `runtime.call(IntegrationCallSpec)` to `runtime.get(IntegrationSpec)` with `CacheFirst(7d, 30d)` per the contract has landed. Verification re-run of `:app:generateIntegrationRuntimeAudit` was blocked by parallel-session WIP in `MetadataAuditReportWriter.kt:256` (unresolved `sourceProvider` reference). Re-run after the WIP resolves to confirm verdict moves FAIL → PASS.
 
 ## P0 fixes landed
 
