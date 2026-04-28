@@ -253,6 +253,55 @@ object TraceValidationRules {
         }
     }
 
+    /**
+     * F-E-02: every metadata.route_decision targeting TVDB / TMDB / Kitsu MUST be followed by
+     * exactly one metadata.localization_plan event before the first metadata.provider_plan
+     * step in the same session. Routes targeting other providers (e.g. ADDON) are exempt.
+     */
+    val LocalizationPlanPrecedesProviderSteps: TraceValidationRule = object : TraceValidationRule {
+        override val id = "LocalizationPlanPrecedesProviderSteps"
+
+        private val coveredProviders = setOf("TVDB", "TMDB", "KITSU")
+
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            val ordered = events.sortedBy { it.sequence }
+            val failures = mutableListOf<TraceValidationFailure>()
+
+            var i = 0
+            while (i < ordered.size) {
+                val event = ordered[i]
+                if (event.eventType == "metadata.route_decision") {
+                    val provider = (map(event)["provider"] as? String)?.uppercase()
+                    if (provider in coveredProviders) {
+                        var sawLocalizationPlan = false
+                        var j = i + 1
+                        while (j < ordered.size) {
+                            val next = ordered[j]
+                            if (next.eventType == "metadata.localization_plan") {
+                                val planProvider = (map(next)["provider"] as? String)?.uppercase()
+                                if (planProvider == provider) sawLocalizationPlan = true
+                            } else if (next.eventType == "metadata.provider_plan") {
+                                if (!sawLocalizationPlan) {
+                                    failures += fail(this, event, "$provider route_decision (seq=${event.sequence}) followed by provider_plan without intervening localization_plan")
+                                }
+                                break
+                            } else if (next.eventType == "metadata.route_decision") {
+                                if (!sawLocalizationPlan) {
+                                    failures += fail(this, event, "$provider route_decision (seq=${event.sequence}) ended without localization_plan")
+                                }
+                                break
+                            }
+                            j++
+                        }
+                    }
+                }
+                i++
+            }
+
+            return failures
+        }
+    }
+
     val NoStaleProfileWritesAfterSwitch: TraceValidationRule = object : TraceValidationRule {
         override val id = "NoStaleProfileWritesAfterSwitch"
         override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
@@ -293,6 +342,7 @@ object TraceValidationRules {
         SecondaryDoesNotOverwritePrimary,
         TraktSimklUsesCorrectProfile,
         NoStaleProfileWritesAfterSwitch,
-        ScheduledResolversAreDispatched
+        ScheduledResolversAreDispatched,
+        LocalizationPlanPrecedesProviderSteps
     )
 }

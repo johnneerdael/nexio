@@ -207,7 +207,7 @@ class TraceValidationRulesTest {
     }
 
     @Test
-    fun `ALL contains exactly 15 rules`() {
-        assertEquals(15, TraceValidationRules.ALL.size)
+    fun `ALL contains exactly 16 rules`() {
+        assertEquals(16, TraceValidationRules.ALL.size)
     }
 }
