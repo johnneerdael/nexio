@@ -7,7 +7,5 @@ enum class TraceCacheDecision {
     EXPIRED_MISS,
     BYPASS_DISABLED,
     OBSERVE_ONLY,
-    WRITE,
-    INVALIDATED,
-    EVICTED
+    WRITE
 }
