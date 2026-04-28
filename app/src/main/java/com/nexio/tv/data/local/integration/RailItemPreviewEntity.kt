@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
     indices = [
         Index("railId"),
         Index(value = ["sourceProvider", "sourceItemId"]),
+        Index("sourceItemId"),
         Index("hydrationState"),
         Index("expiresAtEpochMs")
     ]
@@ -17,7 +18,7 @@ data class RailItemPreviewEntity(
     @PrimaryKey val itemKey: String,
     val railId: String,
     val railSource: String,
-    val sourceProvider: String?,
+    val sourceProvider: String,
     val sourceItemId: String,
     val itemType: String,
     val stableIdsJson: String,
