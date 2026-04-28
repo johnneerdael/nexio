@@ -3,8 +3,12 @@ package com.nexio.tv.ui.screens.cast
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.tvdb.TvdbPersonService
-import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.domain.model.ContentType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CastDetailViewModel @Inject constructor(
-    private val metadataSecondaryRepository: MetadataSecondaryRepository,
+    private val metadataRouterFacade: MetadataRouterFacade,
     private val tvdbPersonService: TvdbPersonService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -42,9 +46,18 @@ class CastDetailViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val detail = if (provider.equals("tvdb", ignoreCase = true)) {
+                    // TODO(F-05-04 follow-up): route TVDB person fetch through MetadataRouterFacade once a TVDB-side
+                    //   facade method exists (TmdbOrganizationPersonAdapter only covers TMDB).
                     tvdbPersonService.fetchPersonDetail(personId)
                 } else {
-                    metadataSecondaryRepository.fetchPersonDetail(
+                    metadataRouterFacade.fetchPersonDetail(
+                        metadataRequest = MetadataRequest(
+                            contentId = "tmdb:person:$personId",
+                            contentType = ContentType.MOVIE,  // sentinel; person-by-id has no canonical content type
+                            sourceContext = MetadataSourceContext(),
+                            language = "eng",
+                            depth = MetadataDepth.DETAIL_SECONDARY
+                        ),
                         personId = personId,
                         preferCrewCredits = preferCrew
                     )
