@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.trakt.TraktScrobbleMutationAdapter
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
@@ -49,7 +51,9 @@ sealed interface TraktScrobbleItem {
 class TraktScrobbleService @Inject constructor(
     private val traktAuthService: TraktRepositoryAuthGateway,
     private val watchingNowStateController: TraktWatchingNowStateController,
-    private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator
+    private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
+    private val profileManager: ProfileManager,
+    private val traceMetadataEvents: TraceMetadataEvents
 ) {
     internal sealed interface MutationResult {
         data object Success : MutationResult
@@ -235,6 +239,7 @@ class TraktScrobbleService @Inject constructor(
         request: WatchingMutationRequest.CheckIn,
         rollbackState: TraktWatchingNowStateController.Snapshot
     ): MutationResult {
+        checkScrobbleBoundary(request.profileId, "checkin")
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktScrobbleMutationAdapter.buildCheckinEnvelope(
@@ -258,6 +263,7 @@ class TraktScrobbleService @Inject constructor(
         val action = request.action
         val item = request.item
         val clampedProgress = request.progressPercent.coerceIn(0f, 100f)
+        checkScrobbleBoundary(request.profileId, "scrobble.$action")
         if (shouldSkip(request.profileId, action, item.itemKey, clampedProgress)) return MutationResult.Success
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
@@ -284,6 +290,18 @@ class TraktScrobbleService @Inject constructor(
 
     private fun stateFor(profileId: Int): ProfileScrobbleState =
         profileScrobbleStates.getOrPut(profileId) { ProfileScrobbleState() }
+
+    private fun checkScrobbleBoundary(envelopeProfileId: Int, operation: String) {
+        val active = profileManager.activeProfileId.value
+        if (envelopeProfileId != active) {
+            traceMetadataEvents.emitScrobbleRejected(
+                envelopeProfileId = envelopeProfileId,
+                activeProfileId = active,
+                operation = "trakt.$operation",
+                reason = "STALE_SESSION_WRITE_REJECTED"
+            )
+        }
+    }
 
     private fun shouldSkip(profileId: Int, action: String, itemKey: String, progress: Float): Boolean {
         val last = stateFor(profileId).lastScrobbleStamp ?: return false
