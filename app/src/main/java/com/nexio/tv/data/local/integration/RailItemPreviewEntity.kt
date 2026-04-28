@@ -2,10 +2,10 @@ package com.nexio.tv.data.local.integration
 
 import androidx.room.Entity
 import androidx.room.Index
-import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "integration_rail_item_preview",
+    primaryKeys = ["railId", "itemKey"],
     indices = [
         Index("railId"),
         Index(value = ["sourceProvider", "sourceItemId"]),
@@ -15,7 +15,7 @@ import androidx.room.PrimaryKey
     ]
 )
 data class RailItemPreviewEntity(
-    @PrimaryKey val itemKey: String,
+    val itemKey: String,
     val railId: String,
     val railSource: String,
     val sourceProvider: String,
