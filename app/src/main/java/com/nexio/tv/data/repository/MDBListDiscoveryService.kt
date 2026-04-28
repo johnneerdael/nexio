@@ -15,6 +15,8 @@ import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 import com.nexio.tv.domain.model.toMetaPreview
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -51,7 +53,38 @@ data class MDBListCustomCatalog(
     val catalogId: String,
     val catalogName: String,
     val type: ContentType,
-    val items: List<MetaPreview>
+    val itemRecords: List<RailItemPreview> = emptyList()
+) {
+    constructor(
+        key: String,
+        catalogId: String,
+        catalogName: String,
+        type: ContentType,
+        items: List<MetaPreview>,
+        fromLegacyItems: Boolean = true
+    ) : this(
+        key = key,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        itemRecords = items.toLegacyRailItemPreviews(railId = catalogId)
+    )
+
+    val items get() = itemRecords.map { it.toMetaPreview() }
+}
+
+fun legacyMDBListCustomCatalog(
+    key: String,
+    catalogId: String,
+    catalogName: String,
+    type: ContentType,
+    items: List<MetaPreview>
+): MDBListCustomCatalog = MDBListCustomCatalog(
+    key = key,
+    catalogId = catalogId,
+    catalogName = catalogName,
+    type = type,
+    itemRecords = items.toLegacyRailItemPreviews(railId = catalogId)
 )
 
 data class MDBListDiscoverySnapshot(
@@ -299,7 +332,7 @@ class MDBListDiscoveryService @Inject constructor(
                     generatedAtMs = generatedAtMs
                 ).asSequence()
             }
-            .distinctBy { "${it.type}:${it.preview.id}" }
+            .distinctBy { "${it.type}:${it.preview.toMetaPreview().id}" }
             .take(maxItemsPerRail * 2)
             .toList()
 
@@ -324,7 +357,7 @@ class MDBListDiscoveryService @Inject constructor(
                 catalogId = movieRailId,
                 catalogName = "$displayTitle (Movies)",
                 type = ContentType.MOVIE,
-                items = movies
+                itemRecords = movies
             )
         }
         if (shows.isNotEmpty()) {
@@ -333,7 +366,7 @@ class MDBListDiscoveryService @Inject constructor(
                 catalogId = showRailId,
                 catalogName = "$displayTitle (Shows)",
                 type = ContentType.SERIES,
-                items = shows
+                itemRecords = shows
             )
         }
         return catalogs
@@ -529,7 +562,7 @@ class MDBListDiscoveryService @Inject constructor(
 
     private data class ParsedListItem(
         val type: ContentType,
-        val preview: MetaPreview
+        val preview: RailItemPreview
     )
 
     private fun parseListItems(
@@ -612,12 +645,12 @@ class MDBListDiscoveryService @Inject constructor(
                     item = itemJson,
                     position = position,
                     generatedAtMs = generatedAtMs
-                )?.toMetaPreview() ?: continue
+                ) ?: continue
 
                 add(
                     ParsedListItem(
                         type = type,
-                        preview = posterRatingsUrlResolver.apply(preview, activePosterProvider)
+                        preview = preview
                     )
                 )
             }

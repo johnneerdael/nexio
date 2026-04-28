@@ -48,6 +48,7 @@ class KitsuDiscoveryServiceTest {
         assertEquals(PosterShape.LANDSCAPE, row.items.single().posterShape)
         assertEquals("1998", row.items.single().releaseInfo)
         assertEquals(8.5f, row.items.single().imdbRating)
+        assertEquals(1, snapshot.rowRecordsByCatalog.getValue(KitsuCatalogIds.TRENDING_ANIME).previews.size)
     }
 
     @Test

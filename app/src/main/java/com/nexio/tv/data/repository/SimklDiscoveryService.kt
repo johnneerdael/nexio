@@ -18,6 +18,8 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 import com.nexio.tv.domain.model.toMetaPreview
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineScope
@@ -40,9 +42,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class SimklDiscoverySnapshot(
-    val itemsByCatalog: Map<String, List<MetaPreview>> = emptyMap(),
+    val itemRecordsByCatalog: Map<String, List<RailItemPreview>> = emptyMap(),
     val updatedAtMs: Long = 0L
-)
+) {
+    constructor(
+        itemsByCatalog: Map<String, List<MetaPreview>>,
+        updatedAtMs: Long = 0L,
+        fromLegacyItems: Boolean = true
+    ) : this(
+        itemRecordsByCatalog = itemsByCatalog.mapValues { (catalogId, items) ->
+            items.toLegacyRailItemPreviews(railId = catalogId)
+        },
+        updatedAtMs = updatedAtMs
+    )
+
+    val itemsByCatalog get() = itemRecordsByCatalog.mapValues { (_, items) -> items.map { it.toMetaPreview() } }
+}
 
 internal fun shouldPreserveLastNonEmptySimklDiscoverySnapshot(
     previousSnapshot: SimklDiscoverySnapshot,
@@ -56,7 +71,7 @@ internal fun shouldPreserveLastNonEmptySimklDiscoverySnapshot(
 private fun SimklDiscoverySnapshot.hasConfiguredDiscoveryContent(
     prefs: SimklCatalogPreferences
 ): Boolean {
-    return prefs.enabledCatalogs.any { id -> itemsByCatalog[id]?.isNotEmpty() == true }
+    return prefs.enabledCatalogs.any { id -> itemRecordsByCatalog[id]?.isNotEmpty() == true }
 }
 
 internal fun extractSimklDiscoveryMediaObject(dto: JsonObject, kind: String): JsonObject {
@@ -255,13 +270,13 @@ class SimklDiscoveryService @Inject constructor(
                 return@withLock
             }
 
-            val results = linkedMapOf<String, List<MetaPreview>>()
+            val results = linkedMapOf<String, List<RailItemPreview>>()
             prefs.enabledCatalogs.forEach { catalogId ->
                 val source = catalogSources[catalogId] ?: return@forEach
                 results[catalogId] = fetchCatalog(railId = catalogId, source = source)
             }
             val refreshed = SimklDiscoverySnapshot(
-                itemsByCatalog = results,
+                itemRecordsByCatalog = results,
                 updatedAtMs = System.currentTimeMillis()
             )
             val snapshotToPersist = if (
@@ -278,7 +293,7 @@ class SimklDiscoveryService @Inject constructor(
         }
     }
 
-    private suspend fun fetchCatalog(railId: String, source: SimklCatalogSource): List<MetaPreview> {
+    private suspend fun fetchCatalog(railId: String, source: SimklCatalogSource): List<RailItemPreview> {
         val body = executeGet(source.url) ?: return emptyList()
         val array = runCatching { gson.fromJson(body, JsonArray::class.java) }.getOrNull() ?: return emptyList()
         val generatedAtMs = System.currentTimeMillis()
@@ -304,7 +319,7 @@ class SimklDiscoveryService @Inject constructor(
         kind: String,
         position: Int,
         generatedAtMs: Long
-    ): MetaPreview? {
+    ): RailItemPreview? {
         val media = extractSimklDiscoveryMediaObject(dto, kind)
         val isMovie = kind == "movies" ||
             media.get("anime_type")?.asString?.equals("movie", ignoreCase = true) == true
@@ -318,8 +333,6 @@ class SimklDiscoveryService @Inject constructor(
             position = position,
             generatedAtMs = generatedAtMs
         )
-            ?.toMetaPreview()
-            ?.let { preview -> posterRatingsUrlResolver.apply(preview, activePosterProvider) }
     }
 
     private fun mapSimklDiscoveryItemDto(

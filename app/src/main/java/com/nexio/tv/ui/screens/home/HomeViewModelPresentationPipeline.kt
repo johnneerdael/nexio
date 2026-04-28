@@ -823,46 +823,7 @@ internal fun applyTomatoesToTraktSnapshot(
     itemId: String,
     tomatoesRating: Double
 ): com.nexio.tv.data.repository.TraktDiscoverySnapshot {
-    var changed = false
-
-    fun updateItems(items: List<MetaPreview>): List<MetaPreview> {
-        var updatedItems: MutableList<MetaPreview>? = null
-        items.forEachIndexed { index, item ->
-            if (item.id != itemId || item.tomatoesRating == tomatoesRating) return@forEachIndexed
-            val nextItems = updatedItems ?: items.toMutableList().also { updatedItems = it }
-            nextItems[index] = item.copy(tomatoesRating = tomatoesRating)
-        }
-        val result = updatedItems?.toList() ?: items
-        if (result !== items) {
-            changed = true
-        }
-        return result
-    }
-
-    fun updateCustomCatalogs(
-        catalogs: List<com.nexio.tv.data.repository.TraktCustomListCatalog>
-    ): List<com.nexio.tv.data.repository.TraktCustomListCatalog> {
-        var updatedCatalogs: MutableList<com.nexio.tv.data.repository.TraktCustomListCatalog>? = null
-        catalogs.forEachIndexed { index, catalog ->
-            val updatedItems = updateItems(catalog.items)
-            if (updatedItems === catalog.items) return@forEachIndexed
-            val nextCatalogs = updatedCatalogs ?: catalogs.toMutableList().also { updatedCatalogs = it }
-            nextCatalogs[index] = catalog.copy(items = updatedItems)
-        }
-        return updatedCatalogs?.toList() ?: catalogs
-    }
-
-    val updatedSnapshot = snapshot.copy(
-        calendarItems = updateItems(snapshot.calendarItems),
-        recommendationMovieItems = updateItems(snapshot.recommendationMovieItems),
-        recommendationShowItems = updateItems(snapshot.recommendationShowItems),
-        trendingMovieItems = updateItems(snapshot.trendingMovieItems),
-        trendingShowItems = updateItems(snapshot.trendingShowItems),
-        popularMovieItems = updateItems(snapshot.popularMovieItems),
-        popularShowItems = updateItems(snapshot.popularShowItems),
-        customListCatalogs = updateCustomCatalogs(snapshot.customListCatalogs)
-    )
-    return if (changed) updatedSnapshot else snapshot
+    return snapshot
 }
 
 internal fun applyTomatoesOverridesToTraktSnapshot(
@@ -879,31 +840,7 @@ private fun applyTomatoesToMDBListSnapshot(
     itemId: String,
     tomatoesRating: Double
 ): com.nexio.tv.data.repository.MDBListDiscoverySnapshot {
-    var changed = false
-
-    val updatedCatalogs = snapshot.customListCatalogs.map { catalog ->
-        var catalogChanged = false
-        val updatedItems = catalog.items.map { item ->
-            if (item.id != itemId || item.tomatoesRating == tomatoesRating) {
-                item
-            } else {
-                catalogChanged = true
-                item.copy(tomatoesRating = tomatoesRating)
-            }
-        }
-        if (catalogChanged) {
-            changed = true
-            catalog.copy(items = updatedItems)
-        } else {
-            catalog
-        }
-    }
-
-    return if (changed) {
-        snapshot.copy(customListCatalogs = updatedCatalogs)
-    } else {
-        snapshot
-    }
+    return snapshot
 }
 
 internal fun applyTomatoesOverridesToMDBListSnapshot(

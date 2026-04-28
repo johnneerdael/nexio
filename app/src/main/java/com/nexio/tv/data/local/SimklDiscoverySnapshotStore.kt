@@ -9,6 +9,9 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.toLegacyRailItemPreview
+import com.nexio.tv.domain.model.toMetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,13 +42,12 @@ class SimklDiscoverySnapshotStore private constructor(
         private const val TAG = "SimklDiscoveryStore"
         internal const val BASE_PREFS_NAME = "simkl_discovery_snapshot_v2"
         private const val LEGACY_PREFS_NAME = "simkl_discovery_snapshot"
+        private const val DEFAULT_LEGACY_PROFILE_ID = 1
         private const val SNAPSHOT_KEY = "snapshot"
         private const val EXTERNAL_ID_CACHE_KEY = "external_id_cache"
     }
 
     private val gson = Gson()
-    private val itemsByCatalogType = object : TypeToken<Map<String, List<MetaPreview>>>() {}.type
-
     private fun injectedPrefsName(profileId: Int): String =
         profilePrefsName(BASE_PREFS_NAME, profileId)
 
@@ -59,8 +61,20 @@ class SimklDiscoverySnapshotStore private constructor(
     fun read(profileId: Int = activeProfileId()): SimklDiscoverySnapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
-            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            decode(raw)
+            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() }
+            if (raw != null) {
+                return@runCatching decode(raw)
+            }
+            if (profileId != DEFAULT_LEGACY_PROFILE_ID) return null
+            val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+            val legacyRaw = legacyPrefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
+            decode(legacyRaw).also { migrated ->
+                if (migrated.updatedAtMs > 0L || migrated.itemRecordsByCatalog.isNotEmpty()) {
+                    if (persistSnapshot(migrated, profileId = profileId)) {
+                        clearLegacySnapshot()
+                    }
+                }
+            }
         }.onFailure {
             Log.w(TAG, "Failed to restore SIMKL discovery snapshot", it)
             clear(profileId)
@@ -71,18 +85,32 @@ class SimklDiscoverySnapshotStore private constructor(
         snapshot: SimklDiscoverySnapshot,
         profileId: Int = activeProfileId()
     ) {
+        persistSnapshot(snapshot, profileId)
+    }
+
+    private fun persistSnapshot(
+        snapshot: SimklDiscoverySnapshot,
+        profileId: Int = activeProfileId()
+    ): Boolean {
         runCatching {
             val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
-                add("itemsByCatalog", gson.toJsonTree(snapshot.itemsByCatalog))
+                add("itemsByCatalog", gson.toJsonTree(snapshot.itemRecordsByCatalog))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
             prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
+        }.onFailure { Log.w(TAG, "Failed to persist SIMKL discovery snapshot", it) }
+            .getOrElse { return false }
+        return true
+    }
+
+    private fun clearLegacySnapshot() {
+        runCatching {
             context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .remove(SNAPSHOT_KEY)
                 .commit()
-        }.onFailure { Log.w(TAG, "Failed to persist SIMKL discovery snapshot", it) }
+        }.onFailure { Log.w(TAG, "Failed to clear legacy SIMKL discovery snapshot", it) }
     }
 
     fun clear(profileId: Int = activeProfileId()) {
@@ -109,12 +137,27 @@ class SimklDiscoverySnapshotStore private constructor(
 
     private fun decode(raw: String): SimklDiscoverySnapshot {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return SimklDiscoverySnapshot()
-        val itemsByCatalog = root.getAsJsonObject("itemsByCatalog")
-            ?.let { gson.fromJson<Map<String, List<MetaPreview>>>(it, itemsByCatalogType) }
-            ?.mapValues { (_, items) -> items.orEmpty().map { item -> item.sanitizedForCache() } }
+        val itemsByCatalogObject = root.getAsJsonObject("itemsByCatalog")
+        val itemsByCatalog = itemsByCatalogObject
+            ?.entrySet()
+            ?.associate { (catalogId, element) ->
+                val array = element.takeIf { it.isJsonArray }?.asJsonArray
+                catalogId to (array?.mapNotNull { item ->
+                    val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                    if (obj.has("sourcePayloadHash") && obj.has("sourceItemId")) {
+                        runCatching { gson.fromJson(obj, RailItemPreview::class.java) }.getOrNull()
+                    } else {
+                        runCatching {
+                            gson.fromJson(obj, MetaPreview::class.java)
+                                ?.sanitizedForCache()
+                                ?.toLegacyRailItemPreview(railId = catalogId)
+                        }.getOrNull()
+                    }
+                } ?: emptyList())
+            }
             ?: emptyMap()
         return SimklDiscoverySnapshot(
-            itemsByCatalog = itemsByCatalog,
+            itemRecordsByCatalog = itemsByCatalog,
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
     }

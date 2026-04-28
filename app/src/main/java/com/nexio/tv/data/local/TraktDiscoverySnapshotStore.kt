@@ -13,6 +13,9 @@ import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktPopularListOption
 import com.nexio.tv.data.repository.TraktRecommendationRef
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.toLegacyRailItemPreview
+import com.nexio.tv.domain.model.toMetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -79,13 +82,13 @@ class TraktDiscoverySnapshotStore private constructor(
         runCatching {
             val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
-                add("calendarItems", gson.toJsonTree(snapshot.calendarItems))
-                add("recommendationMovieItems", gson.toJsonTree(snapshot.recommendationMovieItems))
-                add("recommendationShowItems", gson.toJsonTree(snapshot.recommendationShowItems))
-                add("trendingMovieItems", gson.toJsonTree(snapshot.trendingMovieItems))
-                add("trendingShowItems", gson.toJsonTree(snapshot.trendingShowItems))
-                add("popularMovieItems", gson.toJsonTree(snapshot.popularMovieItems))
-                add("popularShowItems", gson.toJsonTree(snapshot.popularShowItems))
+                add("calendarItems", gson.toJsonTree(snapshot.calendarItemRecords))
+                add("recommendationMovieItems", gson.toJsonTree(snapshot.recommendationMovieItemRecords))
+                add("recommendationShowItems", gson.toJsonTree(snapshot.recommendationShowItemRecords))
+                add("trendingMovieItems", gson.toJsonTree(snapshot.trendingMovieItemRecords))
+                add("trendingShowItems", gson.toJsonTree(snapshot.trendingShowItemRecords))
+                add("popularMovieItems", gson.toJsonTree(snapshot.popularMovieItemRecords))
+                add("popularShowItems", gson.toJsonTree(snapshot.popularShowItemRecords))
                 add("customListCatalogs", gson.toJsonTree(snapshot.customListCatalogs))
                 add("popularLists", gson.toJsonTree(snapshot.popularLists))
                 add("recommendationRefsByStatusKey", gson.toJsonTree(snapshot.recommendationRefsByStatusKey))
@@ -109,26 +112,26 @@ class TraktDiscoverySnapshotStore private constructor(
     private fun decode(raw: String): TraktDiscoverySnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val canonical = TraktDiscoverySnapshot(
-            calendarItems = decodeArray(root, "calendarItems"),
-            recommendationMovieItems = decodeArray(root, "recommendationMovieItems"),
-            recommendationShowItems = decodeArray(root, "recommendationShowItems"),
-            trendingMovieItems = decodeArray(root, "trendingMovieItems"),
-            trendingShowItems = decodeArray(root, "trendingShowItems"),
-            popularMovieItems = decodeArray(root, "popularMovieItems"),
-            popularShowItems = decodeArray(root, "popularShowItems"),
-            customListCatalogs = decodeArray(root, "customListCatalogs"),
+            calendarItemRecords = decodeRailItems(root, "calendarItems", "trakt_calendar"),
+            recommendationMovieItemRecords = decodeRailItems(root, "recommendationMovieItems", "trakt_recommended_movies"),
+            recommendationShowItemRecords = decodeRailItems(root, "recommendationShowItems", "trakt_recommended_shows"),
+            trendingMovieItemRecords = decodeRailItems(root, "trendingMovieItems", "trakt_trending_movies"),
+            trendingShowItemRecords = decodeRailItems(root, "trendingShowItems", "trakt_trending_shows"),
+            popularMovieItemRecords = decodeRailItems(root, "popularMovieItems", "trakt_popular_movies"),
+            popularShowItemRecords = decodeRailItems(root, "popularShowItems", "trakt_popular_shows"),
+            customListCatalogs = decodeCustomCatalogs(root),
             popularLists = decodePopularLists(root),
             recommendationRefsByStatusKey = decodeMap(root, "recommendationRefsByStatusKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
         if (canonical.updatedAtMs > 0L ||
-            canonical.calendarItems.isNotEmpty() ||
-            canonical.recommendationMovieItems.isNotEmpty() ||
-            canonical.recommendationShowItems.isNotEmpty() ||
-            canonical.trendingMovieItems.isNotEmpty() ||
-            canonical.trendingShowItems.isNotEmpty() ||
-            canonical.popularMovieItems.isNotEmpty() ||
-            canonical.popularShowItems.isNotEmpty() ||
+            canonical.calendarItemRecords.isNotEmpty() ||
+            canonical.recommendationMovieItemRecords.isNotEmpty() ||
+            canonical.recommendationShowItemRecords.isNotEmpty() ||
+            canonical.trendingMovieItemRecords.isNotEmpty() ||
+            canonical.trendingShowItemRecords.isNotEmpty() ||
+            canonical.popularMovieItemRecords.isNotEmpty() ||
+            canonical.popularShowItemRecords.isNotEmpty() ||
             canonical.customListCatalogs.isNotEmpty() ||
             canonical.popularLists.isNotEmpty() ||
             canonical.recommendationRefsByStatusKey.isNotEmpty()
@@ -142,17 +145,38 @@ class TraktDiscoverySnapshotStore private constructor(
         }.getOrNull()
     }
 
-    private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {
+    private fun decodeRailItems(root: JsonObject, key: String, fallbackRailId: String): List<RailItemPreview> {
         val array = root.getAsJsonArray(key) ?: return emptyList()
-        val type = object : TypeToken<List<T>>() {}.type
-        return (gson.fromJson<List<T>>(array, type) ?: emptyList()).map { value ->
-            when (value) {
-                is MetaPreview -> value.sanitizedForCache() as T
-                is TraktCustomListCatalog -> value.copy(
-                    items = value.items.orEmpty().map { item -> item.sanitizedForCache() }
-                ) as T
-                else -> value
+        return array.mapNotNull { element ->
+            val obj = element.asJsonObjectOrNull() ?: return@mapNotNull null
+            if (obj.has("sourcePayloadHash") && obj.has("sourceItemId")) {
+                runCatching { gson.fromJson(obj, RailItemPreview::class.java) }.getOrNull()
+            } else {
+                runCatching {
+                    gson.fromJson(obj, MetaPreview::class.java)
+                        ?.sanitizedForCache()
+                        ?.toLegacyRailItemPreview(railId = fallbackRailId)
+                }.getOrNull()
             }
+        }
+    }
+
+    private fun decodeCustomCatalogs(root: JsonObject): List<TraktCustomListCatalog> {
+        val array = root.getAsJsonArray("customListCatalogs") ?: return emptyList()
+        return array.mapNotNull { element ->
+            val obj = element.asJsonObjectOrNull() ?: return@mapNotNull null
+            val catalogId = obj.cleanString("catalogId")
+            val itemArray = obj.getAsJsonArray("itemRecords") ?: obj.getAsJsonArray("items")
+            val itemRecords = if (itemArray == null) emptyList() else JsonObject().apply { add("items", itemArray) }
+                .let { decodeRailItems(it, "items", catalogId) }
+            TraktCustomListCatalog(
+                key = obj.cleanString("key"),
+                catalogId = catalogId,
+                catalogName = obj.cleanString("catalogName"),
+                type = runCatching { gson.fromJson(obj.get("type"), com.nexio.tv.domain.model.ContentType::class.java) }
+                    .getOrDefault(com.nexio.tv.domain.model.ContentType.UNKNOWN),
+                itemRecords = itemRecords
+            )
         }
     }
 

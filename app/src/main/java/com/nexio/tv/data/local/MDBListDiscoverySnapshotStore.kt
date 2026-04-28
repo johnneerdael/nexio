@@ -11,6 +11,11 @@ import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.MDBListListOption
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailItemPreview
+import com.nexio.tv.domain.model.toLegacyRailItemPreview
+import com.nexio.tv.domain.model.toMetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -88,9 +93,7 @@ class MDBListDiscoverySnapshotStore private constructor(
         val canonical = MDBListDiscoverySnapshot(
             personalLists = decodeListOptions(root, "personalLists", isPersonal = true),
             topLists = decodeListOptions(root, "topLists", isPersonal = false),
-            customListCatalogs = decodeArray<MDBListCustomCatalog>(root, "customListCatalogs").map { catalog ->
-                catalog.copy(items = catalog.items.orEmpty().map { item -> item.sanitizedForCache() })
-            },
+            customListCatalogs = decodeCustomCatalogs(root),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
         if (canonical.updatedAtMs > 0L ||
@@ -111,6 +114,43 @@ class MDBListDiscoverySnapshotStore private constructor(
         val array = root.getAsJsonArray(key) ?: return emptyList()
         val type = object : TypeToken<List<T>>() {}.type
         return gson.fromJson<List<T>>(array, type) ?: emptyList()
+    }
+
+    private fun decodeCustomCatalogs(root: JsonObject): List<MDBListCustomCatalog> {
+        val array = root.getAsJsonArray("customListCatalogs") ?: return emptyList()
+        return array.mapNotNull { element ->
+            val obj = element.asJsonObjectOrNull() ?: return@mapNotNull null
+            val catalogId = obj.cleanString("catalogId")
+            val itemArray = obj.getAsJsonArray("itemRecords") ?: obj.getAsJsonArray("items")
+            val itemRecords = decodeRailItems(itemArray, catalogId)
+            MDBListCustomCatalog(
+                key = obj.cleanString("key"),
+                catalogId = catalogId,
+                catalogName = obj.cleanString("catalogName"),
+                type = runCatching { gson.fromJson(obj.get("type"), ContentType::class.java) }
+                    .getOrDefault(ContentType.UNKNOWN),
+                itemRecords = itemRecords
+            )
+        }
+    }
+
+    private fun decodeRailItems(
+        array: com.google.gson.JsonArray?,
+        fallbackRailId: String
+    ): List<RailItemPreview> {
+        if (array == null) return emptyList()
+        return array.mapNotNull { element ->
+            val obj = element.asJsonObjectOrNull() ?: return@mapNotNull null
+            if (obj.has("sourcePayloadHash") && obj.has("sourceItemId")) {
+                runCatching { gson.fromJson(obj, RailItemPreview::class.java) }.getOrNull()
+            } else {
+                runCatching {
+                    gson.fromJson(obj, MetaPreview::class.java)
+                        ?.sanitizedForCache()
+                        ?.toLegacyRailItemPreview(railId = fallbackRailId)
+                }.getOrNull()
+            }
+        }
     }
 
     private fun decodeListOptions(

@@ -608,7 +608,7 @@ class IdleScreensaverRepositoryTest {
             shouldUseTraktScreensaverSource(
                 true,
                 prefs,
-                snapshot.copy(trendingShowItems = emptyList())
+                snapshot.copy(trendingShowItemRecords = emptyList())
             )
         )
         assertFalse(shouldUseTraktScreensaverSource(true, prefs, null))

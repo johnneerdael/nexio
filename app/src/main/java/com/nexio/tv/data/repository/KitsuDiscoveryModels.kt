@@ -4,18 +4,46 @@ import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.RailPreviewCatalogRowRecord
+import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 
 data class KitsuDiscoverySnapshot(
-    val rowsByCatalog: Map<String, CatalogRow> = emptyMap(),
+    val rowRecordsByCatalog: Map<String, RailPreviewCatalogRowRecord> = emptyMap(),
     val updatedAtMs: Long = 0L,
     val catalogIdsWithCurrentPreferences: Set<String> = emptySet()
 ) {
+    constructor(
+        rowsByCatalog: Map<String, CatalogRow>,
+        updatedAtMs: Long = 0L,
+        catalogIdsWithCurrentPreferences: Set<String> = emptySet(),
+        fromLegacyRows: Boolean = true
+    ) : this(
+        rowRecordsByCatalog = rowsByCatalog.mapValues { (_, row) -> row.toRailPreviewCatalogRowRecord() },
+        updatedAtMs = updatedAtMs,
+        catalogIdsWithCurrentPreferences = catalogIdsWithCurrentPreferences
+    )
+
+    val rowsByCatalog get() = rowRecordsByCatalog.mapValues { (_, row) -> row.toCatalogRow() }
+
     fun currentRowsFor(preferences: KitsuCatalogPreferences): Map<String, CatalogRow> {
         val enabledCatalogIds = preferences.enabledCatalogIds()
-        return rowsByCatalog.filterKeys { key ->
+        return rowRecordsByCatalog.filterKeys { key ->
             key in catalogIdsWithCurrentPreferences && key in enabledCatalogIds
-        }
+        }.mapValues { (_, row) -> row.toCatalogRow() }
     }
+}
+
+private fun CatalogRow.toRailPreviewCatalogRowRecord(): RailPreviewCatalogRowRecord {
+    return RailPreviewCatalogRowRecord(
+        addonId = addonId,
+        addonName = addonName,
+        addonBaseUrl = addonBaseUrl,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        rawType = rawType,
+        previews = items.toLegacyRailItemPreviews(railId = catalogId)
+    )
 }
 
 fun kitsuCatalogTitle(catalogId: String): String? {
