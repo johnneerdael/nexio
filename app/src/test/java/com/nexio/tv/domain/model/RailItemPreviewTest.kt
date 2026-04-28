@@ -32,11 +32,134 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
-        assertEquals("trakt:show:1", meta.id)
+        assertEquals("tvdb:81189", meta.id)
         assertEquals(ContentType.SERIES, meta.type)
         assertEquals("Breaking Bad", meta.name)
         assertEquals("2008", meta.releaseInfo)
         assertNull(meta.poster)
+    }
+
+    @Test
+    fun `simkl movie preview uses tmdb routeable meta id instead of provider source id`() {
+        val preview = RailItemPreview(
+            railId = "simkl_trending_movies",
+            railSource = RailSource.BUILT_IN_SIMKL_DISCOVERY,
+            sourceProvider = ProviderId.SIMKL,
+            sourceItemId = "simkl:movie:88",
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(
+                simkl = "88",
+                imdb = "tt1375666",
+                tmdb = "27205"
+            ),
+            display = RailDisplaySeed(title = "Inception", year = 2010),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash-simkl-inception",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals("tmdb:27205", meta.id)
+        assertEquals("Inception", meta.name)
+        assertEquals("2010", meta.releaseInfo)
+    }
+
+    @Test
+    fun `movie preview falls back to imdb routeable meta id when tmdb is unavailable`() {
+        val preview = RailItemPreview(
+            railId = "trakt_recommended_movies",
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            sourceItemId = "trakt:movie:7",
+            itemType = ContentType.MOVIE,
+            stableIds = ProviderIds(
+                trakt = "7",
+                imdb = "tt0137523"
+            ),
+            display = RailDisplaySeed(title = "Fight Club", year = 1999),
+            sourcePayloadQuality = SourcePayloadQuality.SPARSE_IDENTITY,
+            sourcePayloadHash = "hash-trakt-fight-club",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals("imdb:tt0137523", meta.id)
+        assertEquals("Fight Club", meta.name)
+    }
+
+    @Test
+    fun `mdblist series preview uses tvdb routeable meta id instead of provider source id`() {
+        val preview = RailItemPreview(
+            railId = "mdblist_top_shows",
+            railSource = RailSource.BUILT_IN_MDBLIST,
+            sourceProvider = ProviderId.MDBLIST,
+            sourceItemId = "mdblist:list:top-shows:item:1",
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(
+                tmdb = "1396",
+                tvdb = "81189"
+            ),
+            display = RailDisplaySeed(title = "Breaking Bad", year = 2008),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash-mdblist-breaking-bad",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals("tvdb:81189", meta.id)
+        assertEquals("Breaking Bad", meta.name)
+    }
+
+    @Test
+    fun `series preview falls back to source item id when no routeable stable id exists`() {
+        val preview = RailItemPreview(
+            railId = "mdblist_top_shows",
+            railSource = RailSource.BUILT_IN_MDBLIST,
+            sourceProvider = ProviderId.MDBLIST,
+            sourceItemId = "mdblist:list:top-shows:item:2",
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(
+                trakt = "2",
+                simkl = "22",
+                tmdb = "999"
+            ),
+            display = RailDisplaySeed(title = "Provider Only", year = 2024),
+            sourcePayloadQuality = SourcePayloadQuality.SPARSE_IDENTITY,
+            sourcePayloadHash = "hash-provider-only",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals("mdblist:list:top-shows:item:2", meta.id)
+        assertEquals("Provider Only", meta.name)
+    }
+
+    @Test
+    fun `kitsu preview prefers kitsu routeable meta id`() {
+        val preview = RailItemPreview(
+            railId = "kitsu_trending_anime",
+            railSource = RailSource.BUILT_IN_KITSU,
+            sourceProvider = ProviderId.KITSU,
+            sourceItemId = "kitsu:7442",
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(
+                kitsu = "7442",
+                tvdb = "79481"
+            ),
+            display = RailDisplaySeed(title = "Fullmetal Alchemist", year = 2003),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash-kitsu-fma",
+            generatedAtMs = 1_000L
+        )
+
+        val meta = preview.toMetaPreview()
+
+        assertEquals("kitsu:7442", meta.id)
+        assertEquals("Fullmetal Alchemist", meta.name)
     }
 
     @Test
@@ -59,6 +182,7 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
+        assertEquals("mdblist:show:1", meta.id)
         assertNull(meta.imdbRating)
         assertNull(meta.ratingSource)
     }
@@ -88,6 +212,7 @@ class RailItemPreviewTest {
 
         val meta = preview.toMetaPreview()
 
+        assertEquals("tmdb:27205", meta.id)
         assertEquals("TMDB 27205", meta.name)
         assertNull(meta.poster)
         assertNull(meta.background)
