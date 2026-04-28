@@ -1,12 +1,16 @@
 package com.nexio.tv.core.anime
 
 import android.content.Context
+import android.util.Log
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val ANIME_ID_MAP_ASSET = "anime/anime-id-map.json"
+private const val TAG = "AnimeIdMappingService"
+
+private val EMPTY_ANIME_ID_MAP_ASSET = AnimeIdMapAsset(schemaVersion = 0)
 
 @Singleton
 class AnimeIdMappingService(
@@ -18,11 +22,20 @@ class AnimeIdMappingService(
         moshi: Moshi
     ) : this(
         assetProvider = {
-            val adapter = moshi.adapter(AnimeIdMapAsset::class.java)
-            context.assets.open(ANIME_ID_MAP_ASSET).bufferedReader().use { reader ->
-                requireNotNull(adapter.fromJson(reader.readText())) {
-                    "Unable to parse anime ID map asset"
+            try {
+                val adapter = moshi.adapter(AnimeIdMapAsset::class.java)
+                val parsed = context.assets.open(ANIME_ID_MAP_ASSET).bufferedReader().use { reader ->
+                    adapter.fromJson(reader.readText())
                 }
+                if (parsed != null) {
+                    parsed
+                } else {
+                    Log.w(TAG, "Anime ID map parsed to null; anime metadata will be unavailable")
+                    EMPTY_ANIME_ID_MAP_ASSET
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to load $ANIME_ID_MAP_ASSET; anime metadata will be unavailable", t)
+                EMPTY_ANIME_ID_MAP_ASSET
             }
         }
     )
