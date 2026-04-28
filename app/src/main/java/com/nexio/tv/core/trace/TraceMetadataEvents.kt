@@ -206,4 +206,29 @@ class TraceMetadataEvents(
             )
         )
     }
+
+    fun emitScrobbleRejected(
+        envelopeProfileId: Int,
+        activeProfileId: Int,
+        operation: String,
+        reason: String
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "playback.scrobble_rejected",
+                payload = mapOf(
+                    "envelopeProfileId" to envelopeProfileId,
+                    "activeProfileId" to activeProfileId,
+                    "operation" to operation,
+                    "reason" to reason
+                )
+            )
+        )
+    }
 }
