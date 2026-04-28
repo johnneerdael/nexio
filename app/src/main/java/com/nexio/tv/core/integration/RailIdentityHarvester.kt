@@ -1,6 +1,5 @@
 package com.nexio.tv.core.integration
 
-import com.nexio.tv.core.metadata.router.AnimeIdScheme
 import com.nexio.tv.core.metadata.router.IdMapping
 import com.nexio.tv.core.metadata.router.IdMappingSource
 import com.nexio.tv.core.metadata.router.IdMappingStore
@@ -15,25 +14,7 @@ class RailIdentityHarvester @Inject constructor(
     private val idMappingStore: IdMappingStore
 ) {
     suspend fun harvest(preview: RailItemPreview): List<IdMapping> {
-        val sourceIds = preview.stableIds.parsedSourceIds()
-        val targetIds = preview.stableIds.targetProviderIds()
-        val facts = buildList {
-            sourceIds.forEach { sourceId ->
-                targetIds.forEach { (provider, providerId) ->
-                    if (sourceId.scheme.toPrimaryProvider() != provider) {
-                        add(
-                            IdMapping(
-                                sourceId = sourceId,
-                                provider = provider,
-                                providerId = providerId,
-                                source = IdMappingSource.ROUTER_OBSERVED,
-                                evidence = "rail preview ${preview.railId} explicit stableIds"
-                            )
-                        )
-                    }
-                }
-            }
-        }.distinctBy { mapping ->
+        val facts = preview.stableIds.directMappings(preview.railId).distinctBy { mapping ->
             "${mapping.sourceId.scheme}:${mapping.sourceId.value}:${mapping.provider}:${mapping.providerId}"
         }
 
@@ -41,36 +22,42 @@ class RailIdentityHarvester @Inject constructor(
         return facts
     }
 
-    private fun ProviderIds.parsedSourceIds(): List<ParsedMetadataId> =
-        listOfNotNull(
-            imdb?.let { parseMetadataId(it) ?: parseMetadataId("imdb:$it") },
-            tmdb?.let { parseMetadataId("tmdb:$it") },
-            tvdb?.let { parseMetadataId("tvdb:$it") },
-            kitsu?.let { parseMetadataId("kitsu:$it") },
+    private fun ProviderIds.directMappings(railId: String): List<IdMapping> {
+        val imdbSource = imdb?.let { parseMetadataId(it) ?: parseMetadataId("imdb:$it") }
+        val animeSources = listOfNotNull(
             mal?.let { parseMetadataId("mal:$it") },
             anilist?.let { parseMetadataId("anilist:$it") },
             anidb?.let { parseMetadataId("anidb:$it") }
         )
+        val kitsuTarget = kitsu.cleanId()
 
-    private fun ProviderIds.targetProviderIds(): List<Pair<MetadataPrimaryProvider, String>> =
-        listOfNotNull(
-            tmdb.cleanId()?.let { MetadataPrimaryProvider.TMDB to it },
-            tvdb.cleanId()?.let { MetadataPrimaryProvider.TVDB to it },
-            kitsu.cleanId()?.let { MetadataPrimaryProvider.KITSU to it }
+        return buildList {
+            imdbSource?.let { sourceId ->
+                tmdb.cleanId()?.let { add(sourceId.mappingTo(MetadataPrimaryProvider.TMDB, it, railId)) }
+                tvdb.cleanId()?.let { add(sourceId.mappingTo(MetadataPrimaryProvider.TVDB, it, railId)) }
+                kitsuTarget?.let { add(sourceId.mappingTo(MetadataPrimaryProvider.KITSU, it, railId)) }
+            }
+            kitsuTarget?.let { providerId ->
+                animeSources.forEach { sourceId ->
+                    add(sourceId.mappingTo(MetadataPrimaryProvider.KITSU, providerId, railId))
+                }
+            }
+        }
+    }
+
+    private fun ParsedMetadataId.mappingTo(
+        provider: MetadataPrimaryProvider,
+        providerId: String,
+        railId: String
+    ): IdMapping =
+        IdMapping(
+            sourceId = this,
+            provider = provider,
+            providerId = providerId,
+            source = IdMappingSource.ROUTER_OBSERVED,
+            evidence = "rail preview $railId explicit stableIds"
         )
 
     private fun String?.cleanId(): String? =
         this?.trim()?.takeIf { it.isNotEmpty() }
-
-    private fun AnimeIdScheme.toPrimaryProvider(): MetadataPrimaryProvider? =
-        when (this) {
-            AnimeIdScheme.TMDB -> MetadataPrimaryProvider.TMDB
-            AnimeIdScheme.TVDB -> MetadataPrimaryProvider.TVDB
-            AnimeIdScheme.KITSU -> MetadataPrimaryProvider.KITSU
-            AnimeIdScheme.MAL,
-            AnimeIdScheme.ANILIST,
-            AnimeIdScheme.ANIDB,
-            AnimeIdScheme.IMDB,
-            AnimeIdScheme.UNKNOWN -> null
-        }
 }

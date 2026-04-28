@@ -23,8 +23,8 @@ object IdMappingTtlPolicy {
     private fun priority(source: IdMappingSource): Int =
         when (source) {
             IdMappingSource.LOCAL -> 0
-            IdMappingSource.ROUTER_OBSERVED -> 1
-            IdMappingSource.FRIBB -> 2
+            IdMappingSource.FRIBB -> 1
+            IdMappingSource.ROUTER_OBSERVED -> 2
             IdMappingSource.NEGATIVE -> 3
         }
 }
