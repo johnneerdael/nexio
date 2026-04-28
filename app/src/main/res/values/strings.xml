@@ -912,6 +912,7 @@
     <string name="profile_confirm">Confirm</string>
     <string name="profile_delete">Delete</string>
     <string name="profile_addons">addons</string>
+    <string name="profile_switch_blocked_by_playback">Stop playback before switching profiles.</string>
 
 
     <!-- AddonManagerScreen -->
