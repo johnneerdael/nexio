@@ -110,6 +110,25 @@ object NetworkModule {
         traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor,
         traceEventListenerFactory: okhttp3.EventListener.Factory
     ): OkHttpClient = OkHttpClient.Builder()
+        // F2-A-02: IntegrationNetworkPermitInterceptor — AUDIT_ONLY vs ENFORCE migration plan
+        //
+        // Current mode: AUDIT_ONLY
+        //   In AUDIT_ONLY, any in-scope provider call that lacks an IntegrationRuntime permit
+        //   (i.e. was issued outside of DefaultIntegrationRuntime.open()) is silently allowed
+        //   through. The interceptor logs/traces the violation but does not block the request.
+        //
+        // What ENFORCE would change:
+        //   Mode.ENFORCE throws IllegalStateException for any permit-less in-scope request.
+        //   This hard-enforces that all provider network calls must go through the integration
+        //   runtime (with proper backoff, tracing, and cache-policy enforcement).
+        //
+        // Migration path — flip to ENFORCE when:
+        //   1. All call sites that bypass the runtime have been ported to IntegrationStreamSpec
+        //      (tracked by the integration-runtime-phase-* tracks).
+        //   2. The AUDIT_ONLY warning metric drops to zero across a full regression pass.
+        //   3. A dedicated integration test (IntegrationNetworkPermitInterceptorTest) passes
+        //      in ENFORCE mode with the full set of known API shapes.
+        //   Expected milestone: integration-runtime-phase-c or later.
         .addInterceptor(
             IntegrationNetworkPermitInterceptor(
                 hostClassifier = IntegrationHostClassifier.default(),

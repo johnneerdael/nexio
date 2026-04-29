@@ -12,8 +12,6 @@ import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
-import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -79,8 +77,4 @@ class RpdbMetadataProviderAdapter @Inject constructor(
     }
 }
 
-private fun MetadataMediaKind.toContentType(): ContentType = when (this) {
-    MetadataMediaKind.MOVIE -> ContentType.MOVIE
-    MetadataMediaKind.SERIES, MetadataMediaKind.ANIME -> ContentType.SERIES
-    MetadataMediaKind.UNKNOWN -> ContentType.UNKNOWN
-}
+// toContentType() is defined in PosterAdapterUtils.kt (F2-13-E)

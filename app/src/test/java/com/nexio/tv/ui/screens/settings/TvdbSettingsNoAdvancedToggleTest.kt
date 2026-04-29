@@ -41,7 +41,8 @@ class TvdbSettingsNoAdvancedToggleTest {
          * the project root by looking for build.gradle.kts.
          */
         private fun findProjectRoot(): File {
-            val cwd = File(System.getProperty("user.dir"))
+            // user.dir is a mandatory JVM system property — always non-null at runtime.
+            val cwd = File(System.getProperty("user.dir") ?: ".")
             val candidates = listOfNotNull(
                 cwd,
                 cwd.parentFile,

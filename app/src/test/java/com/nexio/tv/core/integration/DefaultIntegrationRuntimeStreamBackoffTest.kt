@@ -12,9 +12,9 @@ import org.robolectric.RobolectricTestRunner
  * stream opener throws), the runtime must engage backoff so subsequent calls for
  * the same provider/scope are blocked.
  *
- * The current implementation only records a FAILED audit phase and returns null;
- * it does NOT call `noteSyntheticNetworkFailure`. This test pins the desired
- * contract and is expected to FAIL until Task 3 fixes the catch branch.
+ * The catch branch now calls `noteSyntheticNetworkFailure` (Task 3 fix in place),
+ * so this test verifies the live contract: an open() failure engages backoff for
+ * the affected provider/scope pair.
  */
 @RunWith(RobolectricTestRunner::class)
 class DefaultIntegrationRuntimeStreamBackoffTest {

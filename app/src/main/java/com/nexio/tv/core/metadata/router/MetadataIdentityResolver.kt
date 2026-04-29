@@ -72,6 +72,14 @@ class MetadataIdentityResolver @Inject constructor(
             return route
         }
 
+        // F2-B-06: ROUTING_ID_TYPE_CONFLICT semantic clarification (cluster G F2-B-01, commit 37f44a99b).
+        // The conflict-trace entry is appended ONLY when the route's original decision reason was
+        // already ROUTING_ID_TYPE_CONFLICT — the entry signals "we resolved a known provider-native
+        // conflict via identity lookup", not "we performed identity resolution". For routes whose
+        // reason is ITEM_TYPE_SERIES, ITEM_TYPE_MOVIE, or any other non-conflict reason that
+        // incidentally require identity resolution (e.g. tt14403178 → tvdb:NN look-up), no
+        // ROUTING_ID_TYPE_CONFLICT trace entry is added, avoiding false-positive conflict signals
+        // in downstream trace consumers.
         return route.copy(
             targetIds = route.targetIds + (route.provider to lookupResult),
             targetIdRequiresIdentityResolution = false,
