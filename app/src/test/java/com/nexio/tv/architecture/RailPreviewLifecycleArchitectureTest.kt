@@ -307,6 +307,66 @@ class RailPreviewLifecycleArchitectureTest {
         }
     }
 
+    @Test
+    fun `provider localized metadata resolver depends only on router facade`() {
+        val source = productionFile("core/tvdb/ProviderLocalizedMetadataResolver.kt").readText()
+        val forbiddenTokens = listOf(
+            "ProviderMetadataRouter",
+            "providerMetadataRouter"
+        )
+        val offenders = forbiddenTokens.filter { token -> source.contains(token) }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "ProviderLocalizedMetadataResolver must not keep the legacy ProviderMetadataRouter " +
+                    "wired beside MetadataRouterFacade. Offenders: $offenders"
+            )
+        }
+        assertTrue(
+            "ProviderLocalizedMetadataResolver must resolve through MetadataRouterFacade.",
+            source.contains("metadataRouterFacade.resolveRequest(metadataRequest)")
+        )
+    }
+
+    @Test
+    fun `home provider overlay does not retain router facade sidecar helpers`() {
+        val source = homeFile("HomeProviderLocalizedMetadataOverlay.kt").readText()
+        val forbiddenTokens = listOf(
+            "fun MetadataRouterFacade.resolveHomeRequest",
+            "fun HomeViewModel.resolveHomeRequestIfAvailable",
+            "Facade sidecar is audit/migration-only",
+            "legacy provider path remains authoritative"
+        )
+        val offenders = forbiddenTokens.filter { token -> source.contains(token) }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Home provider overlay must not retain dead router-facade sidecar helpers or " +
+                    "legacy-authoritative comments: $offenders"
+            )
+        }
+    }
+
+    @Test
+    fun `metadata audit rail scenarios do not hard code identity harvest maps`() {
+        val source = File("app/src/test/java/com/nexio/tv/metadata/audit/MetadataAuditRunner.kt").readText()
+        val forbiddenPatterns = listOf(
+            Regex("""identityMappingsHarvested\s*=\s*mapOf\("""),
+            Regex("""val\s+identityMappingsHarvested\s*:\s*Map<String,\s*String>\s*=\s*emptyMap\(\)""")
+        )
+        val offenders = forbiddenPatterns.flatMap { pattern ->
+            pattern.findAll(source).map { match -> match.value.trim() }
+        }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Rail audit scenarios must not carry hard-coded identity harvest fixture maps. " +
+                    "Identity harvest proof must come from real trace events or remain explicitly empty " +
+                    "in runRailScenario. Offenders: $offenders"
+            )
+        }
+    }
+
     private fun homeFile(name: String): File = File(homeDirectory, name).also { file ->
         assertTrue("Required Home source file is missing: ${file.path}", file.isFile)
     }
