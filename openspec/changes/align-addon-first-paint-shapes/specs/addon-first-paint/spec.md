@@ -14,6 +14,13 @@ Addon catalog item payloads SHALL preserve documented Stremio preview aliases wh
 - **AND** `MetaPreview.releaseInfo` is `"2026"`
 - **AND** no metadata router or provider detail call is required for those fields.
 
+#### Scenario: Canonical addon fields win over aliases
+
+- **GIVEN** an addon catalog response item has `genres: ["Drama"]`, `genre: ["Science Fiction"]`, `releaseInfo: "2026-03-15"`, and `year: "2026"`
+- **WHEN** the item is adapted into `MetaPreview`
+- **THEN** `MetaPreview.genres` is `["Drama"]`
+- **AND** `MetaPreview.releaseInfo` is `"2026-03-15"`.
+
 ### Requirement: Addon catalog preview harvests stable IDs
 
 Addon catalog item payloads SHALL preserve directly supplied stable IDs before visible hydration.
@@ -21,6 +28,13 @@ Addon catalog item payloads SHALL preserve directly supplied stable IDs before v
 #### Scenario: TMDB addon catalog item supplies TMDB and IMDb IDs
 
 - **GIVEN** an addon catalog item has `id: "tmdb:687163"`, `imdb_id: "tt12042730"`, and `behaviorHints.defaultVideoId: "tt12042730"`
+- **WHEN** the item is adapted into `MetaPreview`
+- **THEN** `MetaPreview.firstPaintStableIds.tmdb` is `"687163"`
+- **AND** `MetaPreview.firstPaintStableIds.imdb` is `"tt12042730"`.
+
+#### Scenario: Addon behavior hints provide IMDb ID when imdb_id is absent
+
+- **GIVEN** an addon catalog item has `id: "tmdb:687163"`, no `imdb_id`, and `behaviorHints.defaultVideoId: "tt12042730"`
 - **WHEN** the item is adapted into `MetaPreview`
 - **THEN** `MetaPreview.firstPaintStableIds.tmdb` is `"687163"`
 - **AND** `MetaPreview.firstPaintStableIds.imdb` is `"tt12042730"`.
