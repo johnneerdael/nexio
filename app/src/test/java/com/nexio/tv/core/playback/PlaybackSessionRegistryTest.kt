@@ -1,7 +1,5 @@
 package com.nexio.tv.core.playback
 
-import com.nexio.tv.core.integration.IntegrationProvider
-import com.nexio.tv.core.integration.ProviderAccountRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -14,8 +12,6 @@ class PlaybackSessionRegistryTest {
         PlaybackOwnerContext(
             ownerProfileId = profileId,
             ownerSessionId = sessionId,
-            traktAccount = ProviderAccountRef(IntegrationProvider.TRAKT, "h-$profileId", null),
-            simklAccount = null,
             startedAtEpochMs = 1L
         )
 

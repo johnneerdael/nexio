@@ -19,8 +19,6 @@ class TrackingWatchingNowRoutingTest {
         PlaybackOwnerContext(
             ownerProfileId = profileId,
             ownerSessionId = "session-$profileId",
-            traktAccount = null,
-            simklAccount = null,
             startedAtEpochMs = 1L
         )
 

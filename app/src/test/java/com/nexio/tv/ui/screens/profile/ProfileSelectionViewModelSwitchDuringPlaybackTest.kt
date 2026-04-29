@@ -1,9 +1,7 @@
 package com.nexio.tv.ui.screens.profile
 
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.integration.ProfileBoundaryViolation
-import com.nexio.tv.core.integration.ProviderAccountRef
 import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.core.playback.PlaybackSessionRegistry
 import com.nexio.tv.core.profile.ProfileManager
@@ -54,8 +52,6 @@ class ProfileSelectionViewModelSwitchDuringPlaybackTest {
             PlaybackOwnerContext(
                 ownerProfileId = 1,
                 ownerSessionId = "session-1",
-                traktAccount = ProviderAccountRef(IntegrationProvider.TRAKT, "h", null),
-                simklAccount = null,
                 startedAtEpochMs = 1L
             )
         )

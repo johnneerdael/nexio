@@ -70,8 +70,6 @@ class PlayerViewModel @Inject constructor(
             com.nexio.tv.core.playback.PlaybackOwnerContext(
                 ownerProfileId = session.profileId,
                 ownerSessionId = session.sessionId,
-                traktAccount = null,
-                simklAccount = null,
                 startedAtEpochMs = System.currentTimeMillis().coerceAtLeast(1L)
             )
         }
@@ -123,8 +121,11 @@ class PlayerViewModel @Inject constructor(
     fun getCurrentHeaders(): Map<String, String> = controller.getCurrentHeaders()
 
     fun stopAndRelease() {
+        // F2-H-07: Session unregistration consolidated to onCleared() only.
+        // onCleared() is guaranteed to run on ViewModel destruction regardless of how playback ends,
+        // making it the single authoritative teardown point. Calling unregisterPlaybackSession()
+        // here as well was idempotent but created a dual-path. The registry unregister is null-safe.
         controller.stopAndRelease()
-        unregisterPlaybackSession()
     }
 
     fun scheduleHideControls() {

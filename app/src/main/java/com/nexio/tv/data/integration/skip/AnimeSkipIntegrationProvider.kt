@@ -25,6 +25,8 @@ class AnimeSkipIntegrationProvider @Inject constructor(
     suspend fun resolveShowIds(anilistId: String, clientId: String): List<String> {
         val spec = IntegrationSpec(
             provider = IntegrationProvider.ANIMESKIP,
+            // F2-H-06: Language is intentionally excluded: skip timestamps are audio/subtitle-track-independent
+            // (intro/outro positions are based on the video timeline, not the language track).
             cacheKey = "animeskip:shows:$anilistId",
             codec = gsonCodec<List<String>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -57,6 +59,8 @@ class AnimeSkipIntegrationProvider @Inject constructor(
     suspend fun queryEpisodes(showId: String, clientId: String): List<AnimeSkipEpisode> {
         val spec = IntegrationSpec(
             provider = IntegrationProvider.ANIMESKIP,
+            // F2-H-06: Language is intentionally excluded: skip timestamps are audio/subtitle-track-independent
+            // (intro/outro positions are based on the video timeline, not the language track).
             cacheKey = "animeskip:episodes:$showId",
             codec = gsonCodec<List<AnimeSkipEpisode>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(

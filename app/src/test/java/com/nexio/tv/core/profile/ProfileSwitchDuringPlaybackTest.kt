@@ -1,9 +1,7 @@
 package com.nexio.tv.core.profile
 
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.integration.ProfileBoundaryViolation
-import com.nexio.tv.core.integration.ProviderAccountRef
 import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.core.playback.PlaybackSessionRegistry
 import kotlinx.coroutines.runBlocking
@@ -23,8 +21,6 @@ class ProfileSwitchDuringPlaybackTest {
             PlaybackOwnerContext(
                 ownerProfileId = 1,
                 ownerSessionId = "session-1",
-                traktAccount = ProviderAccountRef(IntegrationProvider.TRAKT, "h", null),
-                simklAccount = null,
                 startedAtEpochMs = 1L
             )
         )
@@ -46,8 +42,6 @@ class ProfileSwitchDuringPlaybackTest {
             PlaybackOwnerContext(
                 ownerProfileId = 1,
                 ownerSessionId = "session-1",
-                traktAccount = null,
-                simklAccount = null,
                 startedAtEpochMs = 1L
             )
         )
