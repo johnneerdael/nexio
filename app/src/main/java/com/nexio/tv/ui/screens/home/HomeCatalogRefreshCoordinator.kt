@@ -33,7 +33,6 @@ import com.nexio.tv.domain.repository.MetaRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -352,13 +351,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
             }
             runCatching {
-                metaRepository.getMetaFromAllAddons(
-                    type = item.apiType,
-                    id = item.id,
-                    cacheOnDisk = true,
-                    origin = "home_visible_hydration"
-                )
-                    .first { result -> result !is com.nexio.tv.core.network.NetworkResult.Loading }
+                overlayProviderLocalizedMetadata(item, onLog)
             }
         }
         onLog(
