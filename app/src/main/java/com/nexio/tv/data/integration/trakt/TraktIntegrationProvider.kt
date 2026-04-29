@@ -962,15 +962,15 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_LISTS,
             operationKey = accountOperationKey(session, "trakt.popular.lists"),
-            cacheKey = accountCacheKey(session, "trakt:popular:lists:page:$page:limit:$limit"),
+            cacheKey = globalContentCacheKey("trakt:popular:lists:page:$page:limit:$limit"),
             codec = gsonCodec<List<TraktPopularListItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularLists(
