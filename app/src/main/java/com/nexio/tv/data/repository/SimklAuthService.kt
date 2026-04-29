@@ -19,6 +19,19 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] Retrofit-usage check.
+ *
+ * This service drives the SIMKL PIN-code grant flow through [SimklAuthIntegrationProvider], which
+ * wraps raw Retrofit calls that predate the [IntegrationRuntime]. The multi-step flow (PIN-code
+ * request → PIN-status poll → token save) runs before any runtime context is established, making
+ * it impractical to route through the runtime at present.
+ *
+ * Migration plan: when the runtime gains support for pre-auth or session-less contexts (no current
+ * ETA), route these flows through it and remove this file from the boundary allowlist.
+ *
+ * Tracking: review-dossier-2/09-known-gaps.md F2-C-06.
+ */
 sealed interface SimklTokenPollResult {
     data object Pending : SimklTokenPollResult
     data class SlowDown(val pollIntervalSeconds: Int) : SimklTokenPollResult
