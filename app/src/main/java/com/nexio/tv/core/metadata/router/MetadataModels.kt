@@ -61,7 +61,6 @@ enum class FieldOwner {
     TRAILERS,
     RECOMMENDATIONS,
     TRACKING,
-    SKIP_SEGMENTS,
     ORGANIZATION_PERSON
 }
 
@@ -84,7 +83,6 @@ internal fun FieldOwner.defaultSourceRole(): SourceRole = when (this) {
     FieldOwner.REVIEWS,
     FieldOwner.TRAILERS,
     FieldOwner.RECOMMENDATIONS,
-    FieldOwner.SKIP_SEGMENTS,
     FieldOwner.ORGANIZATION_PERSON -> SourceRole.SECONDARY
 }
 
