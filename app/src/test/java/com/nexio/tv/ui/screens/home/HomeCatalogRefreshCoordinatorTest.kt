@@ -293,6 +293,9 @@ class HomeCatalogRefreshCoordinatorTest {
         verify(exactly = 0) {
             metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
         }
+        verify(exactly = 0) {
+            metaRepository.getMeta(any(), any(), any(), any(), any(), any())
+        }
         coVerify(exactly = 1) {
             coordinator.refreshSerially(
                 addons = listOf(addon()),
