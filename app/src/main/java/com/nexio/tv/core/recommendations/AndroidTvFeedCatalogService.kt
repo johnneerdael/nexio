@@ -2,6 +2,7 @@ package com.nexio.tv.core.recommendations
 
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
@@ -39,6 +40,7 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -71,6 +73,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val profileManager: ProfileManager,
     private val traktDiscoveryService: TraktDiscoveryService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
@@ -147,7 +150,11 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
+        val activeProfileId = profileManager.activeProfileId.value
+        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot()
+            .filter { it.profileId == activeProfileId }
+            .first()
+            .snapshot
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -222,7 +229,11 @@ class AndroidTvFeedCatalogService @Inject constructor(
             }
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
-        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
+        val activeProfileId = profileManager.activeProfileId.value
+        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot()
+            .filter { it.profileId == activeProfileId }
+            .first()
+            .snapshot
 
         val optionByKey = buildFeedOptions(
             addons = addons,
