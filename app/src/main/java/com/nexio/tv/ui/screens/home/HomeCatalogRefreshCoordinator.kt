@@ -20,6 +20,7 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.applyTo
@@ -353,14 +354,13 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
             runCatching {
                 val hydrated = overlayProviderLocalizedMetadata(item, onLog)
-                if (hydrated != item) {
+                val originalDisplay = item.toHomeDisplayMetadata().withoutProviderArtwork()
+                val hydratedDisplay = hydrated.toHomeDisplayMetadata().withoutProviderArtwork()
+                if (hydratedDisplay != originalDisplay) {
                     metadataDiskCacheStore.writeHomeDisplayMetadata(
                         itemKey = itemKey,
                         languageTag = languageTag,
-                        metadata = hydrated.toHomeDisplayMetadata().copy(
-                            poster = null,
-                            posterProviderTag = null
-                        )
+                        metadata = hydratedDisplay
                     )
                 }
             }
@@ -514,6 +514,13 @@ internal fun shouldReusePersistedHomeItem(
     persistedFallback: MetaPreview?
 ): Boolean {
     return !itemChanged && persistedFallback?.tomatoesRating != null
+}
+
+private fun HomeDisplayMetadata.withoutProviderArtwork(): HomeDisplayMetadata {
+    return copy(
+        poster = null,
+        posterProviderTag = null
+    )
 }
 
 internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadataEnrichment): MetaPreview {
