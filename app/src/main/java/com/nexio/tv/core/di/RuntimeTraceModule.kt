@@ -38,7 +38,7 @@ object RuntimeTraceModule {
     fun provideTraceBuildInfo(): TraceBuildInfo = TraceBuildInfo(
         appVersion = BuildConfig.VERSION_NAME,
         buildType = BuildConfig.BUILD_TYPE,
-        gitSha = null,
+        gitSha = BuildConfig.GIT_SHA, // F2-I-01
         deviceModel = android.os.Build.MODEL ?: "unknown",
         androidVersion = android.os.Build.VERSION.RELEASE ?: "unknown"
     )
