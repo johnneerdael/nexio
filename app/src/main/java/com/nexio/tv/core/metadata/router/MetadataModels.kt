@@ -165,7 +165,7 @@ data class ResolverSchedule(
     val networkResolvers: List<ResolverType>
 )
 
-enum class ProviderPlanRole { PRIMARY_CORE, MEDIA, SECONDARY, SEASON, PLAYER }
+enum class ProviderPlanRole { PRIMARY_CORE, MEDIA, SECONDARY, SEASON, PLAYER, ARTWORK }
 
 data class MetadataSourceContext(
     val addonId: String? = null,
