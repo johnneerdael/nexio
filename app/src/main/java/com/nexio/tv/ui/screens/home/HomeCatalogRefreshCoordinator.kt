@@ -60,6 +60,22 @@ internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPr
     )
 }
 
+internal fun mergeHydratedCatalogRowIntoCurrent(
+    rawRow: CatalogRow,
+    hydratedRow: CatalogRow,
+    currentRow: CatalogRow
+): CatalogRow {
+    val rawItemsByKey = rawRow.items.associateBy { "${it.apiType}:${it.id}" }
+    val hydratedItemsByKey = hydratedRow.items.associateBy { "${it.apiType}:${it.id}" }
+    val mergedItems = currentRow.items.map { currentItem ->
+        val itemKey = "${currentItem.apiType}:${currentItem.id}"
+        val rawItem = rawItemsByKey[itemKey] ?: return@map currentItem
+        val hydratedItem = hydratedItemsByKey[itemKey] ?: return@map currentItem
+        if (currentItem == rawItem) hydratedItem else currentItem
+    }
+    return currentRow.copy(items = mergedItems)
+}
+
 private data class SerialRefreshEntry(
     val catalogKey: String,
     val row: CatalogRow,
@@ -243,12 +259,22 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
             refreshedEntries.zip(hydratedRows).forEach { (entry, hydrated) ->
                 if (hydrated != entry.row) {
-                    onCatalogReady(
-                        entry.catalogKey,
-                        hydrated,
-                        diffCatalogItems(entry.row.items, hydrated.items)
-                    )
-                    onLog("catalog_provider_overlay_ready", "catalogKey=${entry.catalogKey}")
+                    val currentRow = getCurrentRow(entry.catalogKey)
+                    val rowToPublish = currentRow?.let { current ->
+                        mergeHydratedCatalogRowIntoCurrent(
+                            rawRow = entry.row,
+                            hydratedRow = hydrated,
+                            currentRow = current
+                        )
+                    } ?: hydrated
+                    if (rowToPublish != currentRow) {
+                        onCatalogReady(
+                            entry.catalogKey,
+                            rowToPublish,
+                            diffCatalogItems(currentRow?.items ?: entry.row.items, rowToPublish.items)
+                        )
+                        onLog("catalog_provider_overlay_ready", "catalogKey=${entry.catalogKey}")
+                    }
                 }
 
                 entry.diff.removed.forEach { removed ->
