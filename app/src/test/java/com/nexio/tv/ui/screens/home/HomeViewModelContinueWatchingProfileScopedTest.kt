@@ -4,7 +4,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * F-G-01 part 1 (Cluster D Task 4): the home VM's continue-watching subscription must be
+ * F-G-01 (Cluster D Tasks 4 + 5): the home VM's continue-watching subscription must be
  * profile-scoped at the flow API boundary, not via an in-lambda early-return on a
  * mismatched [com.nexio.tv.data.repository.ProfileOwnedContinueWatchingSnapshot.profileId].
  *
@@ -14,10 +14,11 @@ import java.io.File
  *
  *   1. The unscoped form `observeSnapshot().collectLatest { ... }` (without an
  *      intervening `.filter` on `profileId`) must not appear.
- *   2. The subscription must either route through
- *      `observeContinueWatching(<profile-id>)` *or* through `observeSnapshot()` with an
- *      explicit `.filter { ... profileId ... }` on the flow chain (path A in the cluster
- *      D plan), keeping snapshot-shape access for downstream consumers.
+ *   2. The subscription must route through one of:
+ *      - `observeProfileSnapshot(<profile-id>)` (path B, Task 5 — preferred)
+ *      - `observeContinueWatching(<profile-id>)` (path B legacy name)
+ *      - `observeSnapshot()` with an explicit `.filter { ... profileId ... }` on the
+ *        flow chain (path A in the cluster D plan)
  *
  * Task 6 uses the same source-level assertion technique for the rail/home wiring.
  */
@@ -45,10 +46,12 @@ class HomeViewModelContinueWatchingProfileScopedTest {
 
         // Locate the snapshot subscription block. It must exist so we can analyse it.
         val subscriptionRegex = Regex(
-            """continueWatchingSnapshotService\s*\.\s*(observeSnapshot|observeContinueWatching)\b[^{]*"""
+            """continueWatchingSnapshotService\s*\.\s*(observeSnapshot|observeContinueWatching|observeProfileSnapshot)\b[^{]*"""
         )
         val match = subscriptionRegex.find(source)
-            ?: error("expected continueWatchingSnapshotService.observe(Snapshot|ContinueWatching) call")
+            ?: error(
+                "expected continueWatchingSnapshotService.observe(Snapshot|ContinueWatching|ProfileSnapshot) call"
+            )
 
         val callsObserveSnapshot = match.groupValues[1] == "observeSnapshot"
         if (callsObserveSnapshot) {
@@ -64,17 +67,18 @@ class HomeViewModelContinueWatchingProfileScopedTest {
             val hasProfileFilter = Regex("""\.filter\s*\{[^}]*profileId[^}]*}""").containsMatchIn(window) ||
                 Regex("""observeContinueWatching\s*\(""").containsMatchIn(window)
             check(hasProfileFilter) {
-                "F-G-01 part 1: continueWatchingSnapshotService.observeSnapshot() must be " +
+                "F-G-01: continueWatchingSnapshotService.observeSnapshot() must be " +
                     "profile-scoped at the flow boundary (chained .filter on profileId, or " +
-                    "routed via observeContinueWatching). Found unscoped subscription at " +
-                    "char index $windowStart in ${sourceFile.path}."
+                    "routed via observeContinueWatching/observeProfileSnapshot). Found unscoped " +
+                    "subscription at char index $windowStart in ${sourceFile.path}."
             }
         } else {
-            // Path B: observeContinueWatching(...) must receive the active profile id.
+            // Path B: observeContinueWatching(...) or observeProfileSnapshot(...) must
+            // receive the active profile id.
             val callExpr = match.value
             check(Regex("""profileId|activeProfileId|activeHomeProfileSession""").containsMatchIn(callExpr)) {
-                "F-G-01 part 1: observeContinueWatching(...) must be invoked with the active " +
-                    "profile id. Got: $callExpr"
+                "F-G-01: observeContinueWatching/observeProfileSnapshot must be invoked with " +
+                    "the active profile id. Got: $callExpr"
             }
         }
     }
