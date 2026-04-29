@@ -7,6 +7,8 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
+import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -19,6 +21,7 @@ import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -167,6 +170,16 @@ class HomeCatalogRefreshCoordinatorTest {
                 supportsSkip = false
             )
         } returns Result.success(catalogRow)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "Provider title",
+                description = "Provider description",
+                releaseInfo = "2027"
+            )
+        )
 
         val refreshed = coordinator(
             catalogRepository = catalogRepository,
@@ -178,17 +191,22 @@ class HomeCatalogRefreshCoordinatorTest {
             getCurrentRow = { null },
             isItemReferencedElsewhere = { _, _ -> false },
             onCatalogReady = { _, row, _ ->
-                coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+                if (publishedRows.isEmpty()) {
+                    coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+                }
                 publishedRows += row
             },
             onLog = { _, _ -> }
         )
 
         assertEquals(1, refreshed)
-        assertEquals(1, publishedRows.size)
-        assertEquals("tt-first-paint", publishedRows.single().items.single().id)
-        assertEquals("Catalog payload description", publishedRows.single().items.single().description)
-        assertEquals("2026", publishedRows.single().items.single().releaseInfo)
+        assertEquals(2, publishedRows.size)
+        assertEquals("tt-first-paint", publishedRows[0].items.single().id)
+        assertEquals("Catalog payload description", publishedRows[0].items.single().description)
+        assertEquals("2026", publishedRows[0].items.single().releaseInfo)
+        assertEquals("Provider title", publishedRows[1].items.single().name)
+        assertEquals("Provider description", publishedRows[1].items.single().description)
+        assertEquals("2026", publishedRows[1].items.single().releaseInfo)
         coVerify(exactly = 1) {
             catalogRepository.refreshCatalogToDisk(
                 addonBaseUrl = "https://addon.example",
@@ -202,7 +220,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 supportsSkip = false
             )
         }
-        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
