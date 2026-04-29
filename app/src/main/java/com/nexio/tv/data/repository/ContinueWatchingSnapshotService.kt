@@ -324,7 +324,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 snapshotStore.write(normalized, profileId = profileId)
                 emitWrite(
                     profileId = profileId,
-                    recordCount = normalized.resumeItems.size + normalized.nextUpItems.size
+                    recordCount = normalized.resumeItems.size + normalized.nextUpItems.size + normalized.traktUpNextItems.size
                 )
             }
             val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
@@ -344,7 +344,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val current = snapshotState.value
             emitRead(
                 profileId = current.profileId.takeIf { it > 0 } ?: activeProfileId(),
-                recordCount = current.snapshot.resumeItems.size + current.snapshot.nextUpItems.size
+                recordCount = current.snapshot.resumeItems.size + current.snapshot.nextUpItems.size + current.snapshot.traktUpNextItems.size
             )
             scope.launch {
                 runCatching { ensureFresh(force = false) }
@@ -938,7 +938,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         snapshotStore.write(hydrated, profileId = profileId)
         emitWrite(
             profileId = profileId,
-            recordCount = hydrated.resumeItems.size + hydrated.nextUpItems.size
+            recordCount = hydrated.resumeItems.size + hydrated.nextUpItems.size + hydrated.traktUpNextItems.size
         )
         val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = hydrated)
         rawSnapshotState.value = owned
