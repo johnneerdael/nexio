@@ -29,7 +29,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -71,28 +70,12 @@ internal suspend fun <T, R> mapContinueWatchingEnrichmentWithLimit(
 
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
-        // F-G-01 part 1: profile-scope the subscription at the flow boundary instead of
-        // relying on an in-lambda early-return. We retain `observeSnapshot()` (path A in
-        // the cluster D plan) because downstream consumers below depend on snapshot-level
-        // fields (resumeItems / nextUpItems / traktUpNextItems / displayMetadataByItemKey
-        // / metadataSnapshotsByItemKey) that the leaner `ContinueWatchingRecord` shape
-        // returned by `observeContinueWatching(profileId)` does not expose. Migrating to
-        // the leaner shape (path B) is deferred until the snapshot-shape consumers
-        // downstream are themselves moved to record-shaped data.
-        continueWatchingSnapshotService.observeSnapshot()
-            .filter { ownedSnapshot ->
-                val matches = ownedSnapshot.profileId == activeHomeProfileSession.profileId
-                if (!matches) {
-                    Log.d(
-                        HomeViewModel.TAG,
-                        "Skipping foreign continue watching snapshot profile=${ownedSnapshot.profileId}"
-                    )
-                }
-                matches
-            }
-            .collectLatest { ownedSnapshot ->
+        // F-G-01 path B: profile-scope the subscription at the typed API boundary.
+        // observeProfileSnapshot(profileId) filters upstream so only snapshots for the
+        // active profile reach this collector — no manual .filter or unwrapping needed.
+        continueWatchingSnapshotService.observeProfileSnapshot(activeHomeProfileSession.profileId)
+            .collectLatest { snapshot ->
             val capturedGeneration = homeProfileGeneration
-            val snapshot = ownedSnapshot.snapshot
             val timeline = buildMixedContinueWatchingTimeline(
                 resumeItems = snapshot.resumeItems,
                 nextUpItems = snapshot.nextUpItems,
