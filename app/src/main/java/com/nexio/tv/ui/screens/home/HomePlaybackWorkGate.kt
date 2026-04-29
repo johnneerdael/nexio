@@ -39,9 +39,6 @@ internal fun HomeViewModel.cancelNonPlaybackHomeWorkForPlayback() {
     tmdbEnrichFocusJob?.cancel()
     tmdbEnrichFocusJob = null
 
-    externalMetaPrefetchJob?.cancel()
-    externalMetaPrefetchJob = null
-
     adjacentItemPrefetchJob?.cancel()
     adjacentItemPrefetchJob = null
 
@@ -65,12 +62,9 @@ internal fun HomeViewModel.cancelNonPlaybackHomeWorkForPlayback() {
     movieWatchedObserverJobs.clear()
 
     pendingFocusedItemForEnrichment = null
-    pendingExternalMetaPrefetchItemId = null
     pendingAdjacentPrefetchItemId = null
     pendingTmdbEnrichItemId = null
     pendingProviderEnrichmentByItemId.clear()
-    pendingMetaEnrichmentByItemId.clear()
-    externalMetaPrefetchInFlightIds.clear()
     setEnrichingItemId(null)
     trailerPreviewLoadingIds.clear()
 

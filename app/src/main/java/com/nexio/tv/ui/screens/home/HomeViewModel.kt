@@ -58,7 +58,6 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.LibraryEntryInput
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
@@ -221,7 +220,6 @@ class HomeViewModel @Inject constructor(
     internal var pendingHomeSnapshotPersist: HomeCatalogSnapshotStore.Snapshot? = null
     internal var homeSnapshotPersistGeneration: Long = 0L
     internal val pendingProviderEnrichmentByItemId = linkedMapOf<String, TvMetadataEnrichment>()
-    internal val pendingMetaEnrichmentByItemId = linkedMapOf<String, Meta>()
     internal val pendingTomatoesEnrichmentByItemId = linkedMapOf<String, Double>()
     internal val syntheticTomatoesOverridesByItemId = linkedMapOf<String, Double>()
     internal var metadataEnrichmentFlushJob: Job? = null
@@ -275,12 +273,9 @@ class HomeViewModel @Inject constructor(
     internal var trailerPreviewJob: Job? = null
     internal val trailerMetadataAvailabilitySemaphore = Semaphore(4)
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
-    internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val prefetchedTomatoesIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val tomatoesEnrichmentInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var pendingFocusedItemForEnrichment: MetaPreview? = null
-    internal var externalMetaPrefetchJob: Job? = null
-    internal var pendingExternalMetaPrefetchItemId: String? = null
     internal var adjacentItemPrefetchJob: Job? = null
     internal var pendingAdjacentPrefetchItemId: String? = null
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
@@ -289,8 +284,6 @@ class HomeViewModel @Inject constructor(
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var activePosterListPickerInput: LibraryEntryInput? = null
-    @Volatile
-    internal var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
     internal var restoredCatalogSnapshotActive: Boolean = false
     @Volatile
@@ -917,7 +910,6 @@ class HomeViewModel @Inject constructor(
         trailerAvailabilityJobs.forEach { it.cancel() }
         homeSnapshotPersistJob?.cancel()
         pendingProviderEnrichmentByItemId.clear()
-        pendingMetaEnrichmentByItemId.clear()
         pendingHomeSnapshotPersist = null
         cancelInFlightCatalogLoads()
         posterLibraryObserverJobs.values.forEach { it.cancel() }
