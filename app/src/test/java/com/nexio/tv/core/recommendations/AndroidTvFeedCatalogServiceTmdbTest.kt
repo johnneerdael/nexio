@@ -13,7 +13,6 @@ import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
-import com.nexio.tv.data.repository.ProfileOwnedContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoveryService
@@ -256,9 +255,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             every { catalogPreferences } returns flowOf(tmdbPrefs)
         }
         val continueWatchingSnapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true) {
-            every { observeSnapshot() } returns flowOf(
-                ProfileOwnedContinueWatchingSnapshot(snapshot = ContinueWatchingSnapshot())
-            )
+            every { observeProfileSnapshot(1) } returns flowOf(ContinueWatchingSnapshot())
             coEvery { ensureFresh(force = false) } returns Unit
         }
 
