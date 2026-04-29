@@ -172,6 +172,60 @@ class CatalogMapperTest {
         assertEquals("2026-03-15", preview.releaseInfo)
     }
 
+    @Test
+    fun `addon catalog root preserves mixed item source payload for first paint`() {
+        val response = parseCatalogResponse(
+            """
+            {
+              "metas": [
+                {
+                  "id": "tmdb:687163",
+                  "type": "movie",
+                  "name": "Project Hail Mary",
+                  "poster": "https://image.example/poster-hail-mary.jpg",
+                  "background": "https://image.example/backdrop-hail-mary.jpg",
+                  "imdb_id": "tt12042730"
+                },
+                {
+                  "id": "tt14403178",
+                  "type": "series",
+                  "name": "Raw IMDb Series",
+                  "poster": "https://image.example/poster-series.jpg",
+                  "background": "https://image.example/backdrop-series.jpg",
+                  "behaviorHints": {
+                    "defaultVideoId": "tt14403178"
+                  }
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val previews = response.metas.map { it.toDomain() }
+        val movie = previews[0]
+        val series = previews[1]
+
+        assertEquals("tmdb:687163", movie.id)
+        assertEquals(ContentType.MOVIE, movie.type)
+        assertEquals("movie", movie.rawType)
+        assertEquals("Project Hail Mary", movie.name)
+        assertEquals("https://image.example/poster-hail-mary.jpg", movie.poster)
+        assertEquals("https://image.example/backdrop-hail-mary.jpg", movie.background)
+        assertEquals("687163", movie.firstPaintStableIds.tmdb)
+        assertEquals("tt12042730", movie.firstPaintStableIds.imdb)
+        assertEquals(FirstPaintSource.ADDON_META_PREVIEW, movie.firstPaintSource)
+
+        assertEquals("tt14403178", series.id)
+        assertEquals(ContentType.SERIES, series.type)
+        assertEquals("series", series.rawType)
+        assertEquals("Raw IMDb Series", series.name)
+        assertEquals("https://image.example/poster-series.jpg", series.poster)
+        assertEquals("https://image.example/backdrop-series.jpg", series.background)
+        assertEquals("tt14403178", series.firstPaintStableIds.imdb)
+        assertEquals(null, series.firstPaintStableIds.tmdb)
+        assertEquals(FirstPaintSource.ADDON_META_PREVIEW, series.firstPaintSource)
+    }
+
     private fun parseCatalogResponse(json: String): CatalogResponseDto {
         return Moshi.Builder()
             .build()
