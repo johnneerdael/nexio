@@ -1,8 +1,10 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -489,7 +491,7 @@ class ProviderPlanExecutorTest {
 
     private fun router(): MetadataRouter =
         MetadataRouter(
-            normalizer = MetadataRequestNormalizer(),
+            normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
             idMappingStore = InMemoryIdMappingStore()
         )

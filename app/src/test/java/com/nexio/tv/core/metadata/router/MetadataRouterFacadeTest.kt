@@ -295,7 +295,7 @@ class MetadataRouterFacadeTest {
     ): MetadataRouterFacade =
         MetadataRouterFacade(
             router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
                 idMappingStore = InMemoryIdMappingStore()
             ),

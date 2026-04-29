@@ -17,6 +17,8 @@ import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRequestNormalizer
 import com.nexio.tv.core.metadata.router.MetadataRouter
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
@@ -99,7 +101,9 @@ private const val TAG = "MetaDetailsViewModel"
 private fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFacade =
     MetadataRouterFacade(
         router = MetadataRouter(
-            normalizer = MetadataRequestNormalizer(),
+            normalizer = MetadataRequestNormalizer(
+                traceEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null }
+            ),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
             idMappingStore = InMemoryIdMappingStore()
         ),

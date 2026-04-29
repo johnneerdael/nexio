@@ -22,12 +22,14 @@ import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ProviderExecutionPlan
 import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
+import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.metadata.router.ProviderPlanRole
 import com.nexio.tv.core.metadata.router.ProviderPlanRunner
 import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
@@ -704,7 +706,7 @@ class MetadataAuditRunner private constructor(
             val adapters = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.entries
                 .map { provider -> AuditMetadataProviderAdapter(provider) }
             val router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(
                     mappings = listOf(
                         AnimeIdentityMapping(AnimeIdScheme.IMDB, "tt12343534", "7442"),
