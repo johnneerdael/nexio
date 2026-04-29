@@ -20,10 +20,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] Retrofit-usage check.
+ * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] direct-network-call check.
  *
  * This service drives the SIMKL PIN-code grant flow through [SimklAuthIntegrationProvider], which
- * wraps raw Retrofit calls that predate the [IntegrationRuntime]. The multi-step flow (PIN-code
+ * wraps raw network calls that predate the integration-runtime. The multi-step flow (PIN-code
  * request → PIN-status poll → token save) runs before any runtime context is established, making
  * it impractical to route through the runtime at present.
  *
