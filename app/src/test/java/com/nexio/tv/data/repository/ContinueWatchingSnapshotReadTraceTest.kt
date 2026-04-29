@@ -51,12 +51,20 @@ class ContinueWatchingSnapshotReadTraceTest {
         val payload = readEvents.first().payload as Map<*, *>
         assertTrue("payload must include profileId", payload.containsKey("profileId"))
         assertTrue("payload must include recordCount", payload.containsKey("recordCount"))
+        // F2-G-01: assert profileHash and source are present in the payload envelope
+        assertTrue("payload must include profileHash", payload.containsKey("profileHash"))
+        assertTrue("payload must include source", payload.containsKey("source"))
 
         // Verify payload types and values
         val profileId = payload["profileId"] as? Int
         val recordCount = payload["recordCount"] as? Int
         assertTrue("profileId should be a positive integer", profileId != null && profileId > 0)
         assertTrue("recordCount should be a non-negative integer", recordCount != null && recordCount >= 0)
+
+        // F2-G-01: assert profileHash is a non-blank string and source equals OBSERVE_SUBSCRIBE
+        val profileHash = payload["profileHash"] as? String
+        assertTrue("profileHash must be a non-blank string", !profileHash.isNullOrBlank())
+        assertEquals("source must be OBSERVE_SUBSCRIBE", "OBSERVE_SUBSCRIBE", payload["source"])
 
         // Verify envelope fields are present
         assertEquals("s1", readEvents.first().traceSessionId)

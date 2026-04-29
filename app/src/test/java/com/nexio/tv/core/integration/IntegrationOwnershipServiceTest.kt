@@ -155,7 +155,8 @@ private fun railOwnershipFixture(): RailOwnershipFixture {
     val ownershipService = IntegrationOwnershipService(
         railStoreDao = railStoreDao,
         mediaIdentityDao = mediaIdentityDao,
-        orphanCleanupService = orphanCleanupService
+        orphanCleanupService = orphanCleanupService,
+        db = db
     )
     return RailOwnershipFixture(
         db = db,
