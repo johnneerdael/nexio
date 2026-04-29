@@ -118,7 +118,7 @@ class TmdbIntegrationProvider private constructor(
         val includeAdult = preferences.includeAdult
         return fetchMediaResults(
             cacheKey = "tmdb:search:movie:${query.hashCode()}:adult=$includeAdult",
-            apiShapeId = "tmdb.search.movie",
+            apiShapeId = TmdbApiShapes.SEARCH_MOVIE,
             operationKey = "tmdb.search_movies",
             call = { tmdbApi.searchMovies(apiKey = apiKey, query = query, includeAdult = includeAdult) }
         )
@@ -134,7 +134,7 @@ class TmdbIntegrationProvider private constructor(
         val includeAdult = preferences.includeAdult
         return fetchMediaResults(
             cacheKey = "tmdb:search:tv:${query.hashCode()}:adult=$includeAdult",
-            apiShapeId = "tmdb.search.tv",
+            apiShapeId = TmdbApiShapes.SEARCH_TV,
             operationKey = "tmdb.search_tv",
             call = { tmdbApi.searchTv(apiKey = apiKey, query = query, includeAdult = includeAdult) }
         )
@@ -155,19 +155,19 @@ class TmdbIntegrationProvider private constructor(
         return when (catalogId) {
             TmdbCatalogIds.TRENDING_MOVIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:trending_movies:adult=$includeAdult",
-                apiShapeId = "tmdb.trending.movie",
+                apiShapeId = TmdbApiShapes.TRENDING_MOVIE,
                 operationKey = "tmdb.trending_movies",
                 call = { tmdbApi.getTrendingMovies(apiKey = apiKey) }
             )
             TmdbCatalogIds.TRENDING_SERIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:trending_series:adult=$includeAdult",
-                apiShapeId = "tmdb.trending.tv",
+                apiShapeId = TmdbApiShapes.TRENDING_TV,
                 operationKey = "tmdb.trending_tv",
                 call = { tmdbApi.getTrendingTv(apiKey = apiKey) }
             )
             TmdbCatalogIds.LATEST_RELEASES_MOVIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:latest_releases_movies:adult=$includeAdult:date=$today:unreleased=$hideUnreleasedDigital",
-                apiShapeId = "tmdb.discover.movie",
+                apiShapeId = TmdbApiShapes.DISCOVER_MOVIE,
                 operationKey = "tmdb.discover_movies",
                 call = {
                     tmdbApi.discoverMovies(
@@ -181,7 +181,7 @@ class TmdbIntegrationProvider private constructor(
             )
             TmdbCatalogIds.LATEST_RELEASES_SERIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:latest_releases_series:adult=$includeAdult:date=$today",
-                apiShapeId = "tmdb.discover.tv",
+                apiShapeId = TmdbApiShapes.DISCOVER_TV,
                 operationKey = "tmdb.discover_tv",
                 call = {
                     tmdbApi.discoverTv(
@@ -194,19 +194,19 @@ class TmdbIntegrationProvider private constructor(
             )
             TmdbCatalogIds.POPULAR_MOVIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:popular_movies:adult=$includeAdult",
-                apiShapeId = "tmdb.popular.movie",
+                apiShapeId = TmdbApiShapes.POPULAR_MOVIE,
                 operationKey = "tmdb.popular_movies",
                 call = { tmdbApi.getPopularMovies(apiKey = apiKey) }
             )
             TmdbCatalogIds.POPULAR_SERIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:popular_series:adult=$includeAdult",
-                apiShapeId = "tmdb.popular.tv",
+                apiShapeId = TmdbApiShapes.POPULAR_TV,
                 operationKey = "tmdb.popular_tv",
                 call = { tmdbApi.getPopularTv(apiKey = apiKey) }
             )
             TmdbCatalogIds.YEAR_MOVIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:year_movies:adult=$includeAdult:year=$currentYear",
-                apiShapeId = "tmdb.discover.movie",
+                apiShapeId = TmdbApiShapes.DISCOVER_MOVIE,
                 operationKey = "tmdb.discover_movies",
                 call = {
                     tmdbApi.discoverMovies(
@@ -219,7 +219,7 @@ class TmdbIntegrationProvider private constructor(
             )
             TmdbCatalogIds.YEAR_SERIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:year_series:adult=$includeAdult:year=$currentYear",
-                apiShapeId = "tmdb.discover.tv",
+                apiShapeId = TmdbApiShapes.DISCOVER_TV,
                 operationKey = "tmdb.discover_tv",
                 call = {
                     tmdbApi.discoverTv(
@@ -232,7 +232,7 @@ class TmdbIntegrationProvider private constructor(
             )
             TmdbCatalogIds.LANGUAGE_MOVIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:language_movies:adult=$includeAdult:lang=en",
-                apiShapeId = "tmdb.discover.movie",
+                apiShapeId = TmdbApiShapes.DISCOVER_MOVIE,
                 operationKey = "tmdb.discover_movies",
                 call = {
                     tmdbApi.discoverMovies(
@@ -245,7 +245,7 @@ class TmdbIntegrationProvider private constructor(
             )
             TmdbCatalogIds.LANGUAGE_SERIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:language_series:adult=$includeAdult:lang=en",
-                apiShapeId = "tmdb.discover.tv",
+                apiShapeId = TmdbApiShapes.DISCOVER_TV,
                 operationKey = "tmdb.discover_tv",
                 call = {
                     tmdbApi.discoverTv(

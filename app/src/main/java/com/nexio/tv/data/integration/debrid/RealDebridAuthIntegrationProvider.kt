@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.debrid
 
+import com.nexio.tv.core.integration.DebridApiShapes
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationProvider
@@ -25,7 +26,7 @@ class RealDebridAuthIntegrationProvider @Inject constructor(
         newCredentials: String?
     ): Response<RealDebridDeviceCodeResponseDto>? {
         return authCall(
-            apiShapeId = "real_debrid.device_code",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_DEVICE_CODE,
             operationKey = "real_debrid.device_code"
         ) {
             realDebridApi.requestDeviceCode(clientId = clientId, newCredentials = newCredentials)
@@ -37,7 +38,7 @@ class RealDebridAuthIntegrationProvider @Inject constructor(
         deviceCode: String
     ): Response<RealDebridDeviceCredentialsResponseDto>? {
         return authCall(
-            apiShapeId = "real_debrid.device_credentials",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_DEVICE_CREDENTIALS,
             operationKey = "real_debrid.device_credentials"
         ) {
             realDebridApi.requestDeviceCredentials(clientId = clientId, deviceCode = deviceCode)
@@ -51,7 +52,7 @@ class RealDebridAuthIntegrationProvider @Inject constructor(
         grantType: String
     ): Response<RealDebridTokenResponseDto>? {
         return authCall(
-            apiShapeId = "real_debrid.token",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_TOKEN,
             operationKey = "real_debrid.token"
         ) {
             realDebridApi.requestToken(
@@ -65,7 +66,7 @@ class RealDebridAuthIntegrationProvider @Inject constructor(
 
     suspend fun getCurrentUser(authorization: String): Response<RealDebridUserDto>? {
         return authCall(
-            apiShapeId = "real_debrid.account",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_ACCOUNT,
             operationKey = "real_debrid.account"
         ) {
             realDebridApi.getCurrentUser(authorization)
@@ -74,7 +75,7 @@ class RealDebridAuthIntegrationProvider @Inject constructor(
 
     suspend fun disableCurrentAccessToken(authorization: String): Response<Unit>? {
         return authCall(
-            apiShapeId = "real_debrid.revoke_token",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_REVOKE_TOKEN,
             operationKey = "real_debrid.revoke_token"
         ) {
             realDebridApi.disableCurrentAccessToken(authorization)

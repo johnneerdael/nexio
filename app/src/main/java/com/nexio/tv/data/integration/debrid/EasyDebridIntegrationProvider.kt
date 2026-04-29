@@ -63,7 +63,7 @@ class EasyDebridIntegrationProvider @Inject constructor(
     ): EasyDebridLookupDto? =
         cachedRequest(
             cacheKey = "easydebrid:lookup:${body.hashCode()}:${apiKey.hashCode()}",
-            apiShapeId = "easy_debrid.lookup",
+            apiShapeId = DebridApiShapes.EASY_DEBRID_LOOKUP,
             operationKey = "easy_debrid.lookup",
             codec = gsonCodec<EasyDebridLookupDto>(),
             scope = accountScope(apiKey),
@@ -81,7 +81,7 @@ class EasyDebridIntegrationProvider @Inject constructor(
     ): EasyDebridLookupDetailsDto? =
         cachedRequest(
             cacheKey = "easydebrid:lookupdetails:${body.hashCode()}:${apiKey.hashCode()}",
-            apiShapeId = "easy_debrid.lookup_details",
+            apiShapeId = DebridApiShapes.EASY_DEBRID_LOOKUP_DETAILS,
             operationKey = "easy_debrid.lookup_details",
             codec = gsonCodec<EasyDebridLookupDetailsDto>(),
             scope = accountScope(apiKey),

@@ -6,6 +6,7 @@ import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.YouTubeTrailerApiShapes
 import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import java.net.URI
@@ -31,7 +32,7 @@ class TrailerBackendProvider @Inject constructor(
             val result = runtime.call(
                 IntegrationCallSpec(
                     provider = IntegrationProvider.YOUTUBE_TRAILER,
-                    apiShapeId = "youtube_trailer.transport.execute",
+                    apiShapeId = YouTubeTrailerApiShapes.TRANSPORT_EXECUTE,
                     operationKey = "youtube_trailer.backend.resolve",
                     workClass = IntegrationWorkClass.USER_VISIBLE,
                     call = {
