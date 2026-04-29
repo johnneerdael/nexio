@@ -196,7 +196,8 @@ class MetadataRouterTargetIdsImdbTest {
         val router = MetadataRouter(
             normalizer = MetadataRequestNormalizer(traceEvents = noopEvents()),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
-            idMappingStore = InMemoryIdMappingStore()
+            idMappingStore = InMemoryIdMappingStore(),
+            traceEvents = noopEvents()
         )
 
         val route = router.route(request("tmdb:550", ContentType.MOVIE))
@@ -209,6 +210,7 @@ class MetadataRouterTargetIdsImdbTest {
         normalizer = MetadataRequestNormalizer(traceEvents = noopEvents()),
         animeIdentityIndex = InMemoryAnimeIdentityIndex(),
         idMappingStore = InMemoryIdMappingStore(),
+        traceEvents = noopEvents(),
         tmdbExternalIdLookup = lookup
     )
 
