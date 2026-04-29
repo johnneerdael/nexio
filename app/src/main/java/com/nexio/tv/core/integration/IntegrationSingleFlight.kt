@@ -1,5 +1,6 @@
 package com.nexio.tv.core.integration
 
+import androidx.annotation.VisibleForTesting
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CompletableDeferred
@@ -79,6 +80,7 @@ class IntegrationSingleFlight @Inject constructor() {
         return run(composedKey, block)
     }
 
+    @VisibleForTesting
     @Suppress("UNCHECKED_CAST")
     suspend fun <T> run(
         cacheKey: String,
