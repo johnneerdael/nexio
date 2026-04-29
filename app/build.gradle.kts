@@ -468,6 +468,19 @@ android {
             }
         }
 
+        // Git SHA for trace bundle → commit correlation (F2-I-01)
+        val gitSha: String = try {
+            val process = ProcessBuilder("git", "rev-parse", "HEAD")
+                .directory(rootDir)
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+            if (output.isNotEmpty() && process.waitFor() == 0) output else "local-dev"
+        } catch (e: Exception) {
+            "local-dev"
+        }
+        buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
+
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"johnneerdael\"")
         buildConfigField("String", "GITHUB_REPO", "\"nexio\"")
