@@ -1356,10 +1356,32 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) {
             return IntegrationLoadResult.HttpError(statusCode = 401, reason = "tmdb_api_key_missing")
         }
-        return loadResponse(
-            call = { tmdbApi.getCollectionDetails(collectionId, credential.apiKey, normalizedLanguage) },
-            request = "tmdb_collection"
-        )
+        return when (
+            val result = runtime.get(
+                IntegrationSpec(
+                    provider = IntegrationProvider.TMDB,
+                    apiShapeId = TmdbApiShapes.COLLECTION,
+                    operationKey = "tmdb.collection",
+                    cacheKey = "tmdb:collection:$collectionId:$normalizedLanguage",
+                    codec = gsonCodec<TmdbCollectionResponse>(),
+                    cachePolicy = IntegrationCachePolicy.CacheFirst(
+                        ttlMs = 7L * 24L * 60L * 60L * 1000L,
+                        staleAfterExpiryMs = 30L * 24L * 60L * 60L * 1000L
+                    ),
+                    workClass = IntegrationWorkClass.USER_VISIBLE,
+                    load = {
+                        loadResponse("tmdb_collection") {
+                            tmdbApi.getCollectionDetails(collectionId, credential.apiKey, normalizedLanguage)
+                        }
+                    }
+                )
+            )
+        ) {
+            is IntegrationFetchResult.Fresh -> IntegrationLoadResult.Success(result.value)
+            is IntegrationFetchResult.Updated -> IntegrationLoadResult.Success(result.value)
+            is IntegrationFetchResult.Stale -> IntegrationLoadResult.Success(result.value)
+            IntegrationFetchResult.Missing -> IntegrationLoadResult.HttpError(404, reason = "tmdb_collection:missing")
+        }
     }
 
     suspend fun fetchCompanyDetails(entityId: Int): TmdbCompanyDetailsResponse? {
