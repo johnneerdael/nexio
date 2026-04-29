@@ -5,6 +5,32 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster D landed — trace observability hardening
+
+The 10 cluster-D findings (3 P1 + 6 P2 + 1 nit) have been remediated:
+
+- **F-I-02 + F-02-01** — `HomeFirstPaintCanonicalBoundaryTest` pins first-paint emission at canonical Home presentation boundary only (`191dfc3b5`).
+- **F-I-03** — `generateTraceValidatorAudit` filter expanded to wildcard `*Validator*Test` (catches all current and future validator-affecting tests, including the cluster A + C additions) (`b1ce05a3f`).
+- **F-G-01** — Both un-scoped CW reads now apply explicit `.filter { it.profileId == activeProfileId }` on the snapshot flow: `HomeViewModelContinueWatching` (`5d01b0918`) and `AndroidTvFeedCatalogService` (`a220c3aee`). Path A taken; path B (full migration to `observeContinueWatching(profileId)` records) deferred — record-shape lacks fields downstream consumers need (snapshot-level `traktUpNextItems`, `displayMetadataByItemKey`, etc.).
+- **F-I-01** — `TraceRedactor` covers Simkl/Trakt/TVDB API key headers + OAuth body keys (`0bd26aa26`). 6 parity tests pin the contract.
+- **F-I-04** — `RuntimeTraceInterceptorBodyGatingTest` pins body-sample emission gating across `TraceMode × isInternalBuild` (5 tests) (`eb1608270`).
+- **F-I-05** — `DerivedOkHttpClientTraceWiringTest` architecture-scan pins the count of `OkHttpClient.Builder()` fresh constructions in NetworkModule.kt (`d3037b3e4`). Currently 4 sites: `provideOkHttpClient` (base), `providePlaybackOkHttpClient` (correctly wires its own trace interceptors), and `provideYouTubeTrailerMainOkHttpClient` + `provideYouTubeTrailerProbeOkHttpClient` (BUG: no trace interceptor wiring). The trailer clients are a known bug pinned at the current count for follow-up.
+- **F-F-02** — `ProfileBoundaryEnforcer.assertCanSwitchProfile(...)` emits `profile.boundary_check { verdict = "FAIL", violation = "PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK" }` before throwing; `ProfileManager.setActiveProfile` routes through it (`72fa3d1db`).
+- **F-G-02** — `ContinueWatchingSnapshotReadTraceTest` pins `continue_watching.snapshot_read` envelope shape (`a5ec8f6fa`).
+- **F-G-03** — `recordCount` now includes `traktUpNextItems.size` at all 3 emission sites (`190d7751b`).
+
+OpenSpec change `harden-trace-observability` deployed (`4550b6db1`).
+
+**Audit status:** Re-run of 4 audit gradle tasks: 4 of 4 BUILD SUCCESSFUL (`generateProfileBoundaryAudit`, `generateIntegrationRuntimeAudit`, `generateMetadataExecutionAudit`, `generateTraceValidatorAudit`). The IntegrationRuntimeAudit verdict is now PASS (closed in commit `7b7418ea4` earlier today via the codec backfill + `tmdb.search.people` / `tmdb.search.companies` registry entries).
+
+**Updated decision:** APPROVED for merge. Remaining clusters per `09-known-gaps.md`:
+- Cluster E (Profile/playback hardening): F-F-03..05, F-H-01..02, F-J-02..04
+- Cluster F (Provider contracts + identity + nits): F-B-01..02, F-B-05..07, F-C-02..06
+
+**Two known follow-ups:**
+1. F-I-05 partial closure: `provideYouTubeTrailerMainOkHttpClient` + `provideYouTubeTrailerProbeOkHttpClient` bypass the trace interceptor. Architecture pin catches the count; remediation is a separate PR.
+2. F-G-01 path B: full migration of CW consumers to `List<ContinueWatchingRecord>` shape (instead of filtered snapshot) requires `ContinueWatchingRecord` to gain fields it currently lacks. Defer to a separate plan.
+
 ## Cluster C landed — localization tracing
 
 The 5 cluster-C findings (3 P1 + 1 P2 + 1 nit) have been remediated:
