@@ -215,22 +215,16 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         onCatalogReady(catalogKey, refreshed, diff)
                         onLog("catalog_publish_ready", "catalogKey=$catalogKey")
 
-                        val imageTelemetry = buildImagePrefetchTelemetry(refreshed.items)
-                        onLog(
-                            "image_prefetch_start",
-                            "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
-                        )
-                        if (telemetryEnabled) {
-                            imageTelemetry.itemEvents.forEach { itemEvent ->
-                                onLog(itemEvent.first, "catalogKey=$catalogKey ${itemEvent.second}")
-                            }
+                        val hydrated = hydrateAndPrefetchRows(
+                            rows = listOf(refreshed),
+                            existingRowsByKey = mapOf(catalogKey to refreshed.copy(items = oldItems)),
+                            telemetryEnabled = telemetryEnabled,
+                            onLog = onLog
+                        ).single()
+                        if (hydrated != refreshed) {
+                            onCatalogReady(catalogKey, hydrated, diffCatalogItems(refreshed.items, hydrated.items))
+                            onLog("catalog_provider_overlay_ready", "catalogKey=$catalogKey")
                         }
-                        prefetchImageEntries(imageTelemetry.entriesToFetch)
-                        onLog(
-                            "image_prefetch_end",
-                            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.entriesToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
-                                "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
-                        )
 
                         diff.removed.forEach { removed ->
                             val itemKey = "${removed.apiType}:${removed.id}"
