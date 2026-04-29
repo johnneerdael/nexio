@@ -590,6 +590,10 @@ internal fun HomeViewModel.checkInContinueWatchingPipeline(item: ContinueWatchin
             return@launch
         }
         runCatching {
+            // ARCHITECTURE: checkin runs in ambient-profile context — there's no playback session
+            // to bind a specific owner profile. ownerProfileId reflects the active profile at
+            // invocation time. ownerSessionId is not available here; the boundary check in the
+            // scrobble layer falls back to the current active session. (F2-H-03)
             trackingScrobbleService.checkin(scrobbleItem, ownerProfileId = activeHomeProfileSession.profileId)
         }.onFailure { error ->
             if (error is CancellationException) throw error

@@ -1,11 +1,9 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.integration.ActiveProfileSession
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
 import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.integration.ProfileBoundaryViolation
-import com.nexio.tv.core.integration.ProviderAccountRef
 import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
@@ -22,8 +20,6 @@ class TrackingScrobbleServicePlaybackOwnerTest {
         PlaybackOwnerContext(
             ownerProfileId = profileId,
             ownerSessionId = sessionId,
-            traktAccount = ProviderAccountRef(IntegrationProvider.TRAKT, "h-$profileId", null),
-            simklAccount = null,
             startedAtEpochMs = 1L
         )
 

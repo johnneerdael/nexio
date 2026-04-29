@@ -93,6 +93,13 @@ class DefaultTrackingScrobbleService @Inject constructor(
     }
 
     override suspend fun checkin(item: TrackingScrobbleItem, message: String?, ownerProfileId: Int?): Boolean {
+        // F2-S-04: ownerSessionId is NOT threaded through the checkin path — checkin is an ambient
+        // action (from HomeScreen or MetaDetails, outside a playback session). The sub-services fall
+        // back to profileManager.activeProfileSession.value.sessionId for the boundary check, which
+        // is correct because there is no ownerSessionId to thread here. The scrobble boundary
+        // (assertCanWriteProfileState) still guards against cross-profile writes using ownerProfileId.
+        // Follow-up: if checkin is ever called from within a PlayerViewModel, thread ownerSessionId
+        // through TrackingScrobbleService.checkin() and its implementations. (F2-S-04)
         val providerState = providerState(ownerProfileId)
         return when (providerState.effectiveProvider) {
             TrackingProvider.SIMKL -> {

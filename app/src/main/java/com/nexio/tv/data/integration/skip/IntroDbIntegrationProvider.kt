@@ -31,6 +31,8 @@ class IntroDbIntegrationProvider @Inject constructor(
     ): List<SkipInterval> {
         val spec = IntegrationSpec(
             provider = IntegrationProvider.THEINTRODB,
+            // F2-H-06: Language is intentionally excluded: skip timestamps are audio/subtitle-track-independent
+            // (intro/outro positions are based on the video timeline, not the language track).
             cacheKey = "theintrodb:$contentId:$season:$episode",
             codec = gsonCodec<List<SkipInterval>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
