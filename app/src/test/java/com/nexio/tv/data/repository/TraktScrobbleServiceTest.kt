@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.domain.model.TrackingProvider
@@ -33,7 +34,8 @@ class TraktScrobbleServiceTest {
                 item = movieItem("Existing"),
                 progressPercent = 12f,
                 optimisticVersion = 1L,
-                profileId = 1
+                profileId = 1,
+                ownerSessionId = "session-1"
             ),
             rollbackState = TraktWatchingNowStateController.Snapshot(
                 active = false,
@@ -47,7 +49,8 @@ class TraktScrobbleServiceTest {
                 item = movieItem("Existing"),
                 progressPercent = 42f,
                 optimisticVersion = 2L,
-                profileId = 1
+                profileId = 1,
+                ownerSessionId = "session-1"
             ),
             rollbackState = TraktWatchingNowStateController.Snapshot(
                 active = true,
@@ -85,6 +88,9 @@ class TraktScrobbleServiceTest {
             traktMutationOutboxCoordinator = coordinator,
             profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
                 every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+                every { activeProfileSession } returns kotlinx.coroutines.flow.MutableStateFlow(
+                    ActiveProfileSession(profileId = 1, sessionId = "session-1", sessionOrdinal = 1L, startedAtMs = 1_000L)
+                )
             },
             traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
                 com.nexio.tv.core.trace.NoopRuntimeTraceSink,
@@ -135,6 +141,9 @@ class TraktScrobbleServiceTest {
             traktMutationOutboxCoordinator = coordinator,
             profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
                 every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+                every { activeProfileSession } returns kotlinx.coroutines.flow.MutableStateFlow(
+                    ActiveProfileSession(profileId = 1, sessionId = "session-1", sessionOrdinal = 1L, startedAtMs = 1_000L)
+                )
             },
             traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
                 com.nexio.tv.core.trace.NoopRuntimeTraceSink,
@@ -179,6 +188,9 @@ class TraktScrobbleServiceTest {
             profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
                 // active profile matches the ownerProfileId so the boundary check passes
                 every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(2)
+                every { activeProfileSession } returns kotlinx.coroutines.flow.MutableStateFlow(
+                    ActiveProfileSession(profileId = 2, sessionId = "session-2", sessionOrdinal = 1L, startedAtMs = 1_000L)
+                )
             },
             traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
                 com.nexio.tv.core.trace.NoopRuntimeTraceSink,
@@ -206,12 +218,16 @@ class TraktScrobbleServiceTest {
         coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
 
         val activeProfileIdFlow = kotlinx.coroutines.flow.MutableStateFlow(1)
+        val activeProfileSessionFlow = kotlinx.coroutines.flow.MutableStateFlow(
+            ActiveProfileSession(profileId = 1, sessionId = "session-1", sessionOrdinal = 1L, startedAtMs = 1_000L)
+        )
         val service = TraktScrobbleService(
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
             traktMutationOutboxCoordinator = coordinator,
             profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
                 every { activeProfileId } returns activeProfileIdFlow
+                every { activeProfileSession } returns activeProfileSessionFlow
             },
             traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
                 com.nexio.tv.core.trace.NoopRuntimeTraceSink,
@@ -224,6 +240,7 @@ class TraktScrobbleServiceTest {
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 1)
         // Switch active profile so second call's ownerProfileId=2 also passes boundary
         activeProfileIdFlow.value = 2
+        activeProfileSessionFlow.value = ActiveProfileSession(profileId = 2, sessionId = "session-2", sessionOrdinal = 1L, startedAtMs = 1_000L)
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 2)
 
         assertEquals(listOf(1, 2), envelopes.map { it.profileId })

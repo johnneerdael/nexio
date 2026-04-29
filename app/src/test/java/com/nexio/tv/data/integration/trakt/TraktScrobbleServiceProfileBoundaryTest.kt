@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.trakt
 
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -42,8 +43,17 @@ class TraktScrobbleServiceProfileBoundaryTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s-test" })
         val activeProfileIdFlow = MutableStateFlow(activeProfileId)
+        val activeProfileSessionFlow = MutableStateFlow(
+            ActiveProfileSession(
+                profileId = activeProfileId,
+                sessionId = "session-$activeProfileId",
+                sessionOrdinal = 1L,
+                startedAtMs = 1_000L
+            )
+        )
         val profileManager = mockk<ProfileManager> {
             every { this@mockk.activeProfileId } returns activeProfileIdFlow
+            every { this@mockk.activeProfileSession } returns activeProfileSessionFlow
         }
         val authService = mockk<TraktAuthService> {
             coEvery { getAuthState(any()) } returns TraktAuthState(

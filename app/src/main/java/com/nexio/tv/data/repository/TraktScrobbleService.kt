@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
+import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
@@ -103,61 +105,69 @@ class TraktScrobbleService @Inject constructor(
     private val minSendIntervalMs = 8_000L
     private val progressWindow = 1.5f
 
-    suspend fun scrobbleStart(item: TraktScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null) {
+    suspend fun scrobbleStart(item: TraktScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null, ownerSessionId: String? = null) {
         val session = authSession(ownerProfileId)
         if (!canMutateWatchingState(session)) return
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
+        val resolvedSessionId = ownerSessionId ?: profileManager.activeProfileSession.value.sessionId
         submitMutation(
             request = WatchingMutationRequest.Scrobble(
                 action = "start",
                 item = item,
                 progressPercent = progressPercent,
                 optimisticVersion = optimisticVersion,
-                profileId = session.profileId
+                profileId = session.profileId,
+                ownerSessionId = resolvedSessionId
             )
         )
     }
 
-    suspend fun scrobbleStop(item: TraktScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null) {
+    suspend fun scrobbleStop(item: TraktScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null, ownerSessionId: String? = null) {
         val session = authSession(ownerProfileId)
         if (!canMutateWatchingState(session)) return
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
+        val resolvedSessionId = ownerSessionId ?: profileManager.activeProfileSession.value.sessionId
         submitMutation(
             request = WatchingMutationRequest.Scrobble(
                 action = "stop",
                 item = item,
                 progressPercent = progressPercent,
                 optimisticVersion = optimisticVersion,
-                profileId = session.profileId
+                profileId = session.profileId,
+                ownerSessionId = resolvedSessionId
             )
         )
     }
 
-    suspend fun scrobblePause(item: TraktScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null) {
+    suspend fun scrobblePause(item: TraktScrobbleItem, progressPercent: Float, ownerProfileId: Int? = null, ownerSessionId: String? = null) {
         val session = authSession(ownerProfileId)
         if (!canMutateWatchingState(session)) return
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
+        val resolvedSessionId = ownerSessionId ?: profileManager.activeProfileSession.value.sessionId
         submitMutation(
             request = WatchingMutationRequest.Scrobble(
                 action = "pause",
                 item = item,
                 progressPercent = progressPercent,
                 optimisticVersion = optimisticVersion,
-                profileId = session.profileId
+                profileId = session.profileId,
+                ownerSessionId = resolvedSessionId
             )
         )
     }
 
-    suspend fun checkin(item: TraktScrobbleItem, message: String? = null, ownerProfileId: Int? = null): Boolean {
+    suspend fun checkin(item: TraktScrobbleItem, message: String? = null, ownerProfileId: Int? = null, ownerSessionId: String? = null): Boolean {
         val session = authSession(ownerProfileId)
         if (!canMutateWatchingState(session)) return false
         val optimisticVersion = watchingNowStateController.nextOptimisticVersion()
+        val resolvedSessionId = ownerSessionId ?: profileManager.activeProfileSession.value.sessionId
         return submitMutation(
             request = WatchingMutationRequest.CheckIn(
                 item = item,
                 message = message,
                 optimisticVersion = optimisticVersion,
-                profileId = session.profileId
+                profileId = session.profileId,
+                ownerSessionId = resolvedSessionId
             )
         ) == MutationResult.Success
     }
@@ -239,7 +249,7 @@ class TraktScrobbleService @Inject constructor(
         request: WatchingMutationRequest.CheckIn,
         rollbackState: TraktWatchingNowStateController.Snapshot
     ): MutationResult {
-        if (!checkScrobbleBoundary(request.profileId, "checkin")) return MutationResult.Failed
+        if (!checkScrobbleBoundary(request.profileId, request.ownerSessionId, "checkin")) return MutationResult.Failed
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktScrobbleMutationAdapter.buildCheckinEnvelope(
@@ -263,7 +273,7 @@ class TraktScrobbleService @Inject constructor(
         val action = request.action
         val item = request.item
         val clampedProgress = request.progressPercent.coerceIn(0f, 100f)
-        if (!checkScrobbleBoundary(request.profileId, "scrobble.$action")) return MutationResult.Failed
+        if (!checkScrobbleBoundary(request.profileId, request.ownerSessionId, "scrobble.$action")) return MutationResult.Failed
         if (shouldSkip(request.profileId, action, item.itemKey, clampedProgress)) return MutationResult.Success
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
@@ -291,18 +301,27 @@ class TraktScrobbleService @Inject constructor(
     private fun stateFor(profileId: Int): ProfileScrobbleState =
         profileScrobbleStates.getOrPut(profileId) { ProfileScrobbleState() }
 
-    private fun checkScrobbleBoundary(envelopeProfileId: Int, operation: String): Boolean {
-        val active = profileManager.activeProfileId.value
-        if (envelopeProfileId != active) {
+    private fun checkScrobbleBoundary(envelopeProfileId: Int, envelopeSessionId: String, operation: String): Boolean {
+        val activeSession = profileManager.activeProfileSession.value
+        return try {
+            // F2-H-02: session-aware boundary assertion — catches stale credentialHash / re-auth
+            // scenarios where the profileId matches but the session is no longer valid.
+            ProfileBoundaryEnforcer.assertCanWriteProfileState(
+                resultProfileId = envelopeProfileId,
+                resultSessionId = envelopeSessionId,
+                activeProfileId = activeSession.profileId,
+                activeSessionId = activeSession.sessionId
+            )
+            true
+        } catch (e: ProfileBoundaryException) {
             traceMetadataEvents.emitScrobbleRejected(
                 envelopeProfileId = envelopeProfileId,
-                activeProfileId = active,
+                activeProfileId = activeSession.profileId,
                 operation = "trakt.$operation",
                 reason = "STALE_SESSION_WRITE_REJECTED"
             )
-            return false
+            false
         }
-        return true
     }
 
     private fun shouldSkip(profileId: Int, action: String, itemKey: String, progress: Float): Boolean {
@@ -320,6 +339,7 @@ class TraktScrobbleService @Inject constructor(
 internal sealed interface WatchingMutationRequest {
     val optimisticVersion: Long
     val profileId: Int
+    val ownerSessionId: String
     fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot
 
     data class Scrobble(
@@ -327,7 +347,8 @@ internal sealed interface WatchingMutationRequest {
         val item: TraktScrobbleItem,
         val progressPercent: Float,
         override val optimisticVersion: Long,
-        override val profileId: Int
+        override val profileId: Int,
+        override val ownerSessionId: String
     ) : WatchingMutationRequest {
         override fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot {
             val progress = progressPercent.coerceIn(0f, 100f)
@@ -360,7 +381,8 @@ internal sealed interface WatchingMutationRequest {
         val item: TraktScrobbleItem,
         val message: String?,
         override val optimisticVersion: Long,
-        override val profileId: Int
+        override val profileId: Int,
+        override val ownerSessionId: String
     ) : WatchingMutationRequest {
         override fun toWatchingNowState(): TraktWatchingNowStateController.Snapshot {
             return TraktWatchingNowStateController.Snapshot(
