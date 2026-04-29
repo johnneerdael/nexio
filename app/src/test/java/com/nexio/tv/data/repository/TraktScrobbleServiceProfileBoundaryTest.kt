@@ -66,8 +66,8 @@ class TraktScrobbleServiceProfileBoundaryTest {
             (payload["operation"] as String).contains("scrobble")
         )
 
-        // The enqueue still proceeds (informational trace, not behavior change).
-        coVerify { outbox.enqueueAndDrain(any()) }
+        // Enqueue is now BLOCKED on profile mismatch (F2-H-01 / F2-F-05 behaviour change).
+        coVerify(exactly = 0) { outbox.enqueueAndDrain(any()) }
     }
 
     @Test
