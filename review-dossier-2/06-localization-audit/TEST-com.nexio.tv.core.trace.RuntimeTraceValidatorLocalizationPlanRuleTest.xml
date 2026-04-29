@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.nexio.tv.core.trace.RuntimeTraceValidatorLocalizationPlanRuleTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-04-29T13:38:25.311Z" hostname="KQ2DRW310F" time="0.018">
+  <properties/>
+  <testcase name="validator passes when localization_plan fires between route_decision and provider_plan" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorLocalizationPlanRuleTest" time="0.015"/>
+  <testcase name="validator skips routes targeting providers other than TVDB TMDB Kitsu" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorLocalizationPlanRuleTest" time="0.0"/>
+  <testcase name="validator fails when TVDB route_decision is followed by provider_plan without preceding localization_plan" classname="com.nexio.tv.core.trace.RuntimeTraceValidatorLocalizationPlanRuleTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
