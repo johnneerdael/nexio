@@ -78,6 +78,8 @@ object SimklApiShapes {
     const val DISCOVERY = "simkl.discovery"
     const val LIBRARY_READ = "simkl.library_read"
     const val LIBRARY_WRITE = "simkl.library_write"
+    const val PLAYBACK = "simkl.playback"
+    const val SCROBBLE = "simkl.scrobble"
 }
 
 object SkipApiShapes {
@@ -122,19 +124,58 @@ object TmdbApiShapes {
 }
 
 object TraktApiShapes {
-    const val MOVIE_COMMENTS = "trakt.movie.comments"
-    const val SHOW_COMMENTS = "trakt.show.comments"
+    // Auth
+    const val DEVICE_CODE = "trakt.device_code"
+    const val DEVICE_TOKEN = "trakt.device_token"
+    const val TOKEN_REFRESH = "trakt.token_refresh"
+    const val TOKEN_REVOKE = "trakt.token_revoke"
+    // User
+    const val USER_SETTINGS = "trakt.user.settings"
+    const val USER_STATS = "trakt.user.stats"
+    const val USER_LISTS = "trakt.user.lists"
+    const val USER_LIST_CREATE = "trakt.user.list_create"
+    const val USER_LIST_UPDATE = "trakt.user.list_update"
+    const val USER_LIST_DELETE = "trakt.user.list_delete"
+    const val USER_LIST_ITEMS = "trakt.user.list_items"
+    const val USER_LIST_ITEMS_ADD = "trakt.user.list_items.add"
+    const val USER_LIST_ITEMS_REMOVE = "trakt.user.list_items.remove"
+    const val USER_LISTS_REORDER = "trakt.user.lists_reorder"
+    // Discovery
     const val CALENDAR_SHOWS = "trakt.calendar.shows"
     const val TRENDING_MOVIES = "trakt.trending.movies"
     const val TRENDING_SHOWS = "trakt.trending.shows"
     const val POPULAR_MOVIES = "trakt.popular.movies"
     const val POPULAR_SHOWS = "trakt.popular.shows"
+    const val POPULAR_LISTS = "trakt.popular.lists"
     const val RECOMMENDED_MOVIES = "trakt.recommended.movies"
     const val RECOMMENDED_SHOWS = "trakt.recommended.shows"
+    const val RECOMMENDATION_HIDE = "trakt.recommendation.hide"
+    const val HIDDEN_ITEMS = "trakt.hidden_items"
+    // Collection & watchlist
     const val COLLECTION_MOVIES = "trakt.collection.movies"
     const val COLLECTION_SHOWS = "trakt.collection.shows"
     const val WATCHLIST_MOVIES = "trakt.watchlist.movies"
     const val WATCHLIST_SHOWS = "trakt.watchlist.shows"
+    const val WATCHLIST_ADD = "trakt.watchlist.add"
+    const val WATCHLIST_REMOVE = "trakt.watchlist.remove"
+    // History & watched
+    const val LAST_ACTIVITIES = "trakt.last_activities"
+    const val HISTORY_ADD = "trakt.history.add"
+    const val HISTORY_REMOVE = "trakt.history.remove"
+    const val WATCHED = "trakt.watched"
+    const val WATCHED_SHOWS = "trakt.watched.shows"
+    const val EPISODE_HISTORY = "trakt.episode.history"
+    // Playback & scrobble
+    const val PLAYBACK = "trakt.playback"
+    const val PLAYBACK_DELETE = "trakt.playback.delete"
+    const val SCROBBLE = "trakt.scrobble"
+    const val CHECKIN = "trakt.checkin"
+    // Media detail
+    const val MOVIE_COMMENTS = "trakt.movie.comments"
+    const val SHOW_COMMENTS = "trakt.show.comments"
+    const val SHOW_PROGRESS_WATCHED = "trakt.show.progress_watched"
+    const val SEASON_EPISODES = "trakt.season.episodes"
+    const val EPISODE_SUMMARY = "trakt.episode.summary"
 }
 
 object TvdbApiShapes {
