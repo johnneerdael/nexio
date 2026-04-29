@@ -175,6 +175,10 @@ object TraceValidationRules {
             events.filter { it.eventType == "metadata.field_selected" }
                 .filter { e ->
                     val p = map(e)
+                    // F2-I-06: only flag events where the winner itself was SECONDARY;
+                    // a PRIMARY winner with rejected SECONDARY candidates is not a violation.
+                    val sourceRole = (p["sourceRole"] as? String) ?: return@filter false
+                    if (sourceRole != "SECONDARY") return@filter false
                     val field = (p["field"] as? String)?.uppercase() ?: return@filter false
                     if (field !in protectedFields) return@filter false
                     @Suppress("UNCHECKED_CAST")

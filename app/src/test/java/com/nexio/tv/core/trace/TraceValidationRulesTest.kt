@@ -162,16 +162,18 @@ class TraceValidationRulesTest {
     @Test
     fun `SecondaryDoesNotOverwritePrimary silent for poster, fires for title overwrite`() {
         val rule = TraceValidationRules.SecondaryDoesNotOverwritePrimary
-        // Title selected by secondary while primary was rejected — fires
+        // Title selected by secondary (sourceRole=SECONDARY) while primary was rejected — fires
         assertFires(rule, listOf(envelope("metadata.field_selected", 1L, mapOf(
             "field" to "TITLE",
             "selectedProvider" to "TVDB",
+            "sourceRole" to "SECONDARY",
             "rejectedCandidates" to listOf(mapOf("provider" to "TMDB", "reason" to "x"))
         ))))
         // Same shape for POSTER — silent (poster is not in the protected set)
         assertSilent(rule, listOf(envelope("metadata.field_selected", 1L, mapOf(
             "field" to "POSTER",
             "selectedProvider" to "TVDB",
+            "sourceRole" to "SECONDARY",
             "rejectedCandidates" to listOf(mapOf("provider" to "TMDB", "reason" to "x"))
         ))))
     }
