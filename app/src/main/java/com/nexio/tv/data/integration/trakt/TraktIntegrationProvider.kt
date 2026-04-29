@@ -86,7 +86,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktDeviceCodeRequestDto
     ): Response<TraktDeviceCodeResponseDto>? =
         executeRawResponseCall(
-            apiShapeId = "trakt.device_code",
+            apiShapeId = TraktApiShapes.DEVICE_CODE,
             operationKey = "trakt.device_code.request",
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.Profile(session.profileId)
@@ -99,7 +99,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktDeviceTokenRequestDto
     ): Response<TraktTokenResponseDto>? =
         executeRawResponseCall(
-            apiShapeId = "trakt.device_token",
+            apiShapeId = TraktApiShapes.DEVICE_TOKEN,
             operationKey = "trakt.device_token.request",
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.Profile(session.profileId)
@@ -113,7 +113,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktTokenResponseDto>? {
         val ownerSession = traktAuthService.accountScopedSession(session)
         return executeRawResponseCall(
-            apiShapeId = "trakt.token_refresh",
+            apiShapeId = TraktApiShapes.TOKEN_REFRESH,
             operationKey = accountOperationKey(ownerSession, "trakt.token.refresh"),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = accountScope(ownerSession),
@@ -135,7 +135,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<Unit>? {
         val ownerSession = traktAuthService.accountScopedSession(session)
         return executeRawResponseCall(
-            apiShapeId = "trakt.token_revoke",
+            apiShapeId = TraktApiShapes.TOKEN_REVOKE,
             operationKey = accountOperationKey(ownerSession, "trakt.token.revoke"),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = accountScope(ownerSession),
@@ -150,7 +150,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktUserSettingsResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.settings",
+            apiShapeId = TraktApiShapes.USER_SETTINGS,
             operationKey = "trakt.user.settings",
             workClass = IntegrationWorkClass.USER_VISIBLE
         ) { authorization ->
@@ -159,7 +159,7 @@ class TraktIntegrationProvider @Inject constructor(
 
     suspend fun getLastActivities(): IntegrationCallResult<TraktLastActivitiesResponseDto> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.last_activities",
+            apiShapeId = TraktApiShapes.LAST_ACTIVITIES,
             operationKey = "trakt.last_activities",
             request = { authorization -> traktApi.getLastActivities(authorization) },
             mapSuccess = { response -> response.body().toCallResult() }
@@ -167,7 +167,7 @@ class TraktIntegrationProvider @Inject constructor(
 
     suspend fun getUserStats(id: String): IntegrationCallResult<TraktUserStatsResponseDto> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.user.stats",
+            apiShapeId = TraktApiShapes.USER_STATS,
             operationKey = "trakt.user.stats",
             request = { authorization -> traktApi.getUserStats(authorization = authorization, id = id) },
             mapSuccess = { response -> response.body().toCallResult() }
@@ -178,7 +178,7 @@ class TraktIntegrationProvider @Inject constructor(
         extended: String? = null
     ): IntegrationCallResult<List<TraktWatchedMovieItemDto>> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.watched",
+            apiShapeId = TraktApiShapes.WATCHED,
             operationKey = "trakt.watched.$type",
             request = { authorization ->
                 traktApi.getWatched(
@@ -194,7 +194,7 @@ class TraktIntegrationProvider @Inject constructor(
         extended: String? = null
     ): IntegrationCallResult<List<TraktWatchedShowItemDto>> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.watched.shows",
+            apiShapeId = TraktApiShapes.WATCHED_SHOWS,
             operationKey = "trakt.watched.shows",
             request = { authorization ->
                 traktApi.getWatchedShows(
@@ -212,7 +212,7 @@ class TraktIntegrationProvider @Inject constructor(
         limit: Int
     ): IntegrationCallResult<TraktPagedResponse<List<TraktHiddenItemDto>>> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.hidden_items",
+            apiShapeId = TraktApiShapes.HIDDEN_ITEMS,
             operationKey = "trakt.hidden_items.$section.$type",
             request = { authorization ->
                 traktApi.getHiddenItems(
@@ -239,7 +239,7 @@ class TraktIntegrationProvider @Inject constructor(
         extended: String? = null
     ): IntegrationCallResult<List<TraktEpisodeSummaryDto>> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.season.episodes",
+            apiShapeId = TraktApiShapes.SEASON_EPISODES,
             operationKey = "trakt.season.episodes",
             request = { authorization ->
                 traktApi.getSeasonEpisodes(
@@ -259,7 +259,7 @@ class TraktIntegrationProvider @Inject constructor(
         extended: String? = null
     ): IntegrationCallResult<TraktEpisodeSummaryDto> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.episode.summary",
+            apiShapeId = TraktApiShapes.EPISODE_SUMMARY,
             operationKey = "trakt.episode.summary",
             request = { authorization ->
                 traktApi.getEpisodeSummary(
@@ -278,7 +278,7 @@ class TraktIntegrationProvider @Inject constructor(
         lastActivity: String? = null
     ): IntegrationCallResult<TraktShowProgressResponseDto> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.show.progress_watched",
+            apiShapeId = TraktApiShapes.SHOW_PROGRESS_WATCHED,
             operationKey = "trakt.show.progress_watched",
             request = { authorization ->
                 traktApi.getShowProgressWatched(
@@ -295,7 +295,7 @@ class TraktIntegrationProvider @Inject constructor(
         limit: Int
     ): IntegrationCallResult<TraktPagedResponse<List<TraktUserEpisodeHistoryItemDto>>> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.episode.history",
+            apiShapeId = TraktApiShapes.EPISODE_HISTORY,
             operationKey = "trakt.episode.history",
             request = { authorization ->
                 traktApi.getEpisodeHistory(
@@ -320,7 +320,7 @@ class TraktIntegrationProvider @Inject constructor(
         endAt: String? = null
     ): IntegrationCallResult<List<TraktPlaybackItemDto>> =
         executeAuthorizedBackgroundCall(
-            apiShapeId = "trakt.playback",
+            apiShapeId = TraktApiShapes.PLAYBACK,
             operationKey = "trakt.playback.$type",
             request = { authorization ->
                 traktApi.getPlayback(
@@ -355,7 +355,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<List<TraktListSummaryDto>>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.lists",
+            apiShapeId = TraktApiShapes.USER_LISTS,
             operationKey = "trakt.user.lists",
             workClass = IntegrationWorkClass.BACKGROUND_HYDRATION
         ) { authorization ->
@@ -373,7 +373,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<List<TraktListItemDto>>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.list_items",
+            apiShapeId = TraktApiShapes.USER_LIST_ITEMS,
             operationKey = "trakt.user.list_items.$type",
             workClass = IntegrationWorkClass.BACKGROUND_HYDRATION
         ) { authorization ->
@@ -390,7 +390,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktCreateOrUpdateListRequestDto
     ): Response<TraktListSummaryDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.user.list_create",
+            apiShapeId = TraktApiShapes.USER_LIST_CREATE,
             operationKey = "trakt.user.list_create",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -404,7 +404,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktListSummaryDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.list_create",
+            apiShapeId = TraktApiShapes.USER_LIST_CREATE,
             operationKey = "trakt.user.list_create",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -417,7 +417,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktCreateOrUpdateListRequestDto
     ): Response<TraktListSummaryDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.user.list_update",
+            apiShapeId = TraktApiShapes.USER_LIST_UPDATE,
             operationKey = "trakt.user.list_update",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -432,7 +432,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktListSummaryDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.list_update",
+            apiShapeId = TraktApiShapes.USER_LIST_UPDATE,
             operationKey = "trakt.user.list_update",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -444,7 +444,7 @@ class TraktIntegrationProvider @Inject constructor(
         listId: String
     ): Response<Unit>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.user.list_delete",
+            apiShapeId = TraktApiShapes.USER_LIST_DELETE,
             operationKey = "trakt.user.list_delete",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -458,7 +458,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<Unit>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.list_delete",
+            apiShapeId = TraktApiShapes.USER_LIST_DELETE,
             operationKey = "trakt.user.list_delete",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -470,7 +470,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktReorderListsRequestDto
     ): Response<TraktReorderListsResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.user.lists_reorder",
+            apiShapeId = TraktApiShapes.USER_LISTS_REORDER,
             operationKey = "trakt.user.lists_reorder",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -484,7 +484,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktReorderListsResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.lists_reorder",
+            apiShapeId = TraktApiShapes.USER_LISTS_REORDER,
             operationKey = "trakt.user.lists_reorder",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -495,7 +495,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.watchlist.add",
+            apiShapeId = TraktApiShapes.WATCHLIST_ADD,
             operationKey = "trakt.watchlist.add",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -508,7 +508,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.watchlist.add",
+            apiShapeId = TraktApiShapes.WATCHLIST_ADD,
             operationKey = "trakt.watchlist.add",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -519,7 +519,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.watchlist.remove",
+            apiShapeId = TraktApiShapes.WATCHLIST_REMOVE,
             operationKey = "trakt.watchlist.remove",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -532,7 +532,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.watchlist.remove",
+            apiShapeId = TraktApiShapes.WATCHLIST_REMOVE,
             operationKey = "trakt.watchlist.remove",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -545,7 +545,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.user.list_items.add",
+            apiShapeId = TraktApiShapes.USER_LIST_ITEMS_ADD,
             operationKey = "trakt.user.list_items.add",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -560,7 +560,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.list_items.add",
+            apiShapeId = TraktApiShapes.USER_LIST_ITEMS_ADD,
             operationKey = "trakt.user.list_items.add",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -573,7 +573,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.user.list_items.remove",
+            apiShapeId = TraktApiShapes.USER_LIST_ITEMS_REMOVE,
             operationKey = "trakt.user.list_items.remove",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -588,7 +588,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktListItemsMutationResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.user.list_items.remove",
+            apiShapeId = TraktApiShapes.USER_LIST_ITEMS_REMOVE,
             operationKey = "trakt.user.list_items.remove",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -602,7 +602,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<Unit>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.recommendation.hide",
+            apiShapeId = TraktApiShapes.RECOMMENDATION_HIDE,
             operationKey = "trakt.recommendation.hide.$type",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -617,7 +617,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktHistoryAddRequestDto
     ): Response<TraktHistoryAddResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.history.add",
+            apiShapeId = TraktApiShapes.HISTORY_ADD,
             operationKey = "trakt.history.add",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -630,7 +630,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktHistoryAddResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.history.add",
+            apiShapeId = TraktApiShapes.HISTORY_ADD,
             operationKey = "trakt.history.add",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -641,7 +641,7 @@ class TraktIntegrationProvider @Inject constructor(
         body: TraktHistoryRemoveRequestDto
     ): Response<TraktHistoryRemoveResponseDto>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.history.remove",
+            apiShapeId = TraktApiShapes.HISTORY_REMOVE,
             operationKey = "trakt.history.remove",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -654,7 +654,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktHistoryRemoveResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.history.remove",
+            apiShapeId = TraktApiShapes.HISTORY_REMOVE,
             operationKey = "trakt.history.remove",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -665,7 +665,7 @@ class TraktIntegrationProvider @Inject constructor(
         playbackId: Long
     ): Response<Unit>? =
         executeAuthorizedResponseCall(
-            apiShapeId = "trakt.playback.delete",
+            apiShapeId = TraktApiShapes.PLAYBACK_DELETE,
             operationKey = "trakt.playback.delete",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -678,7 +678,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<Unit>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.playback.delete",
+            apiShapeId = TraktApiShapes.PLAYBACK_DELETE,
             operationKey = "trakt.playback.delete",
             workClass = IntegrationWorkClass.MUTATION_OUTBOX
         ) { authorization ->
@@ -691,7 +691,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktCheckinResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.checkin",
+            apiShapeId = TraktApiShapes.CHECKIN,
             operationKey = "trakt.checkin",
             workClass = IntegrationWorkClass.SCROBBLE
         ) { authorization ->
@@ -705,7 +705,7 @@ class TraktIntegrationProvider @Inject constructor(
     ): Response<TraktScrobbleResponseDto>? =
         executeAuthorizedResponseCall(
             session = session,
-            apiShapeId = "trakt.scrobble",
+            apiShapeId = TraktApiShapes.SCROBBLE,
             operationKey = "trakt.scrobble.$action",
             workClass = IntegrationWorkClass.SCROBBLE
         ) { authorization ->
@@ -956,7 +956,7 @@ class TraktIntegrationProvider @Inject constructor(
         val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
-            apiShapeId = "trakt.popular.lists",
+            apiShapeId = TraktApiShapes.POPULAR_LISTS,
             operationKey = accountOperationKey(session, "trakt.popular.lists"),
             cacheKey = accountCacheKey(session, "trakt:popular:lists:page:$page:limit:$limit"),
             codec = gsonCodec<List<TraktPopularListItemDto>>(),
@@ -994,7 +994,7 @@ class TraktIntegrationProvider @Inject constructor(
         val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
-            apiShapeId = "trakt.user.lists",
+            apiShapeId = TraktApiShapes.USER_LISTS,
             operationKey = accountOperationKey(session, "trakt.user.lists"),
             cacheKey = accountCacheKey(session, "trakt:user:lists:$id"),
             codec = gsonCodec<List<TraktListSummaryDto>>(),
@@ -1033,7 +1033,7 @@ class TraktIntegrationProvider @Inject constructor(
         val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
-            apiShapeId = "trakt.user.list_items",
+            apiShapeId = TraktApiShapes.USER_LIST_ITEMS,
             operationKey = accountOperationKey(session, "trakt.user.list_items.$type"),
             cacheKey = accountCacheKey(session, "trakt:user:list-items:$id:$listId:$type"),
             codec = gsonCodec<List<TraktListItemDto>>(),
