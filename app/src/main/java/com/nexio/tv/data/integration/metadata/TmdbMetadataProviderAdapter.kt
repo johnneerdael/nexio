@@ -138,6 +138,10 @@ class TmdbMetadataProviderAdapter @Inject constructor(
                 integrationProvider.fetchTvVideos(tmdbId, language)
                 emptyCandidate(this.provider)
             }
+            TmdbApiShapes.SEASON_VIDEOS -> {
+                integrationProvider.fetchSeasonVideos(tmdbId, route.seasonNumber ?: 1, language)
+                emptyCandidate(this.provider)
+            }
             TmdbApiShapes.MOVIE_REVIEWS -> {
                 integrationProvider.fetchMovieReviews(tmdbId, language)
                 emptyCandidate(this.provider)
@@ -248,6 +252,7 @@ class TmdbMetadataProviderAdapter @Inject constructor(
             TmdbApiShapes.SEASON_EPISODES,
             TmdbApiShapes.MOVIE_VIDEOS,
             TmdbApiShapes.TV_VIDEOS,
+            TmdbApiShapes.SEASON_VIDEOS,
             TmdbApiShapes.MOVIE_REVIEWS,
             TmdbApiShapes.TV_REVIEWS,
             TmdbApiShapes.MOVIE_RECOMMENDATIONS,

@@ -1576,6 +1576,10 @@ class TmdbIntegrationProvider private constructor(
     }
 }
 
+// F2-C-09: Image cache is intentionally fragmented by display language. TMDB returns
+// language-specific imagery (localized posters, country-specific backdrops) so the cache
+// key includes the requested language. To pursue a language-invariant cache, switch the
+// fetch to TMDB's `include_image_language=null,en` query param and stop varying the key.
 private fun buildImageUrl(path: String?, size: String): String? {
     val clean = path?.trim()?.takeIf { it.isNotBlank() } ?: return null
     return "https://image.tmdb.org/t/p/$size$clean"
