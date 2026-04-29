@@ -123,6 +123,69 @@ object ProfileBoundaryEnforcer {
         )
     }
 
+    /**
+     * F-F-02: emits a `profile.boundary_check` trace event for a profile-switch attempt and
+     * throws ProfileBoundaryException(PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) if rejected.
+     *
+     * Routes the playback-active rejection through the same trace pipeline as cross-profile
+     * write rejections (assertCanWriteProfileState).
+     */
+    fun assertCanSwitchProfile(
+        activeProfileId: Int,
+        targetProfileId: Int,
+        hasActivePlaybackOwner: Boolean
+    ) {
+        if (hasActivePlaybackOwner && activeProfileId != targetProfileId) {
+            emitProfileSwitchBoundaryCheck(
+                activeProfileId = activeProfileId,
+                targetProfileId = targetProfileId,
+                verdict = "FAIL",
+                violation = ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK
+            )
+            throw ProfileBoundaryException(
+                ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK,
+                "Cannot switch profile while playback is active (active=$activeProfileId, target=$targetProfileId)"
+            )
+        }
+        emitProfileSwitchBoundaryCheck(
+            activeProfileId = activeProfileId,
+            targetProfileId = targetProfileId,
+            verdict = "PASS",
+            violation = null
+        )
+    }
+
+    private fun emitProfileSwitchBoundaryCheck(
+        activeProfileId: Int,
+        targetProfileId: Int,
+        verdict: String,
+        violation: ProfileBoundaryViolation?
+    ) {
+        if (traceSink === NoopRuntimeTraceSink) return
+        val sid = traceSessionId() ?: return
+        val activeHash = TraceHash.of(sid, activeProfileId.toString())
+        val targetHash = TraceHash.of(sid, targetProfileId.toString())
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = traceSeq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "profile.boundary_check",
+                payload = mapOf(
+                    "operation" to "profile.switch",
+                    "activeProfileId" to activeProfileId,
+                    "targetProfileId" to targetProfileId,
+                    "activeProfileHash" to activeHash,
+                    "targetProfileHash" to targetHash,
+                    "verdict" to verdict,
+                    "violation" to violation?.name
+                )
+            )
+        )
+    }
+
     fun assertCanWriteProfileState(
         resultProfileId: Int,
         resultSessionId: String,

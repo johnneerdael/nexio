@@ -3,6 +3,7 @@ package com.nexio.tv.core.profile
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.integration.ActiveProfileSession
+import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
 import com.nexio.tv.core.integration.ProfileBoundaryException
 import com.nexio.tv.core.integration.ProfileBoundaryViolation
 import com.nexio.tv.core.locale.AppLocaleResolver
@@ -111,12 +112,14 @@ class ProfileManager(
         if (current.none { it.id == id }) return
         if (_activeProfileId.value == id) return
         val owner = playbackSessionRegistry.activeOwner()
-        if (owner != null) {
-            throw ProfileBoundaryException(
-                ProfileBoundaryViolation.PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK,
-                "Cannot switch profile while playback owned by profile=${owner.ownerProfileId} session=${owner.ownerSessionId} is active"
-            )
-        }
+        // F-F-02: route through enforcer so a profile.boundary_check trace event fires
+        // (with verdict=FAIL, violation=PROFILE_SWITCH_BLOCKED_BY_ACTIVE_PLAYBACK) before
+        // throwing. Throws ProfileBoundaryException itself when rejected.
+        ProfileBoundaryEnforcer.assertCanSwitchProfile(
+            activeProfileId = _activeProfileId.value,
+            targetProfileId = id,
+            hasActivePlaybackOwner = owner != null
+        )
         AppLocaleResolver.setActiveProfileId(context, id)
         _activeProfileId.value = id
         _activeProfileSession.value = newProfileSession(id)
