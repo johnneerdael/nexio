@@ -1,6 +1,9 @@
 package com.nexio.tv.core.integration
 
 import com.nexio.tv.data.local.integration.RailStoreDao
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,13 +18,10 @@ class IntegrationOrphanCleanupService @Inject constructor(
         return cacheStore.deleteOwnedMedia(mediaKey) > 0
     }
 
-    suspend fun cleanupAll(mediaKeys: Collection<String>): List<String> {
-        val deleted = mutableListOf<String>()
-        mediaKeys.distinct().forEach { mediaKey ->
-            if (cleanupIfOrphaned(mediaKey)) {
-                deleted += mediaKey
-            }
-        }
-        return deleted
+    suspend fun cleanupAll(mediaKeys: Collection<String>): List<String> = coroutineScope {
+        mediaKeys.distinct()
+            .map { mediaKey -> async { mediaKey.takeIf { cleanupIfOrphaned(it) } } }
+            .awaitAll()
+            .filterNotNull()
     }
 }
