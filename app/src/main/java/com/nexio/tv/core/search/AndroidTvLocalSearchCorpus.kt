@@ -5,6 +5,7 @@ import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -61,18 +62,39 @@ class AndroidTvLocalSearchCorpus @Inject constructor(
         val title = name.trim()
         val contentType = apiType.trim()
         if (id.isEmpty() || title.isEmpty() || contentType.isEmpty()) return null
+        val displayMetadata = readCurrentHomeDisplayMetadata(contentType, id)
         val enrichedMeta = readCurrentMeta(contentType, id)
         return AndroidTvSearchCandidate(
             id = id,
             contentType = contentType,
-            title = enrichedMeta?.name?.takeIf { it.isNotBlank() } ?: title,
-            poster = enrichedMeta?.poster?.takeIf { it.isNotBlank() } ?: poster,
-            background = enrichedMeta?.background?.takeIf { it.isNotBlank() } ?: background,
-            description = enrichedMeta?.description?.takeIf { it.isNotBlank() } ?: description,
-            releaseInfo = enrichedMeta?.releaseInfo?.takeIf { it.isNotBlank() } ?: releaseInfo,
-            runtime = enrichedMeta?.runtime?.takeIf { it.isNotBlank() } ?: runtime,
+            title = displayMetadata?.title?.takeIf { it.isNotBlank() }
+                ?: enrichedMeta?.name?.takeIf { it.isNotBlank() }
+                ?: title,
+            poster = displayMetadata?.poster?.takeIf { it.isNotBlank() }
+                ?: enrichedMeta?.poster?.takeIf { it.isNotBlank() }
+                ?: poster,
+            background = displayMetadata?.backdrop?.takeIf { it.isNotBlank() }
+                ?: enrichedMeta?.background?.takeIf { it.isNotBlank() }
+                ?: background,
+            description = displayMetadata?.description?.takeIf { it.isNotBlank() }
+                ?: enrichedMeta?.description?.takeIf { it.isNotBlank() }
+                ?: description,
+            releaseInfo = displayMetadata?.releaseInfo?.takeIf { it.isNotBlank() }
+                ?: enrichedMeta?.releaseInfo?.takeIf { it.isNotBlank() }
+                ?: releaseInfo,
+            runtime = displayMetadata?.runtime?.takeIf { it.isNotBlank() }
+                ?: enrichedMeta?.runtime?.takeIf { it.isNotBlank() }
+                ?: runtime,
             addonBaseUrl = addonBaseUrl?.trim()?.takeIf { it.isNotEmpty() },
             source = AndroidTvSearchCandidateSource.LOCAL_HOME
+        )
+    }
+
+    private fun readCurrentHomeDisplayMetadata(contentType: String, id: String): HomeDisplayMetadata? {
+        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
+        return metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(
+            itemKey = "${contentType.trim().lowercase()}:${id.trim()}",
+            languageTag = languageTag
         )
     }
 

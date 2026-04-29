@@ -71,7 +71,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 )
             )
 
-        assertEquals("52", enriched.runtime)
+        assertEquals("52 min", enriched.runtime)
     }
 
     @Test

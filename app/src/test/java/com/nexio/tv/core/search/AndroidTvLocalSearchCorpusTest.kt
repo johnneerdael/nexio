@@ -5,6 +5,7 @@ import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.testutil.InMemorySharedPreferences
@@ -54,6 +55,36 @@ class AndroidTvLocalSearchCorpusTest {
     }
 
     @Test
+    fun `corpus prefers home display metadata over row first paint fields`() = runTest {
+        val snapshotStore = snapshotStore(
+            HomeCatalogSnapshotStore.Snapshot(
+                catalogRows = listOf(row(ContentType.SERIES, "series-1", "Addon Title")),
+                fullCatalogRows = emptyList(),
+                heroItems = emptyList()
+            )
+        )
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.readCurrentMetaForItem(any(), any()) } returns null
+        every {
+            metadataStore.readCurrentHomeDisplayMetadataForItem("series:series-1", "en")
+        } returns HomeDisplayMetadata(
+            title = "Localized Title",
+            runtime = "50 min",
+            poster = "localized-poster",
+            backdrop = "localized-backdrop",
+            description = "Localized description",
+            releaseInfo = "2026"
+        )
+
+        val candidate = corpus(snapshotStore, metadataStore, stubMetadataStore = false).candidates().single()
+
+        assertEquals("Localized Title", candidate.title)
+        assertEquals("50 min", candidate.runtime)
+        assertEquals("localized-poster", candidate.poster)
+        assertEquals("localized-backdrop", candidate.background)
+    }
+
+    @Test
     fun `snapshot absence returns empty candidates`() = runTest {
         val snapshotStore = mockk<HomeCatalogSnapshotStore>()
         coEvery { snapshotStore.currentPosterProviderToken() } returns "native"
@@ -62,9 +93,15 @@ class AndroidTvLocalSearchCorpusTest {
         assertTrue(corpus(snapshotStore).candidates().isEmpty())
     }
 
-    private fun corpus(snapshotStore: HomeCatalogSnapshotStore): AndroidTvLocalSearchCorpus {
-        val metadataStore = mockk<MetadataDiskCacheStore>()
-        every { metadataStore.readCurrentMetaForItem(any(), any()) } returns null
+    private fun corpus(
+        snapshotStore: HomeCatalogSnapshotStore,
+        metadataStore: MetadataDiskCacheStore = mockk(),
+        stubMetadataStore: Boolean = true
+    ): AndroidTvLocalSearchCorpus {
+        if (stubMetadataStore) {
+            every { metadataStore.readCurrentMetaForItem(any(), any()) } returns null
+            every { metadataStore.readCurrentHomeDisplayMetadataForItem(any(), any()) } returns null
+        }
         val localePrefs = InMemorySharedPreferences().also {
             it.edit().putString("locale_tag", "en").apply()
         }
