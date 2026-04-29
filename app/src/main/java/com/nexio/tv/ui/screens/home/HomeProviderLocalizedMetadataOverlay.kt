@@ -72,49 +72,11 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
     return providerLocalizedMetadataResolver.fetchDecision(metadataRequest, tvRequest)
 }
 
-internal suspend fun MetadataRouterFacade.resolveHomeRequest(
-    item: MetaPreview,
-    depth: MetadataDepth,
-    language: String? = null,
-    seasonNumber: Int? = null
-) {
-    try {
-        resolveRequest(
-            MetadataRequest(
-                contentId = item.id,
-                contentType = item.type,
-                sourceContext = item.toHomeMetadataSourceContext(),
-                language = language,
-                seasonNumber = seasonNumber,
-                depth = depth
-            )
-        )
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        // Facade sidecar is audit/migration-only here; legacy provider path remains authoritative.
-    }
-}
-
 internal fun HomeViewModel.metadataRouterFacadeOrNull(): MetadataRouterFacade? =
     runCatching { metadataRouterFacade }.getOrNull()
 
 internal fun HomeViewModel.providerLocalizedMetadataResolverOrNull(): ProviderLocalizedMetadataResolver? =
     runCatching { providerLocalizedMetadataResolver }.getOrNull()
-
-internal suspend fun HomeViewModel.resolveHomeRequestIfAvailable(
-    item: MetaPreview,
-    depth: MetadataDepth,
-    language: String? = null,
-    seasonNumber: Int? = null
-) {
-    metadataRouterFacadeOrNull()?.resolveHomeRequest(
-        item = item,
-        depth = depth,
-        language = language,
-        seasonNumber = seasonNumber
-    )
-}
 
 internal fun MetaPreview.toHomeMetadataSourceContext(
     addonMetadata: HomeDisplayMetadata = toHomeDisplayMetadata()
