@@ -824,6 +824,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    internal suspend fun flushCatalogRowsForFirstPaint() {
+        if (shouldSuppressIncrementalHomeSnapshotPublish()) {
+            return
+        }
+        catalogUpdateJob?.cancel()
+        hasRenderedFirstCatalog = true
+        updateCatalogRows()
+    }
+
     private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
     private suspend fun runSerializedPostStartupRefresh(expectedGeneration: Long, reason: String) =
         runSerializedPostStartupRefreshPipeline(expectedGeneration, reason)

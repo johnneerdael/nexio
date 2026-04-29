@@ -338,6 +338,8 @@ class HomeCatalogRefreshCoordinatorTest {
         val coordinator = mockk<HomeCatalogRefreshCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
         val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val renderedRows = mutableListOf<List<CatalogRow>>()
         val catalogPreview = preview(id = "tt-viewmodel-first-paint", poster = null).copy(
             description = "ViewModel catalog payload",
             releaseInfo = "2026"
@@ -361,7 +363,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.startupPerfTelemetryEnabled } returns false
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
-        every { viewModel._fullCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel._fullCatalogRows } returns fullCatalogRows
         every { viewModel.activeProfileTraktAuthenticated } returns false
         every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
         every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
@@ -384,6 +386,10 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
+        coEvery { viewModel.flushCatalogRowsForFirstPaint() } coAnswers {
+            fullCatalogRows.value = catalogsMap.values.toList()
+            renderedRows += fullCatalogRows.value
+        }
         coEvery {
             coordinator.refreshSerially(
                 addons = any(),
@@ -412,6 +418,7 @@ class HomeCatalogRefreshCoordinatorTest {
         }
 
         assertEquals(catalogRow, catalogsMap["addon_movie_popular"])
+        assertEquals(listOf(listOf(catalogRow)), renderedRows)
         verify(exactly = 0) {
             metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
         }
@@ -429,6 +436,85 @@ class HomeCatalogRefreshCoordinatorTest {
                 onLog = any()
             )
         }
+        coVerify(exactly = 1) { viewModel.flushCatalogRowsForFirstPaint() }
+    }
+
+    @Test
+    fun `hydrated catalog republish preserves appended row items and loading state`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val rawPreview = preview(id = "tt-first-page", poster = null).copy(name = "Raw first")
+        val appendedPreview = preview(id = "tt-appended", poster = null).copy(name = "Appended")
+        val rawRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = true,
+            currentPage = 0,
+            supportsSkip = true,
+            skipStep = 100
+        )
+        val currentRowAfterLoadMore = rawRow.copy(
+            items = listOf(rawPreview, appendedPreview),
+            isLoading = true,
+            currentPage = 1,
+            hasMore = false
+        )
+        val publishedRows = mutableListOf<CatalogRow>()
+        var currentRow: CatalogRow? = null
+
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://addon.example",
+                addonId = "addon",
+                addonName = "Addon",
+                catalogId = "popular",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                supportsSkip = false
+            )
+        } returns Result.success(rawRow)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "Hydrated first"
+            )
+        )
+
+        coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter
+        ).refreshSerially(
+            addons = listOf(addon()),
+            telemetryEnabled = true,
+            isCatalogDisabled = { _, _ -> false },
+            getCurrentRow = { currentRow },
+            isItemReferencedElsewhere = { _, _ -> false },
+            onCatalogReady = { _, row, _ ->
+                publishedRows += row
+                currentRow = if (publishedRows.size == 1) {
+                    currentRowAfterLoadMore
+                } else {
+                    row
+                }
+            },
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(2, publishedRows.size)
+        val hydratedRepublish = publishedRows.last()
+        assertEquals(listOf("Hydrated first", "Appended"), hydratedRepublish.items.map { it.name })
+        assertEquals(true, hydratedRepublish.isLoading)
+        assertEquals(1, hydratedRepublish.currentPage)
+        assertEquals(false, hydratedRepublish.hasMore)
     }
 
     private fun preview(id: String, poster: String?): MetaPreview {

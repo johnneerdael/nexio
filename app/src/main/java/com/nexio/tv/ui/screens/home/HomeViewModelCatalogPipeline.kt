@@ -1103,6 +1103,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
                             onCatalogReady = { catalogKey, row, diff ->
                                 withContext(Dispatchers.Main.immediate) {
                                     if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
+                                    val shouldFlushFirstPaint = _fullCatalogRows.value.isEmpty() && row.items.isNotEmpty()
                                     catalogsMap[catalogKey] = row
                                     if (diff.addedOrChanged.isNotEmpty()) {
                                         logStartupPerf(
@@ -1110,7 +1111,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
                                             "catalogKey=$catalogKey items_added=${diff.addedOrChanged.size}"
                                         )
                                     }
-                                    scheduleUpdateCatalogRows()
+                                    if (shouldFlushFirstPaint) {
+                                        flushCatalogRowsForFirstPaint()
+                                    } else {
+                                        scheduleUpdateCatalogRows()
+                                    }
                                 }
                             },
                             onLog = { event, details -> logStartupPerf(event, details) }
