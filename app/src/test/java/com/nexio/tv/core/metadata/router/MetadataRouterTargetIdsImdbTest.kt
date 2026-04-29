@@ -1,5 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ProviderIds
@@ -111,6 +113,31 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
+    fun `raw IMDB movie addon content id resolves TMDB target through external-id lookup`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup(
+            tmdbForImdb = mapOf("tt12042730" to 687163)
+        )
+        val router = router(lookup = lookup)
+
+        val route = router.route(
+            request(
+                id = "tt12042730",
+                type = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(imdb = "tt12042730")
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
+        assertEquals("tmdb:687163", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals("tt12042730", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(LookupCall.FindTmdb("tt12042730", "movie")), lookup.calls)
+    }
+
+    @Test
     fun `malformed addon preview provider stable ids are ignored`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
@@ -167,7 +194,7 @@ class MetadataRouterTargetIdsImdbTest {
     fun `tmdb route works without injected lookup provider`() = runTest {
         // No lookup wired - prior behavior: only the primary provider's id is present.
         val router = MetadataRouter(
-            normalizer = MetadataRequestNormalizer(),
+            normalizer = MetadataRequestNormalizer(traceEvents = noopEvents()),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
             idMappingStore = InMemoryIdMappingStore()
         )
@@ -179,11 +206,13 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     private fun router(lookup: TmdbExternalIdLookupProvider): MetadataRouter = MetadataRouter(
-        normalizer = MetadataRequestNormalizer(),
+        normalizer = MetadataRequestNormalizer(traceEvents = noopEvents()),
         animeIdentityIndex = InMemoryAnimeIdentityIndex(),
         idMappingStore = InMemoryIdMappingStore(),
         tmdbExternalIdLookup = lookup
     )
+
+    private fun noopEvents() = TraceMetadataEvents(RecordingTraceSink()) { null }
 
     private fun request(
         id: String,
