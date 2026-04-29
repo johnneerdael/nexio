@@ -48,7 +48,7 @@ class DefaultIntegrationRuntimeStaleOn429Test {
             operationKey = "test:get:f-d-01",
             cacheKey = "tmdb:movie:f-d-01",
             codec = StringIntegrationCodec,
-            cachePolicy = IntegrationCachePolicy.ObserveOnly(reason = "f-d-01-pin"),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 60_000L, staleAfterExpiryMs = 300_000L),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
             load = {
