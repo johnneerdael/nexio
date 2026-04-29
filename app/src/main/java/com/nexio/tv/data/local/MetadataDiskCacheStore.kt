@@ -11,6 +11,7 @@ import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.trailer.filterCacheableTmdbTrailerVideos
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
@@ -39,6 +40,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TAG = "MetadataDiskCacheStore"
         private const val PREFS_NAME = "metadata_disk_cache_v1"
         private const val META_PREFIX = "meta::"
+        private const val HOME_DISPLAY_PREFIX = "home_display::"
         private const val TMDB_PREFIX = "tmdb::"
         private const val TVDB_PREFIX = "tvdb::"
         private const val TVDB_EPISODE_PREFIX = "tvdb_episode::"
@@ -48,6 +50,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TVDB_REFERENCE_PREFIX = "tvdb_ref::"
         private const val TVDB_REFERENCE_SCHEMA_VERSION = 1
         private const val META_CACHE_SCHEMA_VERSION = 4
+        private const val HOME_DISPLAY_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 1
@@ -158,6 +161,21 @@ class MetadataDiskCacheStore @Inject constructor(
             enqueueWrite(key, payload)
         }.onFailure { error ->
             Log.w(TAG, "Failed to write disk metadata entry", error)
+        }
+    }
+
+    fun writeHomeDisplayMetadata(itemKey: String, languageTag: String, metadata: HomeDisplayMetadata) {
+        val key = buildHomeDisplayKey(itemKey = itemKey, languageTag = languageTag)
+        runCatching {
+            val payload = JsonObject().apply {
+                add("value", gson.toJsonTree(metadata.sanitizedForCache()))
+                addProperty("languageEpoch", currentLanguageEpoch())
+                addProperty("homeDisplaySchemaVersion", HOME_DISPLAY_CACHE_SCHEMA_VERSION)
+                addProperty("updatedAtMs", System.currentTimeMillis())
+            }
+            enqueueWrite(key, payload)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to write home display metadata entry", error)
         }
     }
 
@@ -416,6 +434,29 @@ class MetadataDiskCacheStore @Inject constructor(
         }.getOrNull()
     }
 
+    fun hasCurrentHomeDisplayMetadataForItem(itemKey: String, languageTag: String): Boolean {
+        return readCurrentHomeDisplayMetadataForItem(
+            itemKey = itemKey,
+            languageTag = languageTag
+        ) != null
+    }
+
+    fun readCurrentHomeDisplayMetadataForItem(itemKey: String, languageTag: String): HomeDisplayMetadata? {
+        val key = buildHomeDisplayKey(itemKey = itemKey, languageTag = languageTag)
+        return runCatching {
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
+            val schemaVersion = root.get("homeDisplaySchemaVersion")?.asInt ?: 0
+            if (schemaVersion != HOME_DISPLAY_CACHE_SCHEMA_VERSION) return null
+            decodeHomeDisplayMetadataSafely(root)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read current home display metadata for item", error)
+        }.getOrNull()
+    }
+
     /**
      * Reads TVDB reference data for the given kind.
      * Returns null if the cache entry is absent, malformed, or has a schema mismatch.
@@ -550,6 +591,10 @@ class MetadataDiskCacheStore @Inject constructor(
         return "$META_PREFIX$itemKey::$languageTag::$providerToken"
     }
 
+    private fun buildHomeDisplayKey(itemKey: String, languageTag: String): String {
+        return "$HOME_DISPLAY_PREFIX$itemKey::$languageTag"
+    }
+
     private fun requiredPosterProviderTag(providerToken: String): String? {
         val provider = providerToken.substringBefore(':').trim()
         return provider
@@ -651,6 +696,12 @@ class MetadataDiskCacheStore @Inject constructor(
             else -> emptyList()
         }
         return parsed.copy(castMembers = safeCastMembers).sanitizedForCache()
+    }
+
+    private fun decodeHomeDisplayMetadataSafely(root: JsonObject): HomeDisplayMetadata? {
+        val value = root.get("value") ?: return null
+        val parsed = runCatching { gson.fromJson(value, HomeDisplayMetadata::class.java) }.getOrNull() ?: return null
+        return parsed.sanitizedForCache()
     }
 
     private fun decodeTmdbEnrichmentSafely(root: JsonObject): TmdbEnrichment? {

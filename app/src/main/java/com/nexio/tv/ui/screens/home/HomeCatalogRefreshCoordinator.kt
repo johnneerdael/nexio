@@ -323,7 +323,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val catalogKey = "visible_home"
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
-        val providerToken = posterProviderCacheToken(activePosterProvider)
         val runtimeHydrationKeys = AndroidTvSearchRuntimeReadiness
             .prioritizeMissingRuntimeCandidates(uniqueItems)
             .map { "${it.apiType}:${it.id}" }
@@ -333,6 +332,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         uniqueItems.forEach { item ->
             val itemKey = "${item.apiType}:${item.id}"
             val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
+                itemKey = itemKey,
+                languageTag = languageTag
+            ) || metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(
                 itemKey = itemKey,
                 languageTag = languageTag
             )
@@ -352,12 +354,14 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
             runCatching {
                 val hydrated = overlayProviderLocalizedMetadata(item, onLog)
-                metadataDiskCacheStore.writeMeta(
-                    itemKey = itemKey,
-                    languageTag = languageTag,
-                    providerToken = providerToken,
-                    meta = hydrated.toMinimalMetaCacheRecord(activePosterProvider)
-                )
+                val applied = posterRatingsUrlResolver.apply(hydrated, activePosterProvider)
+                if (applied != item) {
+                    metadataDiskCacheStore.writeHomeDisplayMetadata(
+                        itemKey = itemKey,
+                        languageTag = languageTag,
+                        metadata = applied.toHomeDisplayMetadata()
+                    )
+                }
             }
         }
         onLog(
@@ -480,50 +484,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         }
     }
 
-    private fun posterProviderCacheToken(
-        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
-    ): String {
-        if (activeProvider == null) return "native"
-        return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
-    }
-
-    private fun MetaPreview.toMinimalMetaCacheRecord(
-        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
-    ): Meta {
-        return Meta(
-            id = id,
-            type = type,
-            rawType = rawType,
-            name = name,
-            poster = poster,
-            posterShape = posterShape,
-            background = background,
-            logo = logo,
-            description = description,
-            releaseInfo = releaseInfo,
-            imdbRating = imdbRating,
-            ratingSource = ratingSource,
-            genres = genres,
-            runtime = runtime,
-            director = emptyList(),
-            writer = emptyList(),
-            cast = emptyList(),
-            castMembers = emptyList(),
-            videos = emptyList(),
-            productionCompanies = emptyList(),
-            networks = emptyList(),
-            ageRating = null,
-            country = null,
-            awards = null,
-            language = language,
-            links = emptyList(),
-            trailerYtIds = trailerYtIds,
-            tvdbSeasonOrderContext = null,
-            posterProviderTag = posterProviderTag ?: activeProvider?.provider?.name?.lowercase(),
-            localReleaseInfo = null
-        )
-    }
-
     @OptIn(ExperimentalCoilApi::class)
     private fun evictImageUrls(urls: List<String>) {
         if (urls.isEmpty()) return
@@ -561,7 +521,7 @@ internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadata
         description = enrichment.description?.takeIf { it.isNotBlank() } ?: description,
         genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else genres,
         releaseInfo = enrichment.releaseInfo ?: releaseInfo,
-        runtime = (enrichment.runtimeMinutes ?: enrichment.averageRuntimeMinutes)?.toString() ?: runtime,
+        runtime = (enrichment.runtimeMinutes ?: enrichment.averageRuntimeMinutes)?.let { "$it min" } ?: runtime,
         imdbRating = enrichment.rating?.toFloat() ?: imdbRating,
         ratingSource = if (enrichment.rating != null) enrichment.ratingSource.orDefault() else ratingSource.orDefault(),
         background = enrichment.backdrop ?: background,

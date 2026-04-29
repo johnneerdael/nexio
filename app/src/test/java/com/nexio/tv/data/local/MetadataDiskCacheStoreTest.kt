@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
@@ -21,6 +22,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetadataDiskCacheStoreTest {
+
+    @Test
+    fun `home display metadata uses separate namespace from full meta`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+
+        store.writeHomeDisplayMetadata(
+            itemKey = "movie:tt1",
+            languageTag = "en",
+            metadata = HomeDisplayMetadata(title = "Localized title", runtime = "50 min")
+        )
+
+        val display = store.readCurrentHomeDisplayMetadataForItem("movie:tt1", "en")
+        assertEquals("Localized title", display?.title)
+        assertEquals("50 min", display?.runtime)
+        assertNull(store.readCurrentMetaForItem("movie:tt1", "en"))
+    }
 
     @Test
     fun `shared metadata remains available without legacy home ownership references`() {
