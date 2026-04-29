@@ -238,27 +238,16 @@ class MetadataAuditRunner private constructor(
             emptyList()
         }
         val selectedFields = result.resolvedDocument.fieldOwners.map { (field, owner) ->
-            val isPremiumPoster = field == ResolvedField.POSTER && scenario.premiumArtworkProvider != null
+            val winnerProvider = result.resolvedDocument.sourceProviders[field]
+                ?: (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name
             FieldSelectedEvent(
                 itemId = item.id,
                 field = field.name.lowercase(),
-                selectedProvider = if (isPremiumPoster) {
-                    scenario.premiumArtworkProvider.orEmpty()
-                } else {
-                    (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name
-                },
-                sourceRole = if (isPremiumPoster) "ARTWORK" else owner.name,
-                valuePreview = if (isPremiumPoster) {
-                    "https://example.test/${scenario.premiumArtworkProvider.orEmpty().lowercase()}-poster.jpg"
-                } else {
-                    result.resolvedDocument.valueFor(field)?.toString()
-                },
+                selectedProvider = winnerProvider,
+                sourceRole = owner.name,
+                valuePreview = result.resolvedDocument.valueFor(field)?.toString(),
                 rejectedCandidates = rejectedCandidatesFor(field, scenario, result.route?.provider),
-                ownershipRule = if (isPremiumPoster) {
-                    "poster owned by premium artwork provider ${scenario.premiumArtworkProvider}"
-                } else {
-                    "${field.name.lowercase()} owned by $owner"
-                }
+                ownershipRule = "${field.name.lowercase()} owned by $owner"
             )
         }
         selectedFields.forEach(trace::onFieldSelected)
