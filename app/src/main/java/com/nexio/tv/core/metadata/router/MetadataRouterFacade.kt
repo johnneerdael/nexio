@@ -60,7 +60,8 @@ class MetadataRouterFacade @Inject constructor(
                 fieldResolver.resolveWithPreview(
                     preview = previewCandidate,
                     primary = null,
-                    secondary = emptyList()
+                    secondary = emptyList(),
+                    requestContentId = request.contentId
                 )
             } else {
                 // No preview fields available — return an empty document with empty fieldOwners
@@ -95,7 +96,8 @@ class MetadataRouterFacade @Inject constructor(
         val resolvedDocument = fieldResolver.resolveWithPreview(
             preview = previewCandidate,
             primary = runResult.primaryCandidate,
-            secondary = runResult.secondaryCandidates
+            secondary = runResult.secondaryCandidates,
+            requestContentId = request.contentId
         )
         val displayMetadata = resolvedDocument.toHomeDisplayMetadata(initialDisplay)
 

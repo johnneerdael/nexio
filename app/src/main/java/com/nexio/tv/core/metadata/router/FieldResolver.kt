@@ -18,29 +18,34 @@ class FieldResolver @Inject constructor(
 
     fun resolve(
         primary: MetadataCandidate,
-        secondary: List<MetadataCandidate>
+        secondary: List<MetadataCandidate>,
+        requestContentId: String? = null
     ): ResolvedMetadataDocument = resolveInternal(
         preview = null,
         primary = primary,
-        secondary = secondary
+        secondary = secondary,
+        requestContentId = requestContentId
     )
 
     fun resolveWithPreview(
         preview: MetadataCandidate?,
         primary: MetadataCandidate?,
-        secondary: List<MetadataCandidate>
+        secondary: List<MetadataCandidate>,
+        requestContentId: String? = null
     ): ResolvedMetadataDocument {
         return resolvePreviewFirst(
             preview = preview,
             primary = primary,
-            secondary = secondary
+            secondary = secondary,
+            requestContentId = requestContentId
         )
     }
 
     private fun resolvePreviewFirst(
         preview: MetadataCandidate?,
         primary: MetadataCandidate?,
-        secondary: List<MetadataCandidate>
+        secondary: List<MetadataCandidate>,
+        requestContentId: String? = null
     ): ResolvedMetadataDocument {
         val fields = linkedMapOf<ResolvedField, Any>()
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
@@ -120,7 +125,7 @@ class FieldResolver @Inject constructor(
             localization = localization,
             ignoredOverwrites = ignoredOverwrites,
             rejectedByField = rejectedByField,
-            traceContentId = primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN",
+            traceContentId = requestContentId ?: primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN",
             fallbackSourceProvider = primary?.sourceProvider ?: preview?.sourceProvider ?: "UNKNOWN"
         )
     }
@@ -128,7 +133,8 @@ class FieldResolver @Inject constructor(
     private fun resolveInternal(
         preview: MetadataCandidate?,
         primary: MetadataCandidate?,
-        secondary: List<MetadataCandidate>
+        secondary: List<MetadataCandidate>,
+        requestContentId: String? = null
     ): ResolvedMetadataDocument {
         val fields = linkedMapOf<ResolvedField, Any>()
         val owners = linkedMapOf<ResolvedField, FieldOwner>()
@@ -190,7 +196,7 @@ class FieldResolver @Inject constructor(
             localization = localization,
             ignoredOverwrites = ignoredOverwrites,
             rejectedByField = rejectedByField,
-            traceContentId = primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN",
+            traceContentId = requestContentId ?: primary?.provider?.name ?: preview?.provider?.name ?: "UNKNOWN",
             fallbackSourceProvider = primary?.sourceProvider ?: preview?.sourceProvider ?: "UNKNOWN"
         )
     }
