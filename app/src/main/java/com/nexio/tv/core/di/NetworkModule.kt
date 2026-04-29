@@ -742,7 +742,10 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("youtubeTrailer.main")
-    fun provideYouTubeTrailerMainOkHttpClient(): OkHttpClient =
+    fun provideYouTubeTrailerMainOkHttpClient(
+        taggingInterceptor: com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor,
+        traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor
+    ): OkHttpClient =
         OkHttpClient.Builder()
             .dns(IPv4FirstDns())
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -750,18 +753,28 @@ object NetworkModule {
             .writeTimeout(20, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
+            // F-I-05: tag request with coroutine-scoped trace context (application interceptor),
+            // then observe outgoing request shape (network interceptor) — same pattern as base provider.
+            .addInterceptor(taggingInterceptor)
+            .addNetworkInterceptor(traceInterceptor)
             .build()
 
     @Provides
     @Singleton
     @Named("youtubeTrailer.probe")
-    fun provideYouTubeTrailerProbeOkHttpClient(): OkHttpClient =
+    fun provideYouTubeTrailerProbeOkHttpClient(
+        taggingInterceptor: com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor,
+        traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor
+    ): OkHttpClient =
         OkHttpClient.Builder()
             .dns(IPv4FirstDns())
             .connectTimeout(2, TimeUnit.SECONDS)
             .readTimeout(2, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
+            // F-I-05: same trace wiring as the main client.
+            .addInterceptor(taggingInterceptor)
+            .addNetworkInterceptor(traceInterceptor)
             .build()
 
     @Provides
