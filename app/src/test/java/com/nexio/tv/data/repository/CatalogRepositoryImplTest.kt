@@ -16,6 +16,7 @@ import io.mockk.slot
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CatalogRepositoryImplTest {
@@ -73,6 +74,8 @@ class CatalogRepositoryImplTest {
         assertEquals("series", row.apiType)
         assertEquals(listOf("movie", "series"), row.items.map { it.apiType })
         assertEquals(listOf(ContentType.MOVIE, ContentType.SERIES), row.items.map { it.type })
+        assertTrue(rowSlot.isCaptured)
         assertEquals(listOf("movie", "series"), rowSlot.captured.items.map { it.apiType })
+        assertEquals(listOf(ContentType.MOVIE, ContentType.SERIES), rowSlot.captured.items.map { it.type })
     }
 }
