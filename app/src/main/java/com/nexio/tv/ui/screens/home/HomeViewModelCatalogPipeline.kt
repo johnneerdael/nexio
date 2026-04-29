@@ -1791,10 +1791,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
 
     _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
     posterStatusReconcileJob?.cancel()
-    externalMetaPrefetchJob?.cancel()
-    pendingExternalMetaPrefetchItemId = null
     prefetchedExternalMetaIds.clear()
-    externalMetaPrefetchInFlightIds.clear()
     prefetchedTomatoesIds.clear()
     tomatoesEnrichmentInFlightIds.clear()
     prefetchedTmdbIds.clear()

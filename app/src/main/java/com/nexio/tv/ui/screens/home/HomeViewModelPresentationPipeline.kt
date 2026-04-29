@@ -229,18 +229,8 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
     viewModelScope.launch {
         layoutPreferenceDataStore.preferExternalMetaAddonDetail
             .distinctUntilChanged()
-            .collectLatest { enabled ->
-                externalMetaPrefetchEnabled = enabled
-                if (!enabled) {
-                    externalMetaPrefetchJob?.cancel()
-                    pendingExternalMetaPrefetchItemId = null
-                    externalMetaPrefetchInFlightIds.clear()
-                    if (!currentTmdbSettings.isActive) {
-                        tmdbEnrichFocusJob?.cancel()
-                        pendingTmdbEnrichItemId = null
-                        setEnrichingItemId(null)
-                    }
-                }
+            .collectLatest {
+                // External add-on detail prefetch no longer drives Home enrichment.
             }
     }
 }
@@ -421,7 +411,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         setEnrichingItemId(null)
     }
 
-    val willEnrich = currentTmdbSettings.isActive || externalMetaPrefetchEnabled
+    val willEnrich = currentTmdbSettings.isActive || item.type.isHomeTvContent()
     if (willEnrich) {
         setEnrichingItemId(item.id)
     }
@@ -527,11 +517,6 @@ private fun HomeViewModel.updateCatalogItemWithProvider(itemId: String, enrichme
     scheduleMetadataEnrichmentFlushPipeline()
 }
 
-private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) {
-    pendingMetaEnrichmentByItemId[itemId] = meta
-    scheduleMetadataEnrichmentFlushPipeline()
-}
-
 private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
@@ -544,15 +529,11 @@ private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
 }
 
 private suspend fun HomeViewModel.flushMetadataEnrichmentPipeline() {
-    if (pendingProviderEnrichmentByItemId.isEmpty() &&
-        pendingMetaEnrichmentByItemId.isEmpty()
-    ) {
+    if (pendingProviderEnrichmentByItemId.isEmpty()) {
         return
     }
     val providerByItemId = pendingProviderEnrichmentByItemId.toMap()
-    val metaByItemId = pendingMetaEnrichmentByItemId.toMap()
     pendingProviderEnrichmentByItemId.clear()
-    pendingMetaEnrichmentByItemId.clear()
 
     var changed = false
     val changedCatalogKeys = mutableSetOf<String>()
@@ -562,7 +543,7 @@ private suspend fun HomeViewModel.flushMetadataEnrichmentPipeline() {
             val mergedItem = titleRatingOverrideRepository.enrichPreview(mergeFocusedItemEnrichment(
                 currentItem = currentItem,
                 providerEnrichment = providerByItemId[currentItem.id],
-                externalMeta = metaByItemId[currentItem.id]
+                externalMeta = null
             ))
             if (mergedItem != currentItem) {
                 val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
@@ -776,7 +757,7 @@ internal fun applyTomatoesOverridesToMDBListSnapshot(
 }
 
 private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(item: MetaPreview): Boolean {
-    return (!item.type.isHomeTvContent() && !currentTmdbSettings.isActive && !externalMetaPrefetchEnabled) ||
+    return (!item.type.isHomeTvContent() && !currentTmdbSettings.isActive) ||
         item.id in prefetchedTmdbIds ||
         item.id in prefetchedExternalMetaIds
 }

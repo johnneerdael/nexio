@@ -412,13 +412,16 @@ class MetadataRouterFacade @Inject constructor(
         metadataRequest: MetadataRequest,
         tvRequest: TvMetadataRequest
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
-        val baseRoute = router.route(
-            metadataRequest.copy(
-                depth = MetadataDepth.SEASON,
-                seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
-            )
+        val seasonMetadataRequest = metadataRequest.copy(
+            depth = MetadataDepth.SEASON,
+            seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
         )
-        val resolvedBaseRoute = identityResolver.resolve(baseRoute)
+        val baseRoute = router.route(seasonMetadataRequest)
+        val resolvedBaseRoute = resolveRouteWithFallbackContentId(
+            route = identityResolver.resolve(baseRoute),
+            metadataRequest = seasonMetadataRequest,
+            fallbackContentId = tvRequest.fallbackContentId
+        )
         if (resolvedBaseRoute.targetIdRequiresIdentityResolution) {
             throw MetadataRouteFailure.IdentityResolutionFailed(resolvedBaseRoute.parentId, resolvedBaseRoute.provider)
         }
@@ -439,6 +442,24 @@ class MetadataRouterFacade @Inject constructor(
             value = episodeMetadata,
             diagnostics = emptyList()
         )
+    }
+
+    private suspend fun resolveRouteWithFallbackContentId(
+        route: MetadataRoute,
+        metadataRequest: MetadataRequest,
+        fallbackContentId: String?
+    ): MetadataRoute {
+        if (!route.targetIdRequiresIdentityResolution) return route
+        val fallbackId = fallbackContentId?.takeIf { it.isNotBlank() } ?: return route
+        if (fallbackId == metadataRequest.contentId) return route
+
+        val fallbackRoute = router.route(
+            metadataRequest.copy(
+                contentId = fallbackId,
+                sourceContext = metadataRequest.sourceContext.copy(previewSourceItemId = fallbackId)
+            )
+        )
+        return identityResolver.resolve(fallbackRoute)
     }
 
     suspend fun fetchTvSeasonEpisodes(
