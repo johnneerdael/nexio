@@ -381,6 +381,75 @@ class RailPreviewLifecycleArchitectureTest {
         }
     }
 
+    @Test
+    fun `simkl rail preview models live discovery json fields`() {
+        val discoveryDtos = productionFile("data/remote/dto/simkl/SimklDiscoveryDtos.kt").readText()
+        val trackingDtos = productionFile("data/remote/dto/simkl/SimklTrackingDtos.kt").readText()
+        val simklMapper = productionFile("data/integration/railpreview/SimklRailPreviewMapper.kt").readText()
+        val sharedMapper = productionFile("data/integration/railpreview/RailPreviewMapper.kt").readText()
+        val missing = listOfNotNull(
+            """@Json(name = "release_date")""".takeUnless { discoveryDtos.contains(it) },
+            """SerializedName("release_date")""".takeUnless { discoveryDtos.contains(it) },
+            """@Json(name = "theater")""".takeUnless { discoveryDtos.contains(it) },
+            "val runtimeText: String?".takeUnless { discoveryDtos.contains(it) },
+            "data class SimklDiscoveryRatingValue".takeUnless { discoveryDtos.contains(it) },
+            """SerializedName("simkl_id")""".takeUnless { trackingDtos.contains(it) },
+            "firstNonBlank(item.releaseDate, item.theater, item.released, item.date)"
+                .takeUnless { simklMapper.contains(it) },
+            """withSimklImageSuffix("_m.jpg")""".takeUnless { sharedMapper.contains(it) },
+            """withSimklImageSuffix("_w.jpg")""".takeUnless { sharedMapper.contains(it) }
+        )
+
+        if (missing.isNotEmpty()) {
+            fail(
+                "Simkl rail previews must consume live discovery API fields through the existing " +
+                    "first-paint preview mapper path. Missing source tokens: $missing"
+            )
+        }
+    }
+
+    @Test
+    fun `kitsu rail preview keeps poster image portrait and cover image backdrop`() {
+        val source = productionFile("data/integration/railpreview/KitsuRailPreviewMapper.kt").readText()
+        val requiredTokens = listOf(
+            "posterUrl = posterUrl",
+            "backdropUrl = backdropUrl",
+            "posterShape = PosterShape.POSTER",
+            "display.posterShape?.name.orEmpty(),"
+        )
+        val missing = requiredTokens.filterNot { token -> source.contains(token) }
+        val forbiddenToken = "posterShape = if (backdropUrl != null) PosterShape.LANDSCAPE else PosterShape.POSTER"
+
+        if (missing.isNotEmpty()) {
+            fail(
+                "Kitsu rail previews must keep posterImage as portrait poster, coverImage as backdrop, " +
+                    "and include poster shape in the stable payload hash. Missing source tokens: $missing"
+            )
+        }
+        if (source.contains(forbiddenToken)) {
+            fail("Kitsu rail previews must not infer poster shape from backdrop presence.")
+        }
+    }
+
+    @Test
+    fun `tmdb rail preview maps genre ids without metadata hydration`() {
+        val mapper = productionFile("data/integration/railpreview/TmdbRailPreviewMapper.kt").readText()
+        val service = productionFile("data/repository/TmdbDiscoveryService.kt").readText()
+        val missing = listOfNotNull(
+            "genreNames: Map<Int, String>".takeUnless { mapper.contains(it) },
+            "genreNames = genreNames".takeUnless { service.contains(it) },
+            """878 to "Science Fiction"""".takeUnless { service.contains(it) },
+            """10765 to "Sci-Fi & Fantasy"""".takeUnless { service.contains(it) }
+        )
+
+        if (missing.isNotEmpty()) {
+            fail(
+                "TMDB rail previews must map genre ids in the existing preview mapper/service API shape, " +
+                    "without adding a metadata hydration track. Missing source tokens: $missing"
+            )
+        }
+    }
+
     private fun homeFile(name: String): File = File(homeDirectory, name).also { file ->
         assertTrue("Required Home source file is missing: ${file.path}", file.isFile)
     }
