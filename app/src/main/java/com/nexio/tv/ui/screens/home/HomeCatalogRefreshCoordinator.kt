@@ -357,7 +357,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     metadataDiskCacheStore.writeHomeDisplayMetadata(
                         itemKey = itemKey,
                         languageTag = languageTag,
-                        metadata = hydrated.toHomeDisplayMetadata()
+                        metadata = hydrated.toHomeDisplayMetadata().copy(
+                            poster = null,
+                            posterProviderTag = null
+                        )
                     )
                 }
             }
