@@ -53,7 +53,31 @@ class MetadataRouterFacade @Inject constructor(
         val initialDisplay = request.sourceContext.addonMetadata ?: HomeDisplayMetadata()
 
         if (request.depth == MetadataDepth.PREVIEW) {
-            val document = initialDisplay.toResolvedDocument()
+            // F-B-01: route through FieldResolver so fieldOwners are populated (preview is a real owner)
+            // rather than synthesized with emptyMap().
+            val previewCandidate = request.sourceContext.toPreviewCandidate(MetadataPrimaryProvider.TMDB)
+            val document = if (previewCandidate != null) {
+                fieldResolver.resolveWithPreview(
+                    preview = previewCandidate,
+                    primary = null,
+                    secondary = emptyList()
+                )
+            } else {
+                // No preview fields available — return an empty document with empty fieldOwners
+                // (consistent with the no-data case, NOT the prior empty-fieldOwners workaround).
+                ResolvedMetadataDocument(
+                    canonicalId = null,
+                    title = null,
+                    overview = null,
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    rating = null,
+                    runtimeMinutes = null,
+                    fieldOwners = emptyMap(),
+                    ignoredOverwrites = emptyList()
+                )
+            }
             return MetadataResolutionResult(
                 route = null,
                 plan = null,
@@ -456,20 +480,6 @@ class MetadataRouterFacade @Inject constructor(
             }
         )
     }
-
-    private fun HomeDisplayMetadata.toResolvedDocument(): ResolvedMetadataDocument =
-        ResolvedMetadataDocument(
-            canonicalId = null,
-            title = title,
-            overview = description,
-            poster = poster,
-            backdrop = backdrop,
-            logo = logo,
-            rating = imdbRating,
-            runtimeMinutes = runtime?.toIntOrNull(),
-            fieldOwners = emptyMap(),
-            ignoredOverwrites = emptyList()
-        )
 
     private fun MetadataSourceContext.toPreviewCandidate(
         fallbackProvider: MetadataPrimaryProvider
