@@ -73,6 +73,21 @@ class AddonFirstPaintShapeArchitectureTest {
         )
     }
 
+    @Test
+    fun `home hydration does not call addon detail metadata directly`() {
+        val coordinator = productionFile("ui/screens/home/HomeCatalogRefreshCoordinator.kt").readText()
+        val directAddonMetaCalls = Regex("""metaRepository\s*\.\s*getMetaFromAllAddons\s*\(""")
+            .findAll(coordinator)
+            .map { match -> "HomeCatalogRefreshCoordinator.kt:${match.value}" }
+            .toList()
+
+        assertTrue(
+            "Home hydration must use MetadataRouterFacade via ProviderLocalizedMetadataResolver, " +
+                "not direct add-on detail metadata calls: $directAddonMetaCalls",
+            directAddonMetaCalls.isEmpty()
+        )
+    }
+
     private fun productionFile(relativePath: String): File =
         File("app/src/main/java/com/nexio/tv/$relativePath")
 
