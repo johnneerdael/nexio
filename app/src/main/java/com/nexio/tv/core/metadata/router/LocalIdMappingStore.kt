@@ -14,6 +14,9 @@ class LocalIdMappingStore @Inject constructor(
     override suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping? =
         lookup(MetadataPrimaryProvider.KITSU, sourceId)
 
+    override suspend fun readRaw(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping? =
+        bestDurableMapping(provider, sourceId, includeNegative = true)
+
     override suspend fun persist(mapping: IdMapping) {
         val mediaKey = mapping.sourceId.mappingKey()
         val existing = bestDurableMapping(mapping.provider, mapping.sourceId, includeNegative = true)

@@ -8,6 +8,7 @@ import javax.inject.Singleton
 @Singleton
 class MetadataIdentityResolver @Inject constructor(
     private val lookup: Lookup,
+    private val idMappingStore: IdMappingStore = InMemoryIdMappingStore(),
     private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
         sink = NoopRuntimeTraceSink,
         sessionId = { null }
@@ -20,7 +21,18 @@ class MetadataIdentityResolver @Inject constructor(
 
     suspend fun resolve(route: MetadataRoute): MetadataRoute {
         if (!route.targetIdRequiresIdentityResolution) return route
+
         val parsed = MetadataIdParser.parse(route.parentId)
+        val now = System.currentTimeMillis()
+
+        // F-B-06: short-circuit on prior negative-cached failure
+        if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
+            val existing = idMappingStore.readRaw(provider = route.provider, sourceId = parsed)
+            if (existing?.source == IdMappingSource.NEGATIVE) {
+                return route
+            }
+        }
+
         val (resolverName, apiShapeId, lookupResult) = when {
             parsed.scheme == AnimeIdScheme.TMDB && route.provider == MetadataPrimaryProvider.TVDB ->
                 Triple("TmdbToTvdbResolver", "identity.tmdb_to_tvdb", lookup.tmdbToTvdb(parsed.value))
@@ -40,7 +52,22 @@ class MetadataIdentityResolver @Inject constructor(
             success = lookupResult != null
         )
 
-        if (lookupResult == null) return route
+        if (lookupResult == null) {
+            // F-B-06: persist NEGATIVE mapping for 30-day TTL
+            if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
+                idMappingStore.persist(
+                    IdMapping(
+                        sourceId = parsed,
+                        provider = route.provider,
+                        providerId = "",
+                        source = IdMappingSource.NEGATIVE,
+                        evidence = "identity lookup failed via $resolverName",
+                        expiresAtEpochMs = IdMappingTtlPolicy.expiresAt(IdMappingSource.NEGATIVE, now)
+                    )
+                )
+            }
+            return route
+        }
 
         return route.copy(
             targetIds = route.targetIds + (route.provider to lookupResult),
