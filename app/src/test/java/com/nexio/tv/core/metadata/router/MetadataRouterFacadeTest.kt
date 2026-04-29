@@ -320,6 +320,40 @@ class MetadataRouterFacadeTest {
         assertTrue(adapter.apiShapeIds.contains("tvdb.series.episodes.language"))
     }
 
+    @Test
+    fun `episode enrichment retries fallback id when primary route returns no episodes`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(
+            provider = MetadataPrimaryProvider.TVDB,
+            emptyEpisodeParentIds = setOf("addon-series-id")
+        )
+
+        val result = facade(adapter).fetchTvEpisodeEnrichment(
+            metadataRequest = MetadataRequest(
+                contentId = "addon-series-id",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 1,
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = "addon-series-id",
+                fallbackContentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                seasonNumbers = listOf(1)
+            )
+        )
+
+        assertEquals(TvProvider.TVDB, result.provider)
+        assertEquals("Runtime episode", result.value?.get(1 to 1)?.title)
+        assertEquals(
+            listOf("addon-series-id", "tvdb:1399"),
+            adapter.executedRoutes
+                .filter { route -> route.seasonNumber == 1 }
+                .map { route -> route.parentId }
+                .distinct()
+        )
+    }
+
     private fun facade(
         vararg adapters: MetadataProviderAdapter,
         identityLookup: MetadataIdentityResolver.Lookup = object : MetadataIdentityResolver.Lookup {
@@ -353,7 +387,8 @@ class MetadataRouterFacadeTest {
     }
 
     private class RecordingMetadataProviderAdapter(
-        override val provider: MetadataPrimaryProvider
+        override val provider: MetadataPrimaryProvider,
+        private val emptyEpisodeParentIds: Set<String> = emptySet()
     ) : MetadataProviderAdapter {
         var calls = 0
         val apiShapeIds = mutableListOf<String>()
@@ -365,7 +400,7 @@ class MetadataRouterFacadeTest {
             calls += 1
             apiShapeIds += step.apiShapeId
             executedRoutes += route
-            val episodeMetadata = if (step.role == ProviderPlanRole.SEASON) {
+            val episodeMetadata = if (step.role == ProviderPlanRole.SEASON && route.parentId !in emptyEpisodeParentIds) {
                 val seasonNumber = route.seasonNumber ?: 1
                 mapOf(
                     (seasonNumber to 1) to TvEpisodeMetadata(
