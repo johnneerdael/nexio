@@ -66,6 +66,42 @@ class ProfileManagerSwitchBoundaryCheckTraceTest {
         assertEquals("PASS", payload["verdict"])
     }
 
+    /**
+     * F2-F-03: assertCanWriteProfileState must emit profile.boundary_check with verdict=FAIL
+     * before throwing ProfileBoundaryException for a stale-session mismatch.
+     */
+    @Test
+    fun `assertCanWriteProfileState emits boundary_check FAIL event before throwing`() {
+        val sink = RecordingTraceSink()
+        ProfileBoundaryEnforcer.installTraceSink(sink = sink, sessionId = { "test-session" })
+
+        val ex = runCatching {
+            ProfileBoundaryEnforcer.assertCanWriteProfileState(
+                resultProfileId = 1,
+                resultSessionId = "s1",
+                activeProfileId = 2,
+                activeSessionId = "s2"
+            )
+        }.exceptionOrNull()
+
+        assertTrue(
+            "expected ProfileBoundaryException(STALE_SESSION_WRITE_REJECTED), got $ex",
+            ex is ProfileBoundaryException &&
+                ex.violation == ProfileBoundaryViolation.STALE_SESSION_WRITE_REJECTED
+        )
+
+        val failEvents = sink.events.filter {
+            it.eventType == "profile.boundary_check" &&
+                (it.payload as? Map<*, *>)?.get("verdict") == "FAIL"
+        }
+        assertTrue(
+            "expected at least one profile.boundary_check FAIL event, got ${sink.events.map { it.payload }}",
+            failEvents.isNotEmpty()
+        )
+        val payload = failEvents.first().payload as Map<*, *>
+        assertEquals("STALE_SESSION_WRITE_REJECTED", payload["violation"])
+    }
+
     @Test
     fun `ProfileManager source routes through enforcer (source-grep pin)`() {
         val candidates = listOf(

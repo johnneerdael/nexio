@@ -53,4 +53,24 @@ class ProfileManagerReactiveSwitchDuringPlaybackTest {
         assertNull("no pending to drain", drainedTo)
         assertEquals("active unchanged", 1, policy.activeProfileId)
     }
+
+    /**
+     * F2-F-02: last-writer-wins for multiple reactive switches during playback.
+     * Switches →2, →3, →4 all arrive while playback is active; only 4 should drain.
+     */
+    @Test
+    fun `last reactive switch during playback wins on drain`() {
+        val policy = ProfileSwitchDeferralPolicy(initialProfileId = 1)
+        policy.onIncomingSwitch(targetProfileId = 2, hasActivePlayback = true)
+        policy.onIncomingSwitch(targetProfileId = 3, hasActivePlayback = true)
+        policy.onIncomingSwitch(targetProfileId = 4, hasActivePlayback = true)
+
+        assertEquals("pending holds the last target", 4, policy.pendingActiveProfileId)
+        assertEquals("active stays at 1 while playback is live", 1, policy.activeProfileId)
+
+        val drainedTo = policy.onPlaybackIdle()
+        assertEquals("drain returns the last pending id", 4, drainedTo)
+        assertEquals("active updated to last switch target", 4, policy.activeProfileId)
+        assertNull("pending cleared after drain", policy.pendingActiveProfileId)
+    }
 }
