@@ -26,3 +26,5 @@ kitsu.anime_staff
 kitsu.anime_productions
 kitsu.media_relationships
 kitsu.search.text
+rpdb.poster_template
+topposters.poster_template

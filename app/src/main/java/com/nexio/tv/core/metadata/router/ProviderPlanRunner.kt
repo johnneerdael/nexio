@@ -30,10 +30,13 @@ class ProviderPlanRunner @Inject constructor(
             }
         )
 
-        val stepResults = plan.steps.map { step ->
+        val stepResults = plan.steps.mapNotNull { step ->
             val adapter = adapters.firstOrNull { it.provider == step.provider && it.supports(step) }
-                ?: throw MetadataRouteFailure.MissingPlanStepAdapter(step.apiShapeId)
-            adapter.execute(route = plan.route, step = step)
+            when {
+                adapter != null -> adapter.execute(route = plan.route, step = step)
+                step.required -> throw MetadataRouteFailure.MissingPlanStepAdapter(step.apiShapeId)
+                else -> null  // optional step with no registered adapter — skip silently
+            }
         }
 
         val candidates = stepResults.mapNotNull { it.candidate }

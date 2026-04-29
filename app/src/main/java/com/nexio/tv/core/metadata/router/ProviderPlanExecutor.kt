@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TraktApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
@@ -106,6 +107,12 @@ class ProviderPlanExecutor @Inject constructor() {
             }
         }
 
+        if (depth == MetadataDepth.DETAIL_CORE ||
+            depth == MetadataDepth.DETAIL_MEDIA ||
+            depth == MetadataDepth.DETAIL_SECONDARY) {
+            steps += posterSteps()
+        }
+
         return steps
     }
 
@@ -126,6 +133,12 @@ class ProviderPlanExecutor @Inject constructor() {
                 provider = MetadataPrimaryProvider.TVDB,
                 role = ProviderPlanRole.SEASON
             )
+        }
+
+        if (depth == MetadataDepth.DETAIL_CORE ||
+            depth == MetadataDepth.DETAIL_MEDIA ||
+            depth == MetadataDepth.DETAIL_SECONDARY) {
+            steps += posterSteps()
         }
 
         return steps
@@ -157,8 +170,29 @@ class ProviderPlanExecutor @Inject constructor() {
             steps += step(KitsuApiShapes.MEDIA_RELATIONSHIPS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
         }
 
+        if (depth == MetadataDepth.DETAIL_CORE ||
+            depth == MetadataDepth.DETAIL_MEDIA ||
+            depth == MetadataDepth.DETAIL_SECONDARY) {
+            steps += posterSteps()
+        }
+
         return steps
     }
+
+    private fun posterSteps(): List<ProviderPlanStep> = listOf(
+        step(
+            apiShapeId = PosterApiShapes.RPDB_POSTER_TEMPLATE,
+            provider = MetadataPrimaryProvider.RPDB,
+            role = ProviderPlanRole.ARTWORK,
+            required = false  // poster providers are optional — no API key configured = no candidate
+        ),
+        step(
+            apiShapeId = PosterApiShapes.TOP_POSTERS_POSTER_TEMPLATE,
+            provider = MetadataPrimaryProvider.TOP_POSTERS,
+            role = ProviderPlanRole.ARTWORK,
+            required = false
+        )
+    )
 
     private fun validateMediaKind(route: MetadataRoute, vararg allowed: MetadataMediaKind) {
         check(route.mediaKind in allowed) {
