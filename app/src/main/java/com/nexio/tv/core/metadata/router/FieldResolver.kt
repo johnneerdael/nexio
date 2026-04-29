@@ -283,7 +283,6 @@ class FieldResolver @Inject constructor(
             FieldOwner.REVIEWS,
             FieldOwner.TRAILERS,
             FieldOwner.RECOMMENDATIONS,
-            FieldOwner.SKIP_SEGMENTS,
             FieldOwner.ORGANIZATION_PERSON -> SourceRole.SECONDARY
         }
 
