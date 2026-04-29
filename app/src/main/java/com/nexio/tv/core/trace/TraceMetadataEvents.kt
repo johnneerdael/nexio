@@ -260,7 +260,10 @@ class TraceMetadataEvents(
         requestedIsFallback: Boolean,
         allowProviderFallbackForMissingLocalizedFields: Boolean,
         perEpisodeFallbacksAttempted: Int,
-        perEpisodeFallbacksAllowed: Int
+        perEpisodeFallbacksAllowed: Int,
+        /** F2-E-01: true when the requested locale was not on the provider whitelist and was
+         *  silently collapsed to the English fallback. Surfaces in trace bundles for diagnostics. */
+        localeCollapsedToFallback: Boolean = false
     ) {
         val sid = sessionId() ?: return
         sink.emit(
@@ -280,7 +283,8 @@ class TraceMetadataEvents(
                     "requestedIsFallback" to requestedIsFallback,
                     "allowProviderFallbackForMissingLocalizedFields" to allowProviderFallbackForMissingLocalizedFields,
                     "perEpisodeFallbacksAttempted" to perEpisodeFallbacksAttempted,
-                    "perEpisodeFallbacksAllowed" to perEpisodeFallbacksAllowed
+                    "perEpisodeFallbacksAllowed" to perEpisodeFallbacksAllowed,
+                    "localeCollapsedToFallback" to localeCollapsedToFallback  // F2-E-01
                 )
             )
         )

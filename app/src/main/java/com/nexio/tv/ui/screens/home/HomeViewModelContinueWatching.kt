@@ -199,7 +199,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         is ContinueWatchingItem.InProgress -> item.progress.contentId
         is ContinueWatchingItem.NextUp -> item.info.contentId
     }
-    val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
+    val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
     return try {
         val localizedPreview = overlayProviderLocalizedMetadataForHome(
             item = item.toContinueWatchingProviderPreview(),
