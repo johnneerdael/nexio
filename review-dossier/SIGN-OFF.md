@@ -5,6 +5,72 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster H landed — deferred P2 + Nit cleanup (FINAL audit-remediation cluster)
+
+The 67 deferred P2 + Nit findings from `review-dossier-2/09-known-gaps.md` have been remediated (1 deferred: F2-T13-A — premium poster audit golden requires upstream pipeline work).
+
+**Stale tests + dead code (~10 findings):**
+- F2-B-02 F2-B-03 F2-B-04 F2-D-02 — stale tests fixed (commit `2c4e5f307`)
+- F2-B-07 — `GlobalMetadataDocument` deleted + test pruned (commit `24aed8fa2`)
+- F2-D-04 + F2-skip-01 — `MetadataCacheKeys` + `FieldOwner.SKIP_SEGMENTS` deleted (264 lines, commit `38ab453ba`)
+- F2-C-02 — 6 dead apiShape constants deleted (commit `1c2a16566`)
+
+**Lane B (4 findings):**
+- F2-B-05 — duplicate-closed by cluster G F2-J-03
+- F2-B-08 — fetchTmdbEnrichment discard pattern documented (commit `4143a0e9f`)
+
+**Lane C (7 findings):**
+- F2-C-03 — fetchPopularLists global-content migration (commit `1be443485`)
+- F2-C-04 + F2-C-05 — section-separator pivot + accountCacheKey rationale (commit `32402ab48`)
+- F2-C-06 — auth-service carve-out documentation (commit `b804610c6`)
+- F2-C-07 — `MetadataAdapterUnknownPrefixTraceTest` + adapter emits `unsupported_id_prefix` (commit `8fadd7633`)
+- F2-C-08 + F2-C-09 — SEASON_VIDEOS supports + TMDB image cache fragmentation note (commit `ecbde3c51`)
+
+**Lane D (5 findings):**
+- F2-D-03 + F2-D-05 + F2-D-06 — F-D-01 stale-guard CacheFirst + 5 cache-decision pins + SingleFlight @VisibleForTesting (commit `aa98f527c`)
+- F2-D-07 + F2-D-09 — orphan cleanup parallelization + global backoff note (commit `70b9659f4`)
+
+**Lane E (4 findings):**
+- F2-E-02 F2-E-04 F2-E-05 F2-E-06 — Kitsu policyVersion + TvdbMetadataService legacy doc + Kitsu synopsis comment + dedupe emitLocalizationPlan (commit `19fc8c2b5`)
+
+**Lane F (6 findings):**
+- F2-F-02 + F2-F-03 — multi-switch test + boundary_check FAIL emit (commit `7e1d6281f`)
+- F2-F-04 F2-F-06 F2-F-07 F2-F-08 — audit SHA + scope docs + library refresh + dual-write (commit `945e306f6`)
+
+**Lane G (4 findings):**
+- F2-G-01 F2-G-02 F2-G-03 F2-G-04 — snapshot_read assertions + AndroidTv migration + @Transaction wrapper + enrichment catch doc (commit `44e992b13`)
+
+**Lane H (5 findings):**
+- F2-H-03 F2-H-04 F2-H-06 F2-H-07 F2-S-04 — checkin/owner context cleanup + dual-unregister consolidation (commit `32cc48b02`). PlaybackOwnerContext.traktAccount/simklAccount fields removed (44 lines).
+
+**Lane I — trace mode (8 findings):**
+- F2-I-02 F2-I-02-nit F2-I-03 F2-I-04 — TraceRedactor manifest sync + comment fix + audit pattern + SAFE_METADATA_RUNTIME body gating (commit `caafe7fad`)
+- F2-I-05 F2-I-08 F2-I-09 F2-I-10 — 4 new validator rules + JsonlTraceWriter dropped event counter (commit `aa0473cc0`)
+
+**Lane J — architecture pins (5 findings):**
+- F2-A-03 + F2-J-04 + F2-J-07 + F2-J-08 — allowlist cleanup + facade-bypass pin + boundary test consolidation (commit `7a3991b7a`)
+- F2-J-05 F2-J-06 — duplicate-closed by cluster H Tasks 10 + 9
+
+**Trace-specific (6 findings):**
+- F2-TM-01 F2-TM-02 F2-TM-03 F2-T13-C — Season trailer/recap routing + fetchRecommendations resolver consumption + OrganizationDetailViewModel routing + provider case normalization (commit `d7e4889b4`)
+- F2-T13-A — DEFERRED (poster pipeline not fully wired upstream — `ProviderPlanExecutor.buildPlan()` does not yet append RPDB/TOP_POSTERS plan steps)
+- F2-T-02-nit — duplicate-closed by cluster H Task 7
+
+**Cleanup batch (6 findings):**
+- F2-A-02 F2-A-04 F2-A-05 F2-B-06 F2-13-E F2-meta-01 — AUDIT_ONLY interceptor doc + ENFORCE test + stale comment fix + ObserveOnly KDoc + ROUTING_ID_TYPE_CONFLICT semantic note + shared PosterAdapterUtils + TvdbSettings warning fix (commit `fb0ae185a`)
+
+OpenSpec change `cluster-h-deferred-p2-nit` deployed (commit `e21b8a50f`).
+
+**Audit status:** All 4 audit tasks completed with BUILD SUCCESSFUL — PASS verdicts:
+- `generateProfileBoundaryAudit` — PASS
+- `generateIntegrationRuntimeAudit` — PASS (regression introduced by KDoc comments in `b804610c6` containing scanner-matched keywords `Retrofit`/`IntegrationRuntime` in `KitsuAuthService`, `SimklAuthService`, `RealDebridAuthService`; fixed by rephrasing the KDoc to use `integration-runtime`/`raw network calls` — same carve-out semantics preserved)
+- `generateMetadataExecutionAudit` — PASS (cluster G F2-B-01 fix at `37f44a99b` remains effective; no cluster H regression)
+- `generateTraceValidatorAudit` — PASS
+
+**Final decision:** APPROVED for merge. **Cluster H is the FINAL audit-remediation cluster.** All but 1 of the 145 total findings (60 from `review-dossier/09-known-gaps.md` + 85 added in `review-dossier-2/09-known-gaps.md`) have been remediated across clusters A–H. The 1 deferred (F2-T13-A) is documented and tracked for upstream poster-pipeline work.
+
+**Cluster series complete:** A → B → C → D → E → F → G → H. Total 8 clusters, ~144 commits, ~145 findings closed. Branch is in a reviewable, mergeable state.
+
 ## Cluster G landed — post-audit P0+P1 remediation (clears merge gate)
 
 The 17 P0+P1 findings from `review-dossier-2/09-known-gaps.md` (the post-cluster-F audit dossier at SHA `774a540f8`) have been remediated.

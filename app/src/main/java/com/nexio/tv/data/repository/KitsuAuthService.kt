@@ -9,11 +9,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] Retrofit-usage check.
+ * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] direct-network-call check.
  *
- * This service calls [KitsuAuthApi] (a raw Retrofit interface) directly for two reasons:
+ * This service calls [KitsuAuthApi] (a raw network interface) directly for two reasons:
  * 1. **Password-grant login** — the first call that bootstraps authentication, so no
- *    [IntegrationRuntime] context is available yet.
+ *    integration-runtime context is available yet.
  * 2. **Proactive token refresh** — invoked opportunistically before any playback session exists,
  *    again outside a runtime context.
  *

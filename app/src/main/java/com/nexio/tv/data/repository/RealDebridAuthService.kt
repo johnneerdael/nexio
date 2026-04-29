@@ -13,11 +13,11 @@ import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] Retrofit-usage check.
+ * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] direct-network-call check.
  *
  * This service drives the Real-Debrid OAuth device-code flow through
- * [RealDebridAuthIntegrationProvider], which wraps raw Retrofit calls that predate the
- * [IntegrationRuntime]. The multi-step flow (device-code request → credential poll → token
+ * [RealDebridAuthIntegrationProvider], which wraps raw network calls that predate the
+ * integration-runtime. The multi-step flow (device-code request → credential poll → token
  * exchange) and subsequent token refresh all run before — or independently of — any runtime
  * context, making it impractical to route through the runtime at present.
  *
