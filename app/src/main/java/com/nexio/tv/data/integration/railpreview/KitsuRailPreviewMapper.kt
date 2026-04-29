@@ -78,6 +78,7 @@ class KitsuRailPreviewMapper {
                     display.overview.orEmpty(),
                     display.runtimeText.orEmpty(),
                     display.posterUrl.orEmpty(),
+                    display.posterShape?.name.orEmpty(),
                     display.backdropUrl.orEmpty(),
                     display.rating?.value?.toString().orEmpty(),
                     rank.toString()

@@ -42,6 +42,26 @@ class KitsuRailPreviewMapperTest {
         assertEquals(PosterShape.POSTER, preview.display.posterShape)
         assertEquals("https://kitsu.example/cover.jpg", preview.display.backdropUrl)
         assertEquals("abc123", (preview.display.trailerHint as TrailerHint.YouTube).videoId)
+        assertEquals(
+            stablePayloadHash(
+                listOf(
+                    "kitsu_trending_anime",
+                    "kitsu:1",
+                    "1",
+                    "Cowboy Bebop",
+                    "カウボーイビバップ",
+                    "1998-04-03",
+                    "Bounty hunters in space.",
+                    "24 min",
+                    "https://kitsu.example/poster.jpg",
+                    PosterShape.POSTER.name,
+                    "https://kitsu.example/cover.jpg",
+                    "8.25",
+                    "1"
+                ).joinToString(separator = "|")
+            ),
+            preview.sourcePayloadHash
+        )
     }
 
     @Test
