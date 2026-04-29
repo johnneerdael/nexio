@@ -3,7 +3,7 @@ package com.nexio.tv.ui.screens.organization
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nexio.tv.core.tmdb.TmdbOrganizationService
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.OrganizationDiscoverType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class OrganizationDetailViewModel @Inject constructor(
-    private val tmdbOrganizationService: TmdbOrganizationService,
+    private val metadataRouterFacade: MetadataRouterFacade,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -47,7 +47,8 @@ class OrganizationDetailViewModel @Inject constructor(
     private fun loadOrganizationDetail() {
         viewModelScope.launch {
             try {
-                val detail = tmdbOrganizationService.fetchOrganizationDetail(
+                // F2-TM-03: route through facade so canonical trace events fire.
+                val detail = metadataRouterFacade.fetchOrganizationDetail(
                     entityId = entityId,
                     kind = kind,
                     discoverType = discoverType

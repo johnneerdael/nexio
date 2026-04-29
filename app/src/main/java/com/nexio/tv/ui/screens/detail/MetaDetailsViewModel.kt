@@ -2653,7 +2653,16 @@ class MetaDetailsViewModel @Inject constructor(
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
             val tmdbId = null // TV content: let TrailerService try TVDB first
-            val recapSource = trailerService.getSeasonRecapPlaybackSource(
+            // F2-TM-01: route through facade so metadata.route_decision and
+            // metadata.resolver_schedule trace events fire for the recap path.
+            val recapSource = metadataRouterFacade.fetchSeasonRecap(
+                metadataRequest = MetadataRequest(
+                    contentId = meta.id,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = meta.apiType),
+                    language = currentTvdbLanguageTag(),
+                    depth = MetadataDepth.DETAIL_MEDIA
+                ),
                 title = meta.name,
                 year = year,
                 tmdbId = tmdbId,
@@ -2731,7 +2740,16 @@ class MetaDetailsViewModel @Inject constructor(
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
             val tmdbId = null // TV content: let TrailerService try TVDB first
-            val seasonTrailerSource = trailerService.getSeasonTrailerPlaybackSource(
+            // F2-TM-01: route through facade so metadata.route_decision and
+            // metadata.resolver_schedule trace events fire for the season-trailer path.
+            val seasonTrailerSource = metadataRouterFacade.fetchSeasonTrailer(
+                metadataRequest = MetadataRequest(
+                    contentId = meta.id,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = meta.apiType),
+                    language = currentTvdbLanguageTag(),
+                    depth = MetadataDepth.DETAIL_MEDIA
+                ),
                 title = meta.name,
                 year = year,
                 tmdbId = tmdbId,

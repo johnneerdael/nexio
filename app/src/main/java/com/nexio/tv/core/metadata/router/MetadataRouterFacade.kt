@@ -5,6 +5,10 @@ import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.tmdb.TmdbOrganizationService
+import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.OrganizationDiscoverType
+import com.nexio.tv.domain.model.TmdbOrganizationDetail
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDiagnosticEvent
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -14,6 +18,7 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ContentType
@@ -37,7 +42,8 @@ class MetadataRouterFacade @Inject constructor(
     private val trailerResolver: TrailerResolver? = null,
     private val reviewResolver: ReviewResolver? = null,
     private val recommendationResolver: RecommendationResolver? = null,
-    private val organizationPersonResolver: OrganizationPersonResolver? = null
+    private val organizationPersonResolver: OrganizationPersonResolver? = null,
+    private val tmdbOrganizationService: TmdbOrganizationService? = null
 ) {
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
         val routed = router.route(request)
@@ -248,6 +254,74 @@ class MetadataRouterFacade @Inject constructor(
     }
 
     /**
+     * F2-TM-01: Season trailer path routed through canonical facade.
+     *
+     * Fires canonical trace events (`metadata.route_decision`, `metadata.resolver_schedule`)
+     * via [resolveRequest] at depth [MetadataDepth.DETAIL_MEDIA], then delegates the actual
+     * season-trailer resolution to [TrailerService.getSeasonTrailerPlaybackSource].
+     *
+     * The resolved [TrailerPlaybackSource] is richer than anything carried by
+     * [ResolvedMetadataDocument] — [TrailerService] handles adaptive-URL selection and
+     * YouTube extraction internally.
+     */
+    suspend fun fetchSeasonTrailer(
+        metadataRequest: MetadataRequest,
+        title: String,
+        year: String? = null,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null
+    ): TrailerPlaybackSource? {
+        val service = checkNotNull(trailerService) {
+            "fetchSeasonTrailer requires MetadataRouterFacade to be constructed with a non-null TrailerService"
+        }
+        // Fire canonical trace events (metadata.route_decision, metadata.resolver_schedule).
+        resolveRequest(metadataRequest)
+        return service.getSeasonTrailerPlaybackSource(
+            title = title,
+            year = year,
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId
+        )
+    }
+
+    /**
+     * F2-TM-01: Season recap path routed through canonical facade.
+     *
+     * Fires canonical trace events (`metadata.route_decision`, `metadata.resolver_schedule`)
+     * via [resolveRequest] at depth [MetadataDepth.DETAIL_MEDIA], then delegates the actual
+     * season-recap resolution to [TrailerService.getSeasonRecapPlaybackSource].
+     *
+     * See [fetchSeasonTrailer] for the architecture rationale (same pattern).
+     */
+    suspend fun fetchSeasonRecap(
+        metadataRequest: MetadataRequest,
+        title: String,
+        year: String? = null,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null
+    ): TrailerPlaybackSource? {
+        val service = checkNotNull(trailerService) {
+            "fetchSeasonRecap requires MetadataRouterFacade to be constructed with a non-null TrailerService"
+        }
+        // Fire canonical trace events (metadata.route_decision, metadata.resolver_schedule).
+        resolveRequest(metadataRequest)
+        return service.getSeasonRecapPlaybackSource(
+            title = title,
+            year = year,
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId
+        )
+    }
+
+    /**
      * Routes a review fetch through the canonical resolve pipeline at depth
      * [MetadataDepth.DETAIL_SECONDARY], aggregating REVIEWS candidates from every
      * registered review adapter (TMDB, Trakt). If no adapter produced reviews
@@ -331,10 +405,16 @@ class MetadataRouterFacade @Inject constructor(
     }
 
     /**
-     * Routes a TMDB recommendations (more-like-this) fetch through the canonical resolve pipeline
-     * at depth [MetadataDepth.DETAIL_SECONDARY] so that `metadata.route_decision` and
-     * `metadata.field_selected` trace events fire, then delegates the actual recommendations
-     * list fetch to [MetadataSecondaryRepository].
+     * Routes a recommendations fetch through the canonical resolve pipeline at depth
+     * [MetadataDepth.DETAIL_SECONDARY] so that `metadata.route_decision` and
+     * `metadata.field_selected` trace events fire. Resolver output is consumed FIRST
+     * (from [TmdbRecommendationMetadataAdapter] or another [ResolvedField.RECOMMENDATIONS]
+     * producer in the step results). Falls back to [MetadataSecondaryRepository.fetchMoreLikeThis]
+     * only when the resolver pipeline returns an empty list, preserving the existing
+     * TMDB-only path for plans that do not yet include a recommendation step.
+     *
+     * F2-TM-02: prior to this fix the resolver output was discarded and the repo was
+     * always called; resolver output now takes precedence.
      */
     suspend fun fetchRecommendations(
         metadataRequest: MetadataRequest,
@@ -344,10 +424,24 @@ class MetadataRouterFacade @Inject constructor(
         val repo = checkNotNull(metadataSecondaryRepository) {
             "fetchRecommendations requires MetadataRouterFacade to be constructed with a non-null MetadataSecondaryRepository"
         }
-        // Fire canonical trace events via the resolve pipeline (depth = DETAIL_SECONDARY).
-        resolveRequest(metadataRequest)
-        // Delegate to the secondary repository for the TMDB recommendations list.
-        return repo.fetchMoreLikeThis(tmdbId, contentType)
+        // Resolve through the canonical pipeline — fires metadata.route_decision +
+        // per-step provider_plan + per-field field_selected events.
+        val resolution = resolveRequest(metadataRequest)
+
+        // Collect RECOMMENDATIONS from every step result that produced one.
+        val resolverRecommendations: List<MetaPreview> = resolution.providerRunResult
+            ?.stepResults
+            ?.mapNotNull { stepResult ->
+                @Suppress("UNCHECKED_CAST")
+                stepResult.candidate?.fields?.get(ResolvedField.RECOMMENDATIONS)?.value as? List<MetaPreview>
+            }
+            ?.flatten()
+            .orEmpty()
+
+        // Use resolver output when non-empty; fall back to legacy repo call only when
+        // no adapter produced recommendations (e.g. plan didn't include a recommendation step).
+        return resolverRecommendations.takeIf { it.isNotEmpty() }
+            ?: repo.fetchMoreLikeThis(tmdbId, contentType)
     }
 
     /**
@@ -586,6 +680,47 @@ class MetadataRouterFacade @Inject constructor(
                     detail = trace.detail
                 )
             }
+        )
+    }
+
+    /**
+     * F2-TM-03: Routes an organization-detail fetch through the canonical resolve pipeline so
+     * that `metadata.route_decision` and `metadata.resolver_schedule` trace events fire, then
+     * delegates the actual fetch to [TmdbOrganizationService].
+     *
+     * Since there is no canonical content ID for an organization entity, a synthetic content ID
+     * (`tmdb:org:<entityId>`) is used for the [MetadataRequest] to satisfy the pipeline. The
+     * resolved document is intentionally discarded — the rich [TmdbOrganizationDetail] shape
+     * (company details, discover results) is not carried by [ResolvedMetadataDocument].
+     *
+     * See the F2-B-08 discard pattern in [fetchTmdbEnrichment] for the architecture rationale.
+     */
+    suspend fun fetchOrganizationDetail(
+        entityId: Int,
+        kind: MetaCompanyKind,
+        discoverType: OrganizationDiscoverType,
+        language: String? = "en-US",
+        maxItems: Int = 20
+    ): TmdbOrganizationDetail? {
+        val service = checkNotNull(tmdbOrganizationService) {
+            "fetchOrganizationDetail requires MetadataRouterFacade to be constructed with a non-null TmdbOrganizationService"
+        }
+        // Construct a synthetic MetadataRequest for trace observability.
+        // The resolved document is intentionally discarded — organization shape is not
+        // carried by ResolvedMetadataDocument.
+        val syntheticRequest = MetadataRequest(
+            contentId = "tmdb:org:$entityId",
+            contentType = ContentType.MOVIE,
+            sourceContext = MetadataSourceContext(itemType = "organization"),
+            depth = MetadataDepth.DETAIL_SECONDARY
+        )
+        resolveRequest(syntheticRequest)
+        return service.fetchOrganizationDetail(
+            entityId = entityId,
+            kind = kind,
+            discoverType = discoverType,
+            language = language,
+            maxItems = maxItems
         )
     }
 

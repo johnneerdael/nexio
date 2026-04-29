@@ -68,7 +68,7 @@ class RpdbMetadataProviderAdapter @Inject constructor(
                         sourceRole = SourceRole.ARTWORK
                     )
                 ),
-                sourceProvider = "rpdb",
+                sourceProvider = "RPDB",
                 sourceRole = SourceRole.ARTWORK
             )
         } else {
