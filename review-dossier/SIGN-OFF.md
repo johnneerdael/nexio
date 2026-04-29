@@ -5,6 +5,29 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster F landed — provider contracts + identity + nits (100% audit closure)
+
+The 10 cluster-F findings — the FINAL cluster — have been remediated:
+
+- **F-B-01** — PREVIEW path now routes through `FieldResolver.resolveWithPreview(preview, primary = null, secondary = emptyList())`; `fieldOwners` populated (commit `0dca11291`). Pin: `FieldResolverPreviewProvenanceTest` (`5b78e5c9a`).
+- **F-B-02** — Deleted `MetaDetailsViewModel.defaultMetadataRouterFacadeForManualConstruction()` (`e88054a1f`); removed `runCatching { metadataRouterFacade }.getOrNull()` helpers + caller silent-swallow guards in `HomeProviderLocalizedMetadataOverlay` / `HomeViewModelContinueWatching` (`5dbf2163d`); architecture pin `FieldResolverInjectionContractTest` (`0891776a3`) blocks regressions.
+- **F-B-05** — `FieldResolver.resolve(...)` and `resolveWithPreview(...)` accept `requestContentId`; threaded through both public methods + 2 internal helpers; facade passes `request.contentId` (commit `9db5708e3`). `metadata.field_selected` events now carry real id.
+- **F-B-06** — `MetadataIdentityResolver` reads + writes NEGATIVE mappings via `IdMappingStore.readRaw(...)`; failed lookups short-circuit for 30 days (commit `b03bed6d5`). Required threading `idMappingStore` into `MetadataIdentityResolver` constructor + adding `readRaw(...)` to `IdMappingStore` (also implemented in `LocalIdMappingStore`).
+- **F-B-07** — `MetadataRequestNormalizer` emits `metadata.normalizer_warning` when `ContentType.TV` coerces to `MediaKind.SERIES` (commit `8963dfe33`). Required injecting `TraceMetadataEvents` into the normalizer + updating 14 test fixtures + 1 audit runner.
+- **F-C-02** — All literal `apiShapeId = "..."` and positional `callAuthenticated("...")` arguments migrated to `*ApiShapes` constants. **Total scope discovered: 102 literal sites across 13 files** (Trakt 45, Simkl 5, Tvdb 5, plus 47 additional in debrid providers, TMDB, trailer providers — surfaced by Task 19's pin). Constants added: 32 Trakt + 2 Simkl + 5 Tvdb + 34 from Task 19 expansion = 73 new. Architecture pin `IntegrationApiShapeRegistryCoverageTest` (`8940c4d04`) blocks regressions across both literal forms.
+- **F-C-03** — `MetadataProviderTargetIds` extended with `mal()`, `anilist()`, `anidb()`, `imdb()` parsers (commit `1c4776074`). `imdb()` handles both bare `ttNNNNNN` and `imdb:tt...` forms.
+- **F-C-04** — `RPDB` + `TOP_POSTERS` added to `MetadataPrimaryProvider` (`b528132a0` — also fixed 4 non-exhaustive when blocks); `RpdbMetadataProviderAdapter` + `TopPostersMetadataProviderAdapter` registered via Hilt `@Binds @IntoSet` (`c891485dd`); architecture pin `PremiumPosterAdapterRegistrationTest` (`4228bbd80`).
+- **F-C-05** — `PosterRatingsUrlResolver` swaps `apiKey.hashCode()` for `stableHashHex8(apiKey)` (SHA-256 truncated to 8 hex chars) at both sites (commit `d341abbe5`).
+- **F-C-06** — Trakt global-content endpoints (trending/popular/recommended/calendar — 6 functions) use new `globalContentCacheKey(...)` helper that drops the `profile:N:` prefix; cache shared across profiles (commit `36ece958b`). NOTE: scope/profileContext remain `accountScope(session)` / `profileContext(session)` because `ProfileExecutionContext` requires a positive profileId — no Global singleton exists. The cache-key change alone resolves F-C-06 since the cache layer keys on cacheKey, not scope.
+
+OpenSpec change `cluster-f-provider-contracts-identity-nits` deployed (commit `8f2f3ad0e`).
+
+**Audit status:** 3 of 4 BUILD SUCCESSFUL — PASS verdicts on `generateProfileBoundaryAudit`, `generateIntegrationRuntimeAudit`, `generateTraceValidatorAudit`. `generateMetadataExecutionAudit` reports 11/20 test failures due to a **pre-existing parallel-session WIP regression** introduced by commit `4427f22ed` ("Resolve IMDb series through TVDB remote IDs"): that commit added `imdbToTvdb` support to `MetadataIdentityResolver` but did not update `MetadataAuditRunner.default()`'s stub `Lookup` to implement `imdbToTvdb` — causing every scenario bundle run that encounters `tt27444205` (series IMDB id in `topstreaming_disney_mixed.json`) to throw `IdentityResolutionFailed`. This is NOT a cluster F regression; all 11 failures carry the same root cause (`IdentityResolutionFailed for tt27444205 before TVDB execution`) and the broken commit is outside the cluster F commit range.
+
+**Unit tests:** 176 tests completed in the targeted sweep; only the 2 documented pre-existing failures (`FieldSelectedTraceTest.secondary field rejected`, `MetadataRouterPrecedenceTest.provider native id type conflict`). All 10 new cluster-F pin tests passed.
+
+**Final decision:** ALL 60 architecture-audit findings remediated (100%). APPROVED for merge. The `generateMetadataExecutionAudit` failure is a pre-existing parallel-session WIP issue to be fixed separately (stub `imdbToTvdb` in `MetadataAuditRunner.default()`).
+
 ## Cluster E landed — profile/playback hardening + legacy cleanup
 
 The 8 cluster-E findings (0 P1 + 4 P2 + 4 nits) have been remediated:
