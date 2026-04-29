@@ -1,9 +1,11 @@
 package com.nexio.tv.data.mapper
 
+import com.nexio.tv.data.remote.dto.CatalogResponseDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.PosterShape
+import com.squareup.moshi.Moshi
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -32,5 +34,63 @@ class CatalogMapperTest {
         assertEquals(listOf("Science Fiction", "Adventure"), preview.genres)
         assertEquals(8.2f, preview.imdbRating)
         assertEquals(FirstPaintSource.ADDON_META_PREVIEW, preview.firstPaintSource)
+    }
+
+    @Test
+    fun `moshi parses tmdb addon alias fields for first paint`() {
+        val response = parseCatalogResponse(
+            """
+            {
+              "metas": [
+                {
+                  "id": "tmdb:687163",
+                  "type": "movie",
+                  "name": "Project Hail Mary",
+                  "genre": ["Science Fiction", "Adventure"],
+                  "year": "2026"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val preview = response.metas.single().toDomain()
+
+        assertEquals(listOf("Science Fiction", "Adventure"), preview.genres)
+        assertEquals("2026", preview.releaseInfo)
+    }
+
+    @Test
+    fun `canonical addon fields win over alias fields for first paint`() {
+        val response = parseCatalogResponse(
+            """
+            {
+              "metas": [
+                {
+                  "id": "tmdb:687163",
+                  "type": "movie",
+                  "name": "Project Hail Mary",
+                  "genres": ["Drama"],
+                  "genre": ["Science Fiction"],
+                  "releaseInfo": "2026-03-15",
+                  "year": "2026"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val preview = response.metas.single().toDomain()
+
+        assertEquals(listOf("Drama"), preview.genres)
+        assertEquals("2026-03-15", preview.releaseInfo)
+    }
+
+    private fun parseCatalogResponse(json: String): CatalogResponseDto {
+        return Moshi.Builder()
+            .build()
+            .adapter(CatalogResponseDto::class.java)
+            .fromJson(json)
+            ?: error("CatalogResponseDto did not parse")
     }
 }
