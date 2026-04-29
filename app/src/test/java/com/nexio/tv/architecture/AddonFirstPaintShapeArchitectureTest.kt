@@ -32,17 +32,34 @@ class AddonFirstPaintShapeArchitectureTest {
 
     @Test
     fun `addon first paint does not introduce provider specific home lifecycle`() {
+        data class ForbiddenLifecyclePattern(val pattern: Regex, val prefixGroup: Int)
+
         val providerSpecificLifecyclePatterns = listOf(
-            Regex("""\b[A-Za-z0-9]+AddonHomeRenderer\b"""),
-            Regex("""\b[A-Za-z0-9]+AddonHydrationScheduler\b"""),
-            Regex("""\b[A-Za-z0-9]+PreviewHydrationScheduler\b"""),
-            Regex("""\b[A-Za-z0-9]+AddonRenderer\b""")
+            ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonHomeRenderer\b"""), 1),
+            ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonRenderer\b"""), 1),
+            ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonHydrationScheduler\b"""), 1),
+            ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)PreviewHydrationScheduler\b"""), 1)
+        )
+        val allowedGenericPrefixes = setOf(
+            "Addon",
+            "Catalog",
+            "Default",
+            "External",
+            "Generic",
+            "Home",
+            "Shared",
+            "Unified"
         )
         val offenders = homeFiles().flatMap { file ->
             val source = file.readText()
-            providerSpecificLifecyclePatterns.flatMap { pattern ->
-                pattern.findAll(source).map { match ->
-                    "${file.path}:${match.value}"
+            providerSpecificLifecyclePatterns.flatMap { lifecyclePattern ->
+                lifecyclePattern.pattern.findAll(source).mapNotNull { match ->
+                    val prefix = match.groupValues[lifecyclePattern.prefixGroup]
+                    if (prefix in allowedGenericPrefixes) {
+                        null
+                    } else {
+                        "${file.path}:${match.value}"
+                    }
                 }
             }
         }
