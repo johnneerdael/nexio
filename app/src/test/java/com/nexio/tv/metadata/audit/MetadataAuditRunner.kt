@@ -840,8 +840,7 @@ class MetadataAuditRunner private constructor(
                     "title" to "Signal TVDB Canonical",
                     "poster" to "https://example.test/tvdb-signal.jpg",
                     "overview" to "Hydrated TVDB series overview"
-                ),
-                identityMappingsHarvested = mapOf("trakt:show:signal-2026" to "tvdb:1001")
+                )
             ),
             RailScenarioSpec(
                 name = "mdblist-rail-first-paint-rich-preview",
@@ -893,8 +892,7 @@ class MetadataAuditRunner private constructor(
                     "title" to "TVDB Hydrated Series",
                     "poster" to "https://example.test/tvdb-tv.jpg",
                     "overview" to "TVDB replaced rail preview fields"
-                ),
-                identityMappingsHarvested = mapOf("tmdb:tv:1399" to "tvdb:121361")
+                )
             ),
             RailScenarioSpec(
                 name = "kitsu-rail-first-paint-rich-preview",
@@ -939,8 +937,7 @@ class MetadataAuditRunner private constructor(
                     "title" to "TMDB Hydrated Movie",
                     "poster" to "https://example.test/tmdb-simkl.jpg",
                     "overview" to "TMDB replaced Simkl rail preview fields"
-                ),
-                identityMappingsHarvested = mapOf("simkl:movie:88" to "tmdb:5088")
+                )
             )
         )
 
@@ -1001,8 +998,7 @@ private data class RailScenarioSpec(
     val apiShapeId: String = "",
     val targetIds: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String> = emptyMap(),
     val usedInputs: Set<String> = emptySet(),
-    val hydratedFields: Map<String, String?> = emptyMap(),
-    val identityMappingsHarvested: Map<String, String> = emptyMap()
+    val hydratedFields: Map<String, String?> = emptyMap()
 )
 
 private class AuditMetadataProviderAdapter(
