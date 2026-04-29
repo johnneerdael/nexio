@@ -196,6 +196,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         getCurrentRow: suspend (String) -> CatalogRow?,
         isItemReferencedElsewhere: suspend (String, String) -> Boolean,
         onCatalogReady: suspend (String, CatalogRow, CatalogItemDiff) -> Unit,
+        onRawCatalogBatchComplete: suspend () -> Unit = {},
         onLog: (String, String?) -> Unit
     ): Int {
         var refreshedCatalogCount = 0
@@ -245,8 +246,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                             oldItems = oldItems,
                             diff = diff
                         )
-                    }
+                }
             }
+
+            onRawCatalogBatchComplete()
 
             val hydratedRows = hydrateAndPrefetchRows(
                 rows = refreshedEntries.map { it.row },
