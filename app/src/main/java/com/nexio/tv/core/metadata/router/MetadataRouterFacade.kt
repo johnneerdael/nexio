@@ -153,6 +153,18 @@ class MetadataRouterFacade @Inject constructor(
         )
     }
 
+    /**
+     * F2-B-08 (non-discard): Routes a TV enrichment fetch through the canonical resolve pipeline
+     * and USES the resulting [MetadataResolutionResult] to build [TvMetadataEnrichment].
+     *
+     * Unlike the other `fetch*` methods in this facade, the resolved document is NOT discarded —
+     * [result.route] provides the winning [TvProvider] and [result.resolvedDocument] supplies
+     * the enrichment fields (title, overview, poster, backdrop, logo, rating, runtimeMinutes).
+     *
+     * If you add a richer TV-enrichment shape in the future, map its fields via
+     * [ResolvedMetadataDocument.toTvMetadataEnrichment] rather than bypassing this pipeline,
+     * so trace events (`metadata.route_decision`, `metadata.field_selected`) continue to fire.
+     */
     suspend fun fetchTvEnrichment(
         metadataRequest: MetadataRequest,
         tvRequest: TvMetadataRequest
@@ -167,14 +179,18 @@ class MetadataRouterFacade @Inject constructor(
     }
 
     /**
-     * Routes a TMDB enrichment fetch through the canonical resolve pipeline so that
-     * `metadata.route_decision` and `metadata.field_selected` trace events fire, then
-     * delegates the actual rich-shape data fetch to [MetadataSecondaryRepository].
+     * F2-B-08: trace-only [resolveRequest] discard pattern. The internal `resolveRequest(req)`
+     * call is fired purely so canonical trace events emit (`metadata.route_decision`,
+     * `metadata.field_selected`, etc.). The result is intentionally discarded because the rich
+     * 22-field [TmdbEnrichment] shape is not carried by [ResolvedMetadataDocument] — the second
+     * call to [MetadataSecondaryRepository.fetchTmdbEnrichment] returns the rich payload.
      *
-     * The resolved document from [resolveRequest] is intentionally discarded — its TMDB
-     * carry-set is narrower than the 22-field [TmdbEnrichment] that downstream
-     * `enrichMeta(...)` sites depend on. Migrating naively to the resolved document
-     * would silently drop director/writer/cast/companies/networks/collection.
+     * Specifically, [ResolvedMetadataDocument] omits director, writer, full cast, production
+     * companies, networks, and collection data that downstream `enrichMeta(...)` call sites
+     * depend on. Changing this method to return the resolved document instead of delegating
+     * will silently drop all of those fields.
+     *
+     * See cluster D Task 7 and cluster H F2-B-08 for the architecture decision.
      */
     suspend fun fetchTmdbEnrichment(
         metadataRequest: MetadataRequest,
@@ -191,15 +207,18 @@ class MetadataRouterFacade @Inject constructor(
     }
 
     /**
-     * Routes a trailer fetch through the canonical resolve pipeline at depth
-     * [MetadataDepth.DETAIL_MEDIA] so that `metadata.route_decision` and
-     * `metadata.field_selected` trace events fire, then delegates the actual
-     * playback-ready resolution to [TrailerService].
+     * F2-B-08: trace-only [resolveRequest] discard pattern. The internal `resolveRequest(req)`
+     * call is fired purely so canonical trace events emit (`metadata.route_decision`,
+     * `metadata.field_selected`, etc.). The result is intentionally discarded because the
+     * trailer pipeline produces a player-ready [TrailerResolutionResult] (In-App YouTube
+     * extraction, separate video/audio adaptive URLs) which is richer than anything carried
+     * by [ResolvedMetadataDocument] or the `ResolvedField.TRAILERS` carry-set.
      *
-     * The resolved document from [resolveRequest] is intentionally discarded —
-     * the trailer pipeline produces a player-ready [TrailerResolutionResult]
-     * (with In-App YouTube extraction, separate video/audio adaptive URLs)
-     * which is richer than the resolver's `ResolvedField.TRAILERS` carry-set.
+     * If you change this method to return the resolved document instead of delegating to
+     * [TrailerService], you will lose adaptive-URL resolution, YouTube extraction, and all
+     * fallback/retry logic that [TrailerService] encapsulates.
+     *
+     * See cluster H F2-B-08 for the architecture decision.
      */
     suspend fun fetchTrailer(
         metadataRequest: MetadataRequest,
@@ -408,6 +427,26 @@ class MetadataRouterFacade @Inject constructor(
         return repo.fetchPersonDetail(personId, preferCrewCredits)
     }
 
+    /**
+     * F2-B-08 (pipeline bypass — intentional): Unlike the other `fetch*` methods in this
+     * facade, episode enrichment does NOT call [resolveRequest] at all. It drives routing
+     * directly through [MetadataRouter.route] + [MetadataIdentityResolver.resolve] +
+     * [ProviderPlanExecutor.buildPlan] + [ProviderPlanRunner.run] at [MetadataDepth.SEASON].
+     *
+     * This bypass is intentional: the season/episode step-result shape
+     * (`stepResult.episodeMetadata`) is not surfaced by [ResolvedMetadataDocument] — it
+     * lives exclusively in [ProviderPlanRunResult.stepResults]. Routing through the full
+     * [resolveRequest] pipeline and then discarding its output (as `fetchTmdbEnrichment`
+     * and `fetchTrailer` do) would re-run unnecessary field-resolution and network-resolver
+     * dispatches that have no episode-metadata analogue.
+     *
+     * Additionally, this method implements its own identity-resolution fallback loop
+     * (primary route -> fallback content-id) which requires direct access to intermediate
+     * routing state not exposed by [resolveRequest].
+     *
+     * If you need trace events here, add them at the [ProviderPlanRunner] level rather than
+     * piping this method through [resolveRequest]. See cluster H F2-B-08 and F2-T-02-nit.
+     */
     suspend fun fetchTvEpisodeEnrichment(
         metadataRequest: MetadataRequest,
         tvRequest: TvMetadataRequest
