@@ -5,6 +5,45 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster G landed — post-audit P0+P1 remediation (clears merge gate)
+
+The 17 P0+P1 findings from `review-dossier-2/09-known-gaps.md` (the post-cluster-F audit dossier at SHA `774a540f8`) have been remediated.
+
+**P0 (cluster F regressions + pre-existing pin failure):**
+- **F2-D-01** — 6 Trakt global-content specs (`fetchTrendingMovies`, `fetchTrendingShows`, `fetchPopularMovies`, `fetchPopularShows`, `fetchRecommendations`, `fetchCalendarShows`) migrated to `IntegrationScope.GlobalContent` + `profileContext = null`. New `TraktAuthenticatedGlobalContentBoundaryTest` exercises real `IntegrationSpec.init` boundary check (commits `a31efbce4` + `0076601e5`).
+- **F2-J-01** — Closed by parallel-session commits `9f0555a5a` + `ed5eedc77` between dossier generation and cluster G start. `AddonFirstPaintShapeArchitectureTest` passes; no cluster G commit needed.
+
+**P1 — scrobble enforcement (3 findings, 2 commits):**
+- **F2-H-01 + F2-F-05** — `checkScrobbleBoundary` returns `Boolean`; callers (`enqueueScrobble`, `enqueueCheckin`) gate `outbox.enqueueAndDrain` on it (Trakt + Simkl). Stale scrobbles blocked. New pin tests in both `data/integration/trakt/` and `data/integration/simkl/` (commits `ff3462903` + `0ac6d1b9b`).
+- **F2-H-02** — `checkScrobbleBoundary` now uses session-aware `assertCanWriteProfileState(resultProfileId, resultSessionId, activeProfileId, activeSessionId)` 4-arg overload, catching `ProfileBoundaryException`. Also threads `ownerSessionId` through scrobbleStart/Stop/Pause/checkin and `WatchingMutationRequest.Scrobble`/`.CheckIn` (commits `3127e10fc` + `8b7a5c6b7`).
+
+**P1 — single fixes (5):**
+- **F2-B-01** — `MetadataIdentityResolver` no longer emits `ROUTING_ID_TYPE_CONFLICT` trace entry for routes originating as `ITEM_TYPE_SERIES`/`ITEM_TYPE_MOVIE`. `MetadataExecutionAuditGoldenTest.routing rules match spec for all id types` now PASSES (commit `37f44a99b`).
+- **F2-A-01** — `DefaultIntegrationRuntime.doCallInternal` + `openInternal` success branches call `backoffManager.clear(spec.provider, spec.scope)`. New `IntegrationCallRuntimeBackoffClearTest` (commit `461c88561`).
+- **F2-C-01** — `TmdbIntegrationProvider.loadMovieCollection` routes through `runtime.get(IntegrationSpec(apiShapeId = TmdbApiShapes.COLLECTION, ...))`. `tmdb.collection` now reports `ACTIVE_RUNTIME_COVERED` in the runtime audit (commit `deb3a320f`).
+- **F2-D-08** — `LocalIntegrationCacheStore.deleteOwnedMedia` reorders: blob paths captured, DAO delete first, blob delete second. Crash mid-operation leaves a reapable dangling blob (commit `13d9d8be1`).
+
+**P1 — Lane E + I (5):**
+- **F2-E-01** — `TvdbLanguageMapper` returns `TvdbNormalizedLanguage(code, isCollapsedToFallback)`. `LocalizationPolicy` + `TraceMetadataEvents.emitLocalizationPlan` propagate `localeCollapsedToFallback` to the `metadata.localization_plan` event. 5 collateral callers updated to use `.code` accessor (commit `3f69bd367`).
+- **F2-E-03** — `RuntimeTraceValidatorRealEmissionTest` extended with TVDB episode-bundle scenario exercising `LocalizationPlanPrecedesProviderSteps` end-to-end (commit `a2e3f689c`).
+- **F2-I-01** — `app/build.gradle.kts` adds `BuildConfig.GIT_SHA` via `git rev-parse HEAD` at build time (with `local-dev` fallback). `RuntimeTraceModule` provides `TraceBuildInfo` with the actual SHA. New `TraceBuildInfoGitShaTest` (commit `88124cc99`).
+- **F2-I-06** — `TraceValidationRules.SecondaryDoesNotOverwritePrimary` filters by `sourceRole == "SECONDARY"` before evaluating rejected candidates. Primary-wins-with-rejected-secondaries no longer false-positives (commit `76f89531b`).
+- **F2-I-07** — Trace settings UI in `PlaybackSettingsSections` gated on `BuildConfig.IS_DEBUG_BUILD`. Hidden in release builds (commit `66a76fe55`).
+
+**P1 — Lane J architecture pins (2):**
+- **F2-J-02** — `CheckinCallerOwnerProfileIdContractTest` scans for `trackingScrobbleService.checkin(...)` calls and asserts `ownerProfileId` is supplied. 2 callers fixed: `HomeViewModelContinueWatching` (uses `activeHomeProfileSession.profileId`) + `MetaDetailsViewModel` (uses `profileBoundary.activeContext.value?.profileId`). Pattern narrowed to `trackingScrobbleService.checkin` after 5 unrelated HTTP-layer false positives (commit `03fde5248`).
+- **F2-J-03** — `ResolvedMetadataDocumentConstructionContractTest` allowlists `FieldResolver.kt` + `MetadataRouterFacade.kt` only. Regex refined to exclude the class-declaration line in `MetadataModels.kt` (commit `201a7816d`).
+
+OpenSpec change `cluster-g-post-audit-p0-p1` deployed (commit `dee4dcf81`).
+
+**Audit status:** All 4 audit tasks completed with BUILD SUCCESSFUL — PASS verdicts:
+- `generateProfileBoundaryAudit` — PASS
+- `generateIntegrationRuntimeAudit` — PASS
+- `generateMetadataExecutionAudit` — PASS (restored by F2-B-01 fix in commit `37f44a99b`, which eliminated the false `ROUTING_ID_TYPE_CONFLICT` trace entries that were causing the routing rules golden test to fail; this audit was previously failing before cluster G)
+- `generateTraceValidatorAudit` — PASS
+
+**Decision:** APPROVED for merge. The remaining 27 P2 + 34 Nit findings from `review-dossier-2/09-known-gaps.md` are tracked for future iteration but do not block merge.
+
 ## Cluster F landed — provider contracts + identity + nits (100% audit closure)
 
 The 10 cluster-F findings — the FINAL cluster — have been remediated:
