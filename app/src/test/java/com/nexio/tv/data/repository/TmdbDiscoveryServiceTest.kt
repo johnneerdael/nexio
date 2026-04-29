@@ -84,8 +84,12 @@ class TmdbDiscoveryServiceTest {
         )
         val client = FakeTmdbDiscoveryClient(
             catalogResults = mapOf(
-                TmdbCatalogIds.POPULAR_MOVIES to listOf(mediaResult(id = 1, title = "Movie")),
-                TmdbCatalogIds.LANGUAGE_SERIES to listOf(mediaResult(id = 2, name = "Series"))
+                TmdbCatalogIds.POPULAR_MOVIES to listOf(
+                    mediaResult(id = 1, title = "Movie", genreIds = listOf(28, 878))
+                ),
+                TmdbCatalogIds.LANGUAGE_SERIES to listOf(
+                    mediaResult(id = 2, name = "Series", genreIds = listOf(18, 10765))
+                )
             )
         )
         val service = client.createService()
@@ -106,6 +110,14 @@ class TmdbDiscoveryServiceTest {
         assertFalse(stockRow.supportsSkip)
         assertEquals(requestedCatalogs, snapshot.rowRecordsByCatalog.keys)
         assertEquals(1, snapshot.rowRecordsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES).previews.size)
+        assertEquals(
+            listOf("Action", "Science Fiction"),
+            snapshot.rowRecordsByCatalog.getValue(TmdbCatalogIds.POPULAR_MOVIES).previews.single().display.genres
+        )
+        assertEquals(
+            listOf("Drama", "Sci-Fi & Fantasy"),
+            snapshot.rowRecordsByCatalog.getValue(TmdbCatalogIds.LANGUAGE_SERIES).previews.single().display.genres
+        )
     }
 
     @Test
@@ -463,7 +475,8 @@ class TmdbDiscoveryServiceTest {
         overview: String? = null,
         releaseDate: String? = null,
         firstAirDate: String? = null,
-        voteAverage: Double? = null
+        voteAverage: Double? = null,
+        genreIds: List<Int> = emptyList()
     ): TmdbMediaResult {
         return TmdbMediaResult(
             id = id,
@@ -473,6 +486,7 @@ class TmdbDiscoveryServiceTest {
             originalName = originalName,
             mediaType = mediaType,
             originalLanguage = originalLanguage,
+            genreIds = genreIds,
             posterPath = posterPath,
             backdropPath = backdropPath,
             overview = overview,
