@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
-import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
@@ -71,12 +70,6 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
 
     return providerLocalizedMetadataResolver.fetchDecision(metadataRequest, tvRequest)
 }
-
-internal fun HomeViewModel.metadataRouterFacadeOrNull(): MetadataRouterFacade? =
-    runCatching { metadataRouterFacade }.getOrNull()
-
-internal fun HomeViewModel.providerLocalizedMetadataResolverOrNull(): ProviderLocalizedMetadataResolver? =
-    runCatching { providerLocalizedMetadataResolver }.getOrNull()
 
 internal fun MetaPreview.toHomeMetadataSourceContext(
     addonMetadata: HomeDisplayMetadata = toHomeDisplayMetadata()
