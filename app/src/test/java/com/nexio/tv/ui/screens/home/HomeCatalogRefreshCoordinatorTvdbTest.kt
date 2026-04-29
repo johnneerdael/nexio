@@ -24,7 +24,6 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.CatalogRepository
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -214,7 +213,6 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
         return HomeCatalogRefreshCoordinator(
             catalogRepository = mockk<CatalogRepository>(relaxed = true),
-            metaRepository = mockk<MetaRepository>(relaxed = true),
             titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
