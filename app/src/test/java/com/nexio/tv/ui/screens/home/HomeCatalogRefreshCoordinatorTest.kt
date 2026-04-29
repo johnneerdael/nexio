@@ -333,7 +333,7 @@ class HomeCatalogRefreshCoordinatorTest {
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
-    fun `home serialized refresh publishes coordinator first paint without meta repository detail fetch`() = runTest {
+    fun `home serialized refresh immediately publishes every raw first paint row before hydrated republish`() = runTest {
         val metaRepository = mockk<MetaRepository>(relaxed = true)
         val coordinator = mockk<HomeCatalogRefreshCoordinator>()
         val viewModel = mockk<HomeViewModel>(relaxed = true)
@@ -343,6 +343,14 @@ class HomeCatalogRefreshCoordinatorTest {
         val catalogPreview = preview(id = "tt-viewmodel-first-paint", poster = null).copy(
             description = "ViewModel catalog payload",
             releaseInfo = "2026"
+        )
+        val secondCatalogPreview = preview(id = "tt-viewmodel-second-raw", poster = null).copy(
+            description = "Second raw payload",
+            releaseInfo = "2026"
+        )
+        val hydratedPreview = catalogPreview.copy(
+            name = "Provider title",
+            description = "Provider description"
         )
         val catalogRow = CatalogRow(
             addonId = "addon",
@@ -354,6 +362,12 @@ class HomeCatalogRefreshCoordinatorTest {
             items = listOf(catalogPreview),
             hasMore = false
         )
+        val secondCatalogRow = catalogRow.copy(
+            catalogId = "featured",
+            catalogName = "Featured",
+            items = listOf(secondCatalogPreview)
+        )
+        val hydratedCatalogRow = catalogRow.copy(items = listOf(hydratedPreview))
         every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
         every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
         every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
@@ -398,16 +412,29 @@ class HomeCatalogRefreshCoordinatorTest {
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
                 onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
                 onLog = any()
             )
         } coAnswers {
             val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
             onCatalogReady(
                 "addon_movie_popular",
                 catalogRow,
                 CatalogItemDiff(addedOrChanged = listOf(catalogPreview), removed = emptyList())
             )
-            1
+            onCatalogReady(
+                "addon_movie_featured",
+                secondCatalogRow,
+                CatalogItemDiff(addedOrChanged = listOf(secondCatalogPreview), removed = emptyList())
+            )
+            onRawCatalogBatchComplete()
+            onCatalogReady(
+                "addon_movie_popular",
+                hydratedCatalogRow,
+                CatalogItemDiff(addedOrChanged = listOf(hydratedPreview), removed = emptyList())
+            )
+            2
         }
 
         try {
@@ -417,8 +444,15 @@ class HomeCatalogRefreshCoordinatorTest {
             Dispatchers.resetMain()
         }
 
-        assertEquals(catalogRow, catalogsMap["addon_movie_popular"])
-        assertEquals(listOf(listOf(catalogRow)), renderedRows)
+        assertEquals(hydratedCatalogRow, catalogsMap["addon_movie_popular"])
+        assertEquals(secondCatalogRow, catalogsMap["addon_movie_featured"])
+        assertEquals(
+            listOf(
+                listOf(catalogRow),
+                listOf(catalogRow, secondCatalogRow)
+            ),
+            renderedRows
+        )
         verify(exactly = 0) {
             metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
         }
@@ -433,10 +467,11 @@ class HomeCatalogRefreshCoordinatorTest {
                 getCurrentRow = any(),
                 isItemReferencedElsewhere = any(),
                 onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
                 onLog = any()
             )
         }
-        coVerify(exactly = 1) { viewModel.flushCatalogRowsForFirstPaint() }
+        coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint() }
     }
 
     @Test

@@ -1071,6 +1071,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
             launch(Dispatchers.IO) {
                 try {
                     val addons = addonsCache
+                    var rawFirstPaintBatchActive = _fullCatalogRows.value.isEmpty()
                     refreshedCatalogCount.set(
                         homeCatalogRefreshCoordinator.refreshSerially(
                             addons = addons,
@@ -1103,7 +1104,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
                             onCatalogReady = { catalogKey, row, diff ->
                                 withContext(Dispatchers.Main.immediate) {
                                     if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
-                                    val shouldFlushFirstPaint = _fullCatalogRows.value.isEmpty() && row.items.isNotEmpty()
+                                    val shouldFlushFirstPaint = rawFirstPaintBatchActive && row.items.isNotEmpty()
                                     catalogsMap[catalogKey] = row
                                     if (diff.addedOrChanged.isNotEmpty()) {
                                         logStartupPerf(
@@ -1116,6 +1117,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
                                     } else {
                                         scheduleUpdateCatalogRows()
                                     }
+                                }
+                            },
+                            onRawCatalogBatchComplete = {
+                                withContext(Dispatchers.Main.immediate) {
+                                    rawFirstPaintBatchActive = false
                                 }
                             },
                             onLog = { event, details -> logStartupPerf(event, details) }
