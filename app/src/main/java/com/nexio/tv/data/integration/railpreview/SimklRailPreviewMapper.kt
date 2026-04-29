@@ -73,6 +73,7 @@ class SimklRailPreviewMapper {
                     display.backdropUrl.orEmpty(),
                     display.rating?.provider?.name.orEmpty(),
                     display.rating?.value?.toString().orEmpty(),
+                    display.rating?.votes?.toString().orEmpty(),
                     rank.toString()
                 ).joinToString(separator = "|")
             ),

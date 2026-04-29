@@ -1,5 +1,6 @@
 package com.nexio.tv.data.remote.dto.simkl
 
+import com.google.gson.annotations.SerializedName
 import com.squareup.moshi.Json
 
 data class SimklLastActivitiesResponseDto(
@@ -23,7 +24,7 @@ data class SimklActivityBucketDto(
 
 data class SimklIdsDto(
     @Json(name = "simkl") val simkl: Long? = null,
-    @Json(name = "simkl_id") val simklId: Long? = null,
+    @Json(name = "simkl_id") @SerializedName("simkl_id") val simklId: Long? = null,
     @Json(name = "slug") val slug: String? = null,
     @Json(name = "imdb") val imdb: String? = null,
     @Json(name = "tmdb") val tmdb: String? = null,
