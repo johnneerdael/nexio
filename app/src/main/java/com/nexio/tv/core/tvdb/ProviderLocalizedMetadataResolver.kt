@@ -102,6 +102,10 @@ class ProviderLocalizedMetadataResolver @Inject constructor(
             MetadataPrimaryProvider.IMDB,
             MetadataPrimaryProvider.TRAKT,
             MetadataPrimaryProvider.SIMKL -> TvProvider.TMDB
+            // RPDB and TOP_POSTERS are artwork-only providers; fall back to TMDB for any
+            // localization context that erroneously references them.
+            MetadataPrimaryProvider.RPDB,
+            MetadataPrimaryProvider.TOP_POSTERS -> TvProvider.TMDB
         }
 
     private fun TvProvider.canonicalDecisionReason(hasLocalizedPayload: Boolean): TvMetadataDecisionReason =

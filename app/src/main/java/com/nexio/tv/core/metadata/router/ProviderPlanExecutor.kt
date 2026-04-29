@@ -37,6 +37,15 @@ class ProviderPlanExecutor @Inject constructor() {
                 validateMediaKind(route)
                 error("No provider execution adapter for ${route.provider}")
             }
+            // RPDB and TOP_POSTERS are artwork-only — they are not metadata routing providers
+            // and should never appear as a route.provider in the execution plan.
+            // validateMediaKind is called first so that unknown-kind validation fires before
+            // the artwork-only check, keeping the test contract consistent with TRAKT/IMDB/SIMKL.
+            MetadataPrimaryProvider.RPDB,
+            MetadataPrimaryProvider.TOP_POSTERS -> {
+                validateMediaKind(route)
+                error("${route.provider} is an artwork-only provider and cannot be used as a metadata routing provider")
+            }
         }
 
         return ProviderExecutionPlan(route = route, depth = depth, steps = steps)

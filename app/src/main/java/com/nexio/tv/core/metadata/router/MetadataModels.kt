@@ -4,7 +4,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ProviderIds
 
-enum class MetadataPrimaryProvider { TMDB, TVDB, KITSU, IMDB, TRAKT, SIMKL }
+enum class MetadataPrimaryProvider { TMDB, TVDB, KITSU, IMDB, TRAKT, SIMKL, RPDB, TOP_POSTERS }
 
 enum class MetadataDecisionReason {
     KITSU_PREFIX_DIRECT,

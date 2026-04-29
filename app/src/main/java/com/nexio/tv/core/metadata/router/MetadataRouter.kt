@@ -363,6 +363,9 @@ class MetadataRouter @Inject constructor(
             MetadataPrimaryProvider.IMDB -> builder.containsKey(MetadataPrimaryProvider.IMDB)
             MetadataPrimaryProvider.TRAKT,
             MetadataPrimaryProvider.SIMKL -> builder.containsKey(provider)
+            // RPDB and TOP_POSTERS are artwork-only providers — not used in metadata routing target resolution.
+            MetadataPrimaryProvider.RPDB,
+            MetadataPrimaryProvider.TOP_POSTERS -> false
         }
 
         val canResolveThroughKnownCrossProviderTarget = when (provider) {
