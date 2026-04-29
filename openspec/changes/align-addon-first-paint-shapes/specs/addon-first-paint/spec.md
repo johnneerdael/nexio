@@ -46,6 +46,7 @@ Addon preview stable IDs SHALL be used by the existing metadata routing pipeline
 #### Scenario: Raw IMDb movie add-on item resolves to TMDB target before provider execution
 
 - **GIVEN** an add-on catalog item has `id: "tt12042730"`, `type: "movie"`, and no direct `tmdb:` content ID
+- **AND** visible hydration receives an adapted preview where `MetaPreview.firstPaintStableIds.imdb` is `"tt12042730"`
 - **AND** the existing TMDB external-ID lookup maps IMDb ID `tt12042730` to TMDB ID `687163`
 - **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
 - **THEN** the route provider is `TMDB`
@@ -55,6 +56,7 @@ Addon preview stable IDs SHALL be used by the existing metadata routing pipeline
 #### Scenario: Raw IMDb series add-on item resolves through TMDB then TVDB before provider execution
 
 - **GIVEN** an add-on catalog item has `id: "tt0903747"`, `type: "series"`, and no direct `tvdb:` content ID
+- **AND** visible hydration receives an adapted preview where `MetaPreview.firstPaintStableIds.imdb` is `"tt0903747"`
 - **AND** the existing TMDB external-ID lookup maps IMDb ID `tt0903747` to TMDB TV ID `1396`
 - **AND** the existing identity resolver maps TMDB TV ID `1396` to TVDB ID `81189`
 - **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
@@ -64,7 +66,8 @@ Addon preview stable IDs SHALL be used by the existing metadata routing pipeline
 
 #### Scenario: Preview stable provider IDs win over raw IMDb content ID
 
-- **GIVEN** an add-on catalog item has `id: "tt12042730"`, `type: "movie"`, and `MetaPreview.firstPaintStableIds.tmdb == "687163"`
+- **GIVEN** an add-on catalog item has `id: "tt12042730"` and `type: "movie"`
+- **AND** visible hydration receives an adapted preview where `MetaPreview.firstPaintStableIds.tmdb` is `"687163"`
 - **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
 - **THEN** `route.targetIds[TMDB]` is `"tmdb:687163"`
 - **AND** no add-on-specific renderer, scheduler, or metadata bypass is used.
