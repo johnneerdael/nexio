@@ -129,12 +129,11 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     itemKey = itemKey,
                     languageTag = languageTag
                 )
-                if (hasCachedMetadata) {
-                    if (telemetryEnabled) {
-                        onLog("item_metadata_cached", "catalogKey=$rowKey itemKey=$itemKey")
-                    }
-                } else if (telemetryEnabled) {
-                    onLog("item_metadata_fetch", "catalogKey=$rowKey itemKey=$itemKey")
+                if (telemetryEnabled) {
+                    onLog(
+                        "item_metadata_overlay",
+                        "catalogKey=$rowKey itemKey=$itemKey cache_current=$hasCachedMetadata"
+                    )
                 }
                 val merged = mergePersistedHomeDisplayMetadata(
                     currentItem = item,
@@ -216,18 +215,18 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                             "catalogKey=$catalogKey total=${refreshed.items.size} retained=$retainedCount refreshed=$newCount removed=$removedCount"
                         )
 
-                        var metadataCachedCount = 0
-                        var metadataFetchCount = 0
-                        var metadataRetainedMissingCount = 0
-                        var metadataFetchedNewCount = 0
-                        var metadataFetchedRetainedCount = 0
+                        var metadataOverlayCount = 0
+                        var metadataOverlayCacheCurrentCount = 0
+                        var metadataOverlayCacheMissingCount = 0
+                        var metadataOverlayNewMissingCount = 0
+                        var metadataOverlayRetainedMissingCount = 0
                         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
                         val changedKeys = diff.addedOrChanged
                             .asSequence()
                             .map { "${it.apiType}:${it.id}" }
                             .toHashSet()
                         val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
-                        onLog("metadata_hydrate_start", "catalogKey=$catalogKey items=${refreshed.items.size}")
+                        onLog("metadata_overlay_start", "catalogKey=$catalogKey items=${refreshed.items.size}")
                         val hydratedItems = refreshed.items.map { item ->
                             val itemKey = "${item.apiType}:${item.id}"
                             val persistedFallback = oldItemsByKey[itemKey]
@@ -242,20 +241,22 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 itemKey = itemKey,
                                 languageTag = languageTag
                             )
+                            metadataOverlayCount += 1
                             if (hasCachedMetadata) {
-                                metadataCachedCount += 1
-                                if (telemetryEnabled) {
-                                    onLog("item_metadata_cached", "catalogKey=$catalogKey itemKey=$itemKey")
-                                }
-                            } else if (itemKey !in changedKeys) {
-                                metadataRetainedMissingCount += 1
-                                metadataFetchedRetainedCount += 1
+                                metadataOverlayCacheCurrentCount += 1
                             } else {
-                                metadataFetchedNewCount += 1
-                                metadataFetchCount += 1
-                                if (telemetryEnabled) {
-                                    onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
+                                metadataOverlayCacheMissingCount += 1
+                                if (itemKey in changedKeys) {
+                                    metadataOverlayNewMissingCount += 1
+                                } else {
+                                    metadataOverlayRetainedMissingCount += 1
                                 }
+                            }
+                            if (telemetryEnabled) {
+                                onLog(
+                                    "item_metadata_overlay",
+                                    "catalogKey=$catalogKey itemKey=$itemKey cache_current=$hasCachedMetadata"
+                                )
                             }
                             val merged = mergePersistedHomeDisplayMetadata(
                                 currentItem = item,
@@ -268,9 +269,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         }
                         val refreshedHydrated = refreshed.copy(items = hydratedItems)
                         onLog(
-                            "metadata_hydrate_end",
-                            "catalogKey=$catalogKey total=${refreshedHydrated.items.size} cached=$metadataCachedCount fetched=$metadataFetchCount " +
-                                "fetched_new=$metadataFetchedNewCount fetched_retained_missing=$metadataFetchedRetainedCount retained_missing=$metadataRetainedMissingCount"
+                            "metadata_overlay_end",
+                            "catalogKey=$catalogKey total=${refreshedHydrated.items.size} overlay=$metadataOverlayCount " +
+                                "cache_current=$metadataOverlayCacheCurrentCount cache_missing=$metadataOverlayCacheMissingCount " +
+                                "new_missing=$metadataOverlayNewMissingCount retained_missing=$metadataOverlayRetainedMissingCount"
                         )
 
                         val imageTelemetry = buildImagePrefetchTelemetry(refreshedHydrated.items)
