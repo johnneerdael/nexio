@@ -3081,7 +3081,8 @@ class MetaDetailsViewModel @Inject constructor(
                         season = season,
                         number = episode,
                         episodeTitle = video.title
-                    )
+                    ),
+                    ownerProfileId = profileBoundary.activeContext.value?.profileId
                 )
             }.onSuccess { success ->
                 if (success) {
