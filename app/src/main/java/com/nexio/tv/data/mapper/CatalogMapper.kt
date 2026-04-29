@@ -16,10 +16,10 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         background = background,
         logo = logo,
         description = description,
-        releaseInfo = releaseInfo,
+        releaseInfo = releaseInfo ?: year,
         runtime = runtime,
         imdbRating = imdbRating?.toFloatOrNull(),
-        genres = genres ?: emptyList(),
+        genres = genres ?: genre ?: emptyList(),
         trailerYtIds = trailerStreams?.mapNotNull { it.ytId?.takeIf { id -> id.isNotBlank() } } ?: emptyList(),
         language = language
     )
