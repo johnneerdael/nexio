@@ -100,4 +100,25 @@ class RuntimeTraceInterceptorBodyGatingTest {
         val sink = runRequest(TraceMode.OFF, isInternalBuild = true)
         assertEquals(0, sink.events.size)
     }
+
+    // F2-I-04: SAFE_METADATA_RUNTIME must never capture bodies regardless of build type.
+    @Test
+    fun `SAFE_METADATA_RUNTIME mode does not emit body_sample in internal build`() {
+        val sink = runRequest(TraceMode.SAFE_METADATA_RUNTIME, isInternalBuild = true)
+        assertEquals(
+            "SAFE_METADATA_RUNTIME must not emit trace.body_sample even in internal builds",
+            0,
+            sink.events.count { it.eventType == "trace.body_sample" }
+        )
+    }
+
+    @Test
+    fun `SAFE_METADATA_RUNTIME mode does not emit body_sample in release build`() {
+        val sink = runRequest(TraceMode.SAFE_METADATA_RUNTIME, isInternalBuild = false)
+        assertEquals(
+            "SAFE_METADATA_RUNTIME must not emit trace.body_sample in release builds",
+            0,
+            sink.events.count { it.eventType == "trace.body_sample" }
+        )
+    }
 }
