@@ -223,6 +223,114 @@ class HomeCatalogRefreshCoordinatorTest {
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
+    @Test
+    fun `refresh first paint publishes all serial rows before provider hydration`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val events = mutableListOf<String>()
+        val firstCatalogRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(preview(id = "tt-first-serial", poster = null).copy(name = "Raw first")),
+            hasMore = false
+        )
+        val secondCatalogRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "featured",
+            catalogName = "Featured",
+            type = ContentType.MOVIE,
+            items = listOf(preview(id = "tt-second-serial", poster = null).copy(name = "Raw second")),
+            hasMore = false
+        )
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://addon.example",
+                addonId = "addon",
+                addonName = "Addon",
+                catalogId = "popular",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                supportsSkip = false
+            )
+        } returns Result.success(firstCatalogRow)
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://addon.example",
+                addonId = "addon",
+                addonName = "Addon",
+                catalogId = "featured",
+                catalogName = "Featured",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                supportsSkip = false
+            )
+        } returns Result.success(secondCatalogRow)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } coAnswers {
+            events += "provider"
+            TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = TvMetadataEnrichment(
+                    seriesTvdbId = null,
+                    localizedTitle = "Provider title"
+                )
+            )
+        }
+
+        val refreshed = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter
+        ).refreshSerially(
+            addons = listOf(
+                addon(
+                    catalogs = listOf(
+                        CatalogDescriptor(type = ContentType.MOVIE, id = "popular", name = "Popular"),
+                        CatalogDescriptor(type = ContentType.MOVIE, id = "featured", name = "Featured")
+                    )
+                )
+            ),
+            telemetryEnabled = true,
+            isCatalogDisabled = { _, _ -> false },
+            getCurrentRow = { null },
+            isItemReferencedElsewhere = { _, _ -> false },
+            onCatalogReady = { catalogKey, row, _ ->
+                events += "publish:$catalogKey:${row.items.single().name}"
+                if (events.count { it.startsWith("publish:") && it.contains(":Raw ") } < 2) {
+                    coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+                }
+            },
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(2, refreshed)
+        assertTrue(
+            events.indexOf("provider") >
+                events.indexOf("publish:addon_movie_popular:Raw first")
+        )
+        assertTrue(
+            events.indexOf("provider") >
+                events.indexOf("publish:addon_movie_featured:Raw second")
+        )
+        assertTrue(
+            events.indexOf("publish:addon_movie_popular:Provider title") >
+                events.indexOf("provider")
+        )
+        assertTrue(
+            events.indexOf("publish:addon_movie_featured:Provider title") >
+                events.indexOf("provider")
+        )
+        coVerify(exactly = 2) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun `home serialized refresh publishes coordinator first paint without meta repository detail fetch`() = runTest {
@@ -340,7 +448,15 @@ class HomeCatalogRefreshCoordinatorTest {
         )
     }
 
-    private fun addon(): Addon {
+    private fun addon(
+        catalogs: List<CatalogDescriptor> = listOf(
+            CatalogDescriptor(
+                type = ContentType.MOVIE,
+                id = "popular",
+                name = "Popular"
+            )
+        )
+    ): Addon {
         return Addon(
             id = "addon",
             name = "Addon",
@@ -348,13 +464,7 @@ class HomeCatalogRefreshCoordinatorTest {
             description = null,
             logo = null,
             baseUrl = "https://addon.example",
-            catalogs = listOf(
-                CatalogDescriptor(
-                    type = ContentType.MOVIE,
-                    id = "popular",
-                    name = "Popular"
-                )
-            ),
+            catalogs = catalogs,
             types = listOf(ContentType.MOVIE),
             resources = listOf(AddonResource(name = "catalog", types = listOf("movie"), idPrefixes = null))
         )

@@ -60,6 +60,13 @@ internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPr
     )
 }
 
+private data class SerialRefreshEntry(
+    val catalogKey: String,
+    val row: CatalogRow,
+    val oldItems: List<MetaPreview>,
+    val diff: CatalogItemDiff
+)
+
 @Singleton
 class HomeCatalogRefreshCoordinator @Inject constructor(
     private val catalogRepository: CatalogRepository,
@@ -177,6 +184,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     ): Int {
         var refreshedCatalogCount = 0
         refreshMutex.withLock {
+            val refreshedEntries = mutableListOf<SerialRefreshEntry>()
             addons.forEach { addon ->
                 addon.catalogs
                     .asSequence()
@@ -215,26 +223,42 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         onCatalogReady(catalogKey, refreshed, diff)
                         onLog("catalog_publish_ready", "catalogKey=$catalogKey")
 
-                        val hydrated = hydrateAndPrefetchRows(
-                            rows = listOf(refreshed),
-                            existingRowsByKey = mapOf(catalogKey to refreshed.copy(items = oldItems)),
-                            telemetryEnabled = telemetryEnabled,
-                            onLog = onLog
-                        ).single()
-                        if (hydrated != refreshed) {
-                            onCatalogReady(catalogKey, hydrated, diffCatalogItems(refreshed.items, hydrated.items))
-                            onLog("catalog_provider_overlay_ready", "catalogKey=$catalogKey")
-                        }
-
-                        diff.removed.forEach { removed ->
-                            val itemKey = "${removed.apiType}:${removed.id}"
-                            if (!isItemReferencedElsewhere(itemKey, catalogKey)) {
-                                val urls = metadataDiskCacheStore.removeMetaEntriesForItem(itemKey)
-                                evictImageUrls(urls)
-                                onLog("cleanup_removed_item", "itemKey=$itemKey removedUrls=${urls.size}")
-                            }
-                        }
+                        refreshedEntries += SerialRefreshEntry(
+                            catalogKey = catalogKey,
+                            row = refreshed,
+                            oldItems = oldItems,
+                            diff = diff
+                        )
                     }
+            }
+
+            val hydratedRows = hydrateAndPrefetchRows(
+                rows = refreshedEntries.map { it.row },
+                existingRowsByKey = refreshedEntries.associate { entry ->
+                    entry.catalogKey to entry.row.copy(items = entry.oldItems)
+                },
+                telemetryEnabled = telemetryEnabled,
+                onLog = onLog
+            )
+
+            refreshedEntries.zip(hydratedRows).forEach { (entry, hydrated) ->
+                if (hydrated != entry.row) {
+                    onCatalogReady(
+                        entry.catalogKey,
+                        hydrated,
+                        diffCatalogItems(entry.row.items, hydrated.items)
+                    )
+                    onLog("catalog_provider_overlay_ready", "catalogKey=${entry.catalogKey}")
+                }
+
+                entry.diff.removed.forEach { removed ->
+                    val itemKey = "${removed.apiType}:${removed.id}"
+                    if (!isItemReferencedElsewhere(itemKey, entry.catalogKey)) {
+                        val urls = metadataDiskCacheStore.removeMetaEntriesForItem(itemKey)
+                        evictImageUrls(urls)
+                        onLog("cleanup_removed_item", "itemKey=$itemKey removedUrls=${urls.size}")
+                    }
+                }
             }
         }
         return refreshedCatalogCount
