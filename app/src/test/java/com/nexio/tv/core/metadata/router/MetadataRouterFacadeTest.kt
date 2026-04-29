@@ -5,8 +5,10 @@ import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.ProviderIds
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -200,6 +202,39 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
+    fun `raw IMDB movie addon hydration executes TMDB plan with provider native target`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup(tmdbForImdb = mapOf("tt12042730" to 687163))
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TMDB)
+
+        val result = facade(
+            adapter,
+            tmdbExternalIdLookup = lookup
+        ).resolveRequest(
+            MetadataRequest(
+                contentId = "tt12042730",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(imdb = "tt12042730")
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        val executedRoute = adapter.executedRoutes.single()
+        assertEquals(MetadataPrimaryProvider.TMDB, result.route?.provider)
+        assertEquals(listOf("tmdb.movie.core"), adapter.apiShapeIds)
+        assertEquals("tmdb:687163", executedRoute.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals("tt12042730", executedRoute.targetIds[MetadataPrimaryProvider.IMDB])
+        assertTrue(
+            "provider execution must not receive raw IMDB id as TMDB-native target",
+            executedRoute.targetIds[MetadataPrimaryProvider.TMDB] != "tt12042730"
+        )
+        assertEquals(false, executedRoute.targetIdRequiresIdentityResolution)
+        assertEquals(listOf("findTmdb:tt12042730:movie"), lookup.calls)
+    }
+
+    @Test
     fun `missing plan step adapter mapping fails test`() = runTest {
         val error = try {
             facade().resolveRequest(
@@ -291,13 +326,15 @@ class MetadataRouterFacadeTest {
             override suspend fun tmdbToTvdb(tmdbId: String): String? = null
             override suspend fun tvdbToTmdb(tvdbId: String): String? = null
         },
+        tmdbExternalIdLookup: TmdbExternalIdLookupProvider? = null,
         fieldResolver: FieldResolver = FieldResolver()
     ): MetadataRouterFacade =
         MetadataRouterFacade(
             router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
-                idMappingStore = InMemoryIdMappingStore()
+                idMappingStore = InMemoryIdMappingStore(),
+                tmdbExternalIdLookup = tmdbExternalIdLookup
             ),
             providerPlanExecutor = ProviderPlanExecutor(),
             resolverOrchestrator = ResolverOrchestrator(),
@@ -320,12 +357,14 @@ class MetadataRouterFacadeTest {
     ) : MetadataProviderAdapter {
         var calls = 0
         val apiShapeIds = mutableListOf<String>()
+        val executedRoutes = mutableListOf<MetadataRoute>()
 
         override fun supports(step: ProviderPlanStep): Boolean = true
 
         override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
             calls += 1
             apiShapeIds += step.apiShapeId
+            executedRoutes += route
             val episodeMetadata = if (step.role == ProviderPlanRole.SEASON) {
                 val seasonNumber = route.seasonNumber ?: 1
                 mapOf(
@@ -349,6 +388,22 @@ class MetadataRouterFacadeTest {
                 ),
                 episodeMetadata = episodeMetadata
             )
+        }
+    }
+
+    private class FakeTmdbExternalIdLookup(
+        private val tmdbForImdb: Map<String, Int> = emptyMap()
+    ) : TmdbExternalIdLookupProvider {
+        val calls = mutableListOf<String>()
+
+        override suspend fun findTmdbIdByImdbId(imdbId: String, mediaType: String): Int? {
+            calls += "findTmdb:$imdbId:$mediaType"
+            return tmdbForImdb[imdbId]
+        }
+
+        override suspend fun findImdbIdByTmdbId(tmdbId: Int, mediaType: String): String? {
+            calls += "findImdb:$tmdbId:$mediaType"
+            return null
         }
     }
 }
