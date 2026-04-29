@@ -41,11 +41,11 @@ class TvdbSettingsNoAdvancedToggleTest {
          * the project root by looking for build.gradle.kts.
          */
         private fun findProjectRoot(): File {
-            // Try common locations relative to CWD
-            val candidates = listOf(
-                File(System.getProperty("user.dir")),
-                File(System.getProperty("user.dir")).parentFile,
-                File(System.getProperty("user.dir")).resolve("..").canonicalFile
+            val cwd = File(System.getProperty("user.dir"))
+            val candidates = listOfNotNull(
+                cwd,
+                cwd.parentFile,
+                cwd.resolve("..").canonicalFile
             )
             for (candidate in candidates) {
                 if (candidate.resolve("app/build.gradle.kts").exists() ||
@@ -54,8 +54,7 @@ class TvdbSettingsNoAdvancedToggleTest {
                     return candidate
                 }
             }
-            // Fall back to CWD
-            return File(System.getProperty("user.dir"))
+            return cwd
         }
     }
 
