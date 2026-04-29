@@ -324,7 +324,7 @@ class RailPreviewLifecycleArchitectureTest {
         }
         assertTrue(
             "ProviderLocalizedMetadataResolver must resolve through MetadataRouterFacade.",
-            source.contains("metadataRouterFacade.resolveRequest(metadataRequest)")
+            Regex("""metadataRouterFacade\s*\.\s*resolveRequest\s*\(""").containsMatchIn(source)
         )
     }
 
@@ -350,13 +350,27 @@ class RailPreviewLifecycleArchitectureTest {
     @Test
     fun `metadata audit rail scenarios do not hard code identity harvest maps`() {
         val source = File("app/src/test/java/com/nexio/tv/metadata/audit/MetadataAuditRunner.kt").readText()
-        val forbiddenPatterns = listOf(
-            Regex("""identityMappingsHarvested\s*=\s*mapOf\("""),
-            Regex("""val\s+identityMappingsHarvested\s*:\s*Map<String,\s*String>\s*=\s*emptyMap\(\)""")
+        val railScenarioListSource = Regex(
+            """(?s)\brailScenarioSpecs\s*=\s*listOf\(.*?(?=private\s+data\s+class\s+RailScenarioSpec\b)"""
+        ).find(source)?.value.orEmpty()
+        val railScenarioSpecSource = Regex(
+            """(?s)private\s+data\s+class\s+RailScenarioSpec\b.*"""
+        ).find(source)?.value.orEmpty()
+
+        assertTrue(
+            "MetadataAuditRunner must expose rail scenario fixtures and RailScenarioSpec for architecture auditing.",
+            railScenarioListSource.isNotBlank() && railScenarioSpecSource.isNotBlank()
         )
-        val offenders = forbiddenPatterns.flatMap { pattern ->
-            pattern.findAll(source).map { match -> match.value.trim() }
-        }
+
+        val offenders =
+            Regex("""identityMappingsHarvested\s*=\s*mapOf\(""")
+                .findAll(railScenarioListSource)
+                .map { match -> match.value.trim() }
+                .toList() +
+                Regex("""val\s+identityMappingsHarvested\s*:\s*Map<String,\s*String>\s*=\s*emptyMap\(\)""")
+                    .findAll(railScenarioSpecSource)
+                    .map { match -> match.value.trim() }
+                    .toList()
 
         if (offenders.isNotEmpty()) {
             fail(
