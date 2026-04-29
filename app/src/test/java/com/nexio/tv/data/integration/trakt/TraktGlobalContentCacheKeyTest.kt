@@ -13,6 +13,30 @@ import org.junit.Test
  */
 class TraktGlobalContentCacheKeyTest {
 
+    /**
+     * Extracts the body of a named function using brace-balanced scanning so the
+     * check is not sensitive to physical text layout or file size.
+     */
+    private fun extractFunctionBody(text: String, fnName: String): String? {
+        val start = text.indexOf("fun $fnName(")
+        if (start < 0) return null
+        val openBrace = text.indexOf('{', start)
+        if (openBrace < 0) return null
+        var depth = 1
+        var i = openBrace + 1
+        while (i < text.length) {
+            when (text[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return text.substring(openBrace + 1, i)
+                }
+            }
+            i++
+        }
+        return null
+    }
+
     @Test
     fun `global-content fetch functions do not call accountCacheKey`() {
         val provider = generateSequence(java.io.File(".")) { it.parentFile }
@@ -28,16 +52,13 @@ class TraktGlobalContentCacheKeyTest {
             "fetchPopularMovies",
             "fetchPopularShows",
             "fetchRecommendations",
-            "fetchCalendarShows"
+            "fetchCalendarShows",
+            "fetchPopularLists"
         )
 
         val offenders = mutableListOf<String>()
         for (fn in globalFetchFns) {
-            // Find function declaration; grab next ~2500 chars (covers a typical fetch function body)
-            val start = text.indexOf("fun $fn(")
-            if (start < 0) continue  // function may not exist; skip silently
-            val end = (start + 2500).coerceAtMost(text.length)
-            val body = text.substring(start, end)
+            val body = extractFunctionBody(text, fn) ?: continue
             if (body.contains("accountCacheKey(")) {
                 offenders += fn
             }

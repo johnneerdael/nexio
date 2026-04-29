@@ -949,10 +949,6 @@ class TraktIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
-    // -----------------------------------------------------------------------------------------
-    // User-specific list / review endpoints (account-scoped cache keys)
-    // -----------------------------------------------------------------------------------------
-
     suspend fun fetchPopularLists(
         page: Int,
         limit: Int
@@ -992,6 +988,10 @@ class TraktIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
+    /**
+     * Uses accountCacheKey because each Trakt user owns their own list collection.
+     * Two profiles on the same device have independent lists; their cache entries must not collide.
+     */
     suspend fun fetchUserLists(
         id: String
     ): List<TraktListSummaryDto>? {
@@ -1029,6 +1029,10 @@ class TraktIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
+    /**
+     * Uses accountCacheKey because list items belong to a specific user's custom list.
+     * Different profiles have different lists and must each hold their own cache entry.
+     */
     suspend fun fetchUserListItems(
         id: String,
         listId: String,
@@ -1082,6 +1086,10 @@ class TraktIntegrationProvider @Inject constructor(
             fetchMovieCommentsPage(pathId = pathId, page = page, limit = limit)
         }
 
+    /**
+     * Uses accountCacheKey because comment votes and user-specific state (hidden, liked) are
+     * account-bound. Two profiles must not share a single cached comment list.
+     */
     suspend fun fetchMovieCommentsPage(
         pathId: String,
         page: Int,
@@ -1134,6 +1142,10 @@ class TraktIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
+    /**
+     * Uses accountCacheKey because comment votes and user-specific state (hidden, liked) are
+     * account-bound. Two profiles must not share a single cached comment list.
+     */
     suspend fun fetchShowCommentsPage(
         pathId: String,
         page: Int,
