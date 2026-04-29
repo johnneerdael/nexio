@@ -44,7 +44,7 @@ class OpenSubtitlesHashIntegrationProviderTest {
         assertEquals(listOf(0L..65_535L, 65_536L..131_071L), transport.requests)
         assertEquals(1, runtime.calls.size)
         assertEquals(IntegrationWorkClass.PLAYBACK_RESOLUTION, runtime.calls.single().workClass)
-        assertEquals(IntegrationScope.Global, runtime.calls.single().scope)
+        assertEquals(IntegrationScope.GlobalContent, runtime.calls.single().scope)
         assertTrue(transportThread.get()?.isNotBlank() == true)
         assertFalse(transportThread.get() == callerThread)
     }
