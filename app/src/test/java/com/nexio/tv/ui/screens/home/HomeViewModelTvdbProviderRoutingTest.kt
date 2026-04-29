@@ -42,8 +42,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            providerMetadataRouter = tvMetadataRouter
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
         )
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
@@ -74,8 +73,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            providerMetadataRouter = tvMetadataRouter
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
         )
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
@@ -116,8 +114,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-            providerMetadataRouter = tvMetadataRouter
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
         )
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore

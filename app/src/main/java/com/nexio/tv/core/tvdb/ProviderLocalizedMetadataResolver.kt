@@ -11,8 +11,7 @@ import kotlinx.coroutines.CancellationException
 
 @Singleton
 class ProviderLocalizedMetadataResolver @Inject constructor(
-    private val metadataRouterFacade: MetadataRouterFacade,
-    private val providerMetadataRouter: ProviderMetadataRouter
+    private val metadataRouterFacade: MetadataRouterFacade
 ) {
     suspend fun fetchDecision(
         metadataRequest: MetadataRequest,
