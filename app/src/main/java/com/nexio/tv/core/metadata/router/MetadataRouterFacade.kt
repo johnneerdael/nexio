@@ -550,6 +550,9 @@ class MetadataRouterFacade @Inject constructor(
             MetadataPrimaryProvider.TRAKT,
             MetadataPrimaryProvider.SIMKL,
             null -> TvProvider.TVDB
+            // RPDB and TOP_POSTERS are artwork-only providers — not used in metadata routing context.
+            MetadataPrimaryProvider.RPDB,
+            MetadataPrimaryProvider.TOP_POSTERS -> TvProvider.TVDB
         }
 
     private companion object {
