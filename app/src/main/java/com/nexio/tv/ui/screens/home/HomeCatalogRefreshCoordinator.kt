@@ -29,7 +29,6 @@ import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.repository.CatalogRepository
-import com.nexio.tv.domain.repository.MetaRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -63,7 +62,6 @@ internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPr
 @Singleton
 class HomeCatalogRefreshCoordinator @Inject constructor(
     private val catalogRepository: CatalogRepository,
-    private val metaRepository: MetaRepository,
     private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val metadataRouterFacade: MetadataRouterFacade,
@@ -324,6 +322,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         var metadataFetchCount = 0
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val catalogKey = "visible_home"
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerToken = posterProviderCacheToken(activePosterProvider)
         val runtimeHydrationKeys = AndroidTvSearchRuntimeReadiness
             .prioritizeMissingRuntimeCandidates(uniqueItems)
             .map { "${it.apiType}:${it.id}" }
@@ -351,7 +351,13 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
             }
             runCatching {
-                overlayProviderLocalizedMetadata(item, onLog)
+                val hydrated = overlayProviderLocalizedMetadata(item, onLog)
+                metadataDiskCacheStore.writeMeta(
+                    itemKey = itemKey,
+                    languageTag = languageTag,
+                    providerToken = providerToken,
+                    meta = hydrated.toMinimalMetaCacheRecord(activePosterProvider)
+                )
             }
         }
         onLog(
@@ -472,6 +478,50 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun posterProviderCacheToken(
+        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
+    ): String {
+        if (activeProvider == null) return "native"
+        return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
+    }
+
+    private fun MetaPreview.toMinimalMetaCacheRecord(
+        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
+    ): Meta {
+        return Meta(
+            id = id,
+            type = type,
+            rawType = rawType,
+            name = name,
+            poster = poster,
+            posterShape = posterShape,
+            background = background,
+            logo = logo,
+            description = description,
+            releaseInfo = releaseInfo,
+            imdbRating = imdbRating,
+            ratingSource = ratingSource,
+            genres = genres,
+            runtime = runtime,
+            director = emptyList(),
+            writer = emptyList(),
+            cast = emptyList(),
+            castMembers = emptyList(),
+            videos = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            country = null,
+            awards = null,
+            language = language,
+            links = emptyList(),
+            trailerYtIds = trailerYtIds,
+            tvdbSeasonOrderContext = null,
+            posterProviderTag = posterProviderTag ?: activeProvider?.provider?.name?.lowercase(),
+            localReleaseInfo = null
+        )
     }
 
     @OptIn(ExperimentalCoilApi::class)
