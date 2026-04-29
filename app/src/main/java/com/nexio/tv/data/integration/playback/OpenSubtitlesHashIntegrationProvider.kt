@@ -41,7 +41,7 @@ class OpenSubtitlesHashIntegrationProvider @Inject constructor(
         IntegrationCallSpec(
             provider = IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
             workClass = IntegrationWorkClass.PLAYBACK_RESOLUTION,
-            scope = IntegrationScope.Global,
+            scope = IntegrationScope.GlobalContent,
             apiShapeId = PlaybackApiShapes.OPEN_SUBTITLES_HASH,
             operationKey = "playback.opensubtitlesHash.compute",
             call = {

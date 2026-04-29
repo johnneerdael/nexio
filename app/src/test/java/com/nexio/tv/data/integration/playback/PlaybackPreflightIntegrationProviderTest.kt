@@ -43,7 +43,7 @@ class PlaybackPreflightIntegrationProviderTest {
         assertFalse(provider.isPlayable("https://cdn.stremthru.example/video.mp4"))
         assertEquals(1, runtime.calls.size)
         assertEquals(IntegrationWorkClass.PLAYBACK_RESOLUTION, runtime.calls.single().workClass)
-        assertEquals(IntegrationScope.Global, runtime.calls.single().scope)
+        assertEquals(IntegrationScope.GlobalContent, runtime.calls.single().scope)
         assertTrue(transportThread.get()?.isNotBlank() == true)
         assertFalse(transportThread.get() == callerThread)
     }
