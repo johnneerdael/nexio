@@ -80,7 +80,7 @@ class TraktIntegrationProviderRecommendationsTest {
         )
 
         assertEquals(
-            listOf("profile:1:provider:TRAKT:credential:trakt-test-1:trakt:recommendations:movies:limit:20"),
+            listOf("global:provider:TRAKT:trakt:recommendations:movies:limit:20"),
             runtime.keys
         )
         assertEquals(1, recommendations?.size)
@@ -118,10 +118,10 @@ class TraktIntegrationProviderRecommendationsTest {
 
         assertEquals(
             listOf(
-                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:trending:movies:limit:20",
-                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:trending:shows:limit:20",
-                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:popular:movies:limit:20",
-                "profile:1:provider:TRAKT:credential:trakt-test-1:trakt:popular:shows:limit:20"
+                "global:provider:TRAKT:trakt:trending:movies:limit:20",
+                "global:provider:TRAKT:trakt:trending:shows:limit:20",
+                "global:provider:TRAKT:trakt:popular:movies:limit:20",
+                "global:provider:TRAKT:trakt:popular:shows:limit:20"
             ),
             runtime.keys
         )
@@ -132,7 +132,10 @@ class TraktIntegrationProviderRecommendationsTest {
     }
 
     @Test
-    fun `profile scoped trakt runtime caches do not cross read between profiles`() = runTest {
+    fun `global content recommendations are shared across profiles via common cache key`() = runTest {
+        // F-C-06: recommendations use globalContentCacheKey so multiple profiles share the same
+        // cache entry. Profile 2's call hits the cache populated by profile 1 and returns the
+        // same data without a second API call.
         val registry = defaultIntegrationPolicyRegistry()
         val runtime = DefaultIntegrationRuntime(
             cacheStore = LocalIntegrationCacheStore(
@@ -167,26 +170,13 @@ class TraktIntegrationProviderRecommendationsTest {
         }
         coEvery {
             traktApi.getRecommendations(any(), any(), any(), any(), any())
-        } returnsMany listOf(
-            Response.success(
-                listOf(
-                    TraktRecommendationItemDto(
-                        movie = TraktMovieDto(
-                            title = "Profile One",
-                            year = 2001,
-                            ids = TraktIdsDto(imdb = "tt0000001")
-                        )
-                    )
-                )
-            ),
-            Response.success(
-                listOf(
-                    TraktRecommendationItemDto(
-                        movie = TraktMovieDto(
-                            title = "Profile Two",
-                            year = 2002,
-                            ids = TraktIdsDto(imdb = "tt0000002")
-                        )
+        } returns Response.success(
+            listOf(
+                TraktRecommendationItemDto(
+                    movie = TraktMovieDto(
+                        title = "Global Recommendations",
+                        year = 2001,
+                        ids = TraktIdsDto(imdb = "tt0000001")
                     )
                 )
             )
@@ -201,9 +191,10 @@ class TraktIntegrationProviderRecommendationsTest {
         profileId = 2
         val profileTwo = provider.fetchRecommendations(type = "movies", limit = 20)
 
-        assertEquals("Profile One", profileOne?.firstOrNull()?.movie?.title)
-        assertEquals("Profile Two", profileTwo?.firstOrNull()?.movie?.title)
-        coVerify(exactly = 2) {
+        // Both profiles see the same globally-cached result; only one API call is made.
+        assertEquals("Global Recommendations", profileOne?.firstOrNull()?.movie?.title)
+        assertEquals("Global Recommendations", profileTwo?.firstOrNull()?.movie?.title)
+        coVerify(exactly = 1) {
             traktApi.getRecommendations(any(), "movies", 20, any(), any())
         }
     }

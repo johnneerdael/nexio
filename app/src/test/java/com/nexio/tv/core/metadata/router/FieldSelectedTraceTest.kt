@@ -67,6 +67,6 @@ class FieldSelectedTraceTest {
         val rejected = payload["rejectedCandidates"] as List<Map<String, Any?>>
         assertEquals(1, rejected.size)
         assertEquals("TVDB", rejected.first()["provider"])
-        assertTrue((rejected.first()["reason"] as String).contains("primary"))
+        assertTrue((rejected.first()["reason"] as String).contains("field already filled"))
     }
 }
