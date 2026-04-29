@@ -15,6 +15,7 @@ import com.nexio.tv.core.integration.valueOrNull
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeDetail
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.data.integration.metadata.LocalizationPolicy
 import com.nexio.tv.data.remote.api.KitsuApi
 import com.nexio.tv.data.remote.api.KitsuAnimeCharacterResource
 import com.nexio.tv.data.remote.api.KitsuAnimeProductionResource
@@ -47,7 +48,9 @@ class KitsuIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.KITSU,
             apiShapeId = KitsuApiShapes.ANIME_CORE,
             operationKey = "kitsu.fetch_enrichment",
-            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:enrichment",
+            // F2-E-02: include policyVersion so a LocalizationPolicy.CURRENT_VERSION bump
+            // automatically invalidates previously cached enrichment entries.
+            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:enrichment:policy:${LocalizationPolicy.CURRENT_VERSION}",
             codec = gsonCodec<TvMetadataEnrichment>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,

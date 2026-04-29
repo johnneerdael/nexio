@@ -27,18 +27,24 @@ class TvdbMetadataProviderAdapter @Inject constructor(
         val language = route.language.orEmpty()
         val policy = LocalizationPolicy.tvdb(language)
         // F-E-02: emit localization_plan immediately after policy construction.
-        traceEvents.emitLocalizationPlan(
-            contentId = "tvdb:$tvdbId",
-            provider = "TVDB",
-            policyVersion = policy.policyVersion,
-            requestedLanguage = policy.requestedLanguage.providerCode,
-            fallbackLanguage = policy.fallbackLanguage.providerCode,
-            requestedIsFallback = policy.requestedIsFallback,
-            allowProviderFallbackForMissingLocalizedFields = policy.allowProviderFallbackForMissingLocalizedFields,
-            perEpisodeFallbacksAttempted = 0,
-            perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest,
-            localeCollapsedToFallback = policy.localeCollapsedToFallback  // F2-E-01
-        )
+        // F2-E-06: Skip the initial emission for SERIES_EPISODES_LANGUAGE — that branch emits its
+        // own post-bundle plan (with the real perEpisodeFallbacksAttempted count) after the bundle
+        // is resolved. Emitting here first would always show perEpisodeFallbacksAttempted = 0 and
+        // produce a duplicate event in traces.
+        if (step.apiShapeId != TvdbApiShapes.SERIES_EPISODES_LANGUAGE) {
+            traceEvents.emitLocalizationPlan(
+                contentId = "tvdb:$tvdbId",
+                provider = "TVDB",
+                policyVersion = policy.policyVersion,
+                requestedLanguage = policy.requestedLanguage.providerCode,
+                fallbackLanguage = policy.fallbackLanguage.providerCode,
+                requestedIsFallback = policy.requestedIsFallback,
+                allowProviderFallbackForMissingLocalizedFields = policy.allowProviderFallbackForMissingLocalizedFields,
+                perEpisodeFallbacksAttempted = 0,
+                perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest,
+                localeCollapsedToFallback = policy.localeCollapsedToFallback  // F2-E-01
+            )
+        }
         val episodeMetadata = mutableMapOf<Pair<Int, Int>, com.nexio.tv.core.tvdb.TvEpisodeMetadata>()
         val localizationPayloads = mutableListOf<MetadataLocalizationPayloadTrace>()
         val candidate = when (step.apiShapeId) {
