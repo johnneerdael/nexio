@@ -354,6 +354,35 @@ class MetadataRouterFacadeTest {
         )
     }
 
+    @Test
+    fun `episode enrichment does not resolve fallback id when primary route succeeds`() = runTest {
+        val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
+        val identityLookup = RecordingIdentityLookup(tmdbToTvdb = mapOf("999" to "1399"))
+
+        val result = facade(
+            adapter,
+            identityLookup = identityLookup
+        ).fetchTvEpisodeEnrichment(
+            metadataRequest = MetadataRequest(
+                contentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 1,
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = "tvdb:1399",
+                fallbackContentId = "tmdb:999",
+                contentType = ContentType.SERIES,
+                seasonNumbers = listOf(1)
+            )
+        )
+
+        assertEquals("Runtime episode", result.value?.get(1 to 1)?.title)
+        assertEquals(listOf("tvdb:1399"), adapter.executedRoutes.map { route -> route.parentId }.distinct())
+        assertTrue(identityLookup.calls.isEmpty())
+    }
+
     private fun facade(
         vararg adapters: MetadataProviderAdapter,
         identityLookup: MetadataIdentityResolver.Lookup = object : MetadataIdentityResolver.Lookup {
@@ -439,6 +468,23 @@ class MetadataRouterFacadeTest {
         override suspend fun findImdbIdByTmdbId(tmdbId: Int, mediaType: String): String? {
             calls += "findImdb:$tmdbId:$mediaType"
             return null
+        }
+    }
+
+    private class RecordingIdentityLookup(
+        private val tmdbToTvdb: Map<String, String> = emptyMap(),
+        private val tvdbToTmdb: Map<String, String> = emptyMap()
+    ) : MetadataIdentityResolver.Lookup {
+        val calls = mutableListOf<String>()
+
+        override suspend fun tmdbToTvdb(tmdbId: String): String? {
+            calls += "tmdbToTvdb:$tmdbId"
+            return tmdbToTvdb[tmdbId]
+        }
+
+        override suspend fun tvdbToTmdb(tvdbId: String): String? {
+            calls += "tvdbToTmdb:$tvdbId"
+            return tvdbToTmdb[tvdbId]
         }
     }
 }

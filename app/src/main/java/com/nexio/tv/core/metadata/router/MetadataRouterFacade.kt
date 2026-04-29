@@ -418,11 +418,11 @@ class MetadataRouterFacade @Inject constructor(
         )
         val baseRoute = router.route(seasonMetadataRequest)
         val resolvedBaseRoute = identityResolver.resolve(baseRoute)
-        val fallbackRoute = fallbackRouteForDistinctContentId(
-            metadataRequest = seasonMetadataRequest,
-            fallbackContentId = tvRequest.fallbackContentId
-        )
         if (resolvedBaseRoute.targetIdRequiresIdentityResolution) {
+            val fallbackRoute = fallbackRouteForDistinctContentId(
+                metadataRequest = seasonMetadataRequest,
+                fallbackContentId = tvRequest.fallbackContentId
+            )
             val fallbackMetadata = fallbackRoute?.takeUnless { it.targetIdRequiresIdentityResolution }?.let { route ->
                 fetchEpisodeMetadataForRoute(
                     route = route,
@@ -454,6 +454,10 @@ class MetadataRouterFacade @Inject constructor(
             )
         }
 
+        val fallbackRoute = fallbackRouteForDistinctContentId(
+            metadataRequest = seasonMetadataRequest,
+            fallbackContentId = tvRequest.fallbackContentId
+        )
         val fallbackMetadata = fallbackRoute?.takeUnless { it.targetIdRequiresIdentityResolution }?.let { route ->
             fetchEpisodeMetadataForRoute(
                 route = route,
