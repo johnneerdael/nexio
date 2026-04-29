@@ -94,15 +94,17 @@ class TrackingProgressServiceProfileBoundaryRecheckTest {
 
         // ownerProfileId = 1 matches active profile id = 1, but ownerSession = "s1" is stale.
         // The scrobble result "belongs" to the original session "s1" for profile 1.
+        // After Task 8, ownerSessionId must be passed explicitly so the session-level recheck
+        // can detect the mismatch ("s1" != "s2") even though the profile IDs match.
         service.scrobbleStop(
             item = movieItem("Inception"),
             progressPercent = 95f,
-            ownerProfileId = 1          // same profile — this is what makes it an F2-H-02 case
+            ownerProfileId = 1,         // same profile — this is what makes it an F2-H-02 case
+            ownerSessionId = "s1"       // stale session — differs from active session "s2"
         )
 
-        // After Task 8 adds assertCanWriteProfileState(resultSession="s1", activeSession="s2"),
-        // the outbox MUST NOT be called. Currently (red) it IS called because the profile ID
-        // matches — demonstrating the missing session-level recheck.
+        // assertCanWriteProfileState(resultSession="s1", activeSession="s2") throws
+        // ProfileBoundaryException → checkScrobbleBoundary returns false → outbox not called.
         coVerify(exactly = 0) { outbox.enqueueAndDrain(any()) }
     }
 

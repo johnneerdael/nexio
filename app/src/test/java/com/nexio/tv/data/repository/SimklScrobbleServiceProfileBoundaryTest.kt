@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -22,8 +23,12 @@ class SimklScrobbleServiceProfileBoundaryTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
         val activeProfileIdFlow = MutableStateFlow(2) // active = 2
+        val activeProfileSessionFlow = MutableStateFlow(
+            ActiveProfileSession(profileId = 2, sessionId = "session-2", sessionOrdinal = 1L, startedAtMs = 1_000L)
+        )
         val profileManager = mockk<ProfileManager> {
             every { this@mockk.activeProfileId } returns activeProfileIdFlow
+            every { this@mockk.activeProfileSession } returns activeProfileSessionFlow
         }
         val trackingProviderStateService = mockk<TrackingProviderStateService>()
         coEvery { trackingProviderStateService.currentState(any()) } returns EffectiveTrackingProviderState(
@@ -69,8 +74,12 @@ class SimklScrobbleServiceProfileBoundaryTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
         val activeProfileIdFlow = MutableStateFlow(1) // active = 1
+        val activeProfileSessionFlow = MutableStateFlow(
+            ActiveProfileSession(profileId = 1, sessionId = "session-1", sessionOrdinal = 1L, startedAtMs = 1_000L)
+        )
         val profileManager = mockk<ProfileManager> {
             every { this@mockk.activeProfileId } returns activeProfileIdFlow
+            every { this@mockk.activeProfileSession } returns activeProfileSessionFlow
         }
         val trackingProviderStateService = mockk<TrackingProviderStateService>()
         coEvery { trackingProviderStateService.currentState(any()) } returns EffectiveTrackingProviderState(

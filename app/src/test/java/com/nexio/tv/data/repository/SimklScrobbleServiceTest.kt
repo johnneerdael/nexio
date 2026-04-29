@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -30,8 +31,12 @@ class SimklScrobbleServiceTest {
         coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
 
         val activeProfileIdFlow = MutableStateFlow(1)
+        val activeProfileSessionFlow = MutableStateFlow(
+            ActiveProfileSession(profileId = 1, sessionId = "session-1", sessionOrdinal = 1L, startedAtMs = 1_000L)
+        )
         val profileManager = mockk<ProfileManager> {
             every { activeProfileId } returns activeProfileIdFlow
+            every { activeProfileSession } returns activeProfileSessionFlow
         }
         val service = SimklScrobbleService(
             trackingProviderStateService = trackingProviderStateService,
@@ -46,6 +51,7 @@ class SimklScrobbleServiceTest {
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 1)
         // Switch active profile so second call's ownerProfileId=2 also passes boundary
         activeProfileIdFlow.value = 2
+        activeProfileSessionFlow.value = ActiveProfileSession(profileId = 2, sessionId = "session-2", sessionOrdinal = 1L, startedAtMs = 1_000L)
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 2)
 
         assertEquals(listOf(1, 2), envelopes.map { it.profileId })
