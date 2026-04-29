@@ -8,6 +8,20 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * F2-C-06 carve-out: exempt from the [IntegrationBoundaryTest] Retrofit-usage check.
+ *
+ * This service calls [KitsuAuthApi] (a raw Retrofit interface) directly for two reasons:
+ * 1. **Password-grant login** — the first call that bootstraps authentication, so no
+ *    [IntegrationRuntime] context is available yet.
+ * 2. **Proactive token refresh** — invoked opportunistically before any playback session exists,
+ *    again outside a runtime context.
+ *
+ * Migration plan: when the runtime gains support for pre-auth or session-less contexts (no current
+ * ETA), route both flows through it and remove this file from the boundary allowlist.
+ *
+ * Tracking: review-dossier-2/09-known-gaps.md F2-C-06.
+ */
 data class KitsuAuthSnapshot(
     val enabled: Boolean = true,
     val username: String? = null,
