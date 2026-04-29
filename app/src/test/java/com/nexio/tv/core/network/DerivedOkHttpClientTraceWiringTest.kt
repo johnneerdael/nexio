@@ -5,25 +5,19 @@ import org.junit.Test
 import java.io.File
 
 /**
- * F-I-05 architecture pin: every `@Named` OkHttpClient produced by NetworkModule MUST carry
- * the RuntimeTraceInterceptor. Derived clients via `okHttpClient.newBuilder()` propagate
- * interceptors automatically, but if a future change builds a new client from scratch via
- * `OkHttpClient.Builder()` (no `.` prefix), this test will catch the lost tracing.
+ * F-I-05 architecture pin: every fresh `OkHttpClient.Builder()` construction in NetworkModule
+ * (i.e. NOT preceded by `.`, so not a derived `.newBuilder()`) MUST wire the
+ * RuntimeTraceInterceptor within its surrounding provider body.
  *
- * NOTE: The current codebase has 4 fresh OkHttpClient.Builder() calls:
- * 1. provideOkHttpClient (base) - CORRECT, has trace interceptor wiring
- * 2. providePlaybackOkHttpClient - CORRECT, has custom dispatcher/pool + trace wiring
- * 3. provideYouTubeTrailerMainOkHttpClient - BUG: no trace interceptor wired
- * 4. provideYouTubeTrailerProbeOkHttpClient - BUG: no trace interceptor wired
- *
- * This test pins the count at 4 to catch FUTURE growth (adding more fresh builders without
- * trace wiring). The YouTube client bugs are documented for separate remediation as part of
- * the F-I-05 follow-up work.
+ * Derived clients via `okHttpClient.newBuilder()` propagate interceptors automatically. The real
+ * concern is fresh constructions that bypass the base client — each such site must explicitly
+ * add traceInterceptor. This test scans a forward window of ~1500 chars from each fresh
+ * construction (~2000 chars) to verify the reference exists.
  */
 class DerivedOkHttpClientTraceWiringTest {
 
     @Test
-    fun `NetworkModule constructs OkHttpClient from scratch at most 4 times (pinning current state)`() {
+    fun `every fresh OkHttpClient_Builder construction in NetworkModule wires the trace interceptor`() {
         val module = File("app/src/main/java/com/nexio/tv/core/di/NetworkModule.kt")
         require(module.exists()) { "NetworkModule.kt not found at ${module.absolutePath}" }
         val text = module.readText()
@@ -31,11 +25,18 @@ class DerivedOkHttpClientTraceWiringTest {
         // Match `OkHttpClient.Builder()` NOT preceded by `.` — i.e. fresh construction, not derived.
         val freshBuilds = Regex("(?<!\\.)\\bOkHttpClient\\.Builder\\(\\)").findAll(text).toList()
 
+        val offenders = freshBuilds.filter { match ->
+            val start = match.range.first
+            val end = (match.range.last + 2000).coerceAtMost(text.length)
+            val window = text.substring(start, end)
+            !window.contains("traceInterceptor")
+        }
+
         assertTrue(
-            "F-I-05: at most 4 OkHttpClient.Builder() calls expected in NetworkModule (pinned state). " +
-                "Found ${freshBuilds.size}. If you added a new fresh builder, use baseClient.newBuilder() " +
-                "to inherit the RuntimeTraceInterceptor instead. Sites: ${freshBuilds.map { text.substring(maxOf(0, it.range.first - 60), minOf(text.length, it.range.last + 30)) }}",
-            freshBuilds.size <= 4
+            "F-I-05: every fresh OkHttpClient.Builder() in NetworkModule must wire `traceInterceptor` " +
+                "within ~2000 chars of the construction. Offenders (count=${offenders.size}): " +
+                offenders.map { text.substring(it.range.first, (it.range.last + 80).coerceAtMost(text.length)) },
+            offenders.isEmpty()
         )
     }
 }
