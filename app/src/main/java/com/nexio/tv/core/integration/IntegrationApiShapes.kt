@@ -192,8 +192,13 @@ object TvdbApiShapes {
     const val REFERENCE_ARTWORK_TYPES = "tvdb.reference.artwork_types"
     const val REFERENCE_GENRES = "tvdb.reference.genres"
     const val REFERENCE_LANGUAGES = "tvdb.reference.languages"
+    const val REFERENCE_ARTWORK_STATUSES = "tvdb.reference.artwork_statuses"
+    const val REFERENCE_SERIES_STATUSES = "tvdb.reference.series_statuses"
     const val REFERENCE_CONTENT_RATINGS = "tvdb.reference.content_ratings"
     const val REFERENCE_SEASON_TYPES = "tvdb.reference.season_types"
+    const val REFERENCE_SOURCE_TYPES = "tvdb.reference.source_types"
+    const val REFERENCE_ENTITY_TYPES = "tvdb.reference.entity_types"
+    const val REFERENCE_COMPANY_TYPES = "tvdb.reference.company_types"
     const val PERSON_EXTENDED = "tvdb.person.extended"
     const val TV_TRAILERS = "tvdb.tv.trailers"
 }
