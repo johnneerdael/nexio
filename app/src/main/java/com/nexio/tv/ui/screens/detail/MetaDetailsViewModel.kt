@@ -98,28 +98,6 @@ import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 
-private fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFacade =
-    MetadataRouterFacade(
-        router = MetadataRouter(
-            normalizer = MetadataRequestNormalizer(
-                traceEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null }
-            ),
-            animeIdentityIndex = InMemoryAnimeIdentityIndex(),
-            idMappingStore = InMemoryIdMappingStore()
-        ),
-        providerPlanExecutor = ProviderPlanExecutor(),
-        resolverOrchestrator = ResolverOrchestrator(),
-        identityResolver = MetadataIdentityResolver(
-            lookup = object : MetadataIdentityResolver.Lookup {
-                override suspend fun tmdbToTvdb(tmdbId: String): String? = null
-                override suspend fun tvdbToTmdb(tvdbId: String): String? = null
-            },
-            idMappingStore = InMemoryIdMappingStore()
-        ),
-        providerPlanRunner = ProviderPlanRunner(emptySet()),
-        fieldResolver = FieldResolver()
-    )
-
 private fun debugLog(tag: String, message: String) {
     if (!BuildConfig.DEBUG) return
     runCatching { Log.d(tag, message) }
@@ -197,7 +175,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val reviewsRepository: ReviewsRepository,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
-    private val metadataRouterFacade: MetadataRouterFacade = defaultMetadataRouterFacadeForManualConstruction(),
+    private val metadataRouterFacade: MetadataRouterFacade,
     private val metadataSecondaryRepository: MetadataSecondaryRepository,
     private val profileBoundary: ProfileBoundary,
     private val mdbListRepository: MDBListRepository,
