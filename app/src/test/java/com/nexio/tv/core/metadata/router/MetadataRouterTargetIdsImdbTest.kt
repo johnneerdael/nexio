@@ -26,7 +26,7 @@ class MetadataRouterTargetIdsImdbTest {
 
         assertEquals("tmdb:550", route.targetIds[MetadataPrimaryProvider.TMDB])
         assertEquals("tt0137523", route.targetIds[MetadataPrimaryProvider.IMDB])
-        assertEquals(listOf(LookupCall(550, "movie")), lookup.calls)
+        assertEquals(listOf(LookupCall.FindImdb(550, "movie")), lookup.calls)
     }
 
     @Test
@@ -43,11 +43,11 @@ class MetadataRouterTargetIdsImdbTest {
 
         assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
         assertEquals("tt0110912", route.targetIds[MetadataPrimaryProvider.IMDB])
-        assertEquals(listOf(LookupCall(680, "movie")), lookup.calls)
+        assertEquals(listOf(LookupCall.FindImdb(680, "movie")), lookup.calls)
     }
 
     @Test
-    fun `imdb-prefixed contentId surfaces IMDB id without external-id lookup`() = runTest {
+    fun `imdb-prefixed contentId surfaces IMDB id and attempts TMDB target lookup`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
 
@@ -55,8 +55,7 @@ class MetadataRouterTargetIdsImdbTest {
 
         // Even when IMDb id can't be mapped to Kitsu, the IMDB id is still surfaced.
         assertEquals("tt0133093", route.targetIds[MetadataPrimaryProvider.IMDB])
-        // No TMDB lookup should be triggered because the route is not TMDB-primary.
-        assertEquals(emptyList<LookupCall>(), lookup.calls)
+        assertEquals(listOf(LookupCall.FindTmdb("tt0133093", "movie")), lookup.calls)
     }
 
     @Test
@@ -112,6 +111,48 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
+    fun `malformed addon preview provider stable ids are ignored`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val router = router(lookup = lookup)
+
+        val route = router.route(
+            request(
+                id = "tt0903747",
+                type = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(
+                        imdb = "tt0903747",
+                        tvdb = "tt-not-tvdb",
+                        tmdb = "tt-not-tmdb"
+                    )
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertNull(route.targetIds[MetadataPrimaryProvider.TVDB])
+        assertNull(route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(true, route.targetIdRequiresIdentityResolution)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
+    fun `raw IMDB series without TVDB stable id remains identity resolution required`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val router = router(lookup = lookup)
+
+        val route = router.route(request("tt0903747", ContentType.SERIES))
+
+        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertNull(route.targetIds[MetadataPrimaryProvider.TVDB])
+        assertEquals(true, route.targetIdRequiresIdentityResolution)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
     fun `tmdb route with no IMDB match leaves IMDB key absent`() = runTest {
         val lookup = FakeTmdbExternalIdLookup() // returns null for everything
         val router = router(lookup = lookup)
@@ -155,7 +196,10 @@ class MetadataRouterTargetIdsImdbTest {
         depth = MetadataDepth.DETAIL_CORE
     )
 
-    private data class LookupCall(val tmdbId: Int, val mediaType: String)
+    private sealed class LookupCall {
+        data class FindImdb(val tmdbId: Int, val mediaType: String) : LookupCall()
+        data class FindTmdb(val imdbId: String, val mediaType: String) : LookupCall()
+    }
 
     private class FakeTmdbExternalIdLookup(
         private val imdbForMovie: Map<Int, String> = emptyMap(),
@@ -165,11 +209,12 @@ class MetadataRouterTargetIdsImdbTest {
         val calls = mutableListOf<LookupCall>()
 
         override suspend fun findTmdbIdByImdbId(imdbId: String, mediaType: String): Int? {
+            calls += LookupCall.FindTmdb(imdbId, mediaType)
             return tmdbForImdb[imdbId]
         }
 
         override suspend fun findImdbIdByTmdbId(tmdbId: Int, mediaType: String): String? {
-            calls += LookupCall(tmdbId, mediaType)
+            calls += LookupCall.FindImdb(tmdbId, mediaType)
             return when (mediaType) {
                 "tv" -> imdbForTv[tmdbId]
                 else -> imdbForMovie[tmdbId]

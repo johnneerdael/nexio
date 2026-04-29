@@ -302,9 +302,9 @@ class MetadataRouter @Inject constructor(
         val builder = mutableMapOf<MetadataPrimaryProvider, String>()
         val stableIds = normalized.sourceContext.previewStableIds
 
-        stableIds.tmdb?.providerTarget("tmdb")?.let { builder[MetadataPrimaryProvider.TMDB] = it }
-        stableIds.tvdb?.providerTarget("tvdb")?.let { builder[MetadataPrimaryProvider.TVDB] = it }
-        stableIds.kitsu?.providerTarget("kitsu")?.let { builder[MetadataPrimaryProvider.KITSU] = it }
+        stableIds.tmdb?.numericProviderTarget("tmdb")?.let { builder[MetadataPrimaryProvider.TMDB] = it }
+        stableIds.tvdb?.numericProviderTarget("tvdb")?.let { builder[MetadataPrimaryProvider.TVDB] = it }
+        stableIds.kitsu?.numericProviderTarget("kitsu")?.let { builder[MetadataPrimaryProvider.KITSU] = it }
         stableIds.imdb?.canonicalImdbTarget()?.let { builder[MetadataPrimaryProvider.IMDB] = it }
 
         val targetParsed = MetadataIdParser.parse(targetId)
@@ -331,7 +331,8 @@ class MetadataRouter @Inject constructor(
                 ContentType.SERIES, ContentType.TV -> "tv"
                 else -> "movie"
             }
-            lookup.findTmdbIdByImdbId(builder.getValue(MetadataPrimaryProvider.IMDB), mediaType)
+            runCatching { lookup.findTmdbIdByImdbId(builder.getValue(MetadataPrimaryProvider.IMDB), mediaType) }
+                .getOrNull()
                 ?.let { tmdbId -> builder[MetadataPrimaryProvider.TMDB] = "tmdb:$tmdbId" }
         }
 
@@ -376,19 +377,20 @@ class MetadataRouter @Inject constructor(
         )
     }
 
-    private fun String.providerTarget(prefix: String): String? {
+    private fun String.numericProviderTarget(prefix: String): String? {
         val trimmed = trim().takeIf { it.isNotBlank() } ?: return null
-        return if (trimmed.startsWith("$prefix:", ignoreCase = true)) {
-            val value = trimmed.substringAfter(':').takeIf { it.isNotBlank() } ?: return null
-            "$prefix:$value"
+        val raw = if (trimmed.startsWith("$prefix:", ignoreCase = true)) {
+            trimmed.substringAfter(':').trim()
         } else {
-            "$prefix:$trimmed"
+            trimmed
         }
+        if (!Regex("^\\d+$").matches(raw)) return null
+        return "$prefix:$raw"
     }
 
     private fun String.canonicalImdbTarget(): String? {
         val trimmed = trim().takeIf { it.isNotBlank() } ?: return null
-        val raw = if (trimmed.startsWith("imdb:", ignoreCase = true)) trimmed.substringAfter(':') else trimmed
+        val raw = if (trimmed.startsWith("imdb:", ignoreCase = true)) trimmed.substringAfter(':').trim() else trimmed
         if (!Regex("^tt\\d+$", RegexOption.IGNORE_CASE).matches(raw)) return null
         return "tt" + raw.drop(2)
     }
