@@ -29,10 +29,14 @@ import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolverOrchestrator
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.data.integration.posters.RpdbMetadataProviderAdapter
+import com.nexio.tv.data.integration.posters.TopPostersMetadataProviderAdapter
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterRatingsProvider
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailDisplaySeed
@@ -42,11 +46,15 @@ import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.SourcePayloadQuality
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.toMetaPreview
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import org.json.JSONObject
 
 class MetadataAuditRunner private constructor(
     private val facade: MetadataRouterFacade,
     private val adapters: List<AuditMetadataProviderAdapter>,
+    private val posterResolver: PosterRatingsUrlResolver,
     private val parser: CatalogFixtureParser = CatalogFixtureParser(),
     private val provenanceProvider: MetadataAuditProvenanceProvider = GitMetadataAuditProvenanceProvider()
 ) {
@@ -98,11 +106,39 @@ class MetadataAuditRunner private constructor(
         )
     }
 
+    private fun configurePosterResolverForScenario(scenario: MetadataAuditScenario) {
+        val premium = scenario.premiumArtworkProvider?.uppercase()
+        when (premium) {
+            "RPDB" -> {
+                val activeProvider = PosterRatingsUrlResolver.ActiveProvider(
+                    provider = PosterRatingsProvider.RPDB,
+                    apiKey = "test-rpdb-key"
+                )
+                coEvery { posterResolver.getActiveProvider() } returns activeProvider
+                every { posterResolver.resolvePosterUrl(any(), any(), any(), any()) } returns
+                    "https://example.test/rpdb-poster.jpg"
+            }
+            "TOP_POSTERS" -> {
+                val activeProvider = PosterRatingsUrlResolver.ActiveProvider(
+                    provider = PosterRatingsProvider.TOP_POSTERS,
+                    apiKey = "test-top_posters-key"
+                )
+                coEvery { posterResolver.getActiveProvider() } returns activeProvider
+                every { posterResolver.resolvePosterUrl(any(), any(), any(), any()) } returns
+                    "https://example.test/top_posters-poster.jpg"
+            }
+            else -> {
+                coEvery { posterResolver.getActiveProvider() } returns null
+            }
+        }
+    }
+
     private suspend fun runItem(
         catalog: CatalogFixture,
         item: AddonCatalogItemFixture,
         scenario: MetadataAuditScenario
     ): ItemExecutionReport {
+        configurePosterResolverForScenario(scenario)
         adapters.forEach { it.reset() }
         val trace = RecordingMetadataAuditTraceCollector()
         val firstPaint = FirstPaintEvent(
@@ -705,6 +741,14 @@ class MetadataAuditRunner private constructor(
         fun default(): MetadataAuditRunner {
             val adapters = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.entries
                 .map { provider -> AuditMetadataProviderAdapter(provider) }
+            // Stub resolver — behavior is reconfigured per-scenario in configurePosterResolverForScenario().
+            // Starts with getActiveProvider() returning null (no-op) until a scenario with
+            // premiumArtworkProvider overrides it.
+            val posterResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+            coEvery { posterResolver.getActiveProvider() } returns null
+            val rpdbAdapter = RpdbMetadataProviderAdapter(posterResolver)
+            val topPostersAdapter = TopPostersMetadataProviderAdapter(posterResolver)
+            val allAdapters: Set<MetadataProviderAdapter> = adapters.toSet() + rpdbAdapter + topPostersAdapter
             val router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(
@@ -727,10 +771,11 @@ class MetadataAuditRunner private constructor(
                             override suspend fun tvdbToTmdb(tvdbId: String): String? = "tmdb:$tvdbId"
                         }
                     ),
-                    providerPlanRunner = ProviderPlanRunner(adapters.toSet()),
+                    providerPlanRunner = ProviderPlanRunner(allAdapters),
                     fieldResolver = FieldResolver()
                 ),
-                adapters = adapters
+                adapters = adapters,
+                posterResolver = posterResolver
             )
         }
 
