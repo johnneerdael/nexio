@@ -64,11 +64,9 @@ object KitsuApiShapes {
     const val ANIME_PRODUCTIONS = "kitsu.anime_productions"
     const val MEDIA_RELATIONSHIPS = "kitsu.media_relationships"
     const val SEARCH_TEXT = "kitsu.search.text"
-    const val ADVANCED_DETAIL = "kitsu.advanced_detail"
 }
 
 object MDBListApiShapes {
-    const val USER = "mdblist.user"
     const val RATING_BATCH = "mdblist.rating.batch"
     const val RAW_URL_LIST = "mdblist.raw_url.list"
     const val VALIDATE_KEY = "mdblist.key_validation"
@@ -182,8 +180,6 @@ object TraktApiShapes {
     const val RECOMMENDATION_HIDE = "trakt.recommendation.hide"
     const val HIDDEN_ITEMS = "trakt.hidden_items"
     // Collection & watchlist
-    const val COLLECTION_MOVIES = "trakt.collection.movies"
-    const val COLLECTION_SHOWS = "trakt.collection.shows"
     const val WATCHLIST_MOVIES = "trakt.watchlist.movies"
     const val WATCHLIST_SHOWS = "trakt.watchlist.shows"
     const val WATCHLIST_ADD = "trakt.watchlist.add"
@@ -234,8 +230,6 @@ object TvdbApiShapes {
 }
 
 object YouTubeTrailerApiShapes {
-    const val DEVICE_CODE = "youtube_trailer.device_code"
-    const val TOKEN = "youtube_trailer.token"
     const val TRANSPORT_EXECUTE = "youtube_trailer.transport.execute"
     const val TRANSPORT_PROBE = "youtube_trailer.transport.probe"
 }
