@@ -105,10 +105,13 @@ private fun defaultMetadataRouterFacadeForManualConstruction(): MetadataRouterFa
         ),
         providerPlanExecutor = ProviderPlanExecutor(),
         resolverOrchestrator = ResolverOrchestrator(),
-        identityResolver = MetadataIdentityResolver(object : MetadataIdentityResolver.Lookup {
-            override suspend fun tmdbToTvdb(tmdbId: String): String? = null
-            override suspend fun tvdbToTmdb(tvdbId: String): String? = null
-        }),
+        identityResolver = MetadataIdentityResolver(
+            lookup = object : MetadataIdentityResolver.Lookup {
+                override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+                override suspend fun tvdbToTmdb(tvdbId: String): String? = null
+            },
+            idMappingStore = InMemoryIdMappingStore()
+        ),
         providerPlanRunner = ProviderPlanRunner(emptySet()),
         fieldResolver = FieldResolver()
     )

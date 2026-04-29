@@ -32,6 +32,8 @@ object IdMappingTtlPolicy {
 interface IdMappingStore {
     suspend fun lookup(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping?
     suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping?
+    /** Returns the raw stored mapping including NEGATIVE entries (subject to TTL expiry). */
+    suspend fun readRaw(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping?
     suspend fun persist(mapping: IdMapping)
 }
 
@@ -52,18 +54,21 @@ class InMemoryIdMappingStore(
         }
     }
 
-    override suspend fun lookup(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping? {
+    override suspend fun lookup(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping? =
+        readRaw(provider, sourceId)?.takeIf { it.source != IdMappingSource.NEGATIVE }
+
+    override suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping? =
+        lookup(MetadataPrimaryProvider.KITSU, sourceId)
+
+    override suspend fun readRaw(provider: MetadataPrimaryProvider, sourceId: ParsedMetadataId): IdMapping? {
         val key = mappingStoreKey(provider, sourceId)
         val mapping = mappings[key] ?: return null
         if (mapping.isExpired()) {
             mappings.remove(key)
             return null
         }
-        return mapping.takeIf { it.provider == provider && it.source != IdMappingSource.NEGATIVE }
+        return mapping.takeIf { it.provider == provider }
     }
-
-    override suspend fun lookupKitsu(sourceId: ParsedMetadataId): IdMapping? =
-        lookup(MetadataPrimaryProvider.KITSU, sourceId)
 
     override suspend fun persist(mapping: IdMapping) {
         val key = mapping.storeKey()
