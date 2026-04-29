@@ -151,7 +151,7 @@ class MetadataRouterPrecedenceTest {
 
         assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
         assertEquals("tmdb:1399", route.parentId)
-        assertEquals("tmdb:1399", route.targetIds[MetadataPrimaryProvider.TVDB])
+        assertEquals("tmdb:1399", route.targetIds[MetadataPrimaryProvider.TMDB])
         assertEquals(MetadataDecisionReason.ITEM_TYPE_SERIES, route.reason)
         assertTrue(route.targetIdRequiresIdentityResolution)
         assertTrue(route.trace.any { it.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT })
