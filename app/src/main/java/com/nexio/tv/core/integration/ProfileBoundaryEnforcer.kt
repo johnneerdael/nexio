@@ -193,11 +193,52 @@ object ProfileBoundaryEnforcer {
         activeSessionId: String
     ) {
         if (resultProfileId != activeProfileId || resultSessionId != activeSessionId) {
+            emitWriteStateBoundaryCheck(
+                resultProfileId = resultProfileId,
+                resultSessionId = resultSessionId,
+                activeProfileId = activeProfileId,
+                activeSessionId = activeSessionId,
+                verdict = "FAIL",
+                violation = ProfileBoundaryViolation.STALE_SESSION_WRITE_REJECTED
+            )
             throw ProfileBoundaryException(
                 ProfileBoundaryViolation.STALE_SESSION_WRITE_REJECTED,
                 "Rejecting stale profile write for profile=$resultProfileId session=$resultSessionId activeProfile=$activeProfileId activeSession=$activeSessionId"
             )
         }
+    }
+
+    private fun emitWriteStateBoundaryCheck(
+        resultProfileId: Int,
+        resultSessionId: String,
+        activeProfileId: Int,
+        activeSessionId: String,
+        verdict: String,
+        violation: ProfileBoundaryViolation?
+    ) {
+        if (traceSink === NoopRuntimeTraceSink) return
+        val sid = traceSessionId() ?: return
+        val resultHash = TraceHash.of(sid, resultProfileId.toString())
+        val activeHash = TraceHash.of(sid, activeProfileId.toString())
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = traceSeq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "profile.boundary_check",
+                payload = mapOf(
+                    "operation" to "profile.write_state",
+                    "resultProfileHash" to resultHash,
+                    "resultSessionId" to resultSessionId,
+                    "activeProfileHash" to activeHash,
+                    "activeSessionId" to activeSessionId,
+                    "verdict" to verdict,
+                    "violation" to violation?.name
+                )
+            )
+        )
     }
 
     fun assertCanWriteProfileState(
