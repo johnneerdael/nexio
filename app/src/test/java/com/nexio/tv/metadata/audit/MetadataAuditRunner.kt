@@ -723,6 +723,7 @@ class MetadataAuditRunner private constructor(
                     identityResolver = MetadataIdentityResolver(
                         object : MetadataIdentityResolver.Lookup {
                             override suspend fun tmdbToTvdb(tmdbId: String): String? = "tvdb:$tmdbId"
+                            override suspend fun imdbToTvdb(imdbId: String): String? = "tvdb:$imdbId"
                             override suspend fun tvdbToTmdb(tvdbId: String): String? = "tmdb:$tvdbId"
                         }
                     ),
