@@ -32,18 +32,22 @@ fun tmdbImageUrl(path: String?, size: String = "w500"): String? {
 fun simklImageUrl(fragment: String?): String? {
     val normalizedFragment = fragment?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     if (normalizedFragment.startsWith("http://") || normalizedFragment.startsWith("https://")) return normalizedFragment
-    return "https://simkl.in/posters/${normalizedFragment.trimStart('/')}"
+    return "https://simkl.in/posters/${normalizedFragment.trimStart('/').withSimklImageSuffix("_m.jpg")}"
 }
 
 fun simklFanartUrl(fragment: String?): String? {
     val normalizedFragment = fragment?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     if (normalizedFragment.startsWith("http://") || normalizedFragment.startsWith("https://")) return normalizedFragment
-    return "https://simkl.in/fanart/${normalizedFragment.trimStart('/')}"
+    return "https://simkl.in/fanart/${normalizedFragment.trimStart('/').withSimklImageSuffix("_w.jpg")}"
 }
+
+private fun String.withSimklImageSuffix(defaultSuffix: String): String =
+    if (contains('.')) this else "$this$defaultSuffix"
 
 fun yearFromDate(value: String?): Int? {
     val trimmed = value?.trim()?.takeIf { it.length >= 4 } ?: return null
     return trimmed.take(4).toIntOrNull()
+        ?: Regex("""\b\d{4}\b""").find(trimmed)?.value?.toIntOrNull()
 }
 
 fun firstNonBlank(vararg values: String?): String? =

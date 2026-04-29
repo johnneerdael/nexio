@@ -1,5 +1,6 @@
 package com.nexio.tv.data.remote.dto.simkl
 
+import com.google.gson.annotations.SerializedName
 import com.squareup.moshi.Json
 
 data class SimklDiscoveryItemDto(
@@ -7,8 +8,10 @@ data class SimklDiscoveryItemDto(
     @Json(name = "year") val year: Int? = null,
     @Json(name = "released") val released: String? = null,
     @Json(name = "date") val date: String? = null,
+    @Json(name = "release_date") @SerializedName("release_date") val releaseDate: String? = null,
+    @Json(name = "theater") val theater: String? = null,
     @Json(name = "overview") val overview: String? = null,
-    @Json(name = "runtime") val runtime: Int? = null,
+    @Json(name = "runtime") @SerializedName("runtime") val runtimeText: String? = null,
     @Json(name = "genres") val genres: List<String>? = null,
     @Json(name = "poster") val poster: String? = null,
     @Json(name = "fanart") val fanart: String? = null,
@@ -18,6 +21,11 @@ data class SimklDiscoveryItemDto(
 )
 
 data class SimklDiscoveryRatingsDto(
-    @Json(name = "imdb") val imdb: Double? = null,
-    @Json(name = "simkl") val simkl: Double? = null
+    @Json(name = "imdb") val imdb: SimklDiscoveryRatingValue? = null,
+    @Json(name = "simkl") val simkl: SimklDiscoveryRatingValue? = null
+)
+
+data class SimklDiscoveryRatingValue(
+    @Json(name = "rating") val rating: Double? = null,
+    @Json(name = "votes") val votes: Int? = null
 )
