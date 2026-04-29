@@ -68,7 +68,7 @@ class TopPostersMetadataProviderAdapter @Inject constructor(
                         sourceRole = SourceRole.ARTWORK
                     )
                 ),
-                sourceProvider = "top_posters",
+                sourceProvider = "TOP_POSTERS",
                 sourceRole = SourceRole.ARTWORK
             )
         } else {
