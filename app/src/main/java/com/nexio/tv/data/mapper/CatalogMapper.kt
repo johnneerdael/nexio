@@ -42,15 +42,23 @@ private fun deriveAddonStableIds(
         ?.substringAfter(':')
         ?.takeIf { it.isNotBlank() }
     val imdb = firstNonBlank(
-        imdbId?.takeIf { it.startsWith("tt", ignoreCase = true) },
-        defaultVideoId?.takeIf { it.startsWith("tt", ignoreCase = true) },
-        trimmedId.takeIf { it.startsWith("tt", ignoreCase = true) }
+        canonicalImdbTitleId(imdbId),
+        canonicalImdbTitleId(defaultVideoId),
+        canonicalImdbTitleId(trimmedId)
     )
 
     return ProviderIds(
         imdb = imdb,
         tmdb = tmdb
     )
+}
+
+private val imdbTitleIdPattern = Regex("^tt\\d+$", RegexOption.IGNORE_CASE)
+
+private fun canonicalImdbTitleId(value: String?): String? {
+    val trimmed = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    if (!imdbTitleIdPattern.matches(trimmed)) return null
+    return "tt" + trimmed.drop(2)
 }
 
 private fun firstNonBlank(vararg values: String?): String? =
