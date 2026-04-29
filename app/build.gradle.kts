@@ -409,6 +409,7 @@ tasks.register<Test>("generateTraceValidatorAudit") {
     filter {
         includeTestsMatching("com.nexio.tv.core.trace.TraceBundleGoldenTest")
         includeTestsMatching("com.nexio.tv.core.trace.*Validator*Test")
+        includeTestsMatching("com.nexio.tv.core.trace.RuntimeTraceValidatorRealEmissionTest")  // F2-I-03: explicit safety net
     }
 }
 

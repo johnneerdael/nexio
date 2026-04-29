@@ -5,7 +5,7 @@ import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-class TraceBundleExporter(private val gson: Gson) {
+class TraceBundleExporter(private val gson: Gson, private val redactor: TraceRedactor = TraceRedactor()) {
 
     private val summaryGenerator = TraceSummaryGenerator(gson)
 
@@ -63,21 +63,12 @@ class TraceBundleExporter(private val gson: Gson) {
         return zipFile
     }
 
+    // F2-I-02: derived from TraceRedactor's live sets so the manifest never drifts.
     private fun redactionManifest(): Map<String, Any?> = mapOf(
         "schemaVersion" to 1,
-        "urlQueryKeys" to listOf(
-            "api_key", "apikey", "token", "access_token", "refresh_token",
-            "client_secret", "device_code", "user_code", "pin"
-        ),
-        "headers" to listOf(
-            "authorization", "cookie", "set-cookie",
-            "x-api-key", "x-auth-token", "x-mdblist-apikey"
-        ),
-        "jsonBodyKeys" to listOf(
-            "access_token", "refresh_token", "token", "authorization",
-            "apikey", "api_key", "client_secret", "password", "pin",
-            "user_code", "email", "username"
-        ),
+        "urlQueryKeys" to redactor.urlQueryKeys().sorted(),
+        "headers" to redactor.redactedHeaderNames().sorted(),
+        "jsonBodyKeys" to redactor.jsonBodyKeys().sorted(),
         "profileIdentifiers" to "HMAC-SHA256(perSessionSalt, value).take(12)"
     )
 

@@ -48,4 +48,13 @@ class TraceRedactor {
         }
         return out
     }
+
+    /** Exposes the set of URL query-parameter keys that are redacted. */
+    fun urlQueryKeys(): Set<String> = redactedUrlKeys
+
+    /** Exposes the set of HTTP header names (lowercase) that are redacted. */
+    fun redactedHeaderNames(): Set<String> = redactedHeaders
+
+    /** Exposes the set of JSON body keys that are redacted. */
+    fun jsonBodyKeys(): Set<String> = redactedJsonKeys
 }

@@ -97,7 +97,7 @@ object RuntimeTraceModule {
             sink = sink,
             sessionId = { manager.activeSession()?.traceSessionId }
         )
-        // Side-effect: wire FirstPaintTracer so MetaPreview.toHomeDisplayMetadata()
+        // Side-effect: wire FirstPaintTracer so MetaPreview.toFirstPaintHomeDisplayMetadata()
         // emits `metadata.first_paint` from the canonical addon-preview boundary.
         com.nexio.tv.core.trace.FirstPaintTracer.install(
             events = events,
