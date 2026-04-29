@@ -4,15 +4,12 @@ import android.util.Log
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.ui.navigation.continueWatchingRuntimeMinutes
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 
 internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
@@ -25,16 +22,6 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     val contentType = item.contentType().takeIf { it.isNotBlank() } ?: return null
     val season = item.season()
     val episode = item.episode()
-
-    val meta = (metaRepository.getMetaFromAllAddons(
-        type = contentType,
-        id = contentId,
-        cacheOnDisk = true,
-        writeToDisk = true,
-        origin = "continue_watching_runtime"
-    ).first { it !is NetworkResult.Loading } as? NetworkResult.Success)?.data
-
-    resolveRuntimeMinutesFromMeta(item, meta)?.let { return it }
 
     if (isSeriesType(contentType)) {
         val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
@@ -183,17 +170,6 @@ private fun HomeViewModel.updateContinueWatchingRuntime(item: ContinueWatchingIt
     }
 }
 
-private fun resolveRuntimeMinutesFromMeta(item: ContinueWatchingItem, meta: Meta?): Int? {
-    val resolved = if (item.season() != null && item.episode() != null) {
-        meta?.videos?.firstOrNull {
-            it.season == item.season() && it.episode == item.episode()
-        }?.runtime
-    } else {
-        parseRuntimeMinutesFromMeta(meta?.runtime)
-    }
-    return resolved?.takeIf { it > 0 }
-}
-
 private fun ContinueWatchingItem.videoId(): String {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.videoId
@@ -206,11 +182,4 @@ private fun parseContinueWatchingContentType(raw: String): ContentType {
         "series", "tv" -> ContentType.SERIES
         else -> ContentType.MOVIE
     }
-}
-
-private fun parseRuntimeMinutesFromMeta(raw: String?): Int? {
-    return raw
-        ?.let { Regex("(\\d+)").find(it)?.groupValues?.getOrNull(1) }
-        ?.toIntOrNull()
-        ?.takeIf { it > 0 }
 }

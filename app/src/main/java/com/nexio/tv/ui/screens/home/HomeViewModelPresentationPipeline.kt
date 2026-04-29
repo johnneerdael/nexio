@@ -4,7 +4,6 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
@@ -451,7 +450,6 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         }
 
         try {
-            var tmdbEnriched = false
             if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
                 val enrichment = withContext(Dispatchers.IO) {
                     runCatching { fetchProviderEnrichmentForPreview(item) }.getOrNull()
@@ -460,29 +458,9 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                     prefetchedTmdbIds.add(item.id)
                     prefetchedExternalMetaIds.add(item.id)
                     updateCatalogItemWithProvider(item.id, enrichment)
-                    tmdbEnriched = true
                 }
             }
 
-            if (!tmdbEnriched &&
-                externalMetaPrefetchEnabled &&
-                item.id !in prefetchedExternalMetaIds &&
-                externalMetaPrefetchInFlightIds.add(item.id)
-            ) {
-                try {
-                    val result = withContext(Dispatchers.IO) {
-                        metaRepository.getMetaFromAllAddons(item.apiType, item.id)
-                            .first { it is NetworkResult.Success || it is NetworkResult.Error }
-                    }
-
-                    if (result is NetworkResult.Success && pendingTmdbEnrichItemId == item.id) {
-                        prefetchedExternalMetaIds.add(item.id)
-                        updateCatalogItemWithMeta(item.id, result.data)
-                    }
-                } finally {
-                    externalMetaPrefetchInFlightIds.remove(item.id)
-                }
-            }
         } finally {
             if (pendingTmdbEnrichItemId == item.id) {
                 pendingTmdbEnrichItemId = null
@@ -525,7 +503,6 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
         if (isFocusedPreviewEnrichmentComplete(item)) return@launch
 
         try {
-            var tmdbEnriched = false
             if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
                 val enrichment = withContext(Dispatchers.IO) {
                     runCatching { fetchProviderEnrichmentForPreview(item) }.getOrNull()
@@ -534,28 +511,9 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                     prefetchedTmdbIds.add(item.id)
                     prefetchedExternalMetaIds.add(item.id)
                     updateCatalogItemWithProvider(item.id, enrichment)
-                    tmdbEnriched = true
                 }
             }
 
-            if (!tmdbEnriched &&
-                externalMetaPrefetchEnabled &&
-                item.id !in prefetchedExternalMetaIds &&
-                externalMetaPrefetchInFlightIds.add(item.id)
-            ) {
-                try {
-                    val result = withContext(Dispatchers.IO) {
-                        metaRepository.getMetaFromAllAddons(item.apiType, item.id)
-                            .first { it is NetworkResult.Success || it is NetworkResult.Error }
-                    }
-                    if (result is NetworkResult.Success) {
-                        prefetchedExternalMetaIds.add(item.id)
-                        updateCatalogItemWithMeta(item.id, result.data)
-                    }
-                } finally {
-                    externalMetaPrefetchInFlightIds.remove(item.id)
-                }
-            }
         } finally {
             if (pendingAdjacentPrefetchItemId == item.id) {
                 pendingAdjacentPrefetchItemId = null
