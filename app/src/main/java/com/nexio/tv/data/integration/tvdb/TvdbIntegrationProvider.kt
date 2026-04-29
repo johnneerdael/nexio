@@ -674,7 +674,7 @@ class TvdbIntegrationProvider @Inject constructor(
                 callAuthenticated(TvdbApiShapes.REFERENCE_ARTWORK_TYPES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getArtworkTypes(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.ARTWORK_STATUSES ->
-                callAuthenticated("tvdb.reference.artwork_statuses", "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getArtworkStatuses(it) }
+                callAuthenticated(TvdbApiShapes.REFERENCE_ARTWORK_STATUSES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getArtworkStatuses(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.GENRES ->
                 callAuthenticated(TvdbApiShapes.REFERENCE_GENRES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getGenres(it) }
@@ -683,7 +683,7 @@ class TvdbIntegrationProvider @Inject constructor(
                 callAuthenticated(TvdbApiShapes.REFERENCE_LANGUAGES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getLanguages(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.SERIES_STATUSES ->
-                callAuthenticated("tvdb.reference.series_statuses", "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getSeriesStatuses(it) }
+                callAuthenticated(TvdbApiShapes.REFERENCE_SERIES_STATUSES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getSeriesStatuses(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.CONTENT_RATINGS ->
                 callAuthenticated(TvdbApiShapes.REFERENCE_CONTENT_RATINGS, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getContentRatings(it) }
@@ -692,13 +692,13 @@ class TvdbIntegrationProvider @Inject constructor(
                 callAuthenticated(TvdbApiShapes.REFERENCE_SEASON_TYPES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getSeasonTypes(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.SOURCE_TYPES ->
-                callAuthenticated("tvdb.reference.source_types", "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getSourceTypes(it) }
+                callAuthenticated(TvdbApiShapes.REFERENCE_SOURCE_TYPES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getSourceTypes(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.ENTITY_TYPES ->
-                callAuthenticated("tvdb.reference.entity_types", "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getEntityTypes(it) }
+                callAuthenticated(TvdbApiShapes.REFERENCE_ENTITY_TYPES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getEntityTypes(it) }
                     ?.data?.map { it as Any }
             TvdbReferenceKind.COMPANY_TYPES ->
-                callAuthenticated("tvdb.reference.company_types", "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getCompanyTypes(it) }
+                callAuthenticated(TvdbApiShapes.REFERENCE_COMPANY_TYPES, "tvdb.fetch_reference_records", IntegrationWorkClass.MAINTENANCE) { tvdbApi.getCompanyTypes(it) }
                     ?.data?.map { it as Any }
         }
     }
