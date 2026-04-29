@@ -55,6 +55,49 @@ class CatalogMapperTest {
     }
 
     @Test
+    fun `addon imdb id wins over behavior hint imdb id`() {
+        val preview = MetaPreviewDto(
+            id = "tmdb:687163",
+            type = "movie",
+            name = "Project Hail Mary",
+            imdbId = "tt1111111",
+            behaviorHints = CatalogBehaviorHintsDto(
+                defaultVideoId = "tt2222222"
+            )
+        ).toDomain()
+
+        assertEquals("tt1111111", preview.firstPaintStableIds.imdb)
+        assertEquals("687163", preview.firstPaintStableIds.tmdb)
+    }
+
+    @Test
+    fun `addon stable id harvest rejects episode and malformed imdb ids`() {
+        val episodeLikePreview = MetaPreviewDto(
+            id = "tt1234567:1:1",
+            type = "series",
+            name = "Episode Like Id",
+            imdbId = "ttfoo",
+            behaviorHints = CatalogBehaviorHintsDto(
+                defaultVideoId = "tt7654321:2:3"
+            )
+        ).toDomain()
+
+        assertEquals(null, episodeLikePreview.firstPaintStableIds.imdb)
+    }
+
+    @Test
+    fun `addon raw imdb title id is harvested as stable imdb id`() {
+        val preview = MetaPreviewDto(
+            id = "tt12042730",
+            type = "movie",
+            name = "Project Hail Mary"
+        ).toDomain()
+
+        assertEquals("tt12042730", preview.firstPaintStableIds.imdb)
+        assertEquals(null, preview.firstPaintStableIds.tmdb)
+    }
+
+    @Test
     fun `moshi parses tmdb addon alias fields for first paint`() {
         val response = parseCatalogResponse(
             """
