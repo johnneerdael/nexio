@@ -65,9 +65,22 @@ class TraceMetadataEvents(
         cacheDecision: String,
         executedNetwork: Boolean,
         resultId: String?,
-        success: Boolean
+        success: Boolean,
+        /** F2-C-07: optional failure reason; set to "unsupported_id_prefix" when the adapter
+         *  received a route whose ID has an unrecognised scheme (e.g. spotify:, netflix-id-format). */
+        reason: String? = null
     ) {
         val sid = sessionId() ?: return
+        val basePayload = mapOf(
+            "sourceId" to sourceId,
+            "targetProvider" to targetProvider,
+            "resolver" to resolver,
+            "apiShapeId" to apiShapeId,
+            "cacheDecision" to cacheDecision,
+            "executedNetwork" to executedNetwork,
+            "resultId" to resultId,
+            "success" to success
+        )
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -76,16 +89,7 @@ class TraceMetadataEvents(
                 elapsedRealtimeMs = System.nanoTime() / 1_000_000,
                 threadName = Thread.currentThread().name,
                 eventType = "metadata.identity_resolution",
-                payload = mapOf(
-                    "sourceId" to sourceId,
-                    "targetProvider" to targetProvider,
-                    "resolver" to resolver,
-                    "apiShapeId" to apiShapeId,
-                    "cacheDecision" to cacheDecision,
-                    "executedNetwork" to executedNetwork,
-                    "resultId" to resultId,
-                    "success" to success
-                )
+                payload = if (reason != null) basePayload + ("reason" to reason) else basePayload
             )
         )
     }

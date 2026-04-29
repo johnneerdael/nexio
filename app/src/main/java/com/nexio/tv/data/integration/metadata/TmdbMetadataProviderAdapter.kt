@@ -27,7 +27,24 @@ class TmdbMetadataProviderAdapter @Inject constructor(
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
         val tmdbId = MetadataProviderTargetIds.tmdbInt(route.targetIds[MetadataPrimaryProvider.TMDB])
-            ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
+            ?: run {
+                // F2-C-07: surface unknown-prefix observability — the ID in targetIds[TMDB] has
+                // a scheme we don't recognise (e.g. "spotify:", "netflix-id-format"). Emit a trace
+                // event so the issue is visible in trace bundles rather than silently dropped.
+                val rawId = route.targetIds[MetadataPrimaryProvider.TMDB] ?: route.parentId
+                traceEvents.emitIdentityResolution(
+                    sourceId = rawId,
+                    targetProvider = provider.name,
+                    resolver = "TmdbMetadataProviderAdapter",
+                    apiShapeId = step.apiShapeId,
+                    cacheDecision = "UNKNOWN",
+                    executedNetwork = false,
+                    resultId = null,
+                    success = false,
+                    reason = "unsupported_id_prefix"
+                )
+                return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
+            }
         val language = route.language.orEmpty()
         val policy = LocalizationPolicy.tmdb(language)
         // F-E-02: emit localization_plan after policy construction.
