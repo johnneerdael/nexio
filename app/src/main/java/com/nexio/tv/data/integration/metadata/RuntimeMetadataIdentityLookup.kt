@@ -22,9 +22,8 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
     override suspend fun imdbToTvdb(imdbId: String): String? {
         return tvdbProvider.searchByRemoteId(imdbId)
             ?.data
-            ?.firstOrNull()
-            ?.series
-            ?.id
+            .orEmpty()
+            .firstNotNullOfOrNull { result -> result.series?.id }
             ?.toString()
     }
 
