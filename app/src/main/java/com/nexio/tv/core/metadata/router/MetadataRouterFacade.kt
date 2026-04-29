@@ -417,41 +417,83 @@ class MetadataRouterFacade @Inject constructor(
             seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
         )
         val baseRoute = router.route(seasonMetadataRequest)
-        val resolvedBaseRoute = resolveRouteWithFallbackContentId(
-            route = identityResolver.resolve(baseRoute),
+        val resolvedBaseRoute = identityResolver.resolve(baseRoute)
+        val fallbackRoute = fallbackRouteForDistinctContentId(
             metadataRequest = seasonMetadataRequest,
             fallbackContentId = tvRequest.fallbackContentId
         )
         if (resolvedBaseRoute.targetIdRequiresIdentityResolution) {
+            val fallbackMetadata = fallbackRoute?.takeUnless { it.targetIdRequiresIdentityResolution }?.let { route ->
+                fetchEpisodeMetadataForRoute(
+                    route = route,
+                    seasonNumbers = tvRequest.seasonNumbers,
+                    metadataSeasonNumber = metadataRequest.seasonNumber
+                )
+            }
+            if (!fallbackMetadata.isNullOrEmpty()) {
+                return TvMetadataDecision(
+                    provider = fallbackRoute.provider.toTvProvider(),
+                    reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                    value = fallbackMetadata,
+                    diagnostics = emptyList()
+                )
+            }
             throw MetadataRouteFailure.IdentityResolutionFailed(resolvedBaseRoute.parentId, resolvedBaseRoute.provider)
         }
-        val episodeMetadata = tvRequest.seasonNumbers
-            .ifEmpty { listOfNotNull(metadataRequest.seasonNumber) }
+        val episodeMetadata = fetchEpisodeMetadataForRoute(
+            route = resolvedBaseRoute,
+            seasonNumbers = tvRequest.seasonNumbers,
+            metadataSeasonNumber = metadataRequest.seasonNumber
+        )
+        if (episodeMetadata.isNotEmpty()) {
+            return TvMetadataDecision(
+                provider = resolvedBaseRoute.provider.toTvProvider(),
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = episodeMetadata,
+                diagnostics = emptyList()
+            )
+        }
+
+        val fallbackMetadata = fallbackRoute?.takeUnless { it.targetIdRequiresIdentityResolution }?.let { route ->
+            fetchEpisodeMetadataForRoute(
+                route = route,
+                seasonNumbers = tvRequest.seasonNumbers,
+                metadataSeasonNumber = metadataRequest.seasonNumber
+            )
+        }
+        return TvMetadataDecision(
+            provider = fallbackRoute?.provider?.takeIf { !fallbackMetadata.isNullOrEmpty() }?.toTvProvider()
+                ?: resolvedBaseRoute.provider.toTvProvider(),
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = fallbackMetadata?.takeIf { it.isNotEmpty() } ?: episodeMetadata,
+            diagnostics = emptyList()
+        )
+    }
+
+    private suspend fun fetchEpisodeMetadataForRoute(
+        route: MetadataRoute,
+        seasonNumbers: List<Int>,
+        metadataSeasonNumber: Int?
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        return seasonNumbers
+            .ifEmpty { listOfNotNull(metadataSeasonNumber) }
             .ifEmpty { listOf(1) }
             .flatMap { seasonNumber ->
-                val seasonRoute = resolvedBaseRoute.copy(seasonNumber = seasonNumber)
+                val seasonRoute = route.copy(seasonNumber = seasonNumber)
                 val plan = providerPlanExecutor.buildPlan(seasonRoute, MetadataDepth.SEASON)
                 providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
                     stepResult.episodeMetadata.entries
                 }
             }
             .associate { it.toPair() }
-        return TvMetadataDecision(
-            provider = resolvedBaseRoute.provider.toTvProvider(),
-            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-            value = episodeMetadata,
-            diagnostics = emptyList()
-        )
     }
 
-    private suspend fun resolveRouteWithFallbackContentId(
-        route: MetadataRoute,
+    private suspend fun fallbackRouteForDistinctContentId(
         metadataRequest: MetadataRequest,
         fallbackContentId: String?
-    ): MetadataRoute {
-        if (!route.targetIdRequiresIdentityResolution) return route
-        val fallbackId = fallbackContentId?.takeIf { it.isNotBlank() } ?: return route
-        if (fallbackId == metadataRequest.contentId) return route
+    ): MetadataRoute? {
+        val fallbackId = fallbackContentId?.takeIf { it.isNotBlank() } ?: return null
+        if (fallbackId == metadataRequest.contentId) return null
 
         val fallbackRoute = router.route(
             metadataRequest.copy(
