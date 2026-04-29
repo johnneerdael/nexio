@@ -322,7 +322,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         var metadataFetchCount = 0
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val catalogKey = "visible_home"
-        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val runtimeHydrationKeys = AndroidTvSearchRuntimeReadiness
             .prioritizeMissingRuntimeCandidates(uniqueItems)
             .map { "${it.apiType}:${it.id}" }
@@ -354,12 +353,11 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
             runCatching {
                 val hydrated = overlayProviderLocalizedMetadata(item, onLog)
-                val applied = posterRatingsUrlResolver.apply(hydrated, activePosterProvider)
-                if (applied != item) {
+                if (hydrated != item) {
                     metadataDiskCacheStore.writeHomeDisplayMetadata(
                         itemKey = itemKey,
                         languageTag = languageTag,
-                        metadata = applied.toHomeDisplayMetadata()
+                        metadata = hydrated.toHomeDisplayMetadata()
                     )
                 }
             }
