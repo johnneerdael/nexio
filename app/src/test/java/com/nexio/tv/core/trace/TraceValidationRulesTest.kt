@@ -209,7 +209,107 @@ class TraceValidationRulesTest {
     }
 
     @Test
-    fun `ALL contains exactly 16 rules`() {
-        assertEquals(16, TraceValidationRules.ALL.size)
+    fun `ALL contains exactly 20 rules`() {
+        assertEquals(20, TraceValidationRules.ALL.size)
+    }
+
+    // ——— F2-I-05: EXPIRED_MISS shape ——————————————————————————————————————
+
+    @Test
+    fun `ExpiredMissCacheDecisionShape fires when EXPIRED_MISS lacks cacheKey`() {
+        val rule = TraceValidationRules.ExpiredMissCacheDecisionShape
+        assertFires(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "EXPIRED_MISS", "cacheKey" to null, "ttlMs" to 60_000, "staleWindowMs" to 30_000
+        ))))
+        assertSilent(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "EXPIRED_MISS", "cacheKey" to "tvdb:series:81189", "ttlMs" to 60_000, "staleWindowMs" to 30_000
+        ))))
+    }
+
+    @Test
+    fun `ExpiredMissCacheDecisionShape fires when EXPIRED_MISS lacks ttlMs`() {
+        val rule = TraceValidationRules.ExpiredMissCacheDecisionShape
+        assertFires(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "EXPIRED_MISS", "cacheKey" to "k", "ttlMs" to null, "staleWindowMs" to 30_000
+        ))))
+    }
+
+    @Test
+    fun `ExpiredMissCacheDecisionShape is silent for non-EXPIRED_MISS decisions`() {
+        val rule = TraceValidationRules.ExpiredMissCacheDecisionShape
+        assertSilent(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "HIT", "cacheKey" to null
+        ))))
+    }
+
+    // ——— F2-I-05: WRITE shape ————————————————————————————————————————————
+
+    @Test
+    fun `WriteCacheDecisionShape fires when WRITE lacks cacheKey`() {
+        val rule = TraceValidationRules.WriteCacheDecisionShape
+        assertFires(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "WRITE", "cacheKey" to null
+        ))))
+        assertSilent(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "WRITE", "cacheKey" to "tvdb:series:81189"
+        ))))
+    }
+
+    @Test
+    fun `WriteCacheDecisionShape is silent for non-WRITE decisions`() {
+        val rule = TraceValidationRules.WriteCacheDecisionShape
+        assertSilent(rule, listOf(envelope("runtime.cache_decision", 1L, mapOf(
+            "decision" to "MISS_THEN_NETWORK", "cacheKey" to null
+        ))))
+    }
+
+    // ——— F2-I-08: normalizer_warning shape ——————————————————————————————
+
+    @Test
+    fun `NormalizerWarningPayloadShape fires when contentId missing`() {
+        val rule = TraceValidationRules.NormalizerWarningPayloadShape
+        assertFires(rule, listOf(envelope("metadata.normalizer_warning", 1L, mapOf(
+            "contentId" to null, "reason" to "missing-episode-count"
+        ))))
+        assertSilent(rule, listOf(envelope("metadata.normalizer_warning", 1L, mapOf(
+            "contentId" to "tvdb:81189", "reason" to "missing-episode-count"
+        ))))
+    }
+
+    @Test
+    fun `NormalizerWarningPayloadShape fires when reason missing`() {
+        val rule = TraceValidationRules.NormalizerWarningPayloadShape
+        assertFires(rule, listOf(envelope("metadata.normalizer_warning", 1L, mapOf(
+            "contentId" to "tvdb:81189", "reason" to null
+        ))))
+    }
+
+    // ——— F2-I-09: scrobble_rejected shape ————————————————————————————————
+
+    @Test
+    fun `ScrobbleRejectedPayloadShape fires when envelopeProfileId missing`() {
+        val rule = TraceValidationRules.ScrobbleRejectedPayloadShape
+        assertFires(rule, listOf(envelope("playback.scrobble_rejected", 1L, mapOf(
+            "envelopeProfileId" to null, "activeProfileId" to 2, "reason" to "profile-mismatch"
+        ))))
+        assertSilent(rule, listOf(envelope("playback.scrobble_rejected", 1L, mapOf(
+            "envelopeProfileId" to 1, "activeProfileId" to 2, "reason" to "profile-mismatch"
+        ))))
+    }
+
+    @Test
+    fun `ScrobbleRejectedPayloadShape fires when activeProfileId missing`() {
+        val rule = TraceValidationRules.ScrobbleRejectedPayloadShape
+        assertFires(rule, listOf(envelope("playback.scrobble_rejected", 1L, mapOf(
+            "envelopeProfileId" to 1, "activeProfileId" to null, "reason" to "profile-mismatch"
+        ))))
+    }
+
+    @Test
+    fun `ScrobbleRejectedPayloadShape fires when reason missing`() {
+        val rule = TraceValidationRules.ScrobbleRejectedPayloadShape
+        assertFires(rule, listOf(envelope("playback.scrobble_rejected", 1L, mapOf(
+            "envelopeProfileId" to 1, "activeProfileId" to 2, "reason" to null
+        ))))
     }
 }

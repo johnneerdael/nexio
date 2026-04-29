@@ -7,6 +7,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import com.google.gson.Gson
+import java.io.BufferedWriter
+import java.io.IOException
 
 class JsonlTraceWriterTest {
     @get:Rule val tmp = TemporaryFolder()
@@ -59,6 +61,46 @@ class JsonlTraceWriterTest {
         writer.append(envelope("violation"), TraceEventPriority.BLOCKER)
         writer.close()
         assertTrue(file.readText().contains("\"eventType\":\"violation\""))
+    }
+
+    // ——— F2-I-10: IOException counter ————————————————————————————————————
+
+    @Test
+    fun `IOException during write increments ioDroppedCount`() {
+        // Create a BufferedWriter that always throws IOException on write
+        val throwingWriter = object : BufferedWriter(java.io.StringWriter()) {
+            override fun write(str: String) { throw IOException("disk full") }
+            override fun flush() { throw IOException("disk full") }
+            override fun close() {} // close is allowed to succeed
+        }
+        val writer = JsonlTraceWriter(
+            writer = throwingWriter,
+            gson = Gson(),
+            maxBytes = 1_000_000L,
+            testMarker = Unit
+        )
+        writer.append(envelope("ev"), priority = TraceEventPriority.HIGH)
+        assertEquals(1L, writer.ioDroppedCount())
+        // capacity-dropped counter must NOT be incremented — it was an IO failure, not a size drop
+        assertEquals(0L, writer.droppedCount())
+    }
+
+    @Test
+    fun `two IOException events each increment ioDroppedCount`() {
+        val throwingWriter = object : BufferedWriter(java.io.StringWriter()) {
+            override fun write(str: String) { throw IOException("enospc") }
+            override fun flush() { throw IOException("enospc") }
+            override fun close() {}
+        }
+        val writer = JsonlTraceWriter(
+            writer = throwingWriter,
+            gson = Gson(),
+            maxBytes = 1_000_000L,
+            testMarker = Unit
+        )
+        writer.append(envelope("ev1"), priority = TraceEventPriority.HIGH)
+        writer.append(envelope("ev2"), priority = TraceEventPriority.HIGH)
+        assertEquals(2L, writer.ioDroppedCount())
     }
 
     private fun envelope(type: String) = TraceEventEnvelope(

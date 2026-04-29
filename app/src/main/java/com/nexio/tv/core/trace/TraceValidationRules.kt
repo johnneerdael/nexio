@@ -306,6 +306,76 @@ object TraceValidationRules {
         }
     }
 
+    /**
+     * F2-I-05: Every `runtime.cache_decision` with decision=EXPIRED_MISS must carry a String
+     * `cacheKey`, a Number `ttlMs`, and a Number `staleWindowMs`.
+     */
+    val ExpiredMissCacheDecisionShape: TraceValidationRule = object : TraceValidationRule {
+        override val id = "ExpiredMissCacheDecisionShape"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "runtime.cache_decision" }
+                .filter { e -> map(e)["decision"] == "EXPIRED_MISS" }
+                .mapNotNull { e ->
+                    val p = map(e)
+                    when {
+                        p["cacheKey"] !is String -> fail(this, e, "EXPIRED_MISS cache_decision missing cacheKey string")
+                        p["ttlMs"] !is Number -> fail(this, e, "EXPIRED_MISS cache_decision missing ttlMs number")
+                        p["staleWindowMs"] !is Number -> fail(this, e, "EXPIRED_MISS cache_decision missing staleWindowMs number")
+                        else -> null
+                    }
+                }
+    }
+
+    /**
+     * F2-I-05: Every `runtime.cache_decision` with decision=WRITE must carry a String `cacheKey`.
+     */
+    val WriteCacheDecisionShape: TraceValidationRule = object : TraceValidationRule {
+        override val id = "WriteCacheDecisionShape"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "runtime.cache_decision" }
+                .filter { e -> map(e)["decision"] == "WRITE" }
+                .mapNotNull { e ->
+                    val p = map(e)
+                    if (p["cacheKey"] !is String) fail(this, e, "WRITE cache_decision missing cacheKey string") else null
+                }
+    }
+
+    /**
+     * F2-I-08: Every `metadata.normalizer_warning` must carry String fields `contentId` and `reason`.
+     */
+    val NormalizerWarningPayloadShape: TraceValidationRule = object : TraceValidationRule {
+        override val id = "NormalizerWarningPayloadShape"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "metadata.normalizer_warning" }
+                .mapNotNull { e ->
+                    val p = map(e)
+                    when {
+                        p["contentId"] !is String -> fail(this, e, "normalizer_warning missing contentId string")
+                        p["reason"] !is String -> fail(this, e, "normalizer_warning missing reason string")
+                        else -> null
+                    }
+                }
+    }
+
+    /**
+     * F2-I-09: Every `playback.scrobble_rejected` must carry Number fields `envelopeProfileId` and
+     * `activeProfileId`, and a String field `reason`.
+     */
+    val ScrobbleRejectedPayloadShape: TraceValidationRule = object : TraceValidationRule {
+        override val id = "ScrobbleRejectedPayloadShape"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
+            events.filter { it.eventType == "playback.scrobble_rejected" }
+                .mapNotNull { e ->
+                    val p = map(e)
+                    when {
+                        p["envelopeProfileId"] !is Number -> fail(this, e, "scrobble_rejected missing envelopeProfileId number")
+                        p["activeProfileId"] !is Number -> fail(this, e, "scrobble_rejected missing activeProfileId number")
+                        p["reason"] !is String -> fail(this, e, "scrobble_rejected missing reason string")
+                        else -> null
+                    }
+                }
+    }
+
     val NoStaleProfileWritesAfterSwitch: TraceValidationRule = object : TraceValidationRule {
         override val id = "NoStaleProfileWritesAfterSwitch"
         override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
@@ -347,6 +417,10 @@ object TraceValidationRules {
         TraktSimklUsesCorrectProfile,
         NoStaleProfileWritesAfterSwitch,
         ScheduledResolversAreDispatched,
-        LocalizationPlanPrecedesProviderSteps
+        LocalizationPlanPrecedesProviderSteps,
+        ExpiredMissCacheDecisionShape,
+        WriteCacheDecisionShape,
+        NormalizerWarningPayloadShape,
+        ScrobbleRejectedPayloadShape
     )
 }
