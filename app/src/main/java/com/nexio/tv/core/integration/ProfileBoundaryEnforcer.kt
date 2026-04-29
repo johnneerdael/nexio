@@ -273,11 +273,6 @@ object ProfileBoundaryEnforcer {
         cacheKey: String?,
         profileContext: ProfileExecutionContext?
     ) {
-        if (!scope.isExplicitAccountScope) {
-            validateLegacyAccountScope(cacheKey)
-            return
-        }
-
         val profileId = requireNotNull(scope.profileId)
         val accountProvider = requireNotNull(scope.provider)
         val credentialHash = requireNotNull(scope.credentialHash)
@@ -319,16 +314,6 @@ object ProfileBoundaryEnforcer {
             throw ProfileBoundaryException(
                 ProfileBoundaryViolation.ACCOUNT_SCOPE_CREDENTIAL_MISMATCH,
                 "Account scope credentialHash does not match context credentialHash"
-            )
-        }
-    }
-
-    private fun validateLegacyAccountScope(cacheKey: String?) {
-        val key = cacheKey.orEmpty()
-        if (key.contains("profile:")) {
-            throw ProfileBoundaryException(
-                ProfileBoundaryViolation.ACCOUNT_SCOPE_CONTEXT_MISSING_ACCOUNT,
-                "Legacy account scope cannot be used for profile-bound cache key: $key"
             )
         }
     }
