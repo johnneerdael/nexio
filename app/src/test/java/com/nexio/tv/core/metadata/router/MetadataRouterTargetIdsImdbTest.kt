@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.ProviderIds
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -59,6 +60,58 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
+    fun `addon preview stable TMDB id wins over raw IMDB movie content id`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val router = router(lookup = lookup)
+
+        val route = router.route(
+            request(
+                id = "tt12042730",
+                type = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(
+                        imdb = "tt12042730",
+                        tmdb = "687163"
+                    )
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TMDB, route.provider)
+        assertEquals("tmdb:687163", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals("tt12042730", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
+    fun `addon preview stable TVDB id wins over raw IMDB series content id`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val router = router(lookup = lookup)
+
+        val route = router.route(
+            request(
+                id = "tt0903747",
+                type = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(
+                        imdb = "tt0903747",
+                        tvdb = "81189"
+                    )
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.TVDB, route.provider)
+        assertEquals("tvdb:81189", route.targetIds[MetadataPrimaryProvider.TVDB])
+        assertEquals("tt0903747", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
     fun `tmdb route with no IMDB match leaves IMDB key absent`() = runTest {
         val lookup = FakeTmdbExternalIdLookup() // returns null for everything
         val router = router(lookup = lookup)
@@ -93,11 +146,12 @@ class MetadataRouterTargetIdsImdbTest {
 
     private fun request(
         id: String,
-        type: ContentType
+        type: ContentType,
+        sourceContext: MetadataSourceContext = MetadataSourceContext()
     ): MetadataRequest = MetadataRequest(
         contentId = id,
         contentType = type,
-        sourceContext = MetadataSourceContext(),
+        sourceContext = sourceContext,
         depth = MetadataDepth.DETAIL_CORE
     )
 
