@@ -11,8 +11,16 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.TmdbCatalogPreferences
+import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
+import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
@@ -28,10 +36,14 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -128,7 +140,6 @@ class HomeCatalogRefreshCoordinatorTest {
     @Test
     fun `refresh first paint publishes catalog row without addon detail metadata fetch`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
-        val forbiddenMetaRepository = mockk<MetaRepository>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val publishedRows = mutableListOf<CatalogRow>()
         val catalogPreview = preview(id = "tt-first-paint", poster = null).copy(
@@ -196,16 +207,103 @@ class HomeCatalogRefreshCoordinatorTest {
                 supportsSkip = false
             )
         }
-        verify(exactly = 0) {
-            forbiddenMetaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
-        }
-        assertFalse(
-            "HomeCatalogRefreshCoordinator must not receive MetaRepository; first-paint refresh " +
-                "publishes catalog payloads and uses shared overlay, not add-on detail metadata.",
-            HomeCatalogRefreshCoordinator::class.constructors.any { constructor ->
-                constructor.parameters.any { parameter -> parameter.type.classifier == MetaRepository::class }
-            }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `home serialized refresh publishes coordinator first paint without meta repository detail fetch`() = runTest {
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val catalogPreview = preview(id = "tt-viewmodel-first-paint", poster = null).copy(
+            description = "ViewModel catalog payload",
+            releaseInfo = "2026"
         )
+        val catalogRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(catalogPreview),
+            hasMore = false
+        )
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.metaRepository } returns metaRepository
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns catalogsMap
+        every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
+        every { viewModel._fullCatalogRows } returns MutableStateFlow(emptyList())
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
+            TmdbDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onLog = any()
+            )
+        } coAnswers {
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            onCatalogReady(
+                "addon_movie_popular",
+                catalogRow,
+                CatalogItemDiff(addedOrChanged = listOf(catalogPreview), removed = emptyList())
+            )
+            1
+        }
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        assertEquals(catalogRow, catalogsMap["addon_movie_popular"])
+        verify(exactly = 0) {
+            metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
+        }
+        coVerify(exactly = 1) {
+            coordinator.refreshSerially(
+                addons = listOf(addon()),
+                telemetryEnabled = false,
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onLog = any()
+            )
+        }
     }
 
     private fun preview(id: String, poster: String?): MetaPreview {
