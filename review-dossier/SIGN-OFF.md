@@ -5,6 +5,26 @@
 - **Auditor:** Subagent-driven audit (claude-code, `superpowers:subagent-driven-development` skill)
 - **Decision:** **CHANGES_REQUESTED**
 
+## Cluster E landed — profile/playback hardening + legacy cleanup
+
+The 8 cluster-E findings (0 P1 + 4 P2 + 4 nits) have been remediated:
+
+- **F-F-03** — Deleted `ProfileMetadataOverlay` + `ProfileResolvedDisplayDocument` (zero production callers); pruned `CompositionTypeShapeTest` (commit `431b94105`).
+- **F-F-04** — `ProfileSwitchDeferralPolicy` defers reactive profile-switch during playback; `PlaybackSessionRegistry.ownerState: StateFlow<PlaybackOwnerContext?>` triggers the drain on idle (`80f71ee8f` red test + `4f1e28ca6` impl).
+- **F-J-03** — `OpenSubtitlesHashIntegrationProvider` migrated from `IntegrationScope.Global` to `GlobalContent` (`5ed197ea1`); `IntegrationScopeGlobalDeprecatedNoCallersTest` architecture pin asserts no production constructs `Global` (`deb6a7646`).
+- **F-J-02** — Deleted `IntegrationScope.Account(providerAccountId)` legacy ctor + `providerAccountId` field + equals/hashCode/toString refs (`3716d4b0c`).
+- **F-F-05** — Deleted `ProfileBoundaryEnforcer.validateLegacyAccountScope` + its single caller (unreachable after Task 7) (`d3c34336a`).
+- **F-J-04** — `IntegrationScope.Global` `@Deprecated` gains `ReplaceWith("IntegrationScope.GlobalContent")` (`fdc4547aa`); `DeprecatedAnnotationsHaveReplaceWithTest` architecture pin asserts every production `@Deprecated` carries `ReplaceWith` (`2f4f0f01c` — also fixed `TrackingProgressService.observeContinueWatchingNextUp` and allowlisted 3 forced overrides of `BringIntoViewSpec.scrollAnimationSpec`).
+- **F-H-01** — `TrackingScrobbleServiceCheckinShapeTest` reflection pin asserts `checkin(...)` retains `ownerProfileId: Int?` shape; deliberate asymmetry with `scrobble(...)` (`PlaybackOwnerContext`) since checkin has no playback session (`7aca72cac`).
+- **F-H-02** — `PlaybackSessionRegistrySingleSlotTest` documents the single-slot constraint (second `register(...)` overwrites; stale `unregister(...)` is a no-op). Future multi-VM features must migrate to `ConcurrentHashMap` (`22e45965a`).
+
+OpenSpec change `cluster-e-profile-playback-cleanup` deployed (`4c5156ee4`).
+
+**Audit status:** 4× BUILD SUCCESSFUL — PASS verdicts on `generateProfileBoundaryAudit`, `generateIntegrationRuntimeAudit`, `generateMetadataExecutionAudit`, `generateTraceValidatorAudit`.
+
+**Updated decision:** APPROVED for merge. Remaining cluster per `09-known-gaps.md`:
+- Cluster F (Provider contracts + identity + nits): F-B-01..02, F-B-05..07, F-C-02..06
+
 ## Cluster D landed — trace observability hardening
 
 The 10 cluster-D findings (3 P1 + 6 P2 + 1 nit) have been remediated:
