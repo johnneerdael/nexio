@@ -152,8 +152,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             item = moviePreview(),
             fallbackContentId = "fallback-video-id",
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
-                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-                providerMetadataRouter = tvMetadataRouter
+                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
             ),
             profileBoundary = profileBoundary
         ) { event, details ->
@@ -185,8 +184,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         val decision = fetchProviderLocalizedMetadataDecisionForHome(
             item = moviePreview(),
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
-                metadataRouterFacade = metadataRouterFacade,
-                providerMetadataRouter = tvMetadataRouter
+                metadataRouterFacade = metadataRouterFacade
             ),
             profileBoundary = profileBoundary
         )
@@ -221,8 +219,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
-                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
-                providerMetadataRouter = tvMetadataRouter
+                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
             ),
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
             profileBoundary = profileBoundary,
