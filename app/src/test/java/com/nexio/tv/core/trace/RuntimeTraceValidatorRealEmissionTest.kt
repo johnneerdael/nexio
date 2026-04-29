@@ -16,6 +16,7 @@ import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
 import com.nexio.tv.core.integration.ProfileExecutionContext
 import com.nexio.tv.core.integration.ProviderRequestGate
 import com.nexio.tv.core.integration.RecordingIntegrationAuditSink
+import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.defaultIntegrationPolicyRegistry
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldResolver
@@ -193,6 +194,102 @@ class RuntimeTraceValidatorRealEmissionTest {
         val report = RuntimeTraceValidator().validate(parsed.asSequence())
         assertEquals(
             "real-emission session must validate PASS — schema drift between an emission site and a validator rule. failures=${report.failures}",
+            TraceVerdict.PASS,
+            report.verdict
+        )
+    }
+
+    /**
+     * F2-E-03: drive a TVDB episode-bundle scenario through real TraceMetadataEvents emission
+     * and validate that LocalizationPlanPrecedesProviderSteps sees PASS end-to-end.
+     *
+     * Emits (in sequence):
+     *   1. metadata.route_decision  (provider=TVDB) — triggers rule scan
+     *   2. metadata.localization_plan (provider=TVDB) — satisfies the rule
+     *   3. metadata.provider_plan   (provider=TVDB) — terminates the rule's inner scan
+     *   4. metadata.field_selected  ×2 (TITLE, OVERVIEW for episodes) — exercises episode-bundle fields
+     *
+     * Uses Option B (direct emit via TraceMetadataEvents) because the existing test uses real
+     * emitters only via the integration runtime and router — TvdbMetadataProviderAdapter is not
+     * wired in this harness and pulling in its full dependency graph would exceed the task scope.
+     */
+    @Test
+    fun `LocalizationPlanPrecedesProviderSteps validates TVDB episode-bundle real emission`() = runTest {
+        val sink = RecordingTraceSink()
+        val traceEvents = TraceMetadataEvents(sink, sessionId = { "tvdb-episode-bundle-session" })
+
+        // 1. route_decision for TVDB series (tvdb:81189 = Breaking Bad)
+        traceEvents.emitRouteDecision(
+            contentId = "tvdb:81189",
+            parentId = "tvdb:81189",
+            itemType = "series",
+            provider = "TVDB",
+            mediaKind = "SERIES",
+            reason = "primary_provider_match",
+            usedInputs = listOf("tvdbId", "contentType"),
+            ignoredInputs = emptyList(),
+            targetIdRequiresIdentityResolution = false,
+            targetIds = mapOf("tvdb" to "81189")
+        )
+
+        // 2. localization_plan for TVDB — this is the event LocalizationPlanPrecedesProviderSteps checks for.
+        //    localeCollapsedToFallback = false because the user's locale (en) is on the TVDB whitelist.
+        traceEvents.emitLocalizationPlan(
+            contentId = "tvdb:81189",
+            provider = "TVDB",
+            policyVersion = 2,
+            requestedLanguage = "en",
+            fallbackLanguage = "en",
+            requestedIsFallback = true,
+            allowProviderFallbackForMissingLocalizedFields = true,
+            perEpisodeFallbacksAttempted = 0,
+            perEpisodeFallbacksAllowed = 5,
+            localeCollapsedToFallback = false
+        )
+
+        // 3. provider_plan — terminates the inner loop in LocalizationPlanPrecedesProviderSteps.
+        //    requiresIdentityResolution = false to avoid triggering IdentityResolutionPrecedesProviderConflict.
+        traceEvents.emitProviderPlan(
+            contentId = "tvdb:81189",
+            provider = "TVDB",
+            mediaKind = "SERIES",
+            depth = "DETAIL_CORE",
+            steps = listOf(
+                mapOf(
+                    "apiShapeId" to "tvdb.series.episodes.language",
+                    "requiresIdentityResolution" to false,
+                    "cacheKeyTemplate" to "tvdb:series:{tvdbId}:episodes:lang:{lang}"
+                )
+            )
+        )
+
+        // 4a. field_selected for episode title — TITLE with ownershipRule set (FieldHasOwnershipRule check)
+        //     and empty rejectedCandidates (SecondaryDoesNotOverwritePrimary check on protected fields)
+        traceEvents.emitFieldSelected(
+            contentId = "tvdb:81189:S01E01",
+            field = "TITLE",
+            selectedProvider = "TVDB",
+            sourceRole = "PRIMARY",
+            valuePreview = "Pilot",
+            ownershipRule = "primary_always_wins",
+            rejectedCandidates = emptyList()
+        )
+
+        // 4b. field_selected for episode overview
+        traceEvents.emitFieldSelected(
+            contentId = "tvdb:81189:S01E01",
+            field = "OVERVIEW",
+            selectedProvider = "TVDB",
+            sourceRole = "PRIMARY",
+            valuePreview = "Walt White, a struggling high school chemistry teacher…",
+            ownershipRule = "primary_always_wins",
+            rejectedCandidates = emptyList()
+        )
+
+        // Validate: pass recorded events through the full validator.
+        val report = RuntimeTraceValidator().validate(sink.events.asSequence())
+        assertEquals(
+            "TVDB episode-bundle emission must validate PASS — LocalizationPlanPrecedesProviderSteps or another rule is failing. failures=${report.failures}",
             TraceVerdict.PASS,
             report.verdict
         )
