@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
@@ -35,7 +36,10 @@ class ProviderPlanExecutorTest {
             depth = MetadataDepth.DETAIL_CORE
         )
 
-        assertEquals(listOf(TmdbApiShapes.MOVIE_CORE), plan.apiShapeIds())
+        assertEquals(
+            listOf(TmdbApiShapes.MOVIE_CORE) + posterShapeIds(),
+            plan.apiShapeIds()
+        )
         assertAllShapesCovered(plan)
     }
 
@@ -50,7 +54,7 @@ class ProviderPlanExecutorTest {
         )
 
         assertEquals(
-            listOf(TmdbApiShapes.MOVIE_CORE, TmdbApiShapes.MOVIE_VIDEOS),
+            listOf(TmdbApiShapes.MOVIE_CORE, TmdbApiShapes.MOVIE_VIDEOS) + posterShapeIds(),
             plan.apiShapeIds()
         )
         assertAllShapesCovered(plan)
@@ -72,7 +76,7 @@ class ProviderPlanExecutorTest {
                 TmdbApiShapes.MOVIE_VIDEOS,
                 TmdbApiShapes.MOVIE_REVIEWS,
                 TmdbApiShapes.MOVIE_RECOMMENDATIONS
-            ),
+            ) + posterShapeIds(),
             plan.apiShapeIds()
         )
         assertAllShapesCovered(plan)
@@ -88,7 +92,10 @@ class ProviderPlanExecutorTest {
             depth = MetadataDepth.DETAIL_CORE
         )
 
-        assertEquals(listOf(TmdbApiShapes.TV_CORE), plan.apiShapeIds())
+        assertEquals(
+            listOf(TmdbApiShapes.TV_CORE) + posterShapeIds(),
+            plan.apiShapeIds()
+        )
         assertAllShapesCovered(plan)
     }
 
@@ -103,7 +110,7 @@ class ProviderPlanExecutorTest {
         )
 
         assertEquals(
-            listOf(TmdbApiShapes.TV_CORE, TmdbApiShapes.TV_VIDEOS),
+            listOf(TmdbApiShapes.TV_CORE, TmdbApiShapes.TV_VIDEOS) + posterShapeIds(),
             plan.apiShapeIds()
         )
         assertAllShapesCovered(plan)
@@ -125,7 +132,7 @@ class ProviderPlanExecutorTest {
                 TmdbApiShapes.TV_VIDEOS,
                 TmdbApiShapes.TV_REVIEWS,
                 TmdbApiShapes.TV_RECOMMENDATIONS
-            ),
+            ) + posterShapeIds(),
             plan.apiShapeIds()
         )
         assertAllShapesCovered(plan)
@@ -178,7 +185,7 @@ class ProviderPlanExecutorTest {
         )
 
         assertEquals(
-            listOf(TvdbApiShapes.SERIES_EXTENDED),
+            listOf(TvdbApiShapes.SERIES_EXTENDED) + posterShapeIds(),
             plan.apiShapeIds()
         )
         assertFalse(plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
@@ -196,7 +203,7 @@ class ProviderPlanExecutorTest {
             depth = MetadataDepth.DETAIL_CORE
         )
 
-        assertEquals(listOf(TvdbApiShapes.SERIES_EXTENDED), plan.apiShapeIds())
+        assertEquals(listOf(TvdbApiShapes.SERIES_EXTENDED) + posterShapeIds(), plan.apiShapeIds())
         assertFalse(plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
         assertAllShapesCovered(plan)
     }
@@ -213,7 +220,7 @@ class ProviderPlanExecutorTest {
                 depth = MetadataDepth.DETAIL_CORE
             )
 
-            assertEquals("language=$language", listOf(TvdbApiShapes.SERIES_EXTENDED), plan.apiShapeIds())
+            assertEquals("language=$language", listOf(TvdbApiShapes.SERIES_EXTENDED) + posterShapeIds(), plan.apiShapeIds())
             assertFalse("language=$language", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
             assertAllShapesCovered(plan)
         }
@@ -233,7 +240,7 @@ class ProviderPlanExecutorTest {
 
             assertEquals(
                 "language=$language",
-                listOf(TvdbApiShapes.SERIES_EXTENDED),
+                listOf(TvdbApiShapes.SERIES_EXTENDED) + posterShapeIds(),
                 plan.apiShapeIds()
             )
             assertFalse("language=$language", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
@@ -255,7 +262,7 @@ class ProviderPlanExecutorTest {
 
             assertEquals(
                 "depth=$depth",
-                listOf(TvdbApiShapes.SERIES_EXTENDED),
+                listOf(TvdbApiShapes.SERIES_EXTENDED) + posterShapeIds(),
                 plan.apiShapeIds()
             )
             assertFalse("depth=$depth", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))
@@ -324,7 +331,7 @@ class ProviderPlanExecutorTest {
         val plan = executor.buildPlan(route = route, depth = MetadataDepth.DETAIL_CORE)
 
         assertEquals(MetadataMediaKind.ANIME, plan.route.mediaKind)
-        assertEquals(listOf(KitsuApiShapes.ANIME_CORE), plan.apiShapeIds())
+        assertEquals(listOf(KitsuApiShapes.ANIME_CORE) + posterShapeIds(), plan.apiShapeIds())
         assertAllShapesCovered(plan)
     }
 
@@ -388,7 +395,7 @@ class ProviderPlanExecutorTest {
                 KitsuApiShapes.ANIME_STAFF,
                 KitsuApiShapes.ANIME_PRODUCTIONS,
                 KitsuApiShapes.MEDIA_RELATIONSHIPS
-            ),
+            ) + posterShapeIds(),
             plan.apiShapeIds()
         )
         assertAllShapesCovered(plan)
@@ -476,6 +483,11 @@ class ProviderPlanExecutorTest {
         assertEquals(MetadataDepth.PLAYER, plan.depth)
         assertEquals(emptyList<String>(), plan.apiShapeIds())
     }
+
+    private fun posterShapeIds(): List<String> = listOf(
+        PosterApiShapes.RPDB_POSTER_TEMPLATE,
+        PosterApiShapes.TOP_POSTERS_POSTER_TEMPLATE
+    )
 
     private fun ProviderExecutionPlan.apiShapeIds(): List<String> = steps.map { it.apiShapeId }
 
