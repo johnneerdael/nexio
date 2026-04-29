@@ -33,7 +33,10 @@ sealed class IntegrationScope(
         isProfileBound = false
     )
 
-    @Deprecated("Use GlobalContent, GlobalLocalizedContent, or GlobalEnglishImage.")
+    @Deprecated(
+        message = "Use GlobalContent, GlobalLocalizedContent, or GlobalEnglishImage.",
+        replaceWith = ReplaceWith("IntegrationScope.GlobalContent")
+    )
     data object Global : IntegrationScope(
         storageKey = "global",
         auditName = "Global",
