@@ -28,8 +28,10 @@ OpenSpec change `harden-trace-observability` deployed (`4550b6db1`).
 - Cluster F (Provider contracts + identity + nits): F-B-01..02, F-B-05..07, F-C-02..06
 
 **Two known follow-ups:**
-1. F-I-05 partial closure: `provideYouTubeTrailerMainOkHttpClient` + `provideYouTubeTrailerProbeOkHttpClient` bypass the trace interceptor. Architecture pin catches the count; remediation is a separate PR.
-2. F-G-01 path B: full migration of CW consumers to `List<ContinueWatchingRecord>` shape (instead of filtered snapshot) requires `ContinueWatchingRecord` to gain fields it currently lacks. Defer to a separate plan.
+1. ~~F-I-05 partial closure: `provideYouTubeTrailerMainOkHttpClient` + `provideYouTubeTrailerProbeOkHttpClient` bypass the trace interceptor. Architecture pin catches the count; remediation is a separate PR.~~ — **CLOSED:** both trailer providers now inject + wire `RuntimeTraceInterceptor` + `RuntimeTraceContextRequestTaggingInterceptor` (commit `f3eb5380a`); `DerivedOkHttpClientTraceWiringTest` pivoted to per-construction interceptor-presence assertion + new `YouTubeTrailerClientTraceInterceptorTest` directly verifies (commit `29c01cacf`).
+2. ~~F-G-01 path B: full migration of CW consumers to `List<ContinueWatchingRecord>` shape (instead of filtered snapshot) requires `ContinueWatchingRecord` to gain fields it currently lacks. Defer to a separate plan.~~ — **CLOSED via different lever:** added `observeProfileSnapshot(profileId): Flow<ContinueWatchingSnapshot>` typed flow that preserves snapshot shape but filters at the API boundary (commit `9a33f8ac3`); migrated `HomeViewModelContinueWatching` (commit `f3cc59337`) and `AndroidTvFeedCatalogService` (commit `ac38ef928`). The lean `ContinueWatchingRecord` API stays as-is (intended for persistence/sync); UI consumers use the typed snapshot flow.
+
+OpenSpec change `close-cluster-d-deferrals` deployed (commit `05986e340`).
 
 ## Cluster C landed — localization tracing
 
