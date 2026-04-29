@@ -127,6 +127,10 @@ class ProfileManager(
     val isPrimaryProfileActive: Boolean
         get() = activeProfileId.value == 1
 
+    // F2-F-08: dual-write desync window — direct `_activeProfileId.value` update and the
+    // DataStore write below are not atomic. `deferralPolicy.activeProfileId` resyncs on the
+    // next DataStore collect (within ~1 ms typically under normal IO scheduling). This is
+    // self-correcting and intentional; documented here for clarity.
     suspend fun setActiveProfile(id: Int) {
         val current = dataStore.profilesList.first()
         if (current.none { it.id == id }) return

@@ -379,6 +379,11 @@ class TraktLibraryService @Inject constructor(
     private suspend fun refresh(force: Boolean, profileId: Int = activeProfileId()): Boolean {
         val now = System.currentTimeMillis()
         return refreshMutex.withLock {
+            // F2-F-07: manual staleness guard — `profileId == activeProfileId()` is functionally
+            // correct but inconsistent with assertCanWriteProfileState. Future migration: route
+            // through ProfileBoundaryEnforcer for unified observability (boundary_check trace
+            // events fire on PASS + FAIL). Until then, this guard prevents stale-profile writes
+            // without emitting a boundary_check trace event.
             if (
                 profileId == activeProfileId() &&
                 !force &&

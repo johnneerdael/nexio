@@ -11,6 +11,13 @@ sealed class IntegrationScope(
         isProfileBound = false
     )
 
+    /**
+     * F2-F-06: defined for globally-shared content keyed by display language and policy version.
+     * NOT currently constructed by any production [IntegrationSpec] as of cluster H;
+     * only the profile boundary audit golden test uses this scope for verification purposes.
+     * Use [GlobalContent] for non-localized global content. Reserve this scope for future
+     * adoption when production specs need per-language global cache partitioning.
+     */
     data class GlobalLocalizedContent(
         val language: String,
         val localizationPolicyVersion: Int
@@ -27,6 +34,14 @@ sealed class IntegrationScope(
         }
     }
 
+    /**
+     * F2-F-06: defined for English-only image fetches where the image language is always
+     * fixed to "en" regardless of the user's display language. NOT currently constructed
+     * by any production [IntegrationSpec] as of cluster H; image cache keys use a separate
+     * `imageLang:en` token mechanism. The profile boundary audit golden test exercises this
+     * scope for verification. Reserve for future direct adoption when image specs are
+     * migrated to the integration runtime.
+     */
     data object GlobalEnglishImage : IntegrationScope(
         storageKey = "global:image:lang:en",
         auditName = "GlobalEnglishImage",

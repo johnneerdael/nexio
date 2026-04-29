@@ -1,6 +1,7 @@
 package com.nexio.tv.core.integration
 
 import com.google.gson.GsonBuilder
+import com.nexio.tv.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -250,7 +251,10 @@ class ProfileBoundaryAuditGoldenTest {
         return ProfileBoundaryAuditReport(
             artifactRole = "PROFILE_BOUNDARY_SIGN_OFF",
             generatedAt = Instant.now().toString(),
-            gitSha = git("rev-parse", "--short=9", "HEAD"),
+            // F2-F-04: consume BuildConfig.GIT_SHA (wired by cluster G F2-I-01) instead of
+            // shelling out to `git rev-parse HEAD`. The ProcessBuilder approach stamped the
+            // SHA of whatever commit the test runner happened to check out, not the compile-time SHA.
+            gitSha = BuildConfig.GIT_SHA,
             gitWorktreeState = if (git("status", "--porcelain").isBlank()) "CLEAN" else "DIRTY",
             verdict = "PASS",
             totalScenarios = scenarios.size,
