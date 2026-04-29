@@ -39,6 +39,36 @@ Addon catalog item payloads SHALL preserve directly supplied stable IDs before v
 - **THEN** `MetaPreview.firstPaintStableIds.tmdb` is `"687163"`
 - **AND** `MetaPreview.firstPaintStableIds.imdb` is `"tt12042730"`.
 
+### Requirement: Addon preview stable IDs feed visible hydration targets
+
+Addon preview stable IDs SHALL be used by the existing metadata routing pipeline when a first-paint item becomes visible or focused.
+
+#### Scenario: Raw IMDb movie add-on item resolves to TMDB target before provider execution
+
+- **GIVEN** an add-on catalog item has `id: "tt12042730"`, `type: "movie"`, and no direct `tmdb:` content ID
+- **AND** the existing TMDB external-ID lookup maps IMDb ID `tt12042730` to TMDB ID `687163`
+- **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
+- **THEN** the route provider is `TMDB`
+- **AND** `route.targetIds[TMDB]` is `"tmdb:687163"`
+- **AND** provider execution never receives `"tt12042730"` as a TMDB target ID.
+
+#### Scenario: Raw IMDb series add-on item resolves through TMDB then TVDB before provider execution
+
+- **GIVEN** an add-on catalog item has `id: "tt0903747"`, `type: "series"`, and no direct `tvdb:` content ID
+- **AND** the existing TMDB external-ID lookup maps IMDb ID `tt0903747` to TMDB TV ID `1396`
+- **AND** the existing identity resolver maps TMDB TV ID `1396` to TVDB ID `81189`
+- **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
+- **THEN** the route provider is `TVDB`
+- **AND** `route.targetIds[TVDB]` is `"tvdb:81189"`
+- **AND** provider execution never receives `"tt0903747"` as a TVDB target ID.
+
+#### Scenario: Preview stable provider IDs win over raw IMDb content ID
+
+- **GIVEN** an add-on catalog item has `id: "tt12042730"`, `type: "movie"`, and `MetaPreview.firstPaintStableIds.tmdb == "687163"`
+- **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
+- **THEN** `route.targetIds[TMDB]` is `"tmdb:687163"`
+- **AND** no add-on-specific renderer, scheduler, or metadata bypass is used.
+
 ### Requirement: Addon route type does not override item type
 
 Addon catalog route type and manifest catalog type SHALL NOT override the `type` field on individual `metas` items.
