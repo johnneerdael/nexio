@@ -4,6 +4,7 @@ import com.nexio.tv.data.remote.api.KitsuAnimeAttributes
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TrailerHint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -37,6 +38,9 @@ class KitsuRailPreviewMapperTest {
         assertEquals("Cowboy Bebop", preview.display.title)
         assertEquals("カウボーイビバップ", preview.display.originalTitle)
         assertEquals("24 min", preview.display.runtimeText)
+        assertEquals("https://kitsu.example/poster.jpg", preview.display.posterUrl)
+        assertEquals(PosterShape.POSTER, preview.display.posterShape)
+        assertEquals("https://kitsu.example/cover.jpg", preview.display.backdropUrl)
         assertEquals("abc123", (preview.display.trailerHint as TrailerHint.YouTube).videoId)
     }
 
