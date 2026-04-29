@@ -587,7 +587,7 @@ internal fun HomeViewModel.checkInContinueWatchingPipeline(item: ContinueWatchin
             return@launch
         }
         runCatching {
-            trackingScrobbleService.checkin(scrobbleItem)
+            trackingScrobbleService.checkin(scrobbleItem, ownerProfileId = activeHomeProfileSession.profileId)
         }.onFailure { error ->
             if (error is CancellationException) throw error
             Log.w(HomeViewModel.TAG, "Failed tracking check-in for continue-watching item", error)
