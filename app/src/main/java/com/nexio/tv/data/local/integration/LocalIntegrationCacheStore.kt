@@ -78,9 +78,12 @@ class LocalIntegrationCacheStore @Inject constructor(
 
     override suspend fun deleteOwnedMedia(mediaKey: String): Int {
         val ownedEntries = cacheDao.findByMediaKey(mediaKey)
-        ownedEntries.forEach { entry ->
-            blobStore.delete(entry.blobPath)
-        }
-        return cacheDao.deleteByMediaKey(mediaKey)
+        val blobPaths = ownedEntries.map { it.blobPath }
+        // F2-D-08: DAO delete first so a process kill leaves a dangling blob
+        // (reapable by IntegrationOrphanCleanupService) instead of a dangling DAO row
+        // pointing at a missing blob.
+        val deleted = cacheDao.deleteByMediaKey(mediaKey)
+        blobPaths.forEach { blobStore.delete(it) }
+        return deleted
     }
 }
