@@ -25,5 +25,12 @@ data class MetaPreviewDto(
     @Json(name = "genre") val genre: List<String>? = null,
     @Json(name = "runtime") val runtime: String? = null,
     @Json(name = "language") val language: String? = null,
+    @Json(name = "imdb_id") val imdbId: String? = null,
+    @Json(name = "behaviorHints") val behaviorHints: CatalogBehaviorHintsDto? = null,
     @Json(name = "trailerStreams") val trailerStreams: List<TrailerStreamDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CatalogBehaviorHintsDto(
+    @Json(name = "defaultVideoId") val defaultVideoId: String? = null
 )
