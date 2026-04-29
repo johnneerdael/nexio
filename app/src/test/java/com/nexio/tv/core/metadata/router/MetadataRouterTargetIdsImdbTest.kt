@@ -138,6 +138,81 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
+    fun `raw IMDB movie addon preview routes to Kitsu when anime identity maps before movie fallback`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup(
+            tmdbForImdb = mapOf("tt0388629" to 30984)
+        )
+        val animeIdentityIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.IMDB, "tt0388629", "7442"))
+        )
+        val router = router(
+            lookup = lookup,
+            animeIdentityIndex = animeIdentityIndex
+        )
+
+        val route = router.route(
+            request(
+                id = "tt0388629",
+                type = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(imdb = "tt0388629")
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.KITSU, route.provider)
+        assertEquals(MetadataMediaKind.ANIME, route.mediaKind)
+        assertEquals(MetadataDecisionReason.ID_MAPPING_TO_KITSU, route.reason)
+        assertEquals("kitsu:7442", route.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals("tt0388629", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(AnimeIdentityLookup(AnimeIdScheme.IMDB, "tt0388629")), animeIdentityIndex.lookups)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
+    fun `raw IMDB series addon preview routes to Kitsu when stored anime mapping exists before series fallback`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val animeIdentityIndex = InMemoryAnimeIdentityIndex()
+        val router = router(
+            lookup = lookup,
+            animeIdentityIndex = animeIdentityIndex,
+            idMappingStore = InMemoryIdMappingStore(
+                initialMappings = listOf(
+                    IdMapping(
+                        sourceId = MetadataIdParser.parse("tt0388629"),
+                        provider = MetadataPrimaryProvider.KITSU,
+                        providerId = "7442",
+                        source = IdMappingSource.LOCAL,
+                        evidence = "test anime identity"
+                    )
+                )
+            )
+        )
+
+        val route = router.route(
+            request(
+                id = "tt0388629",
+                type = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewStableIds = ProviderIds(imdb = "tt0388629")
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.KITSU, route.provider)
+        assertEquals(MetadataMediaKind.ANIME, route.mediaKind)
+        assertEquals(MetadataDecisionReason.ID_MAPPING_TO_KITSU, route.reason)
+        assertEquals("kitsu:7442", route.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals("tt0388629", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(emptyList<AnimeIdentityLookup>(), animeIdentityIndex.lookups)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
     fun `malformed addon preview provider stable ids are ignored`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
@@ -206,10 +281,14 @@ class MetadataRouterTargetIdsImdbTest {
         assertNull(route.targetIds[MetadataPrimaryProvider.IMDB])
     }
 
-    private fun router(lookup: TmdbExternalIdLookupProvider): MetadataRouter = MetadataRouter(
+    private fun router(
+        lookup: TmdbExternalIdLookupProvider,
+        animeIdentityIndex: AnimeIdentityIndex = InMemoryAnimeIdentityIndex(),
+        idMappingStore: IdMappingStore = InMemoryIdMappingStore()
+    ): MetadataRouter = MetadataRouter(
         normalizer = MetadataRequestNormalizer(traceEvents = noopEvents()),
-        animeIdentityIndex = InMemoryAnimeIdentityIndex(),
-        idMappingStore = InMemoryIdMappingStore(),
+        animeIdentityIndex = animeIdentityIndex,
+        idMappingStore = idMappingStore,
         traceEvents = noopEvents(),
         tmdbExternalIdLookup = lookup
     )
