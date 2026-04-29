@@ -151,10 +151,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val activeProfileId = profileManager.activeProfileId.value
-        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot()
-            .filter { it.profileId == activeProfileId }
+        val continueWatchingSnapshot = continueWatchingSnapshotService
+            .observeProfileSnapshot(activeProfileId)
             .first()
-            .snapshot
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -230,10 +229,9 @@ class AndroidTvFeedCatalogService @Inject constructor(
         }
         val tmdbSnapshot = tmdbDiscoveryService.observeSnapshot().first()
         val activeProfileId = profileManager.activeProfileId.value
-        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot()
-            .filter { it.profileId == activeProfileId }
+        val continueWatchingSnapshot = continueWatchingSnapshotService
+            .observeProfileSnapshot(activeProfileId)
             .first()
-            .snapshot
 
         val optionByKey = buildFeedOptions(
             addons = addons,
