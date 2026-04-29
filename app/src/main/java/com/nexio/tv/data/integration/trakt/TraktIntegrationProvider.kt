@@ -725,7 +725,7 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.CALENDAR_SHOWS,
             operationKey = accountOperationKey(session, "trakt.calendar.shows"),
-            cacheKey = accountCacheKey(session, "trakt:calendar:shows:start:$startDate:days:$days"),
+            cacheKey = globalContentCacheKey("trakt:calendar:shows:start:$startDate:days:$days"),
             codec = gsonCodec<List<TraktCalendarEpisodeItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
@@ -761,7 +761,7 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.TRENDING_MOVIES,
             operationKey = accountOperationKey(session, "trakt.trending.movies"),
-            cacheKey = accountCacheKey(session, "trakt:trending:movies:limit:$limit"),
+            cacheKey = globalContentCacheKey("trakt:trending:movies:limit:$limit"),
             codec = gsonCodec<List<TraktTrendingMovieItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
@@ -799,7 +799,7 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.TRENDING_SHOWS,
             operationKey = accountOperationKey(session, "trakt.trending.shows"),
-            cacheKey = accountCacheKey(session, "trakt:trending:shows:limit:$limit"),
+            cacheKey = globalContentCacheKey("trakt:trending:shows:limit:$limit"),
             codec = gsonCodec<List<TraktTrendingShowItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
@@ -837,7 +837,7 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_MOVIES,
             operationKey = accountOperationKey(session, "trakt.popular.movies"),
-            cacheKey = accountCacheKey(session, "trakt:popular:movies:limit:$limit"),
+            cacheKey = globalContentCacheKey("trakt:popular:movies:limit:$limit"),
             codec = gsonCodec<List<TraktMovieDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
@@ -875,7 +875,7 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_SHOWS,
             operationKey = accountOperationKey(session, "trakt.popular.shows"),
-            cacheKey = accountCacheKey(session, "trakt:popular:shows:limit:$limit"),
+            cacheKey = globalContentCacheKey("trakt:popular:shows:limit:$limit"),
             codec = gsonCodec<List<TraktShowDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
@@ -916,7 +916,7 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = if (type == "shows") TraktApiShapes.RECOMMENDED_SHOWS else TraktApiShapes.RECOMMENDED_MOVIES,
             operationKey = accountOperationKey(session, "trakt.recommendations.$type"),
-            cacheKey = accountCacheKey(session, "trakt:recommendations:$type:limit:$limit"),
+            cacheKey = globalContentCacheKey("trakt:recommendations:$type:limit:$limit"),
             codec = gsonCodec<List<TraktRecommendationItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 10L * 60L * 1000L,
@@ -948,6 +948,10 @@ class TraktIntegrationProvider @Inject constructor(
 
         return runtime.get(spec).valueOrNull()
     }
+
+    // -----------------------------------------------------------------------------------------
+    // User-specific list / review endpoints (account-scoped cache keys)
+    // -----------------------------------------------------------------------------------------
 
     suspend fun fetchPopularLists(
         page: Int,
@@ -1274,6 +1278,14 @@ class TraktIntegrationProvider @Inject constructor(
 
     private fun accountCacheKey(session: TrackingAuthSession, logicalKey: String): String =
         "profile:${session.profileId}:provider:TRAKT:credential:${credentialHash(session)}:$logicalKey"
+
+    /**
+     * F-C-06: cache key for global Trakt content (trending/popular/recommended/calendar) that
+     * is NOT user-specific. Drops the profile: + credential: prefix so multiple profiles share
+     * the same cache entry. Use `accountCacheKey(...)` for user-bound endpoints (watched/history/etc).
+     */
+    private fun globalContentCacheKey(logicalKey: String): String =
+        "global:provider:TRAKT:$logicalKey"
 
     private fun accountScope(session: TrackingAuthSession): IntegrationScope.Account =
         IntegrationScope.Account(
