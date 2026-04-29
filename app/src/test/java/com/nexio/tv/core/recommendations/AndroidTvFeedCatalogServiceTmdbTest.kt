@@ -1,5 +1,6 @@
 package com.nexio.tv.core.recommendations
 
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -261,11 +262,16 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             coEvery { ensureFresh(force = false) } returns Unit
         }
 
+        val profileManager = mockk<ProfileManager> {
+            every { activeProfileId.value } returns 1
+        }
+
         return ServiceFixture(
             service = AndroidTvFeedCatalogService(
                 addonRepository = addonRepository,
                 catalogRepository = mockk<CatalogRepository>(relaxed = true),
                 layoutPreferenceDataStore = layoutPreferenceDataStore,
+                profileManager = profileManager,
                 traktDiscoveryService = traktDiscoveryService,
                 traktSettingsDataStore = traktSettingsDataStore,
                 mdbListDiscoveryService = mdbListDiscoveryService,
