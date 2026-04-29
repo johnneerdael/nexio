@@ -45,7 +45,8 @@ interface TrackingProgressService {
     fun observeAllProgress(): Flow<List<WatchProgress>>
     fun observeRemoteSnapshotLoaded(): Flow<Boolean>
     @Deprecated(
-        message = "Profile-boundary: use ContinueWatchingSnapshotService.observeContinueWatching(profileId) for profile-scoped CW. This method routes by active tracking provider only and is consumed internally by ContinueWatchingSnapshotService."
+        message = "Profile-boundary: use ContinueWatchingSnapshotService.observeContinueWatching(profileId) for profile-scoped CW. This method routes by active tracking provider only and is consumed internally by ContinueWatchingSnapshotService.",
+        replaceWith = ReplaceWith("ContinueWatchingSnapshotService.observeContinueWatching(profileId)")
     )
     fun observeContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>>
     fun observeSyntheticContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>>
