@@ -176,7 +176,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         onLog: (String, String?) -> Unit
     ): Int {
         var refreshedCatalogCount = 0
-        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         refreshMutex.withLock {
             addons.forEach { addon ->
                 addon.catalogs
@@ -213,67 +212,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                             "catalogKey=$catalogKey total=${refreshed.items.size} retained=$retainedCount refreshed=$newCount removed=$removedCount"
                         )
 
-                        var metadataOverlayCount = 0
-                        var metadataOverlayCacheCurrentCount = 0
-                        var metadataOverlayCacheMissingCount = 0
-                        var metadataOverlayNewMissingCount = 0
-                        var metadataOverlayRetainedMissingCount = 0
-                        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
-                        val changedKeys = diff.addedOrChanged
-                            .asSequence()
-                            .map { "${it.apiType}:${it.id}" }
-                            .toHashSet()
-                        val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
-                        onLog("metadata_overlay_start", "catalogKey=$catalogKey items=${refreshed.items.size}")
-                        val hydratedItems = refreshed.items.map { item ->
-                            val itemKey = "${item.apiType}:${item.id}"
-                            val persistedFallback = oldItemsByKey[itemKey]
-                            if (shouldReusePersistedHomeItem(
-                                    itemChanged = itemKey in changedKeys,
-                                    persistedFallback = persistedFallback
-                                )
-                            ) {
-                                return@map persistedFallback!!
-                            }
-                            val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
-                                itemKey = itemKey,
-                                languageTag = languageTag
-                            )
-                            metadataOverlayCount += 1
-                            if (hasCachedMetadata) {
-                                metadataOverlayCacheCurrentCount += 1
-                            } else {
-                                metadataOverlayCacheMissingCount += 1
-                                if (itemKey in changedKeys) {
-                                    metadataOverlayNewMissingCount += 1
-                                } else {
-                                    metadataOverlayRetainedMissingCount += 1
-                                }
-                            }
-                            if (telemetryEnabled) {
-                                onLog(
-                                    "item_metadata_overlay",
-                                    "catalogKey=$catalogKey itemKey=$itemKey cache_current=$hasCachedMetadata"
-                                )
-                            }
-                            val merged = mergePersistedHomeDisplayMetadata(
-                                currentItem = item,
-                                persistedFallback = persistedFallback,
-                                externalMeta = null
-                            )
-                            val localized = overlayProviderLocalizedMetadata(merged, onLog)
-                            val enriched = titleRatingOverrideRepository.enrichPreview(localized)
-                            posterRatingsUrlResolver.apply(enriched, activePosterProvider)
-                        }
-                        val refreshedHydrated = refreshed.copy(items = hydratedItems)
-                        onLog(
-                            "metadata_overlay_end",
-                            "catalogKey=$catalogKey total=${refreshedHydrated.items.size} overlay=$metadataOverlayCount " +
-                                "cache_current=$metadataOverlayCacheCurrentCount cache_missing=$metadataOverlayCacheMissingCount " +
-                                "new_missing=$metadataOverlayNewMissingCount retained_missing=$metadataOverlayRetainedMissingCount"
-                        )
+                        onCatalogReady(catalogKey, refreshed, diff)
+                        onLog("catalog_publish_ready", "catalogKey=$catalogKey")
 
-                        val imageTelemetry = buildImagePrefetchTelemetry(refreshedHydrated.items)
+                        val imageTelemetry = buildImagePrefetchTelemetry(refreshed.items)
                         onLog(
                             "image_prefetch_start",
                             "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
@@ -298,9 +240,6 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 onLog("cleanup_removed_item", "itemKey=$itemKey removedUrls=${urls.size}")
                             }
                         }
-
-                        onCatalogReady(catalogKey, refreshedHydrated, diff)
-                        onLog("catalog_publish_ready", "catalogKey=$catalogKey")
                     }
             }
         }

@@ -7,10 +7,7 @@ import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
-import com.nexio.tv.core.tvdb.TvMetadataDecision
-import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
-import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SimklCatalogPreferences
@@ -170,11 +167,6 @@ class HomeCatalogRefreshCoordinatorTest {
                 supportsSkip = false
             )
         } returns Result.success(catalogRow)
-        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
-            provider = TvProvider.TVDB,
-            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
-            value = null
-        )
 
         val refreshed = coordinator(
             catalogRepository = catalogRepository,
@@ -185,7 +177,10 @@ class HomeCatalogRefreshCoordinatorTest {
             isCatalogDisabled = { _, _ -> false },
             getCurrentRow = { null },
             isItemReferencedElsewhere = { _, _ -> false },
-            onCatalogReady = { _, row, _ -> publishedRows += row },
+            onCatalogReady = { _, row, _ ->
+                coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+                publishedRows += row
+            },
             onLog = { _, _ -> }
         )
 
@@ -207,6 +202,7 @@ class HomeCatalogRefreshCoordinatorTest {
                 supportsSkip = false
             )
         }
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
