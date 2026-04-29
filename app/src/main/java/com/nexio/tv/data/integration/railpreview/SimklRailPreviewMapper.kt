@@ -26,13 +26,13 @@ class SimklRailPreviewMapper {
         val simklId = ids.simkl ?: ids.simklId ?: return null
         val sourceItemId = "simkl:$simklId"
         val stableIds = ids.toProviderIds(simklId)
-        val releaseDate = firstNonBlank(item.released, item.date)
+        val releaseDate = firstNonBlank(item.releaseDate, item.theater, item.released, item.date)
         val display = RailDisplaySeed(
             title = firstNonBlank(item.title),
             year = item.year ?: yearFromDate(releaseDate),
             releaseDate = releaseDate,
             overview = firstNonBlank(item.overview),
-            runtimeText = item.runtime?.let { "$it min" },
+            runtimeText = firstNonBlank(item.runtimeText),
             genres = item.genres.orEmpty().mapNotNull { it.trim().takeIf(String::isNotEmpty) },
             posterUrl = simklImageUrl(item.poster),
             backdropUrl = simklFanartUrl(item.fanart),
@@ -90,10 +90,22 @@ class SimklRailPreviewMapper {
     )
 
     private fun SimklDiscoveryRatingsDto?.toRatingSeed(): RatingSeed? {
-        val imdbRating = this?.imdb
-        if (imdbRating != null) return RatingSeed(provider = ProviderId.IMDB, value = imdbRating)
+        val imdb = this?.imdb
+        val imdbRating = imdb?.rating
+        if (imdbRating != null) {
+            return RatingSeed(
+                provider = ProviderId.IMDB,
+                value = imdbRating,
+                votes = imdb.votes
+            )
+        }
 
-        val simklRating = this?.simkl ?: return null
-        return RatingSeed(provider = ProviderId.SIMKL, value = simklRating)
+        val simkl = this?.simkl
+        val simklRating = simkl?.rating ?: return null
+        return RatingSeed(
+            provider = ProviderId.SIMKL,
+            value = simklRating,
+            votes = simkl.votes
+        )
     }
 }
