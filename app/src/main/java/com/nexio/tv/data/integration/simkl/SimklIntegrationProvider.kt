@@ -125,7 +125,7 @@ class SimklIntegrationProvider @Inject constructor(
     ): retrofit2.Response<List<SimklPlaybackItemDto>>? {
         return authorizedRead(
             session = session,
-            apiShapeId = "simkl.playback",
+            apiShapeId = SimklApiShapes.PLAYBACK,
             rawOperationKey = "simkl.playback"
         ) { authorization ->
             simklApi.getPlayback(authorization = authorization, type = type)
@@ -186,7 +186,7 @@ class SimklIntegrationProvider @Inject constructor(
     ): retrofit2.Response<SimklScrobbleResponseDto>? {
         return authorizedWrite(
             session = session,
-            apiShapeId = "simkl.scrobble",
+            apiShapeId = SimklApiShapes.SCROBBLE,
             rawOperationKey = "simkl.scrobble.start"
         ) { authorization ->
             simklApi.scrobbleStart(authorization = authorization, body = body)
@@ -199,7 +199,7 @@ class SimklIntegrationProvider @Inject constructor(
     ): retrofit2.Response<SimklScrobbleResponseDto>? {
         return authorizedWrite(
             session = session,
-            apiShapeId = "simkl.scrobble",
+            apiShapeId = SimklApiShapes.SCROBBLE,
             rawOperationKey = "simkl.scrobble.pause"
         ) { authorization ->
             simklApi.scrobblePause(authorization = authorization, body = body)
@@ -212,7 +212,7 @@ class SimklIntegrationProvider @Inject constructor(
     ): retrofit2.Response<SimklScrobbleResponseDto>? {
         return authorizedWrite(
             session = session,
-            apiShapeId = "simkl.scrobble",
+            apiShapeId = SimklApiShapes.SCROBBLE,
             rawOperationKey = "simkl.scrobble.stop"
         ) { authorization ->
             simklApi.scrobbleStop(authorization = authorization, body = body)
@@ -225,7 +225,7 @@ class SimklIntegrationProvider @Inject constructor(
     ): retrofit2.Response<SimklScrobbleResponseDto>? {
         return authorizedWrite(
             session = session,
-            apiShapeId = "simkl.scrobble",
+            apiShapeId = SimklApiShapes.SCROBBLE,
             rawOperationKey = "simkl.checkin"
         ) { authorization ->
             simklApi.checkin(authorization = authorization, body = body)
