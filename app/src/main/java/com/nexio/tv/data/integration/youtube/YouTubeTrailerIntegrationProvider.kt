@@ -6,6 +6,7 @@ import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.YouTubeTrailerApiShapes
 import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransport
 import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransportCall
 import com.nexio.tv.data.integration.youtube.transport.YouTubeTrailerTransportResponse
@@ -26,7 +27,7 @@ class YouTubeTrailerIntegrationProvider @Inject constructor(
                 provider = IntegrationProvider.YOUTUBE_TRAILER,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 scope = IntegrationScope.ProviderConfig("youtube:trailer"),
-                apiShapeId = "youtube_trailer.transport.execute",
+                apiShapeId = YouTubeTrailerApiShapes.TRANSPORT_EXECUTE,
                 operationKey = "youtube.trailer.fetch",
                 call = {
                     try {
@@ -49,7 +50,7 @@ class YouTubeTrailerIntegrationProvider @Inject constructor(
                 provider = IntegrationProvider.YOUTUBE_TRAILER,
                 workClass = IntegrationWorkClass.USER_VISIBLE,
                 scope = IntegrationScope.ProviderConfig("youtube:trailer"),
-                apiShapeId = "youtube_trailer.transport.probe",
+                apiShapeId = YouTubeTrailerApiShapes.TRANSPORT_PROBE,
                 operationKey = "youtube.trailer.probe",
                 call = {
                     try {

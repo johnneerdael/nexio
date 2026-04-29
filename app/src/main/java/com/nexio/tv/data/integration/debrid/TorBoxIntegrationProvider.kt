@@ -63,7 +63,7 @@ class TorBoxIntegrationProvider @Inject constructor(
     ): TorBoxEnvelopeDto<List<TorBoxTorrentListItemDto>>? =
         cachedRequest(
             cacheKey = "torbox:list:${id ?: "all"}:${limit ?: "default"}:${apiKey.hashCode()}",
-            apiShapeId = "torbox.torrent_list",
+            apiShapeId = DebridApiShapes.TORBOX_TORRENT_LIST,
             operationKey = "torbox.torrent_list",
             codec = gsonCodec<TorBoxEnvelopeDto<List<TorBoxTorrentListItemDto>>>(),
             scope = accountScope(apiKey),
@@ -79,7 +79,7 @@ class TorBoxIntegrationProvider @Inject constructor(
 
     suspend fun requestDownloadLink(apiKey: String, torrentId: Int, fileId: Int): String? =
         mutationRequest(
-            apiShapeId = "torbox.download_link",
+            apiShapeId = DebridApiShapes.TORBOX_DOWNLOAD_LINK,
             operationKey = "torbox.download_link",
             codec = gsonCodec<String>(),
             scope = accountScope(apiKey),
@@ -106,7 +106,7 @@ class TorBoxIntegrationProvider @Inject constructor(
     ): TorBoxEnvelopeDto<List<TorBoxCachedTorrentDto>>? =
         cachedRequest(
             cacheKey = "torbox:cached:${body.hashCode()}:${apiKey.hashCode()}",
-            apiShapeId = "torbox.check_cached",
+            apiShapeId = DebridApiShapes.TORBOX_CHECK_CACHED,
             operationKey = "torbox.check_cached",
             codec = gsonCodec<TorBoxEnvelopeDto<List<TorBoxCachedTorrentDto>>>(),
             scope = accountScope(apiKey),

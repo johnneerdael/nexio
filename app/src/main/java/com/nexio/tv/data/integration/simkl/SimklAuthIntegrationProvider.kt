@@ -3,6 +3,7 @@ package com.nexio.tv.data.integration.simkl
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.SimklApiShapes
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationWorkClass
@@ -28,7 +29,7 @@ class SimklAuthIntegrationProvider @Inject constructor(
 ) {
     suspend fun requestPinCode(): Response<SimklPinResponseDto>? {
         return authCall(
-            apiShapeId = "simkl.pin.start",
+            apiShapeId = SimklApiShapes.PIN_START,
             operationKey = "simkl.pin.start"
         ) {
             simklApi.requestPinCode()
@@ -37,7 +38,7 @@ class SimklAuthIntegrationProvider @Inject constructor(
 
     suspend fun getPinStatus(userCode: String): Response<SimklPinStatusResponseDto>? {
         return authCall(
-            apiShapeId = "simkl.pin.status",
+            apiShapeId = SimklApiShapes.PIN_STATUS,
             operationKey = "simkl.pin.status"
         ) {
             simklApi.getPinStatus(userCode)
@@ -49,7 +50,7 @@ class SimklAuthIntegrationProvider @Inject constructor(
         authorization: String
     ): Response<SimklUserSettingsResponseDto>? {
         return authCall(
-            apiShapeId = "simkl.user_settings",
+            apiShapeId = SimklApiShapes.USER_SETTINGS,
             operationKey = accountOperationKey(session, "simkl.user_settings"),
             scope = accountScope(session),
             profileContext = profileContext(session)

@@ -57,7 +57,7 @@ class PremiumizeIntegrationProvider @Inject constructor(
     suspend fun fetchListAllItems(apiKey: String): PremiumizeListAllDto? =
         cachedRequest(
             cacheKey = "premiumize:listall:${apiKey.hashCode()}",
-            apiShapeId = "premiumize.list_all",
+            apiShapeId = DebridApiShapes.PREMIUMIZE_LIST_ALL,
             operationKey = "premiumize.list_all",
             codec = gsonCodec<PremiumizeListAllDto>(),
             scope = accountScope(apiKey),
@@ -69,7 +69,7 @@ class PremiumizeIntegrationProvider @Inject constructor(
     suspend fun fetchItemDetails(apiKey: String, id: String): PremiumizeItemDetailsDto? =
         cachedRequest(
             cacheKey = "premiumize:item:$id:${apiKey.hashCode()}",
-            apiShapeId = "premiumize.item_details",
+            apiShapeId = DebridApiShapes.PREMIUMIZE_ITEM_DETAILS,
             operationKey = "premiumize.item_details",
             codec = gsonCodec<PremiumizeItemDetailsDto>(),
             scope = accountScope(apiKey),
@@ -81,7 +81,7 @@ class PremiumizeIntegrationProvider @Inject constructor(
     suspend fun checkCache(apiKey: String, items: List<String>): PremiumizeCacheCheckDto? =
         cachedRequest(
             cacheKey = "premiumize:cache:${items.joinToString(",").hashCode()}:${apiKey.hashCode()}",
-            apiShapeId = "premiumize.cache_check",
+            apiShapeId = DebridApiShapes.PREMIUMIZE_CACHE_CHECK,
             operationKey = "premiumize.cache_check",
             codec = gsonCodec<PremiumizeCacheCheckDto>(),
             scope = accountScope(apiKey),

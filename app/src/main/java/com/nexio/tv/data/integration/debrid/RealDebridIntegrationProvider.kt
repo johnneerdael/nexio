@@ -35,7 +35,7 @@ class RealDebridIntegrationProvider @Inject constructor(
     suspend fun fetchTorrents(): List<RealDebridTorrentDto> =
         cachedRequest(
             cacheKey = "realdebrid:library:torrents",
-            apiShapeId = "real_debrid.torrents",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_TORRENTS,
             operationKey = "real_debrid.torrents",
             codec = gsonCodec<List<RealDebridTorrentDto>>(),
             workClass = IntegrationWorkClass.USER_VISIBLE
@@ -46,7 +46,7 @@ class RealDebridIntegrationProvider @Inject constructor(
     suspend fun fetchDownloads(): List<RealDebridDownloadDto> =
         cachedRequest(
             cacheKey = "realdebrid:library:downloads",
-            apiShapeId = "real_debrid.downloads",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_DOWNLOADS,
             operationKey = "real_debrid.downloads",
             codec = gsonCodec<List<RealDebridDownloadDto>>(),
             workClass = IntegrationWorkClass.USER_VISIBLE
@@ -68,7 +68,7 @@ class RealDebridIntegrationProvider @Inject constructor(
     suspend fun fetchInstantAvailability(hash: String): Map<String, Map<String, List<Map<String, RealDebridInstantAvailabilityFileDto>>>>? =
         cachedRequest(
             cacheKey = "realdebrid:availability:$hash",
-            apiShapeId = "real_debrid.instant_availability",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_INSTANT_AVAILABILITY,
             operationKey = "real_debrid.instant_availability",
             codec = gsonCodec<Map<String, Map<String, List<Map<String, RealDebridInstantAvailabilityFileDto>>>>>(),
             workClass = IntegrationWorkClass.PLAYBACK_RESOLUTION
@@ -78,7 +78,7 @@ class RealDebridIntegrationProvider @Inject constructor(
 
     suspend fun addMagnet(magnet: String): RealDebridMagnetDto? =
         mutationRequest(
-            apiShapeId = "real_debrid.add_magnet",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_ADD_MAGNET,
             operationKey = "real_debrid.add_magnet",
             codec = gsonCodec<RealDebridMagnetDto>(),
             workClass = IntegrationWorkClass.PLAYBACK_RESOLUTION
@@ -88,7 +88,7 @@ class RealDebridIntegrationProvider @Inject constructor(
 
     suspend fun selectFiles(id: String, files: String): Boolean =
         mutationRequest(
-            apiShapeId = "real_debrid.select_files",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_SELECT_FILES,
             operationKey = "real_debrid.select_files",
             codec = gsonCodec<Boolean>(),
             workClass = IntegrationWorkClass.PLAYBACK_RESOLUTION,
@@ -109,7 +109,7 @@ class RealDebridIntegrationProvider @Inject constructor(
 
     suspend fun unrestrictLink(link: String): RealDebridUnrestrictLinkDto? =
         mutationRequest(
-            apiShapeId = "real_debrid.unrestrict_link",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_UNRESTRICT_LINK,
             operationKey = "real_debrid.unrestrict_link",
             codec = gsonCodec<RealDebridUnrestrictLinkDto>(),
             workClass = IntegrationWorkClass.PLAYBACK_RESOLUTION
@@ -120,7 +120,7 @@ class RealDebridIntegrationProvider @Inject constructor(
     suspend fun fetchMediaInfos(id: String): RealDebridMediaInfoDto? =
         cachedRequest(
             cacheKey = "realdebrid:mediainfo:$id",
-            apiShapeId = "real_debrid.media_infos",
+            apiShapeId = DebridApiShapes.REAL_DEBRID_MEDIA_INFOS,
             operationKey = "real_debrid.media_infos",
             codec = gsonCodec<RealDebridMediaInfoDto>(),
             workClass = IntegrationWorkClass.PLAYBACK_RESOLUTION
