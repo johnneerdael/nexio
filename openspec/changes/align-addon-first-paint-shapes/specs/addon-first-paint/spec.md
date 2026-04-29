@@ -53,16 +53,26 @@ Addon preview stable IDs SHALL be used by the existing metadata routing pipeline
 - **AND** `route.targetIds[TMDB]` is `"tmdb:687163"`
 - **AND** provider execution never receives `"tt12042730"` as a TMDB target ID.
 
-#### Scenario: Raw IMDb series add-on item resolves through TMDB then TVDB before provider execution
+#### Scenario: Raw IMDb series add-on item resolves directly to TVDB through remote-ID lookup before provider execution
 
 - **GIVEN** an add-on catalog item has `id: "tt0903747"`, `type: "series"`, and no direct `tvdb:` content ID
 - **AND** visible hydration receives an adapted preview where `MetaPreview.firstPaintStableIds.imdb` is `"tt0903747"`
-- **AND** the existing TMDB external-ID lookup maps IMDb ID `tt0903747` to TMDB TV ID `1396`
-- **AND** the existing identity resolver maps TMDB TV ID `1396` to TVDB ID `81189`
+- **AND** the existing anime identity lookup does not map IMDb ID `tt0903747` to Kitsu
+- **AND** the existing TVDB remote-ID lookup maps IMDb ID `tt0903747` to TVDB ID `81189` through `GET /search/remoteid/{remoteId}`
 - **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
 - **THEN** the route provider is `TVDB`
 - **AND** `route.targetIds[TVDB]` is `"tvdb:81189"`
-- **AND** provider execution never receives `"tt0903747"` as a TVDB target ID.
+- **AND** provider execution never receives `"tt0903747"` as a TVDB target ID
+- **AND** provider execution does not perform an IMDb-to-TMDB-to-TVDB bridge.
+
+#### Scenario: Raw IMDb anime add-on item validates against anime identity before movie or series fallback
+
+- **GIVEN** an add-on catalog item has `id: "tt0388629"`, `type: "series"`, and no direct `kitsu:` content ID
+- **AND** visible hydration receives an adapted preview where `MetaPreview.firstPaintStableIds.imdb` is `"tt0388629"`
+- **AND** the existing anime identity lookup maps IMDb ID `tt0388629` to Kitsu ID `7442`
+- **WHEN** the item is hydrated through `MetadataRouterFacade.resolveRequest(...)`
+- **THEN** the route provider is `KITSU`
+- **AND** no movie or TV series fallback route is selected before anime identity validation.
 
 #### Scenario: Preview stable provider IDs win over raw IMDb content ID
 
