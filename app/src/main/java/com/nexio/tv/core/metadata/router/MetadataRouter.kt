@@ -256,11 +256,12 @@ class MetadataRouter @Inject constructor(
         trace: List<MetadataRouteTrace>,
         requiresIdentityResolution: Boolean = false
     ): MetadataRoute {
-        val targetIds = buildTargetIds(
+        val targetIdResult = buildTargetIds(
             normalized = normalized,
             provider = provider,
             targetId = targetId
         )
+        val effectiveRequiresIdentityResolution = requiresIdentityResolution || targetIdResult.requiresIdentityResolution
         traceEvents.emitRouteDecision(
             contentId = normalized.originalContentId,
             parentId = normalized.parentId,
@@ -268,10 +269,10 @@ class MetadataRouter @Inject constructor(
             provider = provider.name,
             mediaKind = mediaKind.name,
             reason = reason.name,
-            usedInputs = listOf("item.id", "item.type", "AnimeIdentityIndex", "IdMappingStore"),
+            usedInputs = listOf("item.id", "item.type", "previewStableIds", "AnimeIdentityIndex", "IdMappingStore"),
             ignoredInputs = listOf("catalog.type", "addon.name", "genre", "animeType", "links", "trend"),
-            targetIdRequiresIdentityResolution = requiresIdentityResolution,
-            targetIds = targetIds.mapKeys { it.key.name }
+            targetIdRequiresIdentityResolution = effectiveRequiresIdentityResolution,
+            targetIds = targetIdResult.targetIds.mapKeys { it.key.name }
         )
         return MetadataRoute(
             provider = provider,
@@ -281,53 +282,114 @@ class MetadataRouter @Inject constructor(
             sourceContext = normalized.sourceContext,
             language = normalized.language,
             seasonNumber = normalized.seasonNumber,
-            targetIds = targetIds,
-            targetIdRequiresIdentityResolution = requiresIdentityResolution,
+            targetIds = targetIdResult.targetIds,
+            targetIdRequiresIdentityResolution = effectiveRequiresIdentityResolution,
             trace = trace.toList(),
             pagination = normalized.pagination
         )
     }
 
-    /**
-     * Build the [MetadataRoute.targetIds] map starting with the primary provider's id and,
-     * when possible, surface a cross-provider IMDB id so adapters that prefer IMDB
-     * (e.g. Trakt) can use the route directly without a second identity-resolution hop.
-     */
+    private data class TargetIdBuildResult(
+        val targetIds: Map<MetadataPrimaryProvider, String>,
+        val requiresIdentityResolution: Boolean
+    )
+
     private suspend fun buildTargetIds(
         normalized: NormalizedMetadataRequest,
         provider: MetadataPrimaryProvider,
         targetId: String
-    ): Map<MetadataPrimaryProvider, String> {
-        val builder = mutableMapOf(provider to targetId)
+    ): TargetIdBuildResult {
+        val builder = mutableMapOf<MetadataPrimaryProvider, String>()
+        val stableIds = normalized.sourceContext.previewStableIds
 
-        // Surface IMDB id directly from the request when the contentId already carries one.
+        stableIds.tmdb?.providerTarget("tmdb")?.let { builder[MetadataPrimaryProvider.TMDB] = it }
+        stableIds.tvdb?.providerTarget("tvdb")?.let { builder[MetadataPrimaryProvider.TVDB] = it }
+        stableIds.kitsu?.providerTarget("kitsu")?.let { builder[MetadataPrimaryProvider.KITSU] = it }
+        stableIds.imdb?.canonicalImdbTarget()?.let { builder[MetadataPrimaryProvider.IMDB] = it }
+
+        val targetParsed = MetadataIdParser.parse(targetId)
+        when (targetParsed.scheme) {
+            AnimeIdScheme.TMDB -> builder.putIfAbsent(MetadataPrimaryProvider.TMDB, "tmdb:${targetParsed.value}")
+            AnimeIdScheme.TVDB -> builder.putIfAbsent(MetadataPrimaryProvider.TVDB, "tvdb:${targetParsed.value}")
+            AnimeIdScheme.KITSU -> builder.putIfAbsent(MetadataPrimaryProvider.KITSU, "kitsu:${targetParsed.value}")
+            AnimeIdScheme.IMDB -> builder.putIfAbsent(MetadataPrimaryProvider.IMDB, targetParsed.value.canonicalImdbTarget() ?: targetParsed.value)
+            else -> builder.putIfAbsent(provider, targetId)
+        }
+
         val originalParsed = MetadataIdParser.parse(normalized.originalContentId)
         if (originalParsed.scheme == AnimeIdScheme.IMDB) {
             builder.putIfAbsent(MetadataPrimaryProvider.IMDB, originalParsed.value)
         }
 
-        // For TMDB-primary routes, attempt to resolve the matching IMDB id via the TMDB
-        // external-ids endpoint so cross-provider adapters (e.g. Trakt review fetch) can
-        // operate without an extra identity round-trip.
         val lookup = tmdbExternalIdLookup
+        if (provider == MetadataPrimaryProvider.TMDB &&
+            !builder.containsKey(MetadataPrimaryProvider.TMDB) &&
+            builder.containsKey(MetadataPrimaryProvider.IMDB) &&
+            lookup != null
+        ) {
+            val mediaType = when (normalized.contentType) {
+                ContentType.SERIES, ContentType.TV -> "tv"
+                else -> "movie"
+            }
+            lookup.findTmdbIdByImdbId(builder.getValue(MetadataPrimaryProvider.IMDB), mediaType)
+                ?.let { tmdbId -> builder[MetadataPrimaryProvider.TMDB] = "tmdb:$tmdbId" }
+        }
+
         if (provider == MetadataPrimaryProvider.TMDB &&
             !builder.containsKey(MetadataPrimaryProvider.IMDB) &&
             lookup != null
         ) {
-            val parsedTarget = MetadataIdParser.parse(targetId)
-            val tmdbInt = parsedTarget.value.toIntOrNull()
-            if (tmdbInt != null) {
+            val tmdbId = builder[MetadataPrimaryProvider.TMDB]
+                ?.substringAfter(':')
+                ?.toIntOrNull()
+            if (tmdbId != null) {
                 val mediaType = when (normalized.contentType) {
                     ContentType.SERIES, ContentType.TV -> "tv"
                     else -> "movie"
                 }
-                runCatching { lookup.findImdbIdByTmdbId(tmdbInt, mediaType) }
+                runCatching { lookup.findImdbIdByTmdbId(tmdbId, mediaType) }
                     .getOrNull()
                     ?.takeIf { it.isNotBlank() }
+                    ?.canonicalImdbTarget()
                     ?.let { imdb -> builder[MetadataPrimaryProvider.IMDB] = imdb }
             }
         }
 
-        return builder.toMap()
+        val providerHasNativeTarget = when (provider) {
+            MetadataPrimaryProvider.TMDB -> builder.containsKey(MetadataPrimaryProvider.TMDB)
+            MetadataPrimaryProvider.TVDB -> builder.containsKey(MetadataPrimaryProvider.TVDB)
+            MetadataPrimaryProvider.KITSU -> builder.containsKey(MetadataPrimaryProvider.KITSU)
+            MetadataPrimaryProvider.IMDB -> builder.containsKey(MetadataPrimaryProvider.IMDB)
+            MetadataPrimaryProvider.TRAKT,
+            MetadataPrimaryProvider.SIMKL -> builder.containsKey(provider)
+        }
+
+        val canResolveThroughKnownCrossProviderTarget = when (provider) {
+            MetadataPrimaryProvider.TVDB -> builder.containsKey(MetadataPrimaryProvider.IMDB) || builder.containsKey(MetadataPrimaryProvider.TMDB)
+            MetadataPrimaryProvider.TMDB -> builder.containsKey(MetadataPrimaryProvider.TVDB)
+            else -> false
+        }
+
+        return TargetIdBuildResult(
+            targetIds = builder.toMap(),
+            requiresIdentityResolution = !providerHasNativeTarget && canResolveThroughKnownCrossProviderTarget
+        )
+    }
+
+    private fun String.providerTarget(prefix: String): String? {
+        val trimmed = trim().takeIf { it.isNotBlank() } ?: return null
+        return if (trimmed.startsWith("$prefix:", ignoreCase = true)) {
+            val value = trimmed.substringAfter(':').takeIf { it.isNotBlank() } ?: return null
+            "$prefix:$value"
+        } else {
+            "$prefix:$trimmed"
+        }
+    }
+
+    private fun String.canonicalImdbTarget(): String? {
+        val trimmed = trim().takeIf { it.isNotBlank() } ?: return null
+        val raw = if (trimmed.startsWith("imdb:", ignoreCase = true)) trimmed.substringAfter(':') else trimmed
+        if (!Regex("^tt\\d+$", RegexOption.IGNORE_CASE).matches(raw)) return null
+        return "tt" + raw.drop(2)
     }
 }
