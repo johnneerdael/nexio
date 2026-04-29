@@ -46,7 +46,7 @@ class KitsuRailPreviewMapper {
             overview = firstNonBlank(attributes?.synopsis, attributes?.description),
             runtimeText = attributes?.episodeLength?.let { "$it min" },
             posterUrl = posterUrl,
-            posterShape = if (backdropUrl != null) PosterShape.LANDSCAPE else PosterShape.POSTER,
+            posterShape = PosterShape.POSTER,
             backdropUrl = backdropUrl,
             rating = rating?.let { RatingSeed(provider = ProviderId.KITSU, value = it) },
             ratingText = rating?.let { String.format(Locale.US, "%.1f", it) },
