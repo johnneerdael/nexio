@@ -140,6 +140,24 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitNormalizerWarning(contentId: String, reason: String) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.normalizer_warning",
+                payload = mapOf(
+                    "contentId" to contentId,
+                    "reason" to reason
+                )
+            )
+        )
+    }
+
     fun emitFieldSelected(
         contentId: String,
         field: String,

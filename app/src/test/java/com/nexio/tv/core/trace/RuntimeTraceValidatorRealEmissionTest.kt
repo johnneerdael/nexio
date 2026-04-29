@@ -116,7 +116,7 @@ class RuntimeTraceValidatorRealEmissionTest {
 
         // 4. Drive metadata.route_decision via MetadataRouter.
         val router = MetadataRouter(
-            normalizer = MetadataRequestNormalizer(),
+            normalizer = MetadataRequestNormalizer(traceEvents = metadataEvents),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
             idMappingStore = InMemoryIdMappingStore(),
             traceEvents = metadataEvents

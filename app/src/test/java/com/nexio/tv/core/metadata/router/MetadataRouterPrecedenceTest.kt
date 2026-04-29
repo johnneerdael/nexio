@@ -1,5 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import kotlinx.coroutines.test.runTest
@@ -343,10 +345,12 @@ class MetadataRouterPrecedenceTest {
         animeIndex: AnimeIdentityIndex = InMemoryAnimeIdentityIndex(),
         mappingStore: IdMappingStore = InMemoryIdMappingStore()
     ): MetadataRouter = MetadataRouter(
-        normalizer = MetadataRequestNormalizer(),
+        normalizer = MetadataRequestNormalizer(traceEvents = noopEvents()),
         animeIdentityIndex = animeIndex,
         idMappingStore = mappingStore
     )
+
+    private fun noopEvents() = TraceMetadataEvents(RecordingTraceSink()) { null }
 
     private fun request(
         id: String,

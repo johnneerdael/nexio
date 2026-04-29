@@ -14,7 +14,7 @@ class MetadataRouteDecisionTraceTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
         val router = MetadataRouter(
-            normalizer = MetadataRequestNormalizer(),
+            normalizer = MetadataRequestNormalizer(traceEvents = events),
             animeIdentityIndex = InMemoryAnimeIdentityIndex(),
             idMappingStore = InMemoryIdMappingStore(),
             traceEvents = events

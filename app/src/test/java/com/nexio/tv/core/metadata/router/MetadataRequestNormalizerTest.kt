@@ -1,11 +1,15 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class MetadataRequestNormalizerTest {
-    private val normalizer = MetadataRequestNormalizer()
+    private val normalizer = MetadataRequestNormalizer(
+        traceEvents = TraceMetadataEvents(mockk(relaxed = true)) { null }
+    )
 
     @Test
     fun `IMDb episode id normalizes to parent IMDb id`() {

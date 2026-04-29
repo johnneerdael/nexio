@@ -61,7 +61,7 @@ class MetadataRouterFacadeFetchReviewsTest {
 
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = events),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
                 idMappingStore = InMemoryIdMappingStore(),
                 traceEvents = events
@@ -151,7 +151,7 @@ class MetadataRouterFacadeFetchReviewsTest {
 
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = events),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
                 idMappingStore = InMemoryIdMappingStore(),
                 traceEvents = events
@@ -260,7 +260,7 @@ class MetadataRouterFacadeFetchReviewsTest {
 
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = events),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
                 idMappingStore = InMemoryIdMappingStore(),
                 traceEvents = events
@@ -339,7 +339,7 @@ class MetadataRouterFacadeFetchReviewsTest {
 
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = events),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
                 idMappingStore = InMemoryIdMappingStore(),
                 traceEvents = events

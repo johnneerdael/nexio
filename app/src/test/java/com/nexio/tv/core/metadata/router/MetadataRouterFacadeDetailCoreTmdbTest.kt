@@ -37,7 +37,7 @@ class MetadataRouterFacadeDetailCoreTmdbTest {
 
         val facade = MetadataRouterFacade(
             router = MetadataRouter(
-                normalizer = MetadataRequestNormalizer(),
+                normalizer = MetadataRequestNormalizer(traceEvents = events),
                 animeIdentityIndex = InMemoryAnimeIdentityIndex(),
                 idMappingStore = InMemoryIdMappingStore(),
                 traceEvents = events
