@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
+import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -632,13 +633,15 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
-            item(key = "troubleshooting_runtime_trace") {
-                SettingsActionRow(
-                    title = "Runtime & Metadata Trace",
-                    subtitle = "Capture runtime + HTTP events for support diagnostics",
-                    value = "Open",
-                    onClick = onOpenRuntimeTrace
-                )
+            if (BuildConfig.IS_DEBUG_BUILD) {
+                item(key = "troubleshooting_runtime_trace") {
+                    SettingsActionRow(
+                        title = "Runtime & Metadata Trace",
+                        subtitle = "Capture runtime + HTTP events for support diagnostics",
+                        value = "Open",
+                        onClick = onOpenRuntimeTrace
+                    )
+                }
             }
         }
     }
