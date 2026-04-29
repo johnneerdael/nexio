@@ -8,13 +8,17 @@ class TraceRedactor {
 
     private val redactedHeaders = setOf(
         "authorization", "cookie", "set-cookie",
-        "x-api-key", "x-auth-token", "x-mdblist-apikey"
+        "x-api-key", "x-auth-token", "x-mdblist-apikey",
+        // F-I-01: provider-specific auth headers
+        "simkl-api-key", "trakt-api-key", "simkl-client-id", "x-tvdb-apikey"
     )
 
     private val redactedJsonKeys = setOf(
         "access_token", "refresh_token", "token", "authorization",
         "apikey", "api_key", "client_secret", "password", "pin",
-        "user_code", "email", "username"
+        "user_code", "email", "username",
+        // F-I-01: OAuth POST body keys
+        "code", "client_id"
     )
 
     fun redactUrl(url: String): String {
