@@ -1,0 +1,1017 @@
+{
+  "schemaVersion": 1,
+  "gitSha": "9f0555a5a",
+  "gitWorktree": {"state":"DIRTY","dirtyFileCount":1,"untrackedFileCount":2},
+  "artifactRole": "SIGN_OFF_AGGREGATE",
+  "verdict": "PASS",
+  "generatedAtEpochMs": 1777469835389,
+  "summary": {"totalItems":30,"routedItems":23,"networkCalls":17,"cacheHits":7,"cacheMisses":17,"staleHits":1,"forbiddenOverwrites":5,"policyViolations":0},
+  "reports": [
+    {
+      "fixtureName": "topstreaming_disney_mixed.json",
+      "scenario": "preview-only-disney-mixed",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt26443597",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        },
+        {
+          "itemId": "tt27444205",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "topstreaming_disney_mixed.json",
+      "scenario": "disney-mixed-visible-items",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt26443597",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt26443597","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt26443597:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt26443597:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt26443597:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Disney Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/disney-movie.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt26443597","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt26443597:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        },
+        {
+          "itemId": "tt27444205",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt27444205","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tt27444205:en","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt27444205:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt27444205:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Disney Series","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/disney-series.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tt27444205","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": {"required":true,"sourceId":"tt27444205","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:tt27444205","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt27444205:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "topstreaming_crunchyroll.json",
+      "scenario": "crunchyroll-imdb-anime-detail-core",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt12343534",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt12343534","provider":"KITSU","mediaKind":"ANIME","reason":"ID_MAPPING_TO_KITSU","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type", "AnimeIdentityIndex", "IdMappingStore"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"KITSU","mediaKind":"ANIME","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"KITSU","apiShapeId":"kitsu.anime.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","operationKey":"kitsu.anime.core:kitsu:7442:en","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"Crunchyroll IMDb Anime","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"https://example.test/crunchyroll.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"kitsu:7442","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"KITSU","requestedLanguage":"en","fallbackLanguage":"en","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"kitsu.anime.core","language":"en","fallbackRole":"LOCALIZED","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "anime_kitsu_trending.json",
+      "scenario": "kitsu-prefix-detail-core",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "kitsu:7442",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"kitsu:7442","provider":"KITSU","mediaKind":"ANIME","reason":"KITSU_PREFIX_DIRECT","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"KITSU","mediaKind":"ANIME","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"KITSU","apiShapeId":"kitsu.anime.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","operationKey":"kitsu.anime.core:kitsu:7442:en","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"Kitsu Anime","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"https://example.test/kitsu.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"kitsu:7442","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"KITSU","requestedLanguage":"en","fallbackLanguage":"en","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"kitsu.anime.core","language":"en","fallbackRole":"LOCALIZED","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "anime_catalogs_mal.json",
+      "scenario": "mal-prefix-detail-core",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "mal:21",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"mal:21","provider":"KITSU","mediaKind":"ANIME","reason":"ANIME_PREFIX_MAPPED_TO_KITSU","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type", "AnimeIdentityIndex", "IdMappingStore"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"KITSU","mediaKind":"ANIME","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"KITSU","apiShapeId":"kitsu.anime.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","operationKey":"kitsu.anime.core:kitsu:1:en","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:1:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:1:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"MAL Anime","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"https://example.test/mal.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"kitsu:1","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"KITSU","requestedLanguage":"en","fallbackLanguage":"en","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"kitsu.anime.core","language":"en","fallbackRole":"LOCALIZED","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:1:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_series_nfx.json",
+      "scenario": "tvdb-series-detail-core",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt14403178",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt14403178","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tt14403178:en","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Netflix Series","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-series.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tt14403178","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": {"required":true,"sourceId":"tt14403178","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:tt14403178","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "provider_native_conflict.json",
+      "scenario": "provider-native-conflict",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tmdb:1399",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tmdb:1399","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:1399:en","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:1399:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:1399:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"TMDB Series Conflict","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"A provider-native TMDB id paired with series type to prove identity resolution before TVDB execution.","ownershipRule":"overview owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/provider-native-conflict.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"backdrop","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/provider-native-conflict-bg.jpg","ownershipRule":"backdrop owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:1399","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": {"required":true,"sourceId":"tmdb:1399","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:1399","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:1399:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_movie_nfx.json",
+      "scenario": "premium-artwork-topposters",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt16431404",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt16431404","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt16431404:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","workClass":"USER_VISIBLE","executedNetwork":false}, {"provider":"TOP_POSTERS","apiShapeId":"topposters.poster_template","operationKey":"topposters.poster_template:tt16431404","cacheKey":"artwork:TOP_POSTERS:tt16431404","workClass":"USER_VISIBLE","executedNetwork":false}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","decision":"HIT","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}, {"provider":"TOP_POSTERS","apiShapeId":"topposters.poster_template","cacheKey":"artwork:TOP_POSTERS:tt16431404","decision":"HIT","ttlMs":86400000,"staleWindowMs":604800000,"reason":"poster-generated"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Netflix Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TOP_POSTERS","sourceRole":"ARTWORK","valuePreview":"https://example.test/top_posters-poster.jpg","ownershipRule":"poster owned by premium artwork provider TOP_POSTERS","rejectedCandidates":[{"provider":"TMDB","reason":"Premium artwork provider has poster precedence; primary poster retained only as fallback"}]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt16431404","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en:policy:2","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_movie_nfx.json",
+      "scenario": "premium-artwork-rpdb",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt16431404",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt16431404","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt16431404:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","workClass":"USER_VISIBLE","executedNetwork":false}, {"provider":"RPDB","apiShapeId":"rpdb.poster_template","operationKey":"rpdb.poster_template:tt16431404","cacheKey":"artwork:RPDB:tt16431404","workClass":"USER_VISIBLE","executedNetwork":false}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","decision":"HIT","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}, {"provider":"RPDB","apiShapeId":"rpdb.poster_template","cacheKey":"artwork:RPDB:tt16431404","decision":"HIT","ttlMs":86400000,"staleWindowMs":604800000,"reason":"poster-generated"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Netflix Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"RPDB","sourceRole":"ARTWORK","valuePreview":"https://example.test/rpdb-poster.jpg","ownershipRule":"poster owned by premium artwork provider RPDB","rejectedCandidates":[{"provider":"TMDB","reason":"Premium artwork provider has poster precedence; primary poster retained only as fallback"}]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt16431404","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en:policy:2","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_series_nfx.json",
+      "scenario": "continue-watching-local-playback",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt14403178",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt14403178","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tt14403178:en","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Netflix Series","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-series.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tt14403178","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": {"contentId":"tt14403178","parentId":"tt14403178","provider":"TVDB","routingVersion":1,"hasClickTimeMetadata":true,"reroutedDueToVersionMismatch":false},
+          "identityResolution": {"required":true,"sourceId":"tt14403178","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:tt14403178","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_series_nfx.json",
+      "scenario": "continue-watching-stale-routing-version",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt14403178",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt14403178","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tt14403178:en","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Netflix Series","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-series.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tt14403178","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": {"contentId":"tt14403178","parentId":"tt14403178","provider":"TVDB","routingVersion":1,"hasClickTimeMetadata":true,"reroutedDueToVersionMismatch":true},
+          "identityResolution": {"required":true,"sourceId":"tt14403178","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:tt14403178","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "marvel_movies.json",
+      "scenario": "field-ownership-conflict",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt0036697",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt0036697","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt0036697:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt0036697:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt0036697:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Captain America","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[{"provider":"KITSU","reason":"PRIMARY owner selected; secondary title rejected"}]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/captain-america.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt0036697","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [{"field":"title","primaryProvider":"TMDB","rejectedProvider":"KITSU","reason":"Field already owned by PRIMARY; rejected secondary candidate"}],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt0036697:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_movie_nfx.json",
+      "scenario": "tmdb-movie-core-warm-cache",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt16431404",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt16431404","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt16431404:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","workClass":"USER_VISIBLE","executedNetwork":false}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","decision":"HIT","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Netflix Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-movie.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt16431404","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en:policy:2","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_series_nfx.json",
+      "scenario": "tvdb-series-core-warm-cache",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt14403178",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt14403178","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tt14403178:en","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","workClass":"USER_VISIBLE","executedNetwork":false}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en","decision":"HIT","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Netflix Series","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-series.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tt14403178","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": {"required":true,"sourceId":"tt14403178","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:tt14403178","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:en:policy:2","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "topstreaming_crunchyroll.json",
+      "scenario": "kitsu-anime-core-warm-cache",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt12343534",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt12343534","provider":"KITSU","mediaKind":"ANIME","reason":"ID_MAPPING_TO_KITSU","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type", "AnimeIdentityIndex", "IdMappingStore"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"KITSU","mediaKind":"ANIME","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"KITSU","apiShapeId":"kitsu.anime.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","operationKey":"kitsu.anime.core:kitsu:7442:en","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en","workClass":"USER_VISIBLE","executedNetwork":false}],
+          "cacheDecisions": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en","decision":"HIT","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"Crunchyroll IMDb Anime","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"https://example.test/crunchyroll.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"kitsu:7442","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"KITSU","requestedLanguage":"en","fallbackLanguage":"en","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"kitsu.anime.core","language":"en","fallbackRole":"LOCALIZED","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:en:policy:2","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_movie_nfx.json",
+      "scenario": "stale-on-429",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt16431404",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt16431404","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt16431404:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","workClass":"USER_VISIBLE","executedNetwork":false}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","decision":"STALE_HIT","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Netflix Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-movie.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt16431404","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en:policy:2","cacheDecision":"STALE_HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_movie_nfx.json",
+      "scenario": "production-caller-ownership",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt16431404",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt16431404","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt16431404:en","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Netflix Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-movie.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt16431404","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:en:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": [{"pathName":"home_catalog","entrypoint":"HomeCatalogRefreshCoordinator","facadeOrRepositoryCalled":true,"providerPlanRunnerExpected":true,"fieldResolverExpected":true,"legacyRouterUsedAfterFacade":false}, {"pathName":"detail_screen","entrypoint":"MetaDetailsViewModel","facadeOrRepositoryCalled":true,"providerPlanRunnerExpected":true,"fieldResolverExpected":true,"legacyRouterUsedAfterFacade":false}, {"pathName":"player_start","entrypoint":"PlayerRuntimeController","facadeOrRepositoryCalled":true,"providerPlanRunnerExpected":true,"fieldResolverExpected":true,"legacyRouterUsedAfterFacade":false}, {"pathName":"continue_watching_write","entrypoint":"ContinueWatchingSnapshotService","facadeOrRepositoryCalled":true,"providerPlanRunnerExpected":true,"fieldResolverExpected":true,"legacyRouterUsedAfterFacade":false}, {"pathName":"continue_watching_render","entrypoint":"HomeViewModelContinueWatching","facadeOrRepositoryCalled":true,"providerPlanRunnerExpected":true,"fieldResolverExpected":true,"legacyRouterUsedAfterFacade":false}]
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_series_nfx.json",
+      "scenario": "tvdb-localized-english-fallback",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt14403178",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt14403178","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tt14403178:nl-NL","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:nl-NL","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:nl-NL","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Netflix Series","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-series.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tt14403178","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": {"required":true,"sourceId":"tt14403178","targetProvider":"TVDB","resolver":"TvdbIdentityResolver","apiShapeId":"tvdb.remoteid.lookup","resultId":"tvdb:tt14403178","success":true},
+          "localization": {"provider":"TVDB","requestedLanguage":"nld","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"nld","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:nl-NL:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}, {"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LANGUAGE_FALLBACK","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tt14403178:nl-NL:policy:2:fallback:eng","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "netflix_movie_nfx.json",
+      "scenario": "tmdb-localized-english-fallback",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tt16431404",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tt16431404","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tt16431404:nl-NL","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:nl-NL","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:nl-NL","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"Netflix Movie","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/netflix-movie.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tt16431404","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"nl-NL","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"nl-NL","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:nl-NL:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}, {"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LANGUAGE_FALLBACK","cacheKey":"metadata:TMDB:tmdb.movie.core:tt16431404:nl-NL:policy:2:fallback:en-US","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "anime_kitsu_trending.json",
+      "scenario": "kitsu-localized-field-fallback",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "kitsu:7442",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "ADDON_META_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"kitsu:7442","provider":"KITSU","mediaKind":"ANIME","reason":"KITSU_PREFIX_DIRECT","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": null,
+          "sourceProvider": null,
+          "sourcePayloadFieldsUsed": [],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"KITSU","mediaKind":"ANIME","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"KITSU","apiShapeId":"kitsu.anime.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","operationKey":"kitsu.anime.core:kitsu:7442:nl-NL","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:nl-NL","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"KITSU","apiShapeId":"kitsu.anime.core","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:nl-NL","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"Kitsu Anime","ownershipRule":"title owned by PRIMARY","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"https://example.test/kitsu.jpg","ownershipRule":"poster owned by PRIMARY","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"KITSU","sourceRole":"PRIMARY","valuePreview":"kitsu:7442","ownershipRule":"canonical_id owned by PRIMARY","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"KITSU","requestedLanguage":"nl","fallbackLanguage":"en","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"kitsu.anime.core","language":"nl","fallbackRole":"LOCALIZED","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:nl-NL:policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}, {"apiShapeId":"kitsu.anime.core","language":"en","fallbackRole":"LANGUAGE_FALLBACK","cacheKey":"metadata:KITSU:kitsu.anime.core:kitsu:7442:nl-NL:policy:2:fallback:en","cacheDecision":"HIT","executedNetwork":false,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/trakt-rail-first-paint-title-year.json",
+      "scenario": "trakt-rail-first-paint-title-year",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "trakt:movie:hope-2026",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": "BUILT_IN_TRAKT",
+          "sourceProvider": "TRAKT",
+          "sourcePayloadFieldsUsed": ["title", "year"],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"Hope","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [{"field":"title","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"Hope","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/trakt-rail-visible-hydrates-tvdb.json",
+      "scenario": "trakt-rail-visible-hydrates-tvdb",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tvdb:1001",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"trakt:show:signal-2026","provider":"TVDB","mediaKind":"SERIES","reason":"ITEM_TYPE_SERIES","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": "BUILT_IN_TRAKT",
+          "sourceProvider": "TRAKT",
+          "sourcePayloadFieldsUsed": ["title", "year"],
+          "routingAfterVisible": {"parentId":"trakt:show:signal-2026","provider":"TVDB","mediaKind":"SERIES","reason":"ITEM_TYPE_SERIES","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"Signal","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Signal TVDB Canonical","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"TRAKT","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"release_date","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"","ownershipRule":"rail preview fills field before canonical hydration","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:1001","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Hydrated TVDB series overview","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/tvdb-signal.jpg","ownershipRule":"primary always wins","rejectedCandidates":[]}],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:1001:","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:1001:","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:1001:","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Signal TVDB Canonical","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"TRAKT","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"release_date","selectedProvider":"TRAKT","sourceRole":"RAIL_PREVIEW","valuePreview":"","ownershipRule":"rail preview fills field before canonical hydration","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:1001","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"Hydrated TVDB series overview","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/tvdb-signal.jpg","ownershipRule":"primary always wins","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [{"field":"title","primaryProvider":"TVDB","rejectedProvider":"TRAKT","reason":"Field already owned by PRIMARY; rejected PRIMARY"}],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:1001::policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/mdblist-rail-first-paint-rich-preview.json",
+      "scenario": "mdblist-rail-first-paint-rich-preview",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "mdblist:movie:aurora",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": "BUILT_IN_MDBLIST",
+          "sourceProvider": "MDBLIST",
+          "sourcePayloadFieldsUsed": ["title", "year", "poster", "overview"],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"Aurora","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/mdblist-aurora.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"MDBList rich preview","ownershipRule":"overview selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [{"field":"title","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"Aurora","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/mdblist-aurora.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"MDBLIST","sourceRole":"RAIL_PREVIEW","valuePreview":"MDBList rich preview","ownershipRule":"overview selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/tmdb-movie-rail-first-paint-rich-preview.json",
+      "scenario": "tmdb-movie-rail-first-paint-rich-preview",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tmdb:movie:501",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": "BUILT_IN_TMDB",
+          "sourceProvider": "TMDB",
+          "sourcePayloadFieldsUsed": ["title", "year", "poster", "backdrop"],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"TMDB Preview Movie","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/tmdb-movie.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"backdrop","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/tmdb-backdrop.jpg","ownershipRule":"backdrop selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"TMDB Preview Movie","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/tmdb-movie.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"backdrop","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/tmdb-backdrop.jpg","ownershipRule":"backdrop selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/tmdb-tv-rail-preview-then-tvdb-hydration.json",
+      "scenario": "tmdb-tv-rail-preview-then-tvdb-hydration",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tvdb:121361",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"tmdb:tv","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": "BUILT_IN_TMDB",
+          "sourceProvider": "TMDB",
+          "sourcePayloadFieldsUsed": ["title", "poster"],
+          "routingAfterVisible": {"parentId":"tmdb:tv","provider":"TVDB","mediaKind":"SERIES","reason":"ROUTING_ID_TYPE_CONFLICT","preResolutionTargetIdRequiresIdentityResolution":true,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"TMDB TV Preview","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/tmdb-tv.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"TVDB Hydrated Series","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"TMDB","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/tvdb-tv.jpg","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"TMDB","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tv","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"TVDB replaced rail preview fields","ownershipRule":"primary always wins","rejectedCandidates":[]}],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TVDB","mediaKind":"SERIES","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TVDB","apiShapeId":"tvdb.series.extended","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","operationKey":"tvdb.series.extended:tvdb:tv:","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tv:","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TVDB","apiShapeId":"tvdb.series.extended","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tv:","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"TVDB Hydrated Series","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"TMDB","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"poster","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/tvdb-tv.jpg","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"TMDB","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"canonical_id","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"tvdb:tv","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TVDB","sourceRole":"PRIMARY","valuePreview":"TVDB replaced rail preview fields","ownershipRule":"primary always wins","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [{"field":"title","primaryProvider":"TVDB","rejectedProvider":"TMDB","reason":"Field already owned by PRIMARY; rejected PRIMARY"}, {"field":"poster","primaryProvider":"TVDB","rejectedProvider":"TMDB","reason":"Field already owned by PRIMARY; rejected PRIMARY"}],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TVDB","requestedLanguage":"eng","fallbackLanguage":"eng","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":8,"payloads":[{"apiShapeId":"tvdb.series.translation","language":"eng","fallbackRole":"LOCALIZED","cacheKey":"metadata:TVDB:tvdb.series.extended:tvdb:tv::policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/kitsu-rail-first-paint-rich-preview.json",
+      "scenario": "kitsu-rail-first-paint-rich-preview",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "kitsu:7442",
+          "itemType": "series",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": "BUILT_IN_KITSU",
+          "sourceProvider": "KITSU",
+          "sourcePayloadFieldsUsed": ["title", "poster", "overview"],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"KITSU","sourceRole":"RAIL_PREVIEW","valuePreview":"Kitsu Preview Anime","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/kitsu-anime.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"KITSU","sourceRole":"RAIL_PREVIEW","valuePreview":"Kitsu rich preview","ownershipRule":"overview selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [{"field":"title","selectedProvider":"KITSU","sourceRole":"RAIL_PREVIEW","valuePreview":"Kitsu Preview Anime","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"KITSU","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/kitsu-anime.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"KITSU","sourceRole":"RAIL_PREVIEW","valuePreview":"Kitsu rich preview","ownershipRule":"overview selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/simkl-json-rail-first-paint-rich-preview.json",
+      "scenario": "simkl-json-rail-first-paint-rich-preview",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "simkl:movie:77",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": null,
+          "railSource": "BUILT_IN_SIMKL_DISCOVERY",
+          "sourceProvider": "SIMKL",
+          "sourcePayloadFieldsUsed": ["title", "year", "poster", "overview"],
+          "routingAfterVisible": null,
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"Simkl JSON Movie","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/simkl-json.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"Simkl JSON rich preview","ownershipRule":"overview selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [],
+          "identityMappingsHarvested": {},
+          "providerPlan": null,
+          "runtimeCalls": [],
+          "cacheDecisions": [],
+          "resolverSchedule": null,
+          "selectedFields": [{"field":"title","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"Simkl JSON Movie","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"https://example.test/simkl-json.jpg","ownershipRule":"poster selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"Simkl JSON rich preview","ownershipRule":"overview selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": null,
+          "productionCallerOwnership": []
+        }
+      ]
+    },
+    {
+      "fixtureName": "metadata/rails/simkl-json-rail-visible-hydrates-tmdb.json",
+      "scenario": "simkl-json-rail-visible-hydrates-tmdb",
+      "verdict": "PASS",
+      "items": [
+        {
+          "itemId": "tmdb:5088",
+          "itemType": "movie",
+          "firstPaint": {
+            "source": "RAIL_PREVIEW",
+            "routerExecuted": false,
+            "networkExecuted": false
+          },
+          "routing": {"parentId":"simkl:movie:88","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "railSource": "BUILT_IN_SIMKL_DISCOVERY",
+          "sourceProvider": "SIMKL",
+          "sourcePayloadFieldsUsed": ["title", "year"],
+          "routingAfterVisible": {"parentId":"simkl:movie:88","provider":"TMDB","mediaKind":"MOVIE","reason":"ITEM_TYPE_MOVIE","preResolutionTargetIdRequiresIdentityResolution":false,"executionTargetIdRequiresIdentityResolution":false,"executionIdentityResolved":true,"usedInputs":["item.id", "item.type"],"ignoredInputs":["catalog.type", "catalog.id", "addon.name", "source.name", "genre", "animeType", "links", "trend", "popularity"]},
+          "selectedFieldsBeforeHydration": [{"field":"title","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"Simkl JSON Hydration","ownershipRule":"title selected from RAIL_PREVIEW","rejectedCandidates":[]}, {"field":"year","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"2026","ownershipRule":"year selected from RAIL_PREVIEW","rejectedCandidates":[]}],
+          "selectedFieldsAfterHydration": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"TMDB Hydrated Movie","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"SIMKL","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"release_date","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"","ownershipRule":"rail preview fills field before canonical hydration","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tmdb:5088","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"TMDB replaced Simkl rail preview fields","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/tmdb-simkl.jpg","ownershipRule":"primary always wins","rejectedCandidates":[]}],
+          "identityMappingsHarvested": {},
+          "providerPlan": {"provider":"TMDB","mediaKind":"MOVIE","depth":"DETAIL_CORE","steps":[{"stepId":"primary_core-0","provider":"TMDB","apiShapeId":"tmdb.movie.core","workClass":"USER_VISIBLE","cachePolicy":"provider-metadata","requiresIdentityResolution":false}]},
+          "runtimeCalls": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","operationKey":"tmdb.movie.core:tmdb:5088:","cacheKey":"metadata:TMDB:tmdb.movie.core:tmdb:5088:","workClass":"USER_VISIBLE","executedNetwork":true}],
+          "cacheDecisions": [{"provider":"TMDB","apiShapeId":"tmdb.movie.core","cacheKey":"metadata:TMDB:tmdb.movie.core:tmdb:5088:","decision":"MISS_THEN_NETWORK","ttlMs":604800000,"staleWindowMs":2592000000,"reason":"primary-metadata-core"}],
+          "resolverSchedule": {"depth":"DETAIL_CORE","resolversScheduled":["ADDON_DISPLAY", "RATING", "ARTWORK"],"resolversSkipped":{}},
+          "selectedFields": [{"field":"title","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"TMDB Hydrated Movie","ownershipRule":"primary always wins","rejectedCandidates":[{"provider":"SIMKL","sourceRole":"RAIL_PREVIEW","reason":"primary canonical field available"}]}, {"field":"release_date","selectedProvider":"SIMKL","sourceRole":"RAIL_PREVIEW","valuePreview":"","ownershipRule":"rail preview fills field before canonical hydration","rejectedCandidates":[]}, {"field":"canonical_id","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"tmdb:5088","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"overview","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"TMDB replaced Simkl rail preview fields","ownershipRule":"primary always wins","rejectedCandidates":[]}, {"field":"poster","selectedProvider":"TMDB","sourceRole":"PRIMARY","valuePreview":"https://example.test/tmdb-simkl.jpg","ownershipRule":"primary always wins","rejectedCandidates":[]}],
+          "forbiddenOverwrites": [{"field":"title","primaryProvider":"TMDB","rejectedProvider":"SIMKL","reason":"Field already owned by PRIMARY; rejected PRIMARY"}],
+          "continueWatchingSnapshot": null,
+          "identityResolution": null,
+          "localization": {"provider":"TMDB","requestedLanguage":"en-US","fallbackLanguage":"en-US","policyVersion":2,"providerFallbackAllowedForMissingLocalizedFields":false,"providerFallbackUsed":false,"perEpisodeTranslationFallbacksAttempted":0,"maxPerEpisodeTranslationFallbacksAllowed":0,"payloads":[{"apiShapeId":"tmdb.movie.core","language":"en-US","fallbackRole":"LOCALIZED","cacheKey":"metadata:TMDB:tmdb.movie.core:tmdb:5088::policy:2","cacheDecision":"MISS_THEN_NETWORK","executedNetwork":true,"source":"PRODUCTION_ADAPTER"}]},
+          "productionCallerOwnership": []
+        }
+      ]
+    }
+  ]
+}
