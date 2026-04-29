@@ -22,11 +22,12 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.repository.CatalogRepository
+import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import java.io.File
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -127,6 +128,7 @@ class HomeCatalogRefreshCoordinatorTest {
     @Test
     fun `refresh first paint publishes catalog row without addon detail metadata fetch`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
+        val forbiddenMetaRepository = mockk<MetaRepository>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val publishedRows = mutableListOf<CatalogRow>()
         val catalogPreview = preview(id = "tt-first-paint", poster = null).copy(
@@ -194,8 +196,16 @@ class HomeCatalogRefreshCoordinatorTest {
                 supportsSkip = false
             )
         }
-        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
-        assertRefreshSeriallyDoesNotCallAddonDetailMetadata()
+        verify(exactly = 0) {
+            forbiddenMetaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
+        }
+        assertFalse(
+            "HomeCatalogRefreshCoordinator must not receive MetaRepository; first-paint refresh " +
+                "publishes catalog payloads and uses shared overlay, not add-on detail metadata.",
+            HomeCatalogRefreshCoordinator::class.constructors.any { constructor ->
+                constructor.parameters.any { parameter -> parameter.type.classifier == MetaRepository::class }
+            }
+        )
     }
 
     private fun preview(id: String, poster: String?): MetaPreview {
@@ -274,16 +284,4 @@ class HomeCatalogRefreshCoordinatorTest {
         return context
     }
 
-    private fun assertRefreshSeriallyDoesNotCallAddonDetailMetadata() {
-        val source = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeCatalogRefreshCoordinator.kt").readText()
-        val start = source.indexOf("    internal suspend fun refreshSerially(")
-        val end = source.indexOf("\n    internal fun evictCachedImageUrls", start)
-
-        assertTrue("refreshSerially source should exist", start >= 0)
-        assertTrue("refreshSerially source boundary should exist", end > start)
-        assertFalse(
-            "First-paint row publication may fetch catalog pages, but must not run per-item add-on detail metadata before publish",
-            source.substring(start, end).contains("getMetaFromAllAddons(")
-        )
-    }
 }
