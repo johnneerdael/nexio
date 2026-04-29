@@ -930,6 +930,28 @@ tmdb.search.tv:
   expectedRuntimePolicy:
     default: Disabled
 
+tmdb.search.people:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/search/person"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnlyOrMutation
+
+tmdb.search.companies:
+  provider: TMDB
+  headerPolicy: tmdb-json-v1
+  method: GET
+  path: "/search/company"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: ObserveOnlyOrMutation
+
 tmdb.trending.movie:
   provider: TMDB
   headerPolicy: tmdb-json-v1
