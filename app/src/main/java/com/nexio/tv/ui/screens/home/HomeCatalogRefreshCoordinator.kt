@@ -7,7 +7,6 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -137,20 +136,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 } else if (telemetryEnabled) {
                     onLog("item_metadata_fetch", "catalogKey=$rowKey itemKey=$itemKey")
                 }
-                val result = runCatching {
-                    metaRepository.getMetaFromAllAddons(
-                        type = item.apiType,
-                        id = item.id,
-                        cacheOnDisk = true,
-                        origin = "home_synthetic_refresh"
-                    ).first { networkResult -> networkResult !is NetworkResult.Loading }
-                }.getOrNull()
-                val externalMeta =
-                    (result as? NetworkResult.Success<*>)?.data as? Meta
                 val merged = mergePersistedHomeDisplayMetadata(
                     currentItem = item,
                     persistedFallback = persistedFallback,
-                    externalMeta = externalMeta
+                    externalMeta = null
                 )
                 val localized = overlayProviderLocalizedMetadata(merged, onLog)
                 val enriched = titleRatingOverrideRepository.enrichPreview(localized)
@@ -268,21 +257,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                     onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
                                 }
                             }
-                            val result = runCatching {
-                                metaRepository.getMetaFromAllAddons(
-                                    type = item.apiType,
-                                    id = item.id,
-                                    cacheOnDisk = true,
-                                    origin = "home_catalog_refresh"
-                                )
-                                    .first { result -> result !is com.nexio.tv.core.network.NetworkResult.Loading }
-                            }.getOrNull()
-                            val externalMeta =
-                                (result as? com.nexio.tv.core.network.NetworkResult.Success<*>)?.data as? Meta
                             val merged = mergePersistedHomeDisplayMetadata(
                                 currentItem = item,
                                 persistedFallback = persistedFallback,
-                                externalMeta = externalMeta
+                                externalMeta = null
                             )
                             val localized = overlayProviderLocalizedMetadata(merged, onLog)
                             val enriched = titleRatingOverrideRepository.enrichPreview(localized)
