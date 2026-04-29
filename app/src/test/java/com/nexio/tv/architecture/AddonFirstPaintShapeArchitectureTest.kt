@@ -75,11 +75,11 @@ class AddonFirstPaintShapeArchitectureTest {
 
     @Test
     fun `home hydration does not call addon detail metadata directly`() {
-        val coordinator = productionFile("ui/screens/home/HomeCatalogRefreshCoordinator.kt").readText()
-        val directAddonMetaCalls = Regex("""metaRepository\s*\.\s*getMetaFromAllAddons\s*\(""")
-            .findAll(coordinator)
-            .map { match -> "HomeCatalogRefreshCoordinator.kt:${match.value}" }
-            .toList()
+        val directAddonMetaCalls = homeFiles().flatMap { file ->
+            Regex("""\bgetMetaFromAllAddons\s*\(""")
+                .findAll(file.readText())
+                .map { match -> "${file.name}:${match.value}" }
+        }
 
         assertTrue(
             "Home hydration must use MetadataRouterFacade via ProviderLocalizedMetadataResolver, " +
