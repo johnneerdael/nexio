@@ -64,7 +64,6 @@ sealed class IntegrationScope(
         val profileId: Int?
         val provider: IntegrationProvider?
         val credentialHash: String?
-        val providerAccountId: String?
 
         constructor(
             profileId: Int,
@@ -80,23 +79,6 @@ sealed class IntegrationScope(
             this.profileId = profileId
             this.provider = provider
             this.credentialHash = credentialHash.trim()
-            this.providerAccountId = null
-        }
-
-        @Deprecated(
-            message = "Use ProviderConfig for global provider configuration or Account(profileId, provider, credentialHash) for profile-owned account state.",
-            level = DeprecationLevel.ERROR
-        )
-        constructor(providerAccountId: String) : super(
-            storageKey = "account:${providerAccountId.trim()}",
-            auditName = "Account",
-            isProfileBound = true
-        ) {
-            require(providerAccountId.isNotBlank()) { "Account.providerAccountId must not be blank" }
-            this.profileId = null
-            this.provider = null
-            this.credentialHash = null
-            this.providerAccountId = providerAccountId.trim()
         }
 
         val isExplicitAccountScope: Boolean
@@ -108,24 +90,18 @@ sealed class IntegrationScope(
 
             return profileId == other.profileId &&
                 provider == other.provider &&
-                credentialHash == other.credentialHash &&
-                providerAccountId == other.providerAccountId
+                credentialHash == other.credentialHash
         }
 
         override fun hashCode(): Int {
             var result = profileId ?: 0
             result = 31 * result + (provider?.hashCode() ?: 0)
             result = 31 * result + (credentialHash?.hashCode() ?: 0)
-            result = 31 * result + (providerAccountId?.hashCode() ?: 0)
             return result
         }
 
         override fun toString(): String =
-            if (providerAccountId != null) {
-                "Account(providerAccountId=$providerAccountId)"
-            } else {
-                "Account(profileId=$profileId, provider=$provider, credentialHash=$credentialHash)"
-            }
+            "Account(profileId=$profileId, provider=$provider, credentialHash=$credentialHash)"
     }
 
     data class ProfileLocal(val profileId: Int) : IntegrationScope(
