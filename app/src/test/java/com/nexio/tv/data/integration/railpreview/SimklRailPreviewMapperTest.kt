@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.railpreview
 
+import com.google.gson.Gson
 import com.nexio.tv.data.remote.dto.simkl.SimklDiscoveryItemDto
 import com.nexio.tv.data.remote.dto.simkl.SimklDiscoveryRatingValue
 import com.nexio.tv.data.remote.dto.simkl.SimklDiscoveryRatingsDto
@@ -99,6 +100,49 @@ class SimklRailPreviewMapperTest {
         assertEquals(245000, preview.display.rating?.votes)
         assertEquals("tvd7UUHzdhA", (preview.display.trailerHint as TrailerHint.YouTube).videoId)
         assertTrue(preview.sourcePayloadHash.isNotBlank())
+    }
+
+    @Test
+    fun `simkl live discovery json parses with gson and maps simkl_id`() {
+        val json = """
+            {
+              "title": "Project Hail Mary",
+              "poster": "19/195417372d9325feb5",
+              "fanart": "19/19676837733d10098c",
+              "ids": {
+                "simkl_id": 1306562,
+                "slug": "project-hail-mary",
+                "imdb": "tt12042730",
+                "tmdb": "687163",
+                "tvdb": "346729"
+              },
+              "release_date": "03/15/2026",
+              "ratings": {
+                "simkl": { "rating": 8.68, "votes": 1101 },
+                "imdb": { "rating": 8.3, "votes": 245000 }
+              },
+              "runtime": "2h 37m",
+              "overview": "Science teacher Ryland Grace wakes up on a spaceship light years from home.",
+              "genres": ["Adventure", "Comedy", "Science Fiction"],
+              "trailer": "tvd7UUHzdhA",
+              "theater": "03/15/2026"
+            }
+        """.trimIndent()
+        val item = Gson().fromJson(json, SimklDiscoveryItemDto::class.java)
+        val preview = SimklRailPreviewMapper().mapDiscoveryItem(
+            railId = "simkl_trending_movies",
+            item = item,
+            itemType = ContentType.MOVIE,
+            position = 0,
+            generatedAtMs = 1_000L
+        )!!
+
+        assertEquals("simkl:1306562", preview.sourceItemId)
+        assertEquals("1306562", preview.stableIds.simkl)
+        assertEquals("tt12042730", preview.stableIds.imdb)
+        assertEquals("Project Hail Mary", preview.display.title)
+        assertEquals("2h 37m", preview.display.runtimeText)
+        assertEquals(245000, preview.display.rating?.votes)
     }
 
     @Test
