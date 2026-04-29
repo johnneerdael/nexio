@@ -1,7 +1,6 @@
 package com.nexio.tv.architecture
 
 import java.io.File
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,6 +13,7 @@ class AddonFirstPaintShapeArchitectureTest {
         assertTrue("TMDB addon search uses genre for first-paint genres.", dtoSource.contains("@Json(name = \"genre\")"))
         assertTrue("TMDB addon search uses year for first-paint release info.", dtoSource.contains("@Json(name = \"year\")"))
         assertTrue("TMDB addon catalog exposes imdb_id for identity harvest.", dtoSource.contains("@Json(name = \"imdb_id\")"))
+        assertTrue("Catalog metas must wire behaviorHints into MetaPreviewDto.", dtoSource.contains("@Json(name = \"behaviorHints\")"))
         assertTrue("Top Streaming/TMDB payloads expose behaviorHints.defaultVideoId.", dtoSource.contains("data class CatalogBehaviorHintsDto"))
         assertTrue("Catalog behavior hints must model defaultVideoId.", dtoSource.contains("@Json(name = \"defaultVideoId\")"))
     }
@@ -32,18 +32,25 @@ class AddonFirstPaintShapeArchitectureTest {
 
     @Test
     fun `addon first paint does not introduce provider specific home lifecycle`() {
-        val homeSource = homeFiles().joinToString("\n") { it.readText() }
-        val forbiddenNames = listOf(
-            "TmdbAddonHomeRenderer",
-            "TopStreamingHomeRenderer",
-            "AddonPreviewHydrationScheduler",
-            "TmdbAddonHydrationScheduler",
-            "TopStreamingHydrationScheduler"
+        val providerSpecificLifecyclePatterns = listOf(
+            Regex("""\b[A-Za-z0-9]+AddonHomeRenderer\b"""),
+            Regex("""\b[A-Za-z0-9]+AddonHydrationScheduler\b"""),
+            Regex("""\b[A-Za-z0-9]+PreviewHydrationScheduler\b"""),
+            Regex("""\b[A-Za-z0-9]+AddonRenderer\b""")
         )
-
-        forbiddenNames.forEach { name ->
-            assertFalse("Addon first-paint shape fixes must not introduce $name.", homeSource.contains(name))
+        val offenders = homeFiles().flatMap { file ->
+            val source = file.readText()
+            providerSpecificLifecyclePatterns.flatMap { pattern ->
+                pattern.findAll(source).map { match ->
+                    "${file.path}:${match.value}"
+                }
+            }
         }
+
+        assertTrue(
+            "Addon first-paint shape fixes must not introduce provider-specific Home renderer or hydration scheduler names: $offenders",
+            offenders.isEmpty()
+        )
     }
 
     private fun productionFile(relativePath: String): File =
