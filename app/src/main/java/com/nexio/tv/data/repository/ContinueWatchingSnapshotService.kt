@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -353,6 +354,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     }
             }
         }
+    }
+
+    /**
+     * F-G-01 path B: typed profile-scoped snapshot flow. Returns the full ContinueWatchingSnapshot
+     * (preserving snapshot-shape consumers like displayMetadataByItemKey) but filtered to the
+     * requested profile. Replaces the manual `.filter { it.profileId == profileId }` pattern that
+     * cluster D Task 4/5 used as a workaround.
+     */
+    fun observeProfileSnapshot(profileId: Int): Flow<ContinueWatchingSnapshot> {
+        require(profileId > 0) { "observeProfileSnapshot.profileId must be positive, got $profileId" }
+        return observeSnapshot()
+            .filter { it.profileId == profileId }
+            .map { it.snapshot }
     }
 
     fun observeContinueWatching(profileId: Int): Flow<List<ContinueWatchingRecord>> {
