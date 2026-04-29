@@ -328,6 +328,8 @@ internal fun selectKitsuSynopsis(
         description = description
     )?.value
 
+// F2-E-05: Kitsu's `synopsis` field is single-language (English only). No localization
+// applies, so no emitFieldSelected for provider competition is needed.
 internal fun selectKitsuSynopsisField(
     policy: LocalizationPolicy,
     synopsis: String?,

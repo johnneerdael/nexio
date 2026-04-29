@@ -25,6 +25,25 @@ private const val TAG = "TvdbMetadataService"
 private const val SERIES_EXTENDED_RECORD_KIND = "series_extended"
 private const val DEFAULT_SEASON_TYPE = "default"
 
+/**
+ * F2-E-04 (Legacy): TVDB series and episode metadata service predating [LocalizationPolicy].
+ *
+ * This class is a **legacy** path that drives TVDB lookups independently of the
+ * [com.nexio.tv.data.integration.metadata.LocalizationPolicy] / [com.nexio.tv.data.integration.metadata.TvdbMetadataProviderAdapter]
+ * pipeline introduced in Phase A of the integration runtime. It existed before the policy-based
+ * localization system and remains in production because the following consumers have not yet been
+ * migrated:
+ *
+ *  - [com.nexio.tv.core.tvdb.TvMetadataRepository] — series enrichment and episode hydration for
+ *    the legacy `ContentDetailPipeline`.
+ *  - Direct callers in `HomeCatalogRefreshCoordinator` and background refresh tasks that bypass
+ *    the [com.nexio.tv.core.metadata.router.MetadataRouter].
+ *
+ * **Migration intent**: once all consumers are routed through
+ * [com.nexio.tv.data.integration.metadata.TvdbMetadataProviderAdapter], this class should be
+ * deleted. New localization or caching logic must be added to [LocalizationPolicy] and the adapter
+ * pipeline, NOT here.
+ */
 @Singleton
 class TvdbMetadataService @Inject constructor(
     private val provider: TvdbIntegrationProvider,
