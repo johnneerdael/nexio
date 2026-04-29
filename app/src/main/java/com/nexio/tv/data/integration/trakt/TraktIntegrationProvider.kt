@@ -755,6 +755,10 @@ class TraktIntegrationProvider @Inject constructor(
         return runtime.get(spec).valueOrNull()
     }
 
+    // F2-D-09: All global-content fns share IntegrationScope.GlobalContent, so a 429 from any
+    // trending/popular/recommendations endpoint applies the backoff window to all of them — correct
+    // for global data, sub-optimal for unrelated endpoints. Acceptable trade-off; revisit if
+    // endpoint-level granularity becomes important.
     suspend fun fetchTrendingMovies(limit: Int): List<TraktTrendingMovieItemDto>? {
         val session = traktAuthService.accountScopedSession()
         val spec = IntegrationSpec(
