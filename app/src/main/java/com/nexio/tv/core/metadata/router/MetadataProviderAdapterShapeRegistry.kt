@@ -1,6 +1,7 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.integration.KitsuApiShapes
+import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.integration.TraktApiShapes
 import com.nexio.tv.core.integration.TvdbApiShapes
@@ -34,6 +35,8 @@ object MetadataProviderAdapterShapeRegistry {
         KitsuApiShapes.CASTINGS,
         KitsuApiShapes.ANIME_STAFF,
         KitsuApiShapes.ANIME_PRODUCTIONS,
-        KitsuApiShapes.MEDIA_RELATIONSHIPS
+        KitsuApiShapes.MEDIA_RELATIONSHIPS,
+        PosterApiShapes.RPDB_POSTER_TEMPLATE,
+        PosterApiShapes.TOP_POSTERS_POSTER_TEMPLATE
     )
 }
