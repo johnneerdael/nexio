@@ -1712,7 +1712,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun currentTvdbLanguageTag(): String {
-        return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
+        return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
     }
 
     private fun ContentType.toAnimeMediaKind(): ContentMediaKind =

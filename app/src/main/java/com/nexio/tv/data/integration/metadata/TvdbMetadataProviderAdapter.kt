@@ -36,7 +36,8 @@ class TvdbMetadataProviderAdapter @Inject constructor(
             requestedIsFallback = policy.requestedIsFallback,
             allowProviderFallbackForMissingLocalizedFields = policy.allowProviderFallbackForMissingLocalizedFields,
             perEpisodeFallbacksAttempted = 0,
-            perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest
+            perEpisodeFallbacksAllowed = policy.maxPerEpisodeTranslationFallbacksPerRequest,
+            localeCollapsedToFallback = policy.localeCollapsedToFallback  // F2-E-01
         )
         val episodeMetadata = mutableMapOf<Pair<Int, Int>, com.nexio.tv.core.tvdb.TvEpisodeMetadata>()
         val localizationPayloads = mutableListOf<MetadataLocalizationPayloadTrace>()
@@ -90,7 +91,8 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                     requestedIsFallback = bundle.policy.requestedIsFallback,
                     allowProviderFallbackForMissingLocalizedFields = bundle.policy.allowProviderFallbackForMissingLocalizedFields,
                     perEpisodeFallbacksAttempted = bundle.perEpisodeTranslationFallbacksAttempted,
-                    perEpisodeFallbacksAllowed = bundle.maxPerEpisodeTranslationFallbacksAllowed
+                    perEpisodeFallbacksAllowed = bundle.maxPerEpisodeTranslationFallbacksAllowed,
+                    localeCollapsedToFallback = bundle.policy.localeCollapsedToFallback  // F2-E-01
                 )
                 episodeMetadata += bundle.episodes.mapValues { it.value.metadata }
                 localizationPayloads += bundle.localizationPayloads

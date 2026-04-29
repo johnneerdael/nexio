@@ -643,7 +643,7 @@ class TvdbMetadataService @Inject constructor(
     }
 
     private fun normalizeLanguage(language: String?): String {
-        return TvdbLanguageMapper.normalize(language)
+        return TvdbLanguageMapper.normalize(language).code
     }
 
     private fun String?.trimmed(): String? = this?.trim()?.takeIf { it.isNotBlank() }

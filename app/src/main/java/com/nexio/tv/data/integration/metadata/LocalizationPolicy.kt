@@ -22,7 +22,14 @@ internal data class LocalizationPolicy(
      * `en`, `en_jp`, `ja`, ...). When `false`, the adapter must issue a second fetch in the
      * fallback language to satisfy the policy contract.
      */
-    val fallbackLanguageEmbeddedInResponse: Boolean = false
+    val fallbackLanguageEmbeddedInResponse: Boolean = false,
+    /**
+     * F2-E-01: `true` when the requested locale tag was not on the provider whitelist and was
+     * silently collapsed to the English fallback by [TvdbLanguageMapper]. Propagated to the
+     * `metadata.localization_plan` trace event so diagnostic bundles surface the collapse for
+     * Italian, Portuguese, Polish, Russian, Korean, Arabic, Japanese, etc. users.
+     */
+    val localeCollapsedToFallback: Boolean = false
 ) {
     val requestedIsFallback: Boolean
         get() = requestedLanguage.providerCode == fallbackLanguage.providerCode
@@ -40,14 +47,15 @@ internal data class LocalizationPolicy(
             requestedLanguage: String?,
             maxPerEpisodeTranslationFallbacksPerRequest: Int = DEFAULT_PER_EPISODE_TRANSLATION_FALLBACK_CAP
         ): LocalizationPolicy {
-            val normalized = TvdbLanguageMapper.normalize(requestedLanguage)
+            val normalizedResult = TvdbLanguageMapper.normalize(requestedLanguage)
             return LocalizationPolicy(
-                requestedLanguage = NormalizedLanguage(requestedLanguage.orEmpty(), normalized),
+                requestedLanguage = NormalizedLanguage(requestedLanguage.orEmpty(), normalizedResult.code),
                 fallbackLanguage = NormalizedLanguage("en", "eng"),
                 provider = MetadataPrimaryProvider.TVDB,
                 policyVersion = CURRENT_VERSION,
                 allowProviderFallbackForMissingLocalizedFields = false,
-                maxPerEpisodeTranslationFallbacksPerRequest = maxPerEpisodeTranslationFallbacksPerRequest.coerceAtLeast(0)
+                maxPerEpisodeTranslationFallbacksPerRequest = maxPerEpisodeTranslationFallbacksPerRequest.coerceAtLeast(0),
+                localeCollapsedToFallback = normalizedResult.isCollapsedToFallback  // F2-E-01
             )
         }
 

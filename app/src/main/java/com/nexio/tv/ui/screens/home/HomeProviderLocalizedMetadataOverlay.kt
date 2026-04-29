@@ -49,7 +49,7 @@ internal suspend fun fetchProviderLocalizedMetadataDecisionForHome(
     providerLocalizedMetadataResolver: ProviderLocalizedMetadataResolver,
     profileBoundary: ProfileBoundary
 ): TvMetadataDecision<TvMetadataEnrichment> {
-    val language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
+    val language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag()).code
     val metadataRequest = MetadataRequest(
         contentId = item.id,
         contentType = item.type,
