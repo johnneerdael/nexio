@@ -316,6 +316,7 @@ class DefaultIntegrationRuntime @Inject constructor(
                     result
                 }
                 is IntegrationCallResult.Success -> {
+                    backoffManager.clear(spec.provider, spec.scope)
                     record(spec, traceId, IntegrationAuditPhase.NETWORK_END, IntegrationOutcome.SUCCESS, networkStarted = true, loaderInvoked = true)
                     result
                 }
@@ -391,6 +392,7 @@ class DefaultIntegrationRuntime @Inject constructor(
             try {
                 record(spec, traceId, IntegrationAuditPhase.NETWORK_START, networkStarted = true, loaderInvoked = true)
                 spec.open().also {
+                    backoffManager.clear(spec.provider, spec.scope)
                     record(spec, traceId, IntegrationAuditPhase.NETWORK_END, IntegrationOutcome.SUCCESS, networkStarted = true, loaderInvoked = true)
                 }
             } catch (exception: Exception) {
