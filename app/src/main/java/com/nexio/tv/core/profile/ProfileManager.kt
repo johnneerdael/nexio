@@ -75,6 +75,8 @@ class ProfileManager(
     private val _activeProfileSession = MutableStateFlow(newProfileSession(profileId = 1))
     val activeProfileSession: StateFlow<ActiveProfileSession> = _activeProfileSession.asStateFlow()
 
+    private val deferralPolicy = ProfileSwitchDeferralPolicy(initialProfileId = _activeProfileId.value)
+
     val profiles: StateFlow<List<UserProfile>> = dataStore.profilesList
         .stateIn(
             scope, SharingStarted.Eagerly,
@@ -85,19 +87,37 @@ class ProfileManager(
         scope.launch {
             dataStore.activeProfileId.collect { id ->
                 val previousId = _activeProfileId.value
-                if (previousId != id && playbackSessionRegistry.activeOwner() != null) {
-                    Log.w(TAG, "Ignoring DataStore profile change to $id while playback active")
-                    return@collect
+                val applied = deferralPolicy.onIncomingSwitch(
+                    targetProfileId = id,
+                    hasActivePlayback = playbackSessionRegistry.activeOwner() != null
+                )
+                if (applied) {
+                    applyProfileChange(previousId, id)
                 }
-                _activeProfileId.value = id
-                if (previousId != id) {
-                    _activeProfileSession.value = newProfileSession(id)
-                }
-                AppLocaleResolver.setActiveProfileId(context, id)
-                if (previousId != id) {
-                    _profileSwitched.emit(id)
+                // else: deferred. Drained when ownerState becomes null below.
+            }
+        }
+        scope.launch {
+            playbackSessionRegistry.ownerState.collect { owner ->
+                if (owner == null) {
+                    val drainedTo = deferralPolicy.onPlaybackIdle()
+                    if (drainedTo != null) {
+                        val previousId = _activeProfileId.value
+                        applyProfileChange(previousId, drainedTo)
+                    }
                 }
             }
+        }
+    }
+
+    private suspend fun applyProfileChange(previousId: Int, newId: Int) {
+        _activeProfileId.value = newId
+        if (previousId != newId) {
+            _activeProfileSession.value = newProfileSession(newId)
+        }
+        AppLocaleResolver.setActiveProfileId(context, newId)
+        if (previousId != newId) {
+            _profileSwitched.emit(newId)
         }
     }
 
