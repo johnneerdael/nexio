@@ -408,6 +408,7 @@ tasks.register<Test>("generateTraceValidatorAudit") {
     classpath = sourceTest.get().classpath
     filter {
         includeTestsMatching("com.nexio.tv.core.trace.TraceBundleGoldenTest")
+        includeTestsMatching("com.nexio.tv.core.trace.*Validator*Test")
     }
 }
 
