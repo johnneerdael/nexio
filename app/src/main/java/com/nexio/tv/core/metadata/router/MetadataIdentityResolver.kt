@@ -75,10 +75,15 @@ class MetadataIdentityResolver @Inject constructor(
         return route.copy(
             targetIds = route.targetIds + (route.provider to lookupResult),
             targetIdRequiresIdentityResolution = false,
-            trace = route.trace + MetadataRouteTrace(
-                reason = MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT,
-                detail = "provider-native conflict identity resolved for ${route.provider}"
-            )
+            trace = if (route.reason == MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT) {
+                // F2-B-01: only append the conflict-trace entry when the route ACTUALLY originated as a
+                // provider-native conflict. For ITEM_TYPE_SERIES / ITEM_TYPE_MOVIE routes that happen to
+                // need identity resolution (e.g. tt14403178 → tvdb:NN), no conflict happened.
+                route.trace + MetadataRouteTrace(
+                    reason = MetadataDecisionReason.ROUTING_ID_TYPE_CONFLICT,
+                    detail = "provider-native conflict identity resolved for ${route.provider}"
+                )
+            } else route.trace
         )
     }
 }
