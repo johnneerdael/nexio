@@ -16,6 +16,7 @@ class MetadataIdentityResolver @Inject constructor(
 ) {
     interface Lookup {
         suspend fun tmdbToTvdb(tmdbId: String): String?
+        suspend fun imdbToTvdb(imdbId: String): String? = null
         suspend fun tvdbToTmdb(tvdbId: String): String?
     }
 
@@ -36,6 +37,8 @@ class MetadataIdentityResolver @Inject constructor(
         val (resolverName, apiShapeId, lookupResult) = when {
             parsed.scheme == AnimeIdScheme.TMDB && route.provider == MetadataPrimaryProvider.TVDB ->
                 Triple("TmdbToTvdbResolver", "identity.tmdb_to_tvdb", lookup.tmdbToTvdb(parsed.value))
+            parsed.scheme == AnimeIdScheme.IMDB && route.provider == MetadataPrimaryProvider.TVDB ->
+                Triple("ImdbToTvdbResolver", "identity.imdb_to_tvdb", lookup.imdbToTvdb(parsed.value))
             parsed.scheme == AnimeIdScheme.TVDB && route.provider == MetadataPrimaryProvider.TMDB ->
                 Triple("TvdbToTmdbResolver", "identity.tvdb_to_tmdb", lookup.tvdbToTmdb(parsed.value))
             else -> Triple("Unknown", "identity.unknown", null)
