@@ -124,7 +124,7 @@ class PosterRatingsUrlResolver @Inject constructor(
         }
         return PosterIntegrationRequest(
             provider = IntegrationProvider.RPDB,
-            cacheKey = "rpdb:$idType:${id.value}:poster-default:${apiKey.hashCode()}",
+            cacheKey = "rpdb:$idType:${id.value}:poster-default:${stableHashHex8(apiKey)}",
             apiKey = apiKey,
             path = "$idType/poster-default/${id.value}.jpg",
             mimeType = "image/jpeg"
@@ -148,7 +148,7 @@ class PosterRatingsUrlResolver @Inject constructor(
         }
         return PosterIntegrationRequest(
             provider = IntegrationProvider.TOP_POSTERS,
-            cacheKey = "topposters:${id.type.name.lowercase()}:${id.value}:${apiKey.hashCode()}",
+            cacheKey = "topposters:${id.type.name.lowercase()}:${id.value}:${stableHashHex8(apiKey)}",
             apiKey = apiKey,
             path = path,
             fallbackUrl = fallbackUrl,
@@ -204,5 +204,16 @@ class PosterRatingsUrlResolver @Inject constructor(
         KITSU,
         ANILIST,
         ANIDB
+    }
+
+    private fun stableHashHex8(s: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(s.toByteArray(Charsets.UTF_8))
+        return buildString(8) {
+            for (i in 0 until 4) {
+                val b = bytes[i].toInt() and 0xFF
+                append(b.toString(16).padStart(2, '0'))
+            }
+        }
     }
 }
