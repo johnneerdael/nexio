@@ -1,6 +1,7 @@
 package com.nexio.tv.data.mapper
 
 import com.nexio.tv.data.remote.dto.CatalogResponseDto
+import com.nexio.tv.data.remote.dto.CatalogBehaviorHintsDto
 import com.nexio.tv.data.remote.dto.MetaPreviewDto
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
@@ -37,6 +38,23 @@ class CatalogMapperTest {
     }
 
     @Test
+    fun `addon catalog preview harvests tmdb and imdb stable ids`() {
+        val preview = MetaPreviewDto(
+            id = "tmdb:687163",
+            type = "movie",
+            name = "Project Hail Mary",
+            imdbId = "tt12042730",
+            behaviorHints = CatalogBehaviorHintsDto(
+                defaultVideoId = "tt12042730"
+            )
+        ).toDomain()
+
+        assertEquals("687163", preview.firstPaintStableIds.tmdb)
+        assertEquals("tt12042730", preview.firstPaintStableIds.imdb)
+        assertEquals(FirstPaintSource.ADDON_META_PREVIEW, preview.firstPaintSource)
+    }
+
+    @Test
     fun `moshi parses tmdb addon alias fields for first paint`() {
         val response = parseCatalogResponse(
             """
@@ -58,6 +76,31 @@ class CatalogMapperTest {
 
         assertEquals(listOf("Science Fiction", "Adventure"), preview.genres)
         assertEquals("2026", preview.releaseInfo)
+    }
+
+    @Test
+    fun `addon behavior hints provide imdb stable id when imdb id is absent`() {
+        val response = parseCatalogResponse(
+            """
+            {
+              "metas": [
+                {
+                  "id": "tmdb:687163",
+                  "type": "movie",
+                  "name": "Project Hail Mary",
+                  "behaviorHints": {
+                    "defaultVideoId": "tt12042730"
+                  }
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val preview = response.metas.single().toDomain()
+
+        assertEquals("687163", preview.firstPaintStableIds.tmdb)
+        assertEquals("tt12042730", preview.firstPaintStableIds.imdb)
     }
 
     @Test
