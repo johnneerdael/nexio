@@ -39,6 +39,7 @@ class AddonFirstPaintShapeArchitectureTest {
             ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonRenderer\b"""), 1),
             ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonHydrationScheduler\b"""), 1),
             ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)PreviewHydrationScheduler\b"""), 1),
+            ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonMetadataRenderer\b"""), 1),
             ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonMetadataMerger\b"""), 1),
             ForbiddenLifecyclePattern(Regex("""\b([A-Za-z0-9]+)AddonMetadataScheduler\b"""), 1)
         )
@@ -67,7 +68,7 @@ class AddonFirstPaintShapeArchitectureTest {
         }
 
         assertTrue(
-            "Addon first-paint shape fixes must not introduce provider-specific Home renderer, hydration scheduler, or metadata merger names: $offenders",
+            "Addon first-paint shape fixes must not introduce provider-specific Home renderer, metadata renderer, hydration scheduler, or metadata merger names: $offenders",
             offenders.isEmpty()
         )
     }
