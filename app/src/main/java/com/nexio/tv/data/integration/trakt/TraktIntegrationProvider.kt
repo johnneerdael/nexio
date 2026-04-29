@@ -732,8 +732,8 @@ class TraktIntegrationProvider @Inject constructor(
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getMyShowsCalendar(
@@ -768,8 +768,8 @@ class TraktIntegrationProvider @Inject constructor(
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getTrendingMovies(
@@ -806,8 +806,8 @@ class TraktIntegrationProvider @Inject constructor(
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getTrendingShows(
@@ -844,8 +844,8 @@ class TraktIntegrationProvider @Inject constructor(
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularMovies(
@@ -882,8 +882,8 @@ class TraktIntegrationProvider @Inject constructor(
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularShows(
@@ -923,8 +923,8 @@ class TraktIntegrationProvider @Inject constructor(
                 staleAfterExpiryMs = 60L * 60L * 1000L
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
-            scope = accountScope(session),
-            profileContext = profileContext(session),
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getRecommendations(
