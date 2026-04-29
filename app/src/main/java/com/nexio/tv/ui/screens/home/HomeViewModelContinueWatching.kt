@@ -247,6 +247,9 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
+        // F2-G-04: broad catch is intentional — best-effort enrichment; UI prefers stale display
+        // metadata over crashing the row. NPE from null injectable in test harness is logged but
+        // not rethrown (safe in correctly-wired production where Hilt guarantees non-null).
         Log.w(HomeViewModel.TAG, "Provider enrichment failed for continue watching item $contentId: ${e.message}")
         item
     }

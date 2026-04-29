@@ -1,6 +1,8 @@
 package com.nexio.tv.core.integration
 
+import androidx.room.withTransaction
 import com.nexio.tv.data.local.integration.ExternalIdEntity
+import com.nexio.tv.data.local.integration.IntegrationCacheDatabase
 import com.nexio.tv.data.local.integration.MediaIdentityDao
 import com.nexio.tv.data.local.integration.MediaIdentityEntity
 import com.nexio.tv.data.local.integration.RailCacheEntity
@@ -20,20 +22,24 @@ data class RailMembership(
 class IntegrationOwnershipService @Inject constructor(
     private val railStoreDao: RailStoreDao,
     private val mediaIdentityDao: MediaIdentityDao,
-    private val orphanCleanupService: IntegrationOrphanCleanupService
+    private val orphanCleanupService: IntegrationOrphanCleanupService,
+    private val db: IntegrationCacheDatabase
 ) {
+    // F2-G-03: wrapped in an outer withTransaction to eliminate the partial-write window where
+    // a CW rail upsert could leave rail rows committed but item/identity rows not yet written.
     suspend fun upsertRailMembership(membership: RailMembership) {
-        val previousItems = railStoreDao.itemsForRail(membership.rail.railKey)
-        railStoreDao.upsertRail(membership.rail)
-        railStoreDao.replaceRailItems(membership.rail.railKey, membership.items)
-        membership.mediaIdentities.forEach { mediaIdentityDao.upsertMediaIdentity(it) }
-        val externalIdsByMedia = membership.externalIds.groupBy { it.mediaKey }
-        externalIdsByMedia.forEach { (mediaKey, ids) ->
-            mediaIdentityDao.replaceExternalIds(mediaKey, ids)
+        val removedMediaKeys = db.withTransaction {
+            val previousItems = railStoreDao.itemsForRail(membership.rail.railKey)
+            railStoreDao.upsertRail(membership.rail)
+            railStoreDao.replaceRailItems(membership.rail.railKey, membership.items)
+            membership.mediaIdentities.forEach { mediaIdentityDao.upsertMediaIdentity(it) }
+            val externalIdsByMedia = membership.externalIds.groupBy { it.mediaKey }
+            externalIdsByMedia.forEach { (mediaKey, ids) ->
+                mediaIdentityDao.replaceExternalIds(mediaKey, ids)
+            }
+            previousItems.map { it.mediaKey }.toSet() -
+                membership.items.map { it.mediaKey }.toSet()
         }
-
-        val removedMediaKeys = previousItems.map { it.mediaKey }.toSet() -
-            membership.items.map { it.mediaKey }.toSet()
         orphanCleanupService.cleanupAll(removedMediaKeys)
     }
 

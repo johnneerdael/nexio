@@ -15,6 +15,7 @@ import androidx.tvprovider.media.tv.PreviewChannelHelper
 import androidx.tvprovider.media.tv.PreviewProgram
 import androidx.tvprovider.media.tv.TvContractCompat
 import com.nexio.tv.R
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.domain.model.MetaPreview
@@ -22,11 +23,14 @@ import com.nexio.tv.domain.model.PosterShape
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,13 +47,15 @@ private const val EXTRA_RECOMMENDATION_CONTENT_ID = "recommendation_content_id"
 private const val EXTRA_RECOMMENDATION_CONTENT_TYPE = "recommendation_content_type"
 private const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class AndroidTvChannelPublisher @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataStore: AndroidTvRecommendationsDataStore,
     private val feedCatalogService: AndroidTvFeedCatalogService,
     private val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
-    private val channelArtworkCache: AndroidTvChannelArtworkCache
+    private val channelArtworkCache: AndroidTvChannelArtworkCache,
+    private val profileManager: ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -65,13 +71,21 @@ class AndroidTvChannelPublisher @Inject constructor(
                 .collect { requestSync("preferences_changed") }
         }
         scope.launch {
+            // F2-G-02: use observeProfileSnapshot scoped to the active profile so CW change
+            // signals are attributed correctly and won't fire for the wrong profile's snapshot.
+            val profileScopedSnapshotFlow = profileManager.activeProfileId
+                .flatMapLatest { profileId ->
+                    profileId.takeIf { it > 0 }
+                        ?.let { continueWatchingSnapshotService.observeProfileSnapshot(it) }
+                        ?: emptyFlow()
+                }
             combine(
                 dataStore.preferences,
-                continueWatchingSnapshotService.observeSnapshot()
+                profileScopedSnapshotFlow
             ) { prefs, snapshot ->
                 prefs.enabled &&
                     AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY in prefs.selectedFeedKeys &&
-                    snapshot.snapshot.updatedAtMs > 0L
+                    snapshot.updatedAtMs > 0L
             }
                 .distinctUntilChanged()
                 .collect { shouldSync ->
