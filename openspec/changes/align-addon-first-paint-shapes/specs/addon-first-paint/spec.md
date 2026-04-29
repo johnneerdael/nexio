@@ -63,7 +63,8 @@ Addon preview stable IDs SHALL be used by the existing metadata routing pipeline
 - **THEN** the route provider is `TVDB`
 - **AND** `route.targetIds[TVDB]` is `"tvdb:81189"`
 - **AND** provider execution never receives `"tt0903747"` as a TVDB target ID
-- **AND** provider execution does not perform an IMDb-to-TMDB-to-TVDB bridge.
+- **AND** route resolution does not perform a TMDB TV lookup for IMDb ID `tt0903747`
+- **AND** route resolution does not perform a TMDB-TV-to-TVDB identity mapping for IMDb ID `tt0903747`.
 
 #### Scenario: Raw IMDb anime add-on item validates against anime identity before movie or series fallback
 
