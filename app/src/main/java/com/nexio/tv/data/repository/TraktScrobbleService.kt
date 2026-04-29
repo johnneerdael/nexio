@@ -239,7 +239,7 @@ class TraktScrobbleService @Inject constructor(
         request: WatchingMutationRequest.CheckIn,
         rollbackState: TraktWatchingNowStateController.Snapshot
     ): MutationResult {
-        checkScrobbleBoundary(request.profileId, "checkin")
+        if (!checkScrobbleBoundary(request.profileId, "checkin")) return MutationResult.Failed
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktScrobbleMutationAdapter.buildCheckinEnvelope(
@@ -263,7 +263,7 @@ class TraktScrobbleService @Inject constructor(
         val action = request.action
         val item = request.item
         val clampedProgress = request.progressPercent.coerceIn(0f, 100f)
-        checkScrobbleBoundary(request.profileId, "scrobble.$action")
+        if (!checkScrobbleBoundary(request.profileId, "scrobble.$action")) return MutationResult.Failed
         if (shouldSkip(request.profileId, action, item.itemKey, clampedProgress)) return MutationResult.Success
         return runCatching {
             traktMutationOutboxCoordinator.enqueueAndDrain(
@@ -291,7 +291,7 @@ class TraktScrobbleService @Inject constructor(
     private fun stateFor(profileId: Int): ProfileScrobbleState =
         profileScrobbleStates.getOrPut(profileId) { ProfileScrobbleState() }
 
-    private fun checkScrobbleBoundary(envelopeProfileId: Int, operation: String) {
+    private fun checkScrobbleBoundary(envelopeProfileId: Int, operation: String): Boolean {
         val active = profileManager.activeProfileId.value
         if (envelopeProfileId != active) {
             traceMetadataEvents.emitScrobbleRejected(
@@ -300,7 +300,9 @@ class TraktScrobbleService @Inject constructor(
                 operation = "trakt.$operation",
                 reason = "STALE_SESSION_WRITE_REJECTED"
             )
+            return false
         }
+        return true
     }
 
     private fun shouldSkip(profileId: Int, action: String, itemKey: String, progress: Float): Boolean {

@@ -177,7 +177,8 @@ class TraktScrobbleServiceTest {
             watchingNowStateController = controller,
             traktMutationOutboxCoordinator = coordinator,
             profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
-                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+                // active profile matches the ownerProfileId so the boundary check passes
+                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(2)
             },
             traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
                 com.nexio.tv.core.trace.NoopRuntimeTraceSink,
@@ -204,12 +205,13 @@ class TraktScrobbleServiceTest {
         every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
 
+        val activeProfileIdFlow = kotlinx.coroutines.flow.MutableStateFlow(1)
         val service = TraktScrobbleService(
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             watchingNowStateController = controller,
             traktMutationOutboxCoordinator = coordinator,
             profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
-                every { activeProfileId } returns kotlinx.coroutines.flow.MutableStateFlow(1)
+                every { activeProfileId } returns activeProfileIdFlow
             },
             traceMetadataEvents = com.nexio.tv.core.trace.TraceMetadataEvents(
                 com.nexio.tv.core.trace.NoopRuntimeTraceSink,
@@ -218,7 +220,10 @@ class TraktScrobbleServiceTest {
         )
         val item = movieItem("Arrival")
 
+        // First call: ownerProfileId=1 matches active=1 → passes boundary, enqueues
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 1)
+        // Switch active profile so second call's ownerProfileId=2 also passes boundary
+        activeProfileIdFlow.value = 2
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 2)
 
         assertEquals(listOf(1, 2), envelopes.map { it.profileId })

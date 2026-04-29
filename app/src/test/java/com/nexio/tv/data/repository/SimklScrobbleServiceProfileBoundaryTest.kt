@@ -60,7 +60,8 @@ class SimklScrobbleServiceProfileBoundaryTest {
             (payload["operation"] as String).startsWith("simkl.")
         )
 
-        coVerify { outbox.enqueueAndDrain(any()) }
+        // Enqueue is now BLOCKED on profile mismatch (F2-H-01 / F2-F-05 behaviour change).
+        coVerify(exactly = 0) { outbox.enqueueAndDrain(any()) }
     }
 
     @Test

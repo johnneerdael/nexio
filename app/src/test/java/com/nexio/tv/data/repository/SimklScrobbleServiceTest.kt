@@ -29,8 +29,9 @@ class SimklScrobbleServiceTest {
         )
         coEvery { coordinator.enqueueAndDrain(capture(envelopes)) } answers { firstArg() }
 
+        val activeProfileIdFlow = MutableStateFlow(1)
         val profileManager = mockk<ProfileManager> {
-            every { activeProfileId } returns MutableStateFlow(1)
+            every { activeProfileId } returns activeProfileIdFlow
         }
         val service = SimklScrobbleService(
             trackingProviderStateService = trackingProviderStateService,
@@ -41,7 +42,10 @@ class SimklScrobbleServiceTest {
         )
         val item = movieItem("simkl:12345", "Arrival")
 
+        // First call: ownerProfileId=1 matches active=1 → passes boundary, enqueues
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 1)
+        // Switch active profile so second call's ownerProfileId=2 also passes boundary
+        activeProfileIdFlow.value = 2
         service.scrobbleStart(item, progressPercent = 12f, ownerProfileId = 2)
 
         assertEquals(listOf(1, 2), envelopes.map { it.profileId })
