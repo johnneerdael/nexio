@@ -413,6 +413,17 @@ tasks.register<Test>("generateTraceValidatorAudit") {
     }
 }
 
+tasks.register<Test>("generateCatalogRailUniformityAudit") {
+    group = "verification"
+    description = "Runs the catalog-rail uniformity audit and writes a Markdown report."
+    val sourceTest = tasks.named<Test>("testUniversalDebugUnitTest")
+    testClassesDirs = sourceTest.get().testClassesDirs
+    classpath = sourceTest.get().classpath
+    filter {
+        includeTestsMatching("com.nexio.tv.core.catalog.rails.CatalogRailUniformityAuditTest")
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
     dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)
