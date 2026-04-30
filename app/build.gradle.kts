@@ -14,6 +14,15 @@ import java.net.URI
 import java.time.Instant
 import java.util.Properties
 import org.gradle.api.tasks.testing.Test
+import javax.inject.Inject
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
 
 fun parseBooleanProperty(value: String?): Boolean {
     val normalized = value?.trim()?.lowercase() ?: return false
@@ -424,11 +433,30 @@ tasks.register<Test>("generateCatalogRailUniformityAudit") {
     }
 }
 
+abstract class SyncFilteredAssetsTask @Inject constructor(
+    private val fs: FileSystemOperations
+) : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        fs.sync {
+            from(sourceDir)
+            into(outputDir)
+        }
+    }
+}
+
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
-val syncFilteredMainAssets by tasks.registering(Sync::class) {
+val syncFilteredMainAssets by tasks.registering(SyncFilteredAssetsTask::class) {
     dependsOn(generateAnimeIdMap, generateOpenRouterReasoningModels)
-    from("src/main/assets")
-    into(filteredMainAssetsDir)
+    sourceDir.set(layout.projectDirectory.dir("src/main/assets"))
+    outputDir.set(filteredMainAssetsDir)
 }
 
 android {
@@ -622,7 +650,6 @@ android {
                 "src/main/_jni_disabled",
                 "src/main/jniLibs"
             )
-            assets.setSrcDirs(listOf(syncFilteredMainAssets))
         }
     }
 
@@ -654,6 +681,13 @@ androidComponents {
 
     onVariants(selector().withBuildType("debug")) { variant ->
         variant.applicationId.set("com.nexiodebug.tv")
+    }
+
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            syncFilteredMainAssets,
+            SyncFilteredAssetsTask::outputDir
+        )
     }
 }
 
