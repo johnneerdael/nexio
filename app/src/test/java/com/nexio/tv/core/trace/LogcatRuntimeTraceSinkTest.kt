@@ -1,0 +1,221 @@
+package com.nexio.tv.core.trace
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
+
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
+class LogcatRuntimeTraceSinkTest {
+
+    private val allEnabled = object : LogcatChannelGate {
+        override fun isEnabled(channel: LogcatTraceChannel): Boolean = true
+    }
+
+    private fun envelope(eventType: String, payload: Map<String, Any?>): TraceEventEnvelope<*> =
+        TraceEventEnvelope(
+            traceSessionId = "test-session",
+            sequence = 1L,
+            wallClockMs = 0L,
+            elapsedRealtimeMs = 0L,
+            threadName = "test",
+            eventType = eventType,
+            payload = payload
+        )
+
+    @Before
+    fun reset() {
+        ShadowLog.clear()
+    }
+
+    @After
+    fun teardown() {
+        ShadowLog.clear()
+    }
+
+    @Test
+    fun `first_paint event writes to FirstPaint tag with curated fields`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("metadata.first_paint", mapOf(
+            "contentId" to "tt0111161",
+            "itemType" to "movie",
+            "surface" to "HOME",
+            "source" to "ROUTER",
+            "routerExecuted" to true,
+            "networkExecuted" to false,
+            "fieldsUsed" to listOf("title", "year", "poster"),
+            "profileHash" to "ab12cd34"
+        )))
+        val logs = ShadowLog.getLogsForTag("Nexio.FirstPaint")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue("expected contentId in $msg", msg.contains("contentId=tt0111161"))
+        assertTrue("expected surface in $msg", msg.contains("surface=HOME"))
+        assertTrue("expected source in $msg", msg.contains("source=ROUTER"))
+        assertTrue("expected routerExecuted in $msg", msg.contains("routerExecuted=true"))
+        assertTrue("expected networkExecuted in $msg", msg.contains("networkExecuted=false"))
+        assertTrue("expected used fields in $msg", msg.contains("used=[title,year,poster]"))
+        assertTrue("expected profile in $msg", msg.contains("profile=ab12cd34"))
+    }
+
+    @Test
+    fun `route_decision event writes to MetaRoute tag with provider and reason`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("metadata.route_decision", mapOf(
+            "contentId" to "tt0111161",
+            "parentId" to "",
+            "itemType" to "movie",
+            "provider" to "TMDB",
+            "mediaKind" to "MOVIE",
+            "reason" to "primary_for_kind",
+            "usedInputs" to listOf("imdbId"),
+            "ignoredInputs" to listOf<String>(),
+            "targetIdRequiresIdentityResolution" to true,
+            "targetIds" to mapOf("imdb" to "tt0111161")
+        )))
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=metadata.route_decision"))
+        assertTrue(msg.contains("contentId=tt0111161"))
+        assertTrue(msg.contains("provider=TMDB"))
+        assertTrue(msg.contains("reason=primary_for_kind"))
+    }
+
+    @Test
+    fun `field_selected event writes to MetaRoute tag with field provider and rejected count`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("metadata.field_selected", mapOf(
+            "contentId" to "tt0111161",
+            "field" to "poster",
+            "selectedProvider" to "RPDB",
+            "sourceRole" to "ARTWORK",
+            "valuePreview" to "https://...",
+            "ownershipRule" to "ARTWORK_OVERRIDES_RAIL_PREVIEW",
+            "rejectedCandidates" to listOf(mapOf("provider" to "TMDB"))
+        )))
+        val msg = ShadowLog.getLogsForTag("Nexio.MetaRoute").first().msg
+        assertTrue(msg.contains("field=poster"))
+        assertTrue(msg.contains("selectedProvider=RPDB"))
+        assertTrue(msg.contains("rejectedCount=1"))
+    }
+
+    @Test
+    fun `cache_decision event writes to IntRuntime tag with decision and cacheKey`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("runtime.cache_decision", mapOf(
+            "runtimeOperationId" to "op-1",
+            "provider" to "TMDB",
+            "apiShapeId" to "tmdb.movie.details",
+            "operationKey" to "getDetails:550",
+            "cacheKey" to "tmdb:movie:550",
+            "decision" to "FRESH"
+        )))
+        val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+        assertTrue(msg.contains("t=runtime.cache_decision"))
+        assertTrue(msg.contains("provider=TMDB"))
+        assertTrue(msg.contains("decision=FRESH"))
+        assertTrue(msg.contains("cacheKey=tmdb:movie:550"))
+    }
+
+    @Test
+    fun `http_request event writes to IntRuntime tag with method and url`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("http.request", mapOf(
+            "runtimeOperationId" to "op-1",
+            "provider" to "TMDB",
+            "apiShapeId" to "tmdb.movie.details",
+            "method" to "GET",
+            "url" to "https://api.themoviedb.org/3/movie/550",
+            "headers" to emptyMap<String, String>()
+        )))
+        val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+        assertTrue(msg.contains("t=http.request"))
+        assertTrue(msg.contains("method=GET"))
+        assertTrue(msg.contains("url=https://api.themoviedb.org/3/movie/550"))
+    }
+
+    @Test
+    fun `http_response event writes to IntRuntime tag with status and durationMs`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("http.response", mapOf(
+            "runtimeOperationId" to "op-1",
+            "provider" to "TMDB",
+            "apiShapeId" to "tmdb.movie.details",
+            "statusCode" to 200,
+            "durationMs" to 142L,
+            "responseHeaders" to emptyMap<String, String>(),
+            "byteCount" to 4096L
+        )))
+        val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+        assertTrue(msg.contains("statusCode=200"))
+        assertTrue(msg.contains("durationMs=142"))
+        assertTrue(msg.contains("byteCount=4096"))
+    }
+
+    @Test
+    fun `bundle-only event types do not write to logcat`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("policy.unscoped_network", mapOf("url" to "x")))
+        sink.emit(envelope("playback.scrobble_rejected", mapOf("operation" to "x", "reason" to "y", "envelopeProfileId" to 1, "activeProfileId" to 2)))
+        sink.emit(envelope("profile.boundary_check", emptyMap<String, Any?>()))
+        assertEquals(0, ShadowLog.getLogsForTag("Nexio.FirstPaint").size)
+        assertEquals(0, ShadowLog.getLogsForTag("Nexio.MetaRoute").size)
+        assertEquals(0, ShadowLog.getLogsForTag("Nexio.IntRuntime").size)
+    }
+
+    @Test
+    fun `disabled channel does not write to logcat`() {
+        val onlyMeta = object : LogcatChannelGate {
+            override fun isEnabled(channel: LogcatTraceChannel): Boolean =
+                channel == LogcatTraceChannel.META_ROUTE
+        }
+        val sink = LogcatRuntimeTraceSink(onlyMeta)
+        sink.emit(envelope("metadata.first_paint", mapOf(
+            "contentId" to "x", "itemType" to "movie", "surface" to "HOME",
+            "source" to "ROUTER", "routerExecuted" to true, "networkExecuted" to false,
+            "fieldsUsed" to emptyList<String>(), "profileHash" to null
+        )))
+        sink.emit(envelope("metadata.route_decision", mapOf(
+            "contentId" to "x", "parentId" to "", "itemType" to "movie",
+            "provider" to "TMDB", "mediaKind" to "MOVIE", "reason" to "r",
+            "usedInputs" to emptyList<String>(), "ignoredInputs" to emptyList<String>(),
+            "targetIdRequiresIdentityResolution" to false, "targetIds" to emptyMap<String, String>()
+        )))
+        sink.emit(envelope("runtime.cache_decision", mapOf(
+            "runtimeOperationId" to "op", "provider" to "TMDB", "apiShapeId" to "x",
+            "operationKey" to "k", "cacheKey" to "ck", "decision" to "FRESH"
+        )))
+        assertEquals(0, ShadowLog.getLogsForTag("Nexio.FirstPaint").size)
+        assertEquals(1, ShadowLog.getLogsForTag("Nexio.MetaRoute").size)
+        assertEquals(0, ShadowLog.getLogsForTag("Nexio.IntRuntime").size)
+    }
+
+    @Test
+    fun `eventsWritten counts only emissions actually sent to logcat`() {
+        val onlyMeta = object : LogcatChannelGate {
+            override fun isEnabled(channel: LogcatTraceChannel): Boolean =
+                channel == LogcatTraceChannel.META_ROUTE
+        }
+        val sink = LogcatRuntimeTraceSink(onlyMeta)
+        sink.emit(envelope("metadata.first_paint", mapOf(
+            "contentId" to "x", "itemType" to "m", "surface" to "HOME", "source" to "R",
+            "routerExecuted" to true, "networkExecuted" to false,
+            "fieldsUsed" to emptyList<String>(), "profileHash" to null
+        )))
+        sink.emit(envelope("metadata.route_decision", mapOf(
+            "contentId" to "x", "parentId" to "", "itemType" to "m",
+            "provider" to "TMDB", "mediaKind" to "MOVIE", "reason" to "r",
+            "usedInputs" to emptyList<String>(), "ignoredInputs" to emptyList<String>(),
+            "targetIdRequiresIdentityResolution" to false, "targetIds" to emptyMap<String, String>()
+        )))
+        assertEquals(1L, sink.eventsWritten())
+        assertEquals(0L, sink.eventsDropped())
+    }
+}
