@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.mdblist
 
+import com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationCachePolicy
@@ -26,6 +27,10 @@ import com.nexio.tv.data.repository.mapEpisodeRatings
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@CatalogRailNotYetUniform(
+    reason = "Routes through IntegrationRuntime, but does not yet implement CatalogRailSource.",
+    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
+)
 private data class EpisodeRatingsCacheDto(
     val ratings: Map<String, Double>
 )

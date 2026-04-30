@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform
 import com.nexio.tv.data.integration.railpreview.KitsuRailPreviewMapper
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
 import com.nexio.tv.data.local.KitsuCatalogPreferences
@@ -17,6 +18,10 @@ import javax.inject.Singleton
 
 typealias RetrofitKitsuDiscoveryClient = KitsuDiscoveryIntegrationProvider
 
+@CatalogRailNotYetUniform(
+    reason = "Discovery bypasses runtime via KitsuDiscoveryClient; enrichment is conformant. Migration pending.",
+    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
+)
 @Singleton
 class KitsuDiscoveryService @Inject constructor(
     private val client: KitsuDiscoveryClient
