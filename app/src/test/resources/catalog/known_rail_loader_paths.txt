@@ -1,4 +1,4 @@
-app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt
+app/src/main/java/com/nexio/tv/data/catalog/rails/TraktCatalogRailSource.kt
 app/src/main/java/com/nexio/tv/data/integration/mdblist/MDBListIntegrationProvider.kt
 app/src/main/java/com/nexio/tv/data/integration/simkl/SimklIntegrationProvider.kt
 app/src/main/java/com/nexio/tv/data/repository/TmdbDiscoveryService.kt
