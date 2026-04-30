@@ -2,9 +2,10 @@ package com.nexio.tv.core.trace
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,19 +15,24 @@ import org.junit.Test
 class LogcatTraceChannelsProviderTest {
 
     @Test
-    fun `defaults all channels to disabled before flows emit`() {
+    fun `defaults all channels to disabled before flows emit`() = runTest {
         val firstPaint = MutableStateFlow(false)
         val metaRoute = MutableStateFlow(false)
         val intRuntime = MutableStateFlow(false)
+        val scope: CoroutineScope = TestScope(UnconfinedTestDispatcher())
         val provider = LogcatTraceChannelsProvider(
             firstPaintSource = firstPaint,
             metaRouteSource = metaRoute,
             intRuntimeSource = intRuntime,
-            scope = CoroutineScope(StandardTestDispatcher())
+            scope = scope
         )
-        assertFalse(provider.isEnabled(LogcatTraceChannel.FIRST_PAINT))
-        assertFalse(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
-        assertFalse(provider.isEnabled(LogcatTraceChannel.INT_RUNTIME))
+        try {
+            assertFalse(provider.isEnabled(LogcatTraceChannel.FIRST_PAINT))
+            assertFalse(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
+            assertFalse(provider.isEnabled(LogcatTraceChannel.INT_RUNTIME))
+        } finally {
+            scope.cancel()
+        }
     }
 
     @Test
@@ -34,27 +40,29 @@ class LogcatTraceChannelsProviderTest {
         val firstPaint = MutableStateFlow(false)
         val metaRoute = MutableStateFlow(false)
         val intRuntime = MutableStateFlow(false)
+        val scope: CoroutineScope = TestScope(UnconfinedTestDispatcher())
         val provider = LogcatTraceChannelsProvider(
             firstPaintSource = firstPaint,
             metaRouteSource = metaRoute,
             intRuntimeSource = intRuntime,
-            scope = this
+            scope = scope
         )
-        firstPaint.value = true
-        advanceUntilIdle()
-        assertTrue(provider.isEnabled(LogcatTraceChannel.FIRST_PAINT))
-        assertFalse(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
-        assertFalse(provider.isEnabled(LogcatTraceChannel.INT_RUNTIME))
+        try {
+            firstPaint.value = true
+            assertTrue(provider.isEnabled(LogcatTraceChannel.FIRST_PAINT))
+            assertFalse(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
+            assertFalse(provider.isEnabled(LogcatTraceChannel.INT_RUNTIME))
 
-        metaRoute.value = true
-        intRuntime.value = true
-        advanceUntilIdle()
-        assertTrue(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
-        assertTrue(provider.isEnabled(LogcatTraceChannel.INT_RUNTIME))
+            metaRoute.value = true
+            intRuntime.value = true
+            assertTrue(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
+            assertTrue(provider.isEnabled(LogcatTraceChannel.INT_RUNTIME))
 
-        firstPaint.value = false
-        advanceUntilIdle()
-        assertFalse(provider.isEnabled(LogcatTraceChannel.FIRST_PAINT))
-        assertTrue(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
+            firstPaint.value = false
+            assertFalse(provider.isEnabled(LogcatTraceChannel.FIRST_PAINT))
+            assertTrue(provider.isEnabled(LogcatTraceChannel.META_ROUTE))
+        } finally {
+            scope.cancel()
+        }
     }
 }

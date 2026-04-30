@@ -2,9 +2,8 @@ package com.nexio.tv.core.trace
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class LogcatTraceChannelsProvider(
     firstPaintSource: Flow<Boolean>,
@@ -12,12 +11,15 @@ class LogcatTraceChannelsProvider(
     intRuntimeSource: Flow<Boolean>,
     scope: CoroutineScope
 ) {
-    private val firstPaint: StateFlow<Boolean> =
-        firstPaintSource.stateIn(scope, SharingStarted.Eagerly, false)
-    private val metaRoute: StateFlow<Boolean> =
-        metaRouteSource.stateIn(scope, SharingStarted.Eagerly, false)
-    private val intRuntime: StateFlow<Boolean> =
-        intRuntimeSource.stateIn(scope, SharingStarted.Eagerly, false)
+    private val firstPaint = MutableStateFlow(false)
+    private val metaRoute = MutableStateFlow(false)
+    private val intRuntime = MutableStateFlow(false)
+
+    init {
+        scope.launch { firstPaintSource.collect { firstPaint.value = it } }
+        scope.launch { metaRouteSource.collect { metaRoute.value = it } }
+        scope.launch { intRuntimeSource.collect { intRuntime.value = it } }
+    }
 
     fun isEnabled(channel: LogcatTraceChannel): Boolean = when (channel) {
         LogcatTraceChannel.FIRST_PAINT -> firstPaint.value
