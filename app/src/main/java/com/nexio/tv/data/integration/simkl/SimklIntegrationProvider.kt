@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.simkl
 
+import com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationProvider
@@ -29,6 +30,10 @@ import com.squareup.moshi.Moshi
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@CatalogRailNotYetUniform(
+    reason = "Account ops route through runtime; discovery uses SimklDiscoveryTransport bypass. Migration pending.",
+    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
+)
 @Singleton
 class SimklIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,

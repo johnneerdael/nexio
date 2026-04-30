@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.trakt
 
+import com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationCachePolicy
@@ -61,6 +62,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import retrofit2.Response
 
+@CatalogRailNotYetUniform(
+    reason = "Routes through IntegrationRuntime with CacheFirst, but does not yet implement CatalogRailSource.",
+    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
+)
 data class TraktCommentsPage(
     val items: List<TraktCommentItemDto>,
     val hasMore: Boolean

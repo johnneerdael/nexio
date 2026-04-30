@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.addon
 
+import com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform
 import com.nexio.tv.core.integration.AddonApiShapes
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
@@ -14,6 +15,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
+@CatalogRailNotYetUniform(
+    reason = "Routes through IntegrationRuntime, but no IntegrationCachePolicy set; uses bespoke CatalogDiskCacheStore. Migration pending.",
+    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
+)
 @Singleton
 class AddonCatalogIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
