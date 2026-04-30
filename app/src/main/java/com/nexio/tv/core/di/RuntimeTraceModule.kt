@@ -3,7 +3,12 @@ package com.nexio.tv.core.di
 import android.content.Context
 import com.google.gson.Gson
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.trace.CompositeRuntimeTraceSink
 import com.nexio.tv.core.trace.DataStoreTraceModeProvider
+import com.nexio.tv.core.trace.LogcatChannelGate
+import com.nexio.tv.core.trace.LogcatRuntimeTraceSink
+import com.nexio.tv.core.trace.LogcatTraceChannel
+import com.nexio.tv.core.trace.LogcatTraceChannelsProvider
 import com.nexio.tv.core.trace.RuntimeTraceContext
 import com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor
 import com.nexio.tv.core.trace.RuntimeTraceEventListener
@@ -60,8 +65,39 @@ object RuntimeTraceModule {
 
     @Provides
     @Singleton
-    fun provideRuntimeTraceSink(manager: TraceSessionManager): RuntimeTraceSink {
-        val sink: RuntimeTraceSink = ActiveSessionRuntimeTraceSink(manager)
+    fun provideTraceModeProvider(store: TraceSettingsDataStore): TraceModeProvider {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        return DataStoreTraceModeProvider(store.mode, scope)
+    }
+
+    @Provides
+    @Singleton
+    fun provideLogcatTraceChannelsProvider(
+        store: TraceSettingsDataStore
+    ): LogcatTraceChannelsProvider {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        return LogcatTraceChannelsProvider(
+            firstPaintSource = store.firstPaintLogcatEnabled,
+            metaRouteSource = store.metaRouteLogcatEnabled,
+            intRuntimeSource = store.intRuntimeLogcatEnabled,
+            scope = scope
+        )
+    }
+
+    @Provides
+    @Singleton
+    fun provideRuntimeTraceSink(
+        manager: TraceSessionManager,
+        channels: LogcatTraceChannelsProvider
+    ): RuntimeTraceSink {
+        val activeSessionSink: RuntimeTraceSink = ActiveSessionRuntimeTraceSink(manager)
+        val logcatSink: RuntimeTraceSink = LogcatRuntimeTraceSink(
+            gate = object : LogcatChannelGate {
+                override fun isEnabled(channel: LogcatTraceChannel): Boolean =
+                    channels.isEnabled(channel)
+            }
+        )
+        val sink: RuntimeTraceSink = CompositeRuntimeTraceSink(listOf(activeSessionSink, logcatSink))
         // Side-effect: wire ProfileBoundaryEnforcer's static sink slot so
         // boundary checks emit `profile.boundary_check` events into the active session.
         com.nexio.tv.core.integration.ProfileBoundaryEnforcer.installTraceSink(sink) {
@@ -73,13 +109,6 @@ object RuntimeTraceModule {
             manager.activeSession()?.traceSessionId
         }
         return sink
-    }
-
-    @Provides
-    @Singleton
-    fun provideTraceModeProvider(store: TraceSettingsDataStore): TraceModeProvider {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        return DataStoreTraceModeProvider(store.mode, scope)
     }
 
     @Provides
