@@ -31,7 +31,7 @@ class IntegrationBackoffManager(
         jitterMs = DEFAULT_JITTER_MS
     )
 
-    private val random = java.util.Random()
+    private val random = kotlin.random.Random.Default
 
     suspend fun noteHttpFailure(
         provider: IntegrationProvider,
