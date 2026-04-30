@@ -73,4 +73,30 @@ class CompositeRuntimeTraceSinkTest {
         val composite = CompositeRuntimeTraceSink(listOf(bad1, bad2))
         assertEquals(3L, composite.eventsDropped())
     }
+
+    @Test(expected = kotlinx.coroutines.CancellationException::class)
+    fun `cancellation exception from a child sink propagates`() {
+        val cancelling = object : RuntimeTraceSink {
+            override fun emit(event: TraceEventEnvelope<*>) {
+                throw kotlinx.coroutines.CancellationException("cancelled")
+            }
+            override fun eventsWritten(): Long = 0L
+            override fun eventsDropped(): Long = 0L
+        }
+        val composite = CompositeRuntimeTraceSink(listOf(cancelling))
+        composite.emit(envelope(1))
+    }
+
+    @Test(expected = OutOfMemoryError::class)
+    fun `error from a child sink propagates`() {
+        val erroring = object : RuntimeTraceSink {
+            override fun emit(event: TraceEventEnvelope<*>) {
+                throw OutOfMemoryError("oom")
+            }
+            override fun eventsWritten(): Long = 0L
+            override fun eventsDropped(): Long = 0L
+        }
+        val composite = CompositeRuntimeTraceSink(listOf(erroring))
+        composite.emit(envelope(1))
+    }
 }
