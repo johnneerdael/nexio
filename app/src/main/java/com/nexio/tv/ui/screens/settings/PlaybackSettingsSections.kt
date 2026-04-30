@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.automirrored.filled.AltRoute
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
@@ -151,6 +154,12 @@ internal fun PlaybackSettingsSections(
     diskSpoolDiagnosticsEnabled: Boolean,
     dolbyVisionDiagnosticsEnabled: Boolean,
     autoTranslateDiagnosticsEnabled: Boolean,
+    firstPaintLogcatEnabled: Boolean,
+    metaRouteLogcatEnabled: Boolean,
+    intRuntimeLogcatEnabled: Boolean,
+    onSetFirstPaintLogcatEnabled: (Boolean) -> Unit,
+    onSetMetaRouteLogcatEnabled: (Boolean) -> Unit,
+    onSetIntRuntimeLogcatEnabled: (Boolean) -> Unit,
     autoTranslateUnsafeBodyLoggingEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
@@ -640,6 +649,39 @@ internal fun PlaybackSettingsSections(
                         subtitle = "Capture runtime + HTTP events for support diagnostics",
                         value = "Open",
                         onClick = onOpenRuntimeTrace
+                    )
+                }
+
+                item(key = "troubleshooting_logcat_first_paint") {
+                    ToggleSettingsItem(
+                        icon = Icons.Default.Visibility,
+                        title = stringResource(R.string.troubleshooting_logcat_first_paint_title),
+                        subtitle = stringResource(R.string.troubleshooting_logcat_first_paint_subtitle),
+                        isChecked = firstPaintLogcatEnabled,
+                        onCheckedChange = onSetFirstPaintLogcatEnabled,
+                        onFocused = { focusedSection = PlaybackSection.LOGGING }
+                    )
+                }
+
+                item(key = "troubleshooting_logcat_meta_route") {
+                    ToggleSettingsItem(
+                        icon = Icons.AutoMirrored.Filled.AltRoute,
+                        title = stringResource(R.string.troubleshooting_logcat_meta_route_title),
+                        subtitle = stringResource(R.string.troubleshooting_logcat_meta_route_subtitle),
+                        isChecked = metaRouteLogcatEnabled,
+                        onCheckedChange = onSetMetaRouteLogcatEnabled,
+                        onFocused = { focusedSection = PlaybackSection.LOGGING }
+                    )
+                }
+
+                item(key = "troubleshooting_logcat_int_runtime") {
+                    ToggleSettingsItem(
+                        icon = Icons.Default.Sync,
+                        title = stringResource(R.string.troubleshooting_logcat_int_runtime_title),
+                        subtitle = stringResource(R.string.troubleshooting_logcat_int_runtime_subtitle),
+                        isChecked = intRuntimeLogcatEnabled,
+                        onCheckedChange = onSetIntRuntimeLogcatEnabled,
+                        onFocused = { focusedSection = PlaybackSection.LOGGING }
                     )
                 }
             }

@@ -147,6 +147,9 @@ internal fun PlaybackSettingsContent(
     val diskSpoolDiagnosticsEnabled by viewModel.diskSpoolDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val dolbyVisionDiagnosticsEnabled by viewModel.dolbyVisionDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val autoTranslateDiagnosticsEnabled by viewModel.autoTranslateDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val firstPaintLogcatEnabled by viewModel.firstPaintLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val metaRouteLogcatEnabled by viewModel.metaRouteLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val intRuntimeLogcatEnabled by viewModel.intRuntimeLogcatEnabled.collectAsStateWithLifecycle(initialValue = false)
     val autoTranslateUnsafeBodyLoggingEnabled by viewModel.autoTranslateUnsafeBodyLoggingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
@@ -362,6 +365,12 @@ internal fun PlaybackSettingsContent(
                 diskSpoolDiagnosticsEnabled = diskSpoolDiagnosticsEnabled,
                 dolbyVisionDiagnosticsEnabled = dolbyVisionDiagnosticsEnabled,
                 autoTranslateDiagnosticsEnabled = autoTranslateDiagnosticsEnabled,
+                firstPaintLogcatEnabled = firstPaintLogcatEnabled,
+                metaRouteLogcatEnabled = metaRouteLogcatEnabled,
+                intRuntimeLogcatEnabled = intRuntimeLogcatEnabled,
+                onSetFirstPaintLogcatEnabled = viewModel::setFirstPaintLogcatEnabled,
+                onSetMetaRouteLogcatEnabled = viewModel::setMetaRouteLogcatEnabled,
+                onSetIntRuntimeLogcatEnabled = viewModel::setIntRuntimeLogcatEnabled,
                 autoTranslateUnsafeBodyLoggingEnabled = autoTranslateUnsafeBodyLoggingEnabled,
                 onSetFireOsIecVerboseLoggingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFireOsIecVerboseLoggingEnabled(enabled) }
