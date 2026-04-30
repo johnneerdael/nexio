@@ -1,8 +1,3 @@
-@file:com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform(
-    reason = "Bypasses the integration-runtime control plane via TmdbDiscoveryClient; uses bespoke MutableStateFlow snapshot. Migration pending.",
-    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
-)
-
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.integration.railpreview.TmdbRailPreviewMapper
