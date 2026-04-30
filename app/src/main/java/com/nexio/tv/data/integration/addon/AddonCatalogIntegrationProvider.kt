@@ -1,8 +1,3 @@
-@file:com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform(
-    reason = "Routes through IntegrationRuntime, but no IntegrationCachePolicy set; uses bespoke CatalogDiskCacheStore. Migration pending.",
-    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
-)
-
 package com.nexio.tv.data.integration.addon
 
 import com.nexio.tv.core.integration.AddonApiShapes

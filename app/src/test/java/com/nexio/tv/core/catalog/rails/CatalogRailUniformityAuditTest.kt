@@ -119,13 +119,19 @@ class CatalogRailUniformityAuditTest {
 
     private companion object {
         /**
-         * Matches `... : CatalogRailSource` or `..., CatalogRailSource` on a class/object
-         * declaration line. Line-scoped (no `\n` traversal) so a string literal or KDoc
-         * elsewhere in the file mentioning `CatalogRailSource` cannot false-positive.
+         * Matches `class <Name> ... : ... CatalogRailSource ... {` (the supertype clause
+         * up to the body's opening brace). Allows multi-line spans because Kotlin class
+         * declarations with multi-arg constructors typically place the `: SuperType` clause
+         * on a separate line from the `class` keyword.
+         *
+         * The match is bounded by the first `{` (the class body opening), so
+         * `CatalogRailSource` mentions inside method bodies, KDoc, or string literals
+         * AFTER the first `{` cannot false-positive. The drift guard (annotation must be
+         * in manifest) provides the second layer of protection.
          */
         private val CONFORMANT_PATTERNS = listOf(
-            Regex("""^\s*(?:abstract\s+|open\s+|sealed\s+|data\s+|internal\s+|private\s+)*class\s+\w+[^\n{]*[,:]\s*[^\n{]*\bCatalogRailSource\b""", RegexOption.MULTILINE),
-            Regex("""^\s*(?:internal\s+|private\s+)*object\s+\w+[^\n{]*[,:]\s*[^\n{]*\bCatalogRailSource\b""", RegexOption.MULTILINE)
+            Regex("""(?:^|\n)\s*(?:abstract\s+|open\s+|sealed\s+|data\s+|internal\s+|private\s+)*class\s+\w+[^{]*?[,:]\s*[^{]*?\bCatalogRailSource\b[^{]*?\{""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""(?:^|\n)\s*(?:internal\s+|private\s+)*object\s+\w+[^{]*?[,:]\s*[^{]*?\bCatalogRailSource\b[^{]*?\{""", RegexOption.DOT_MATCHES_ALL)
         )
 
         /**
