@@ -1452,4 +1452,11 @@
     <string name="playback_diagnostics_send_to_developer_subtitle">Upload the last session to the developer\'s collector for analysis</string>
     <string name="error_missing_tracking_ids">Missing tracking IDs for check-in</string>
     <string name="error_tracking_check_in_failed">Tracking check-in failed</string>
+    <!-- On-device logcat trace toggles (debug builds only) -->
+    <string name="troubleshooting_logcat_first_paint_title">Logcat: First Paint</string>
+    <string name="troubleshooting_logcat_first_paint_subtitle">Mirror metadata.first_paint events to logcat tag Nexio.FirstPaint so you can prove what each rail received vs which fields it actually used.</string>
+    <string name="troubleshooting_logcat_meta_route_title">Logcat: Metadata Routing</string>
+    <string name="troubleshooting_logcat_meta_route_subtitle">Mirror provider plan, route decision, identity resolution, and field selection events to logcat tag Nexio.MetaRoute so you can trace where each metadata field originated.</string>
+    <string name="troubleshooting_logcat_int_runtime_title">Logcat: Integration Runtime</string>
+    <string name="troubleshooting_logcat_int_runtime_subtitle">Mirror runtime cache decisions and HTTP request/response events to logcat tag Nexio.IntRuntime so you can prove which provider APIs were called and whether responses came from cache or the network.</string>
 </resources>
