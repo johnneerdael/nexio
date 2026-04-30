@@ -12,9 +12,7 @@ import dagger.multibindings.IntoSet
  * Contributes [KitsuCatalogRailSource] into the multibound `Set<CatalogRailSource>`
  * declared by `CatalogRailSources` in `CatalogRailModule.kt` (Plan 1/2).
  *
- * One file per provider. After Plan 7 lands, all six providers are conformant and
- * Plan 8 can retire the [com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform]
- * tracking annotation type.
+ * One file per provider — keeps each migration self-contained.
  */
 @Module
 @InstallIn(SingletonComponent::class)
