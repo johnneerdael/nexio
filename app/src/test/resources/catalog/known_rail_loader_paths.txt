@@ -1,0 +1,6 @@
+app/src/main/java/com/nexio/tv/data/integration/trakt/TraktIntegrationProvider.kt
+app/src/main/java/com/nexio/tv/data/integration/mdblist/MDBListIntegrationProvider.kt
+app/src/main/java/com/nexio/tv/data/integration/simkl/SimklIntegrationProvider.kt
+app/src/main/java/com/nexio/tv/data/repository/TmdbDiscoveryService.kt
+app/src/main/java/com/nexio/tv/data/repository/KitsuDiscoveryService.kt
+app/src/main/java/com/nexio/tv/data/integration/addon/AddonCatalogIntegrationProvider.kt
