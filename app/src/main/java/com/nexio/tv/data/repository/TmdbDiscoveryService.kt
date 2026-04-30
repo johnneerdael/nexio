@@ -1,6 +1,10 @@
+@file:com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform(
+    reason = "Bypasses IntegrationRuntime via TmdbDiscoveryClient; uses bespoke MutableStateFlow snapshot. Migration pending.",
+    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
+)
+
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform
 import com.nexio.tv.data.integration.railpreview.TmdbRailPreviewMapper
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
@@ -24,10 +28,6 @@ import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@CatalogRailNotYetUniform(
-    reason = "Bypasses IntegrationRuntime via TmdbDiscoveryClient; uses bespoke MutableStateFlow snapshot. Migration pending.",
-    tracking = "docs/superpowers/plans/2026-04-30-catalog-rails-uniform-contract-foundation.md"
-)
 @Singleton
 class TmdbDiscoveryService @Inject constructor(
     private val client: TmdbDiscoveryClient

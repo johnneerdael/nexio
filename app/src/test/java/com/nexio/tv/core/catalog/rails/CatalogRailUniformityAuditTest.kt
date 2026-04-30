@@ -118,13 +118,26 @@ class CatalogRailUniformityAuditTest {
     }
 
     private companion object {
+        /**
+         * Matches `... : CatalogRailSource` or `..., CatalogRailSource` on a class/object
+         * declaration line. Line-scoped (no `\n` traversal) so a string literal or KDoc
+         * elsewhere in the file mentioning `CatalogRailSource` cannot false-positive.
+         */
         private val CONFORMANT_PATTERNS = listOf(
-            Regex("""class\s+\w+[^{]*:\s*[^{]*\bCatalogRailSource\b"""),
-            Regex("""object\s+\w+[^{]*:\s*[^{]*\bCatalogRailSource\b""")
+            Regex("""^\s*(?:abstract\s+|open\s+|sealed\s+|data\s+|internal\s+|private\s+)*class\s+\w+[^\n{]*[,:]\s*[^\n{]*\bCatalogRailSource\b""", RegexOption.MULTILINE),
+            Regex("""^\s*(?:internal\s+|private\s+)*object\s+\w+[^\n{]*[,:]\s*[^\n{]*\bCatalogRailSource\b""", RegexOption.MULTILINE)
         )
+
+        /**
+         * Matches the annotation in either short form (`@CatalogRailNotYetUniform(...)`) or
+         * file-level fully-qualified form (`@file:com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform(...)`).
+         * The leading `@` plus an optional `file:<fqn>.` prefix accommodates both placements.
+         */
         private val ANNOTATION_PATTERN = Regex(
-            """@CatalogRailNotYetUniform\s*\(([^)]*)\)""", RegexOption.DOT_MATCHES_ALL
+            """@(?:file:)?(?:[\w.]+\.)?CatalogRailNotYetUniform\s*\(([^)]*)\)""",
+            RegexOption.DOT_MATCHES_ALL
         )
+
         private val REASON_PATTERN = Regex("""reason\s*=\s*"([^"]*)"""")
         private val TRACKING_PATTERN = Regex("""tracking\s*=\s*"([^"]*)"""")
     }
