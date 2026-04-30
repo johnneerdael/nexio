@@ -1,6 +1,6 @@
 app/src/main/java/com/nexio/tv/data/catalog/rails/TraktCatalogRailSource.kt
 app/src/main/java/com/nexio/tv/data/catalog/rails/MDBListCatalogRailSource.kt
-app/src/main/java/com/nexio/tv/data/integration/simkl/SimklIntegrationProvider.kt
+app/src/main/java/com/nexio/tv/data/catalog/rails/SimklCatalogRailSource.kt
 app/src/main/java/com/nexio/tv/data/repository/TmdbDiscoveryService.kt
 app/src/main/java/com/nexio/tv/data/repository/KitsuDiscoveryService.kt
 app/src/main/java/com/nexio/tv/data/catalog/rails/AddonCatalogRailSource.kt
