@@ -610,6 +610,9 @@ class MetaDetailsViewModel @Inject constructor(
 
                             if (preferredMeta != null) {
                                 applyMetaWithEnrichment(preferredMeta)
+                            } else if (tryApplyCanonicalMetadataHydration(metaLookupId)) {
+                                // Addons returned no meta; canonical providers (TMDB/TVDB)
+                                // are the source of truth for IMDb/TMDB IDs.
                             } else {
                                 if (tryApplyStreamOnlyFallback(result.message)) {
                                     _uiState.update { state ->
@@ -661,7 +664,10 @@ class MetaDetailsViewModel @Inject constructor(
                         when (result) {
                             is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
                             is NetworkResult.Error -> {
-                                if (tryApplyStreamOnlyFallback(result.message)) {
+                                if (tryApplyCanonicalMetadataHydration(metaLookupId)) {
+                                    // Addons returned no meta; canonical providers (TMDB/TVDB)
+                                    // are the source of truth for IMDb/TMDB IDs.
+                                } else if (tryApplyStreamOnlyFallback(result.message)) {
                                     _uiState.update { state ->
                                         if (state.userMessage == null) {
                                             state.copy(
@@ -699,10 +705,10 @@ class MetaDetailsViewModel @Inject constructor(
         return tmdbService.tmdbToImdb(tmdbNumericId, itemType) ?: raw
     }
 
-    private fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {
+    private suspend fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {
         if (!shouldUseStreamOnlyFallback(errorMessage)) return false
         val fallbackMeta = buildStreamOnlyFallbackMeta()
-        applyMeta(fallbackMeta)
+        applyMetaWithEnrichment(fallbackMeta)
         return true
     }
 
@@ -774,6 +780,13 @@ class MetaDetailsViewModel @Inject constructor(
             .distinct()
             .singleOrNull()
         val enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false)
+        dispatchEnrichedMeta(enrichment, preferredSeason)
+    }
+
+    private suspend fun dispatchEnrichedMeta(
+        enrichment: DetailMetadataEnrichment,
+        preferredSeason: Int? = null
+    ) {
         applyMeta(enrichment.meta)
         if (preferredSeason != null) {
             _uiState.update { state ->
@@ -798,12 +811,59 @@ class MetaDetailsViewModel @Inject constructor(
         } else {
             // Start recommendations fetch early for non-anime titles.
             _uiState.update { it.copy(isAnimeDetail = false) }
-            loadMoreLikeThisAsync(meta)
-            loadReviewsAsync(meta)
+            loadMoreLikeThisAsync(enrichment.meta)
+            loadReviewsAsync(enrichment.meta)
         }
         loadEpisodeMetadataAsync(enrichment)
         loadEpisodeRatingsAsync(enrichment.meta)
         loadMDBListRatings(enrichment.meta)
+    }
+
+    /**
+     * Stremio addons supply streams; canonical metadata for IMDb/TMDB ids must come from
+     * TMDB/TVDB. When the id is canonical, build a stub Meta and run it through the
+     * existing enrichment pipeline. Returns true if real metadata was applied.
+     */
+    private suspend fun tryApplyCanonicalMetadataHydration(metaLookupId: String): Boolean {
+        val normalized = metaLookupId.trim()
+        val isCanonical = normalized.startsWith("tt", ignoreCase = true) ||
+            normalized.startsWith("imdb:", ignoreCase = true) ||
+            normalized.startsWith("tmdb:", ignoreCase = true)
+        if (!isCanonical) return false
+
+        val contentType = ContentType.fromString(itemType)
+        val stub = Meta(
+            id = normalized,
+            type = contentType,
+            rawType = itemType,
+            name = "",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            writer = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
+        )
+
+        val enrichment = enrichMeta(stub, includeEpisodeMetadata = false)
+        if (enrichment.meta.name.isBlank()) return false
+
+        dispatchEnrichedMeta(enrichment)
+        return true
     }
 
     private fun loadEpisodeMetadataAsync(enrichment: DetailMetadataEnrichment) {

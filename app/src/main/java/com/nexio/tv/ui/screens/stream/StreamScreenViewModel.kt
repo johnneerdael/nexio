@@ -2113,7 +2113,11 @@ internal fun shouldRejectDeterministicAutoplayForTitle(
 }
 
 private fun titleTokens(value: String): Set<String> {
-    return value
+    // Fold diacritics (NFD + strip combining marks) so "Samouraï" matches the
+    // ASCII "Samourai" used by release filenames.
+    val folded = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+    return folded
         .lowercase(Locale.US)
         // Strip elision apostrophes so "Marvel's" tokenizes as one word, not
         // two ("marvel" + "s"). Other intra-word marks (hyphens, periods) are

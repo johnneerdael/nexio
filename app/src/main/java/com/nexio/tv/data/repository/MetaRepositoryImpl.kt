@@ -153,7 +153,9 @@ class MetaRepositoryImpl @Inject constructor(
         val addons = addonRepository.getInstalledAddons().first()
 
         val metaResourceAddons = addons.filter { addon ->
-            addon.resources.any { it.name == "meta" }
+            addon.resources.any { resource ->
+                resource.name == "meta" && idCandidates.any { resource.matchesId(it) }
+            }
         }
 
         // Priority order:
@@ -163,13 +165,15 @@ class MetaRepositoryImpl @Inject constructor(
         val prioritizedCandidates = linkedSetOf<Pair<Addon, String>>()
         typeCandidates.forEach { candidateType ->
             addons.forEach { addon ->
-                if (addon.supportsMetaType(candidateType)) {
+                if (idCandidates.any { addon.supportsMetaType(candidateType, it) }) {
                     prioritizedCandidates.add(addon to candidateType)
                 }
             }
         }
         metaResourceAddons.firstOrNull()?.let { topMetaAddon ->
-            val fallbackType = typeCandidates.firstOrNull { topMetaAddon.supportsMetaType(it) }
+            val fallbackType = typeCandidates.firstOrNull { type ->
+                idCandidates.any { topMetaAddon.supportsMetaType(type, it) }
+            }
                 ?: typeCandidates.firstOrNull()
                 ?: type.trim()
             prioritizedCandidates.add(topMetaAddon to fallbackType)
@@ -223,6 +227,7 @@ class MetaRepositoryImpl @Inject constructor(
         // Try each candidate until we find meta.
         for ((addon, candidateType) in prioritizedCandidates) {
             for (candidateId in idCandidates) {
+                if (!addon.supportsMetaType(candidateType, candidateId)) continue
                 val url = buildMetaUrl(addon.baseUrl, candidateType, candidateId)
                 Log.d(
                     TAG,
@@ -341,17 +346,25 @@ class MetaRepositoryImpl @Inject constructor(
         return buildAddonRequestUrl(baseUrl, "meta/$encodedType/$encodedId.json")
     }
 
-    private fun Addon.supportsMetaType(type: String): Boolean {
+    private fun Addon.supportsMetaType(type: String, id: String): Boolean {
         val target = type.trim()
         if (target.isBlank()) return false
         return resources.any { resource ->
-            resource.name == "meta" && resource.supportsType(target)
+            resource.name == "meta" && resource.supportsType(target) && resource.matchesId(id)
         }
     }
 
     private fun AddonResource.supportsType(type: String): Boolean {
         if (types.isEmpty()) return true
         return types.any { it.equals(type, ignoreCase = true) }
+    }
+
+    private fun AddonResource.matchesId(id: String): Boolean {
+        val prefixes = idPrefixes
+        if (prefixes.isNullOrEmpty()) return true
+        val trimmed = id.trim()
+        if (trimmed.isEmpty()) return true
+        return prefixes.any { prefix -> trimmed.startsWith(prefix, ignoreCase = true) }
     }
 
     private fun inferCanonicalType(type: String, id: String): String {

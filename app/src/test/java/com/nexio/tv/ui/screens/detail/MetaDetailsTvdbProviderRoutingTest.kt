@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.detail
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -15,13 +16,16 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
+import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -176,6 +180,72 @@ class MetaDetailsTvdbProviderRoutingTest {
         coVerify(atLeast = 1) { tmdbService.ensureTmdbId("tt0137523", "movie") }
         coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) }
         coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
+    @Test
+    fun `stream-only movie fallback is enriched from tmdb`() = runTest(dispatcher) {
+        val metaRepository = mockk<MetaRepository>()
+        every {
+            metaRepository.getMetaFromAllAddons(
+                type = any(),
+                id = any(),
+                cacheOnDisk = any(),
+                writeToDisk = any(),
+                origin = any()
+            )
+        } returns flowOf(NetworkResult.Error("Meta not found in any addon"))
+
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        coEvery { tmdbService.ensureTmdbId("tt26443616", "movie") } returns "550"
+        coEvery { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) } returns TmdbEnrichment(
+            localizedTitle = "TMDB Fallback Movie",
+            description = "TMDB fallback overview",
+            genres = listOf("Thriller"),
+            backdrop = null,
+            logo = null,
+            poster = null,
+            directorMembers = emptyList(),
+            writerMembers = emptyList(),
+            castMembers = emptyList(),
+            releaseInfo = "2026-01-01",
+            rating = 7.1,
+            runtimeMinutes = 100,
+            director = emptyList(),
+            writer = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            countries = null,
+            language = "en",
+            collectionId = null,
+            collectionName = null
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildMovieMeta(),
+            itemId = "tt26443616",
+            itemType = "movie",
+            metaRepository = metaRepository,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useCredits = false,
+                useProductions = false,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = false,
+                useReviews = false,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        assertEquals("TMDB Fallback Movie", viewModel.uiState.value.meta?.name)
+        coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) }
     }
 
     @Test

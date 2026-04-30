@@ -48,6 +48,24 @@ class DeterministicAutoplayTitleGuardTest {
     }
 
     @Test
+    fun `diacritics are folded — Le Samourai matches Le Samouraï`() {
+        // Repro: tt0062229 hero rejected all 17 streams because canonical title
+        // "Le Samouraï" (with diaeresis) didn't match parsed filename "Le Samourai".
+        assertFalse(
+            shouldRejectDeterministicAutoplayForTitle(
+                contentName = "Le Samouraï",
+                parsedTitle = "Le Samourai"
+            )
+        )
+        assertFalse(
+            shouldRejectDeterministicAutoplayForTitle(
+                contentName = "Le Samourai",
+                parsedTitle = "Le Samouraï"
+            )
+        )
+    }
+
+    @Test
     fun `case and punctuation differences are ignored`() {
         assertFalse(
             shouldRejectDeterministicAutoplayForTitle(
