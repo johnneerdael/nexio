@@ -27,7 +27,17 @@ class AnimeIdMappingService(
         }
     )
 
-    private val asset: AnimeIdMapAsset by lazy { assetProvider() }
+    private val asset: AnimeIdMapAsset by lazy {
+        runCatching { assetProvider() }
+            .onFailure { error ->
+                android.util.Log.w(
+                    "AnimeIdMappingService",
+                    "anime-id-map asset unavailable; degrading to empty resolution",
+                    error
+                )
+            }
+            .getOrDefault(EMPTY_ASSET)
+    }
 
     fun resolveKitsuId(id: AnimeStremioId, mediaKind: ContentMediaKind): String? {
         return when (id.source) {
@@ -42,5 +52,9 @@ class AnimeIdMappingService(
                 ContentMediaKind.SERIES -> asset.byTmdbSeries[id.value]
             }
         }
+    }
+
+    private companion object {
+        private val EMPTY_ASSET: AnimeIdMapAsset = AnimeIdMapAsset(schemaVersion = 0)
     }
 }

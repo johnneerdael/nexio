@@ -33,6 +33,34 @@ class AnimeIdMappingServiceTest {
         assertNull(service.resolveKitsuId(AnimeStremioId(AnimeIdSource.MAL, "999999"), ContentMediaKind.SERIES))
     }
 
+    @Test
+    fun `resolveKitsuId returns null when assetProvider throws (missing asset on profileable)`() {
+        val service = AnimeIdMappingService(
+            assetProvider = { throw java.io.FileNotFoundException("anime/anime-id-map.json") }
+        )
+
+        val resolved = service.resolveKitsuId(
+            id = AnimeStremioId(source = AnimeIdSource.MAL, value = "1"),
+            mediaKind = ContentMediaKind.SERIES
+        )
+
+        assertNull(resolved)
+    }
+
+    @Test
+    fun `resolveKitsuId returns null when assetProvider throws JSON parse error`() {
+        val service = AnimeIdMappingService(
+            assetProvider = { error("Unable to parse anime ID map asset") }
+        )
+
+        val resolved = service.resolveKitsuId(
+            id = AnimeStremioId(source = AnimeIdSource.IMDB, value = "tt0000001"),
+            mediaKind = ContentMediaKind.MOVIE
+        )
+
+        assertNull(resolved)
+    }
+
     private fun fixtureAsset(): AnimeIdMapAsset {
         return AnimeIdMapAsset(
             schemaVersion = 1,
