@@ -13,7 +13,8 @@ import dagger.multibindings.IntoSet
  * declared by `CatalogRailSources` in `CatalogRailModule.kt` (Plan 1/2).
  *
  * One file per provider. After Plan 7 lands, all six providers are conformant and
- * Plan 8 can retire the `@CatalogRailNotYetUniform` tracking annotation.
+ * Plan 8 can retire the [com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform]
+ * tracking annotation type.
  */
 @Module
 @InstallIn(SingletonComponent::class)
