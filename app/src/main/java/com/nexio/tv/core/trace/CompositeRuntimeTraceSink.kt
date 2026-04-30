@@ -1,5 +1,7 @@
 package com.nexio.tv.core.trace
 
+import kotlinx.coroutines.CancellationException
+
 class CompositeRuntimeTraceSink(
     private val sinks: List<RuntimeTraceSink>
 ) : RuntimeTraceSink {
@@ -7,7 +9,9 @@ class CompositeRuntimeTraceSink(
         for (sink in sinks) {
             try {
                 sink.emit(event)
-            } catch (_: Throwable) {
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Exception) {
                 // never let one sink's failure stop the others
             }
         }
