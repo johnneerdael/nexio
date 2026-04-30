@@ -4,6 +4,7 @@ import android.content.Context
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.TraceSettingsDataStore
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.repository.TrackingProviderState
@@ -286,6 +287,7 @@ class PlaybackSettingsViewModelSpoolModeTest {
     ): PlaybackSettingsViewModel {
         val trailerSettingsDataStore = mockk<TrailerSettingsDataStore>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>(relaxed = true)
+        val traceSettingsDataStore = mockk<TraceSettingsDataStore>(relaxed = true)
         val addonRepository = mockk<AddonRepository>(relaxed = true)
         val trackingProviderStateRepository = mockk<TrackingProviderStateRepository>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
@@ -303,6 +305,7 @@ class PlaybackSettingsViewModelSpoolModeTest {
             playerSettingsDataStore = playerSettingsDataStore,
             trailerSettingsDataStore = trailerSettingsDataStore,
             debugSettingsDataStore = debugSettingsDataStore,
+            traceSettingsDataStore = traceSettingsDataStore,
             addonRepository = addonRepository,
             trackingProviderStateRepository = trackingProviderStateRepository,
             context = context
