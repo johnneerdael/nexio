@@ -16,8 +16,10 @@ import com.nexio.tv.domain.model.RailItemPreview
  *  - Apply per-profile rail visibility inside [availableRails] — never return rails this
  *    profile is not configured to see.
  *
- * Files awaiting migration carry [CatalogRailNotYetUniform] and are tracked by the
- * `generateCatalogRailUniformityAudit` Gradle task.
+ * Every implementation must be registered in
+ * `app/src/test/resources/catalog/known_rail_loader_paths.txt`. The strict audit
+ * `generateCatalogRailUniformityAudit` fails if a new `CatalogRailSource` impl appears
+ * in production code without a corresponding manifest entry.
  */
 interface CatalogRailSource {
     /** Stable provider identity; echoed into trace events and audit reports. */
