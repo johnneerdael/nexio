@@ -3,4 +3,4 @@ app/src/main/java/com/nexio/tv/data/integration/mdblist/MDBListIntegrationProvid
 app/src/main/java/com/nexio/tv/data/integration/simkl/SimklIntegrationProvider.kt
 app/src/main/java/com/nexio/tv/data/repository/TmdbDiscoveryService.kt
 app/src/main/java/com/nexio/tv/data/repository/KitsuDiscoveryService.kt
-app/src/main/java/com/nexio/tv/data/integration/addon/AddonCatalogIntegrationProvider.kt
+app/src/main/java/com/nexio/tv/data/catalog/rails/AddonCatalogRailSource.kt
