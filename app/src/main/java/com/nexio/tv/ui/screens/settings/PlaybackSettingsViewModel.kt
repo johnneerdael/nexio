@@ -16,6 +16,7 @@ import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
+import com.nexio.tv.data.local.TraceSettingsDataStore
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.VodCacheSizeMode
@@ -61,6 +62,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val traceSettingsDataStore: TraceSettingsDataStore,
     private val addonRepository: AddonRepository,
     trackingProviderStateRepository: TrackingProviderStateRepository,
     @ApplicationContext private val context: Context
@@ -79,6 +81,27 @@ class PlaybackSettingsViewModel @Inject constructor(
         debugSettingsDataStore.autoTranslateDiagnosticsEnabled
     val autoTranslateUnsafeBodyLoggingEnabled: Flow<Boolean> =
         debugSettingsDataStore.autoTranslateUnsafeBodyLoggingEnabled
+
+    val firstPaintLogcatEnabled: Flow<Boolean> =
+        traceSettingsDataStore.firstPaintLogcatEnabled
+
+    val metaRouteLogcatEnabled: Flow<Boolean> =
+        traceSettingsDataStore.metaRouteLogcatEnabled
+
+    val intRuntimeLogcatEnabled: Flow<Boolean> =
+        traceSettingsDataStore.intRuntimeLogcatEnabled
+
+    fun setFirstPaintLogcatEnabled(enabled: Boolean) {
+        viewModelScope.launch { traceSettingsDataStore.setFirstPaintLogcatEnabled(enabled) }
+    }
+
+    fun setMetaRouteLogcatEnabled(enabled: Boolean) {
+        viewModelScope.launch { traceSettingsDataStore.setMetaRouteLogcatEnabled(enabled) }
+    }
+
+    fun setIntRuntimeLogcatEnabled(enabled: Boolean) {
+        viewModelScope.launch { traceSettingsDataStore.setIntRuntimeLogcatEnabled(enabled) }
+    }
     val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
     fun androidFrameRateStatus(): AndroidFrameRateSettings.Status {
         return AndroidFrameRateSettings.readStatus(context)
