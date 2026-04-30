@@ -7,25 +7,26 @@ import org.junit.Test
 
 /**
  * Generates `app/build/reports/catalog-rail-uniformity-audit/catalog-rail-uniformity.md` and
- * verifies every known rail-loader file is either conformant (implements [CatalogRailSource])
- * or tracked (carries [CatalogRailNotYetUniform]).
+ * enforces strict conformance: every file in the manifest must implement [CatalogRailSource],
+ * and every `CatalogRailSource` implementation under `app/src/main/java/com/nexio/tv/` must be
+ * declared in the manifest.
  *
  * Wrapped by the Gradle task `generateCatalogRailUniformityAudit` (registered in
  * `app/build.gradle.kts`).
+ *
+ * Plan 8 of the catalog-rails uniformity series retired the `@CatalogRailNotYetUniform`
+ * tracking annotation; this test no longer recognises a TRACKED state. Adding a new rail
+ * source requires both a new file under `data/catalog/rails/` AND a new manifest entry —
+ * the audit fails on either side missing.
  */
 class CatalogRailUniformityAuditTest {
 
-    private enum class Verdict { CONFORMANT, TRACKED, MISSING }
+    private enum class Verdict { CONFORMANT, MISSING }
 
-    private data class Row(
-        val path: String,
-        val verdict: Verdict,
-        val reason: String?,
-        val tracking: String?
-    )
+    private data class Row(val path: String, val verdict: Verdict)
 
     @Test
-    fun `every known rail loader is conformant or tracked`() {
+    fun `every known rail loader is conformant and no unauthorized impls exist`() {
         val projectRoot = locateProjectRoot()
         val manifest = projectRoot.resolve("app/src/test/resources/catalog/known_rail_loader_paths.txt")
         require(manifest.exists()) {
@@ -37,18 +38,23 @@ class CatalogRailUniformityAuditTest {
 
         val rows = manifestPaths.map { rel -> classify(projectRoot.resolve(rel), rel) }
 
-        // 1. Drift guard: any file in src/main/java carrying the annotation MUST be in the manifest.
+        // 1. Strict guard: any file in src/main/java implementing CatalogRailSource MUST be in the manifest.
         val mainSrc = projectRoot.resolve("app/src/main/java/com/nexio/tv")
-        val annotatedFiles = mainSrc.walkTopDown()
+        val implFiles = mainSrc.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
-            .filter { it.readText().contains("@CatalogRailNotYetUniform") }
+            .filter { f ->
+                val text = f.readText()
+                CONFORMANT_PATTERNS.any { it.containsMatchIn(text) }
+            }
             .map { it.relativeTo(projectRoot).path }
             .toSet()
-        val undeclared = annotatedFiles - manifestPaths.toSet()
+        val unauthorized = implFiles - manifestPaths.toSet()
         assertTrue(
-            "Files carry @CatalogRailNotYetUniform but are not in known_rail_loader_paths.txt:\n" +
-                undeclared.joinToString("\n"),
-            undeclared.isEmpty()
+            "Files implement CatalogRailSource but are not in known_rail_loader_paths.txt:\n" +
+                unauthorized.joinToString("\n") +
+                "\n\nIf you are adding a new rail provider: also add the file path to the manifest.\n" +
+                "If you are removing one: remove the path from the manifest.",
+            unauthorized.isEmpty()
         )
 
         // 2. Write the markdown report (always — even on success).
@@ -60,7 +66,7 @@ class CatalogRailUniformityAuditTest {
         // 3. Conformance assertion.
         val missing = rows.filter { it.verdict == Verdict.MISSING }
         assertEquals(
-            "Files in manifest with neither CatalogRailSource impl nor @CatalogRailNotYetUniform:\n" +
+            "Files in manifest do not implement CatalogRailSource:\n" +
                 missing.joinToString("\n") { it.path },
             emptyList<Row>(),
             missing
@@ -69,18 +75,11 @@ class CatalogRailUniformityAuditTest {
 
     private fun classify(file: File, relPath: String): Row {
         if (!file.exists()) {
-            return Row(relPath, Verdict.MISSING, reason = "file not found", tracking = null)
+            return Row(relPath, Verdict.MISSING)
         }
         val text = file.readText()
         val isConformant = CONFORMANT_PATTERNS.any { it.containsMatchIn(text) }
-        if (isConformant) return Row(relPath, Verdict.CONFORMANT, reason = null, tracking = null)
-        val annotationMatch = ANNOTATION_PATTERN.find(text)
-        if (annotationMatch != null) {
-            val reason = REASON_PATTERN.find(annotationMatch.value)?.groupValues?.get(1)
-            val tracking = TRACKING_PATTERN.find(annotationMatch.value)?.groupValues?.get(1)
-            return Row(relPath, Verdict.TRACKED, reason = reason, tracking = tracking)
-        }
-        return Row(relPath, Verdict.MISSING, reason = null, tracking = null)
+        return Row(relPath, if (isConformant) Verdict.CONFORMANT else Verdict.MISSING)
     }
 
     private fun renderReport(rows: List<Row>): String = buildString {
@@ -88,18 +87,16 @@ class CatalogRailUniformityAuditTest {
         appendLine()
         appendLine("Generated by `CatalogRailUniformityAuditTest`. Do not hand-edit.")
         appendLine()
-        appendLine("| File | Verdict | Reason | Tracking |")
-        appendLine("|------|---------|--------|----------|")
-        rows.forEach { r ->
-            appendLine(
-                "| ${r.path} | ${r.verdict.name} | ${r.reason ?: ""} | ${r.tracking ?: ""} |"
-            )
-        }
+        appendLine("Strict mode (Plan 8): every manifest entry must implement `CatalogRailSource`,")
+        appendLine("and every `CatalogRailSource` implementation in production code must be in the manifest.")
+        appendLine()
+        appendLine("| File | Verdict |")
+        appendLine("|------|---------|")
+        rows.forEach { r -> appendLine("| ${r.path} | ${r.verdict.name} |") }
         appendLine()
         val conformant = rows.count { it.verdict == Verdict.CONFORMANT }
-        val tracked = rows.count { it.verdict == Verdict.TRACKED }
         val missing = rows.count { it.verdict == Verdict.MISSING }
-        appendLine("**Summary:** $conformant conformant, $tracked tracked, $missing missing.")
+        appendLine("**Summary:** $conformant conformant, $missing missing.")
     }
 
     private fun locateProjectRoot(): File {
@@ -126,25 +123,11 @@ class CatalogRailUniformityAuditTest {
          *
          * The match is bounded by the first `{` (the class body opening), so
          * `CatalogRailSource` mentions inside method bodies, KDoc, or string literals
-         * AFTER the first `{` cannot false-positive. The drift guard (annotation must be
-         * in manifest) provides the second layer of protection.
+         * AFTER the first `{` cannot false-positive.
          */
         private val CONFORMANT_PATTERNS = listOf(
             Regex("""(?:^|\n)\s*(?:abstract\s+|open\s+|sealed\s+|data\s+|internal\s+|private\s+)*class\s+\w+[^{]*?[,:]\s*[^{]*?\bCatalogRailSource\b[^{]*?\{""", RegexOption.DOT_MATCHES_ALL),
             Regex("""(?:^|\n)\s*(?:internal\s+|private\s+)*object\s+\w+[^{]*?[,:]\s*[^{]*?\bCatalogRailSource\b[^{]*?\{""", RegexOption.DOT_MATCHES_ALL)
         )
-
-        /**
-         * Matches the annotation in either short form (`@CatalogRailNotYetUniform(...)`) or
-         * file-level fully-qualified form (`@file:com.nexio.tv.core.catalog.rails.CatalogRailNotYetUniform(...)`).
-         * The leading `@` plus an optional `file:<fqn>.` prefix accommodates both placements.
-         */
-        private val ANNOTATION_PATTERN = Regex(
-            """@(?:file:)?(?:[\w.]+\.)?CatalogRailNotYetUniform\s*\(([^)]*)\)""",
-            RegexOption.DOT_MATCHES_ALL
-        )
-
-        private val REASON_PATTERN = Regex("""reason\s*=\s*"([^"]*)"""")
-        private val TRACKING_PATTERN = Regex("""tracking\s*=\s*"([^"]*)"""")
     }
 }
