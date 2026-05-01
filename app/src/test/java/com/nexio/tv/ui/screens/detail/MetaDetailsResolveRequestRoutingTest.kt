@@ -177,6 +177,11 @@ class MetaDetailsResolveRequestRoutingTest {
                     origin = any()
                 )
             }
+
+            // The screen state reflects the resolved meta from the addon fallback path.
+            val state = viewModel.uiState.value
+            assertFalse("isLoading should be false after fallback path completes", state.isLoading)
+            assertNotNull("meta should be populated after getMeta fallback succeeds", state.meta)
         }
 
     // ── helpers ──────────────────────────────────────────────────────────────────
