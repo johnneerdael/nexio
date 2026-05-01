@@ -32,6 +32,34 @@ class CustomImdbTitleRatingsRepositoryTest {
     }
 
     @Test
+    fun `direct imdb rating extracts canonical imdb id`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        coEvery {
+            client.fetchTitleRatings(listOf("tt0944947"))
+        } returns mapOf("tt0944947" to 9.2)
+
+        val rating = repository.getTitleRatingByImdbId(" tt0944947/foo ")
+
+        assertEquals(9.2, rating ?: 0.0, 0.0)
+        coVerify(exactly = 1) { client.fetchTitleRatings(listOf("tt0944947")) }
+    }
+
+    @Test
+    fun `direct imdb rating rejects invalid imdb sidecar`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        val rating = repository.getTitleRatingByImdbId("ttbad")
+
+        assertEquals(null, rating)
+        coVerify(exactly = 0) { client.fetchTitleRatings(any()) }
+    }
+
+    @Test
     fun `resolves tmdb id to imdb before custom bulk request`() = runTest {
         val client = mockk<CustomImdbClient>()
         val tmdbService = mockk<TmdbService>()

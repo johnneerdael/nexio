@@ -108,12 +108,56 @@ class MDBListTitleRatingsTest {
             meta = stubMeta("tmdb:1399", ContentType.SERIES),
             fallbackItemId = "tmdb:1399",
             fallbackItemType = "series",
-            imdbIdOverride = " tt0944947 "
+            imdbIdOverride = " tt0944947/foo "
         )
 
         assertEquals(8.8, result?.ratings?.imdb ?: 0.0, 0.0)
         assertEquals(listOf("tt0944947"), request.captured.ids)
         coVerify(exactly = 0) { tmdbService.tmdbToImdb(any(), any()) }
+    }
+
+    @Test
+    fun `getRatingsForMeta ignores invalid imdb override and falls back to inferred imdb id`() = runTest {
+        val api = mockk<MDBListApi>()
+        val settings = mockk<MDBListSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val repository = MDBListRepository(
+            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
+            settingsDataStore = settings,
+            tmdbService = tmdbService
+        )
+        val request = slot<com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto>()
+
+        every { settings.settings } returns flowOf(
+            MDBListSettings(
+                enabled = true,
+                apiKey = "mdb-key",
+                showTrakt = false,
+                showImdb = true,
+                showTmdb = false,
+                showLetterboxd = false,
+                showTomatoes = false,
+                showAudience = false,
+                showMetacritic = false
+            )
+        )
+        coEvery {
+            api.getRating("show", "imdb", "mdb-key", capture(request))
+        } returns Response.success(
+            MDBListRatingResponseDto(
+                ratings = listOf(MDBListRatingItemDto(id = "tt0944947", rating = 8.8))
+            )
+        )
+
+        val result = repository.getRatingsForMeta(
+            meta = stubMeta("tt0944947", ContentType.SERIES),
+            fallbackItemId = "tt0944947",
+            fallbackItemType = "series",
+            imdbIdOverride = "ttbad"
+        )
+
+        assertEquals(8.8, result?.ratings?.imdb ?: 0.0, 0.0)
+        assertEquals(listOf("tt0944947"), request.captured.ids)
     }
 
     @Test
