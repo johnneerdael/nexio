@@ -58,7 +58,8 @@ fun buildMetaDetailsViewModel(
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
     libraryRepository: LibraryRepository = defaultLibraryRepository(),
     trailerService: TrailerService? = null,
-    metadataRouterFacade: MetadataRouterFacade? = null
+    metadataRouterFacade: MetadataRouterFacade? = null,
+    addonRepository: AddonRepository? = null
 ): MetaDetailsViewModel {
     val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
     every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
@@ -77,8 +78,11 @@ fun buildMetaDetailsViewModel(
         coEvery { it.getSeasonMediaAvailability(any(), any(), any(), any()) } returns SeasonMediaAvailability()
     }
 
-    val addonRepository = mockk<AddonRepository>()
-    every { addonRepository.getInstalledAddons() } returns flowOf(emptyList())
+    val addonRepository = addonRepository ?: run {
+        val default = mockk<AddonRepository>()
+        every { default.getInstalledAddons() } returns flowOf(emptyList())
+        default
+    }
 
     val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
     every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
