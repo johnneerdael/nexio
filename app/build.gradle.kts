@@ -859,3 +859,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+afterEvaluate {
+    tasks.named("testUniversalDebugUnitTest") {
+        dependsOn("generateIntegrationRuntimeAudit")
+    }
+}
