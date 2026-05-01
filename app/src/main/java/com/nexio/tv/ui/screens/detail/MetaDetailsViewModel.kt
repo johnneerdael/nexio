@@ -567,9 +567,6 @@ class MetaDetailsViewModel @Inject constructor(
             loadingSeasonAvailability.clear()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
-            // preferExternalMetaAddonDetail is now a no-op for the detail screen —
-            // the canonical MetadataRouter subsumes the choice.
-            layoutPreferenceDataStore.preferExternalMetaAddonDetail.first() // consumed but not branched on
 
             val metadataRequest = MetadataRequest(
                 contentId = metaLookupId,
@@ -596,7 +593,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentType = ContentType.fromString(itemType)
                 )
                 applyMetaWithEnrichment(meta)
-            } else if (preferredAddonBaseUrl != null) {
+            } else if (preferredAddonBaseUrl?.isNotBlank() == true) {
                 // Last-resort A: item came from an addon catalog rail and the router yielded nothing.
                 metaRepository.getMeta(
                     addonBaseUrl = preferredAddonBaseUrl,
