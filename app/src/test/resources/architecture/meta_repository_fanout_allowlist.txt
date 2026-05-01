@@ -1,0 +1,33 @@
+# Files allowed to call MetaRepository.getMetaFromAllAddons /
+# .getCachedMetaFromAllAddons / .hydrateAddonOriginItem.
+#
+# Adding a path here requires reviewer sign-off and a comment explaining why
+# the caller has a verified addon origin.
+#
+# Last reviewed: 3e54448dd
+
+# Interface + implementation declarations
+/com/nexio/tv/domain/repository/MetaRepository.kt
+/com/nexio/tv/data/repository/MetaRepositoryImpl.kt
+
+# Stream selection — inherently addon-rooted (Stremio addon supplies streams)
+/com/nexio/tv/ui/screens/stream/StreamScreenViewModel.kt
+
+# Player runtime controllers — need Stremio composite Video.id for stream selection
+# (verified Tier 2 / Task 7 audit: no canonical pipeline equivalent)
+/com/nexio/tv/ui/screens/player/PlayerRuntimeControllerStreams.kt
+/com/nexio/tv/ui/screens/player/PlayerRuntimeControllerMetadata.kt
+
+# Detail screen last-resort fallback when item came from addon catalog rail
+# AND canonical router yielded no result
+/com/nexio/tv/ui/screens/detail/MetaDetailsViewModel.kt
+
+# IdleScreensaverRepository — cached read from disk (getCachedMetaFromAllAddons),
+# not fan-out. Tier 2 Task 2 migrated the network path; cached path is deferred
+# pending architecture decision on whether MetadataDiskCacheStore should expose
+# a router-aware reader. Safe for now (no fan-out, no addon HTTP).
+/com/nexio/tv/data/repository/IdleScreensaverRepository.kt
+
+# CanonicalMetaResolver KDoc reference (pre-existing — not a real call site;
+# remove after the KDoc is updated to use the renamed API)
+# /com/nexio/tv/core/metadata/router/CanonicalMetaResolver.kt
