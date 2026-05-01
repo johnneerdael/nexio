@@ -5,7 +5,6 @@ import android.util.Log
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -33,7 +32,13 @@ import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TraktListPrivacy
-import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,14 +49,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -61,7 +64,7 @@ class TraktLibraryService @Inject constructor(
     private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktAuthService: TraktRepositoryAuthGateway,
     private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
-    private val metaRepository: MetaRepository,
+    private val metadataRouterFacade: MetadataRouterFacade,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val snapshotStore: TraktLibrarySnapshotStore,
@@ -1145,44 +1148,44 @@ class TraktLibraryService @Inject constructor(
     }
 
     private suspend fun fetchMetadata(entry: LibraryEntry): LibraryMetadata? {
-        val typeCandidates = if (entry.type == "movie") {
-            listOf("movie")
-        } else {
-            listOf("series", "tv")
-        }
-
-        val idCandidates = buildList {
-            add(entry.id)
-            if (entry.id.startsWith("tmdb:")) add(entry.id.substringAfter(':'))
-            if (entry.id.startsWith("trakt:")) add(entry.id.substringAfter(':'))
-        }.distinct()
-
-        for (type in typeCandidates) {
-            for (id in idCandidates) {
-                val result = withTimeoutOrNull(3500) {
-                    metaRepository.getMetaFromAllAddons(
-                        type = type,
-                        id = id,
-                        cacheOnDisk = false,
-                        origin = "library"
-                    )
-                        .first { it !is NetworkResult.Loading }
-                } ?: continue
-                val meta = (result as? NetworkResult.Success)?.data ?: continue
-                return LibraryMetadata(
-                    name = meta.name,
-                    poster = meta.poster,
-                    background = meta.background,
-                    logo = meta.logo,
-                    description = meta.description,
-                    releaseInfo = meta.releaseInfo,
-                    imdbRating = meta.imdbRating,
-                    genres = meta.genres
+        val request = MetadataRequest(
+            contentId = entry.id,
+            contentType = ContentType.fromString(entry.type),
+            sourceContext = MetadataSourceContext(
+                itemType = entry.type,
+                addonMetadata = HomeDisplayMetadata(
+                    title = entry.name,
+                    poster = entry.poster,
+                    backdrop = entry.background,
+                    logo = entry.logo,
+                    description = entry.description,
+                    releaseInfo = entry.releaseInfo,
+                    imdbRating = entry.imdbRating,
+                    genres = entry.genres
                 )
-            }
+            ),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+        val canonical = try {
+            metadataRouterFacade.resolveRequest(request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchMetadata resolveRequest failed for ${entry.id}: ${e.message}", e)
+            return null
         }
-
-        return null
+        if (canonical.route == null) return null
+        val display = canonical.displayMetadata
+        return LibraryMetadata(
+            name = display.title ?: entry.name,
+            poster = display.poster ?: entry.poster,
+            background = display.backdrop ?: entry.background,
+            logo = display.logo ?: entry.logo,
+            description = display.description ?: entry.description,
+            releaseInfo = display.releaseInfo ?: entry.releaseInfo,
+            imdbRating = display.imdbRating ?: entry.imdbRating,
+            genres = display.genres.takeIf { it.isNotEmpty() } ?: entry.genres
+        )
     }
 
     private fun restorePersistedState(persisted: TraktLibrarySnapshotStore.Snapshot) {
