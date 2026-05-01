@@ -40,7 +40,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `loadTvSeasonEpisodes returns episode list from success response`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.getTvSeasonDetails(
@@ -143,7 +143,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `searchPeople returns person search response and calls tmdb person search endpoint`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.searchPeople(apiKey = "tmdb-key", query = "Jane", includeAdult = false)
@@ -176,7 +176,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `searchCompanies returns company search response and calls tmdb company search endpoint`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.searchCompanies(apiKey = "tmdb-key", query = "Studio", page = 1)
@@ -580,7 +580,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `loadMovieCollection returns collection response`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.getCollectionDetails(
@@ -678,7 +678,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `loadTvSeasonEpisodes maps failed season response to http error`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.getTvSeasonDetails(
@@ -706,7 +706,7 @@ class TmdbIntegrationProviderTest {
 
     @Test
     fun `loadTvSeasonEpisodes propagates cancellation`() = runTest {
-        val runtime = mockk<IntegrationRuntime>(relaxed = true)
+        val runtime = passThroughTestRuntime()
         val tmdbApi = mockk<TmdbApi>()
         coEvery {
             tmdbApi.getTvSeasonDetails(any(), any(), any(), any())
