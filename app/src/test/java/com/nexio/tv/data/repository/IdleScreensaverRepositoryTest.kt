@@ -258,7 +258,8 @@ class IdleScreensaverRepositoryTest {
         val slides = repository.slides.value
         assertEquals(2, slides.size)
         assertEquals("Routed movie-1", slides.first().title)
-        // PREVIEW depth: fetchIdleScreensaverMeta returns Meta with empty trailerYtIds;
+        // fetchIdleScreensaverMeta(DETAIL_CORE) returns Meta with trailerYtIds = emptyList()
+        // (toScreensaverMeta intentionally omits trailer enrichment fields);
         // trailer candidates come from the warmFromCache path instead.
         assertNull(slides.first().modeData.trailer)
         assertNull(slides.last().modeData.trailer)
