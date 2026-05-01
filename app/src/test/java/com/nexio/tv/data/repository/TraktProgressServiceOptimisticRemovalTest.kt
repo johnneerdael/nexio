@@ -4,8 +4,8 @@ import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +26,7 @@ class TraktProgressServiceOptimisticRemovalTest {
                 traktAuthService = traktAuthService
             ),
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
-            metaRepository = mockk<MetaRepository>(relaxed = true)
+            metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         )
 
         val contentId = "tt1190634"
