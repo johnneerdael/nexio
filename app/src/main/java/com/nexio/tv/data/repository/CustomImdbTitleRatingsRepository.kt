@@ -10,6 +10,12 @@ import javax.inject.Singleton
 
 private const val CUSTOM_IMDB_TITLE_TAG = "CustomImdbTitleRatings"
 internal const val CUSTOM_IMDB_TITLE_RATINGS_TTL_MS = 7L * 24L * 60L * 60L * 1000L
+private val CANONICAL_IMDB_ID_REGEX = Regex("tt\\d+")
+
+internal fun extractCanonicalImdbId(rawId: String?): String? {
+    if (rawId.isNullOrBlank()) return null
+    return CANONICAL_IMDB_ID_REGEX.find(rawId)?.value
+}
 
 @Singleton
 class CustomImdbTitleRatingsRepository @Inject constructor(
@@ -35,7 +41,7 @@ class CustomImdbTitleRatingsRepository @Inject constructor(
     }
 
     suspend fun getTitleRatingByImdbId(imdbId: String): Double? {
-        val clean = imdbId.trim().takeIf { it.startsWith("tt") } ?: return null
+        val clean = extractCanonicalImdbId(imdbId) ?: return null
         return getTitleRatingForResolvedImdbId(clean)
     }
 
@@ -84,7 +90,6 @@ class CustomImdbTitleRatingsRepository @Inject constructor(
     }
 
     private fun extractImdbId(rawId: String?): String? {
-        if (rawId.isNullOrBlank()) return null
-        return Regex("tt\\d+").find(rawId)?.value
+        return extractCanonicalImdbId(rawId)
     }
 }

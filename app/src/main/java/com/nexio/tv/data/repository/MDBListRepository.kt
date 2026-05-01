@@ -103,7 +103,7 @@ class MDBListRepository @Inject constructor(
         if (providers.isEmpty()) return null
 
         val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
-        val imdbId = imdbIdOverride?.trim()?.takeIf { it.startsWith("tt") }
+        val imdbId = extractCanonicalImdbId(imdbIdOverride)
             ?: resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType)
             ?: return null
 
@@ -298,9 +298,7 @@ class MDBListRepository @Inject constructor(
     }
 
     private fun extractImdbId(rawId: String?): String? {
-        if (rawId.isNullOrBlank()) return null
-        val regex = Regex("tt\\d+")
-        return regex.find(rawId)?.value
+        return extractCanonicalImdbId(rawId)
     }
 
     private fun extractTmdbId(rawId: String?): Int? {

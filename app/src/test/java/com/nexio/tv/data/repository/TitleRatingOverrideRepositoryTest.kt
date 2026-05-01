@@ -9,6 +9,8 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.MDBListRatings
+import com.nexio.tv.domain.model.MDBListRatingsResult
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -100,6 +102,30 @@ class TitleRatingOverrideRepositoryTest {
     }
 
     @Test
+    fun `enrich preview passes stable bundle imdb to mdblist after custom ratings miss`() = runTest {
+        val custom = mockk<CustomImdbTitleRatingsRepository>()
+        val mdb = mockk<MDBListRepository>()
+        val repository = TitleRatingOverrideRepository(custom, mdb)
+        val preview = preview(id = "tmdb:1399", rating = 8.1f, source = TitleRatingSource.TMDB)
+        val stableIds = stableIdBundle(imdbId = "tt0944947")
+        val mdblistPreview = preview.copy(imdbRating = 8.7f, ratingSource = TitleRatingSource.IMDB)
+
+        coEvery { custom.getTitleRatingByImdbId("tt0944947") } returns null
+        coEvery {
+            custom.getTitleRating("tmdb:1399", "tmdb:1399", ContentType.SERIES, "series")
+        } returns null
+        coEvery {
+            mdb.enrichPreview(preview, imdbIdOverride = "tt0944947")
+        } returns mdblistPreview
+
+        val enriched = repository.enrichPreview(preview, stableIds)
+
+        assertEquals(8.7f, enriched.imdbRating ?: 0f, 0.0f)
+        assertEquals(TitleRatingSource.IMDB, enriched.ratingSource)
+        coVerify(exactly = 1) { mdb.enrichPreview(preview, imdbIdOverride = "tt0944947") }
+    }
+
+    @Test
     fun `enrich meta uses stable bundle imdb before fallback inference`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
@@ -116,6 +142,31 @@ class TitleRatingOverrideRepositoryTest {
         coVerify(exactly = 1) { custom.getTitleRatingByImdbId("tt0944947") }
         coVerify(exactly = 0) { custom.getTitleRating(any(), any(), any(), any()) }
         coVerify(exactly = 0) { mdb.getRatingsForMeta(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `enrich meta passes stable bundle imdb to mdblist after custom ratings miss`() = runTest {
+        val custom = mockk<CustomImdbTitleRatingsRepository>()
+        val mdb = mockk<MDBListRepository>()
+        val repository = TitleRatingOverrideRepository(custom, mdb)
+        val meta = meta(id = "tmdb:1399", rating = 8.1f, source = TitleRatingSource.TMDB)
+        val stableIds = stableIdBundle(imdbId = "tt0944947")
+
+        coEvery { custom.getTitleRatingByImdbId("tt0944947") } returns null
+        coEvery {
+            custom.getTitleRating("tmdb:1399", "tmdb:1399", ContentType.SERIES, "series")
+        } returns null
+        coEvery {
+            mdb.getRatingsForMeta(meta, "tmdb:1399", "series", imdbIdOverride = "tt0944947")
+        } returns MDBListRatingsResult(MDBListRatings(imdb = 8.7), hasImdbRating = true)
+
+        val enriched = repository.enrichMeta(meta, "tmdb:1399", "series", stableIds)
+
+        assertEquals(8.7f, enriched.imdbRating ?: 0f, 0.0f)
+        assertEquals(TitleRatingSource.IMDB, enriched.ratingSource)
+        coVerify(exactly = 1) {
+            mdb.getRatingsForMeta(meta, "tmdb:1399", "series", imdbIdOverride = "tt0944947")
+        }
     }
 
     private fun preview(
