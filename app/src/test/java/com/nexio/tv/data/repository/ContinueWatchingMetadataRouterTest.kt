@@ -15,7 +15,6 @@ import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -187,7 +186,6 @@ class ContinueWatchingMetadataRouterTest {
             traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
             },
-            metaRepository = mockk<MetaRepository>(relaxed = true),
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
             snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
                 every { read(any()) } returns null

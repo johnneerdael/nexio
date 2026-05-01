@@ -358,7 +358,6 @@ class MarkSeasonWatchedTest {
             trackingProgressService = traktProgressService,
             trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
-            metaRepository = mockk(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),
             snapshotStore = mockk(relaxed = true) { every { read(any()) } returns null }
         )

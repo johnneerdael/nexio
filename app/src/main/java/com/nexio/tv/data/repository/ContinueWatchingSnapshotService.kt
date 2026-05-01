@@ -16,20 +16,17 @@ import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.data.local.integration.MediaIdentityEntity
 import com.nexio.tv.data.local.integration.RailCacheEntity
 import com.nexio.tv.data.local.integration.RailItemEntity
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileManager
+import kotlinx.coroutines.CancellationException
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.homeDisplayItemKey
-import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,7 +148,6 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val trackingProgressService: TrackingProgressService,
     private val trackingProviderStateService: TrackingProviderStateService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
-    private val metaRepository: MetaRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val snapshotStore: ContinueWatchingSnapshotStore,
     private val airScheduler: ContinueWatchingAirScheduler = NoopContinueWatchingAirScheduler,
@@ -1228,79 +1224,31 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return routeUpgradedSnapshot.copy(displayMetadataByItemKey = hydratedMetadata)
     }
 
-    private suspend fun fetchHomeDisplayMetadata(
+    internal suspend fun fetchHomeDisplayMetadata(
         contentType: String,
         contentId: String,
         snapshot: ContinueWatchingSnapshot
     ): HomeDisplayMetadata? {
-        val typeCandidates = buildList {
-            val normalized = contentType.trim().lowercase()
-            if (normalized.isNotBlank()) add(normalized)
-            if (normalized == "tv") add("series")
-            if (normalized == "series") add("tv")
-            if (normalized != "movie") add("movie")
-        }.distinct()
-        val idCandidates = buildList {
-            val trimmed = contentId.trim()
-            add(trimmed)
-            if (trimmed.startsWith("tmdb:")) add(trimmed.substringAfter(':'))
-            if (trimmed.startsWith("trakt:")) add(trimmed.substringAfter(':'))
-            if (trimmed.startsWith("tt", ignoreCase = true)) add("imdb:$trimmed")
-        }.distinct()
-
-        typeCandidates.forEach { type ->
-            idCandidates.forEach { id ->
-                val result = runCatching {
-                    metaRepository.getMetaFromAllAddons(
-                        type = type,
-                        id = id,
-                        cacheOnDisk = true,
-                        origin = "continue_watching_snapshot"
-                    )
-                }.getOrNull() ?: return@forEach
-                val resolved = runCatching { result.first { it !is NetworkResult.Loading } }.getOrNull()
-                val meta = (resolved as? NetworkResult.Success<*>)?.data as? Meta ?: return@forEach
-                return buildHomeDisplayMetadata(
-                    meta = meta,
-                    contentType = type,
-                    contentId = contentId,
-                    snapshot = snapshot
-                )
-            }
-        }
-        return null
-    }
-
-    private fun buildHomeDisplayMetadata(
-        meta: Meta,
-        contentType: String,
-        contentId: String,
-        snapshot: ContinueWatchingSnapshot
-    ): HomeDisplayMetadata {
-        val episodeMetadata = if (contentType.equals("series", ignoreCase = true) || contentType.equals("tv", ignoreCase = true)) {
-            val progressEntry = snapshot.resumeItems
-                .filter { it.contentId == contentId && it.season != null && it.episode != null }
-                .maxByOrNull { it.lastWatched }
-            val nextUpEntry = snapshot.nextUpItems.firstOrNull { it.contentId == contentId }
-            val traktUpNextEntry = snapshot.traktUpNextItems.firstOrNull { it.contentId == contentId }
-            val season = progressEntry?.season ?: nextUpEntry?.season ?: traktUpNextEntry?.season
-            val episode = progressEntry?.episode ?: nextUpEntry?.episode ?: traktUpNextEntry?.episode
-            if (season != null && episode != null) {
-                meta.videos.firstOrNull { it.season == season && it.episode == episode }
-            } else {
-                null
-            }
-        } else {
-            null
-        }
-
-        val metaDisplay = meta.toHomeDisplayMetadata()
-        return metaDisplay.copy(
-            description = episodeMetadata?.overview ?: metaDisplay.description,
-            runtime = episodeMetadata?.runtime?.let { "${it}m" } ?: metaDisplay.runtime,
-            poster = metaDisplay.poster,
-            backdrop = metaDisplay.backdrop ?: episodeMetadata?.thumbnail
+        val itemKey = homeDisplayItemKey(contentType, contentId)
+        val routedSnapshot = snapshot.metadataSnapshotsByItemKey[itemKey]
+        val request = MetadataRequest(
+            contentId = contentId,
+            contentType = ContentType.fromString(contentType),
+            sourceContext = MetadataSourceContext(
+                itemType = contentType,
+                addonMetadata = routedSnapshot?.clickTimeDisplayMetadata
+            ),
+            depth = MetadataDepth.DETAIL_CORE
         )
+        val canonical = try {
+            metadataRouterFacade?.resolveRequest(request) ?: return null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("ContinueWatching", "fetchHomeDisplayMetadata resolveRequest failed for $contentId: ${e.message}", e)
+            return null
+        }
+        return canonical.displayMetadata.takeIf { canonical.route != null }
     }
 
     private fun normalizeResumeItem(progress: WatchProgress): WatchProgress? {

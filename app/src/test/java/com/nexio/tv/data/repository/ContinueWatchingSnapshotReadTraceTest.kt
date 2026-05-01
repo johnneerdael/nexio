@@ -6,7 +6,6 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -96,7 +95,6 @@ class ContinueWatchingSnapshotReadTraceTest {
             traktSettingsDataStore = mockk {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
             },
-            metaRepository = mockk<MetaRepository>(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),
             snapshotStore = mockk(relaxed = true),
             profileManager = profileManager

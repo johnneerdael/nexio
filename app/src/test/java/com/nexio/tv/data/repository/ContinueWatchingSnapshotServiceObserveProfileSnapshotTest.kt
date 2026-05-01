@@ -3,7 +3,6 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
@@ -52,14 +51,12 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
             every { read(any()) } returns null
         }
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
 
         return ContinueWatchingSnapshotService(
             watchProgressRepository = watchProgressRepository,
             trackingProgressService = trackingProgressService,
             trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
-            metaRepository = metaRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             snapshotStore = snapshotStore
         )
