@@ -65,7 +65,7 @@ class IntegrationStreamRuntimeTest {
         val fixture = realRuntimeFixture()
         fixture.backoffManager.noteHttpFailure(
             provider = IntegrationProvider.REAL_DEBRID,
-            scope = IntegrationScope.Global,
+            scope = IntegrationScope.GlobalContent,
             statusCode = 429,
             retryAfterMs = 60_000L,
             reason = "retry later"

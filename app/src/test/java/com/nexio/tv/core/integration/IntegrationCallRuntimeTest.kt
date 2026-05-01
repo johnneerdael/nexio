@@ -66,7 +66,7 @@ class IntegrationCallRuntimeTest {
         val fixture = realRuntimeFixture()
         fixture.backoffManager.noteHttpFailure(
             provider = IntegrationProvider.TMDB,
-            scope = IntegrationScope.Global,
+            scope = IntegrationScope.GlobalContent,
             statusCode = 429,
             retryAfterMs = 60_000L,
             reason = "retry later"
@@ -108,7 +108,9 @@ class IntegrationCallRuntimeTest {
 
         assertEquals(1, fixture.requestGate.acquireCount)
         assertTrue(result is IntegrationCallResult.NetworkError)
-        assertEquals(failure, (result as IntegrationCallResult.NetworkError).throwable)
+        val throwable = (result as IntegrationCallResult.NetworkError).throwable
+        assertTrue(throwable is IllegalStateException)
+        assertEquals(failure.message, throwable.message)
     }
 
     @Test
@@ -131,7 +133,7 @@ class IntegrationCallRuntimeTest {
             )
         )
 
-        val entry = fixture.backoffDao.get("TMDB", "global")
+        val entry = fixture.backoffDao.get("TMDB", "global:content")
         assertTrue(result is IntegrationCallResult.NetworkError)
         assertEquals(503, entry?.statusCode)
         assertEquals("socket closed", entry?.reason)
