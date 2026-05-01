@@ -1,7 +1,16 @@
 package com.nexio.tv.data.repository
 
 import com.google.gson.JsonObject
-import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -13,13 +22,12 @@ import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -47,7 +55,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val snapshotStore = mockk<TraktLibrarySnapshotStore>()
@@ -55,14 +63,12 @@ class TraktLibraryServiceTest {
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
         every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
-            flowOf(NetworkResult.Error("metadata unavailable"))
 
         val service = TraktLibraryService(
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -86,7 +92,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -117,17 +123,12 @@ class TraktLibraryServiceTest {
             successResponse(emptyList<TraktListSummaryDto>())
             )
         )
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
-            val type = firstArg<String>()
-            val id = secondArg<String>()
-            flowOf(NetworkResult.Success(meta(id = id, type = type, name = "hydrated-$id", poster = "poster-$id", background = "background-$id", logo = "logo-$id")))
-        }
 
         val service = TraktLibraryService(
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -146,7 +147,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -185,14 +186,12 @@ class TraktLibraryServiceTest {
             successResponse(emptyList<TraktListSummaryDto>())
             )
         )
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
-            flowOf(NetworkResult.Error("metadata unavailable"))
 
         service = TraktLibraryService(
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -213,7 +212,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -222,15 +221,13 @@ class TraktLibraryServiceTest {
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
-            flowOf(NetworkResult.Error("metadata unavailable"))
         stubLibraryRefreshFailure(traktIntegrationProvider)
 
         val service = TraktLibraryService(
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -250,7 +247,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
@@ -266,7 +263,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -292,7 +289,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
@@ -308,7 +305,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -346,7 +343,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
@@ -362,7 +359,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -400,7 +397,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
@@ -417,7 +414,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -443,7 +440,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
@@ -459,7 +456,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -486,7 +483,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -504,8 +501,6 @@ class TraktLibraryServiceTest {
             )
             persistedSnapshot = firstArg()
         }
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
-            flowOf(NetworkResult.Error("metadata unavailable"))
         stubLibraryRefresh(
             traktIntegrationProvider,
             listOf(
@@ -532,7 +527,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -553,7 +548,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -562,13 +557,12 @@ class TraktLibraryServiceTest {
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
         val service = TraktLibraryService(
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -597,7 +591,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(false)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -606,13 +600,12 @@ class TraktLibraryServiceTest {
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read(any()) } returns samplePersistedSnapshot()
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
         val service = TraktLibraryService(
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -643,7 +636,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -698,20 +691,14 @@ class TraktLibraryServiceTest {
             )
         )
 
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
-            val type = firstArg<String>()
-            val id = secondArg<String>()
-            flowOf(
-                NetworkResult.Success(
-                    meta(
-                        id = id,
-                        type = type,
-                        name = "hydrated-$id",
-                        poster = "https://image.test/$id/poster.jpg",
-                        background = "https://image.test/$id/background.jpg",
-                        logo = "https://image.test/$id/logo.png"
-                    )
-                )
+        coEvery { metadataRouterFacade.resolveRequest(any()) } answers {
+            val request = firstArg<com.nexio.tv.core.metadata.router.MetadataRequest>()
+            val id = request.contentId
+            successResolutionResult(
+                contentId = id,
+                poster = "https://image.test/$id/poster.jpg",
+                backdrop = "https://image.test/$id/background.jpg",
+                logo = "https://image.test/$id/logo.png"
             )
         }
 
@@ -719,7 +706,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -756,7 +743,7 @@ class TraktLibraryServiceTest {
         val traktIntegrationProvider = mockk<com.nexio.tv.data.integration.trakt.TraktIntegrationProvider>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -788,20 +775,14 @@ class TraktLibraryServiceTest {
             )
         )
 
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
-            val type = firstArg<String>()
-            val id = secondArg<String>()
-            flowOf(
-                NetworkResult.Success(
-                    meta(
-                        id = id,
-                        type = type,
-                        name = "hydrated-$id",
-                        poster = "https://image.test/$id/poster.jpg",
-                        background = "https://image.test/$id/background.jpg",
-                        logo = "https://image.test/$id/logo.png"
-                    )
-                )
+        coEvery { metadataRouterFacade.resolveRequest(any()) } answers {
+            val request = firstArg<com.nexio.tv.core.metadata.router.MetadataRequest>()
+            val id = request.contentId
+            successResolutionResult(
+                contentId = id,
+                poster = "https://image.test/$id/poster.jpg",
+                backdrop = "https://image.test/$id/background.jpg",
+                logo = "https://image.test/$id/logo.png"
             )
         }
 
@@ -809,7 +790,7 @@ class TraktLibraryServiceTest {
             traktIntegrationProvider = traktIntegrationProvider,
             traktAuthService = TraktRepositoryAuthGateway(traktAuthService),
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
-            metaRepository = metaRepository,
+            metadataRouterFacade = metadataRouterFacade,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
             snapshotStore = snapshotStore
@@ -830,43 +811,43 @@ class TraktLibraryServiceTest {
         assertNotNull(item.logo)
     }
 
-    private fun meta(
-        id: String,
-        type: String,
-        name: String,
-        poster: String,
-        background: String,
-        logo: String
-    ): Meta {
-        val contentType = if (type == "movie") ContentType.MOVIE else ContentType.SERIES
-        return Meta(
-            id = id,
-            type = contentType,
-            rawType = type,
-            name = name,
+    private fun successResolutionResult(
+        contentId: String,
+        poster: String? = null,
+        backdrop: String? = null,
+        logo: String? = null
+    ): MetadataResolutionResult = MetadataResolutionResult(
+        route = MetadataRoute(
+            provider = MetadataPrimaryProvider.TVDB,
+            parentId = contentId,
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+            sourceContext = MetadataSourceContext(),
+            targetIds = mapOf(MetadataPrimaryProvider.TVDB to contentId),
+            trace = emptyList()
+        ),
+        plan = null,
+        resolverSchedule = ResolverSchedule(MetadataDepth.DETAIL_CORE, emptyList(), emptyList()),
+        resolvedDocument = ResolvedMetadataDocument(
+            canonicalId = contentId,
+            title = "Hydrated Title",
+            overview = null,
             poster = poster,
-            posterShape = PosterShape.POSTER,
-            background = background,
+            backdrop = backdrop,
             logo = logo,
-            description = "description-$id",
-            releaseInfo = "2024",
-            imdbRating = 8.4f,
-            genres = listOf("Drama"),
-            runtime = null,
-            director = emptyList(),
-            writer = emptyList(),
-            cast = emptyList(),
-            castMembers = emptyList(),
-            videos = emptyList(),
-            productionCompanies = emptyList(),
-            networks = emptyList(),
-            country = null,
-            awards = null,
-            language = null,
-            links = emptyList(),
-            trailerYtIds = emptyList()
-        )
-    }
+            rating = null,
+            runtimeMinutes = null,
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        ),
+        displayMetadata = HomeDisplayMetadata(
+            title = "Hydrated Title",
+            poster = poster,
+            backdrop = backdrop,
+            logo = logo
+        ),
+        trace = emptyList()
+    )
 
     private fun samplePersistedSnapshot(): TraktLibrarySnapshotStore.Snapshot {
         val watchlistItem = LibraryEntry(
