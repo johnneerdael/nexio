@@ -589,10 +589,32 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             if (canonical != null && canonical.route != null) {
-                val meta = canonical.toMeta(
+                var meta = canonical.toMeta(
                     contentId = metaLookupId,
                     contentType = ContentType.fromString(itemType)
                 )
+                // When the canonical meta lacks episodes or franchise links (e.g. the resolver
+                // pipeline produces a display-only result), seed them from the addon origin so
+                // that the initial UI state (episode list, season expansion) is immediately
+                // correct before async TVDB episode enrichment completes.
+                if (preferredAddonBaseUrl?.isNotBlank() == true &&
+                    (meta.videos.isEmpty() || meta.links.isEmpty())) {
+                    val addonResult = runCatching {
+                        metaRepository.getMeta(
+                            addonBaseUrl = preferredAddonBaseUrl,
+                            type = itemType,
+                            id = metaLookupId,
+                            cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                            origin = detailMetaOrigin
+                        ).first { it !is NetworkResult.Loading }
+                    }.getOrNull()
+                    if (addonResult is NetworkResult.Success) {
+                        meta = meta.copy(
+                            videos = meta.videos.ifEmpty { addonResult.data.videos },
+                            links = meta.links.ifEmpty { addonResult.data.links }
+                        )
+                    }
+                }
                 applyMetaWithEnrichment(meta)
             } else if (preferredAddonBaseUrl?.isNotBlank() == true) {
                 // Last-resort A: item came from an addon catalog rail and the router yielded nothing.

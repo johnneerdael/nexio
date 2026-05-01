@@ -547,7 +547,9 @@ class MetadataRouterFacade @Inject constructor(
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
         val seasonMetadataRequest = metadataRequest.copy(
             depth = MetadataDepth.SEASON,
-            seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
+            // Default to season 1 when no explicit season is provided — the episode metadata
+            // fetcher will expand to all available seasons via fetchEpisodeMetadataForRoute.
+            seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber ?: 1
         )
         val baseRoute = router.route(seasonMetadataRequest)
         val resolvedBaseRoute = identityResolver.resolve(baseRoute)
@@ -779,7 +781,15 @@ class MetadataRouterFacade @Inject constructor(
             logo = logo,
             poster = poster,
             rating = (rating as? Number)?.toDouble(),
-            runtimeMinutes = runtimeMinutes
+            runtimeMinutes = runtimeMinutes,
+            genres = genres,
+            releaseInfo = releaseDate,
+            ageRating = ageRating,
+            countries = countries.takeIf { it.isNotEmpty() },
+            language = language,
+            castMembers = castMembers,
+            productionCompanies = productionCompanies,
+            networks = networks
         )
 
     private fun MetadataPrimaryProvider?.toTvProvider(): TvProvider =
