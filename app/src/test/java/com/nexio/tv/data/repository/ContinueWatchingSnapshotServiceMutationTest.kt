@@ -10,7 +10,6 @@ import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.every
@@ -94,14 +93,12 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { read(any()) } returns null
         }
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
 
         return ContinueWatchingSnapshotService(
             watchProgressRepository = watchProgressRepository,
             trackingProgressService = trackingProgressService,
             trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
-            metaRepository = metaRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
             snapshotStore = snapshotStore
         )
@@ -173,7 +170,6 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 TraktSettingsDataStore::class.java -> mockk<TraktSettingsDataStore>(relaxed = true) {
                     every { dismissedNextUpKeys } returns flowOf(emptySet())
                 }
-                MetaRepository::class.java -> mockk<MetaRepository>(relaxed = true)
                 MetadataDiskCacheStore::class.java -> mockk<MetadataDiskCacheStore>(relaxed = true)
                 ContinueWatchingSnapshotStore::class.java -> snapshotStore
                 ContinueWatchingAirScheduler::class.java -> airScheduler
@@ -513,7 +509,6 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 trackingProgressService = traktProgressService,
                 trackingProviderStateService = trackingProviderStateService,
                 traktSettingsDataStore = traktSettingsDataStore,
-                metaRepository = mockk(relaxed = true),
                 metadataDiskCacheStore = mockk(relaxed = true),
                 snapshotStore = mockk(relaxed = true) { every { read(any()) } returns null }
             )
@@ -556,7 +551,6 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktSettingsDataStore = mockk(relaxed = true) {
                     every { dismissedNextUpKeys } returns flowOf(emptySet())
                 },
-                metaRepository = mockk(relaxed = true),
                 metadataDiskCacheStore = mockk(relaxed = true),
                 snapshotStore = mockk(relaxed = true) { every { read(any()) } returns persisted }
             )
