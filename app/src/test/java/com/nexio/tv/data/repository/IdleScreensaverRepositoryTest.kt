@@ -1,12 +1,24 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.MetaPreview
@@ -198,7 +210,7 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
-    fun `refreshOnColdBoot hydrates trakt source items into trailer ready slides`() = runBlocking {
+    fun `refreshOnColdBoot hydrates trakt source items into slides via resolveRequest`() = runBlocking {
         val addonRepository = mockk<AddonRepository>()
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
@@ -206,6 +218,7 @@ class IdleScreensaverRepositoryTest {
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
         val traktSnapshotStore = mockk<TraktDiscoverySnapshotStore>()
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
         val snapshot = TraktDiscoverySnapshot(
             trendingMovieItems = listOf(
                 buildPreview("movie-1", ContentType.MOVIE, background = "https://preview/movie.jpg")
@@ -224,18 +237,9 @@ class IdleScreensaverRepositoryTest {
         )
         every { traktSnapshotStore.readActiveProfile() } returns snapshot
         coEvery { mdbListRepository.enrichPreview(any()) } answers { firstArg() }
-        every {
-            metaRepository.getMetaFromAllAddons(
-                type = any(),
-                id = any(),
-                cacheOnDisk = true,
-                writeToDisk = true,
-                origin = "idle_screensaver"
-            )
-        } answers {
-            val type = firstArg<String>()
-            val id = secondArg<String>()
-            flowOf(NetworkResult.Success(buildMeta(id = id, type = type, includeTrailer = id == "movie-1")))
+        coEvery { metadataRouterFacade.resolveRequest(any()) } answers {
+            val req = firstArg<MetadataRequest>()
+            buildFacadeSuccessResult(req.contentId, req.contentType)
         }
 
         val repository = IdleScreensaverRepository(
@@ -245,19 +249,20 @@ class IdleScreensaverRepositoryTest {
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
-            traktDiscoverySnapshotStore = traktSnapshotStore
+            traktDiscoverySnapshotStore = traktSnapshotStore,
+            metadataRouterFacade = metadataRouterFacade
         )
 
         repository.refreshOnColdBoot()
 
         val slides = repository.slides.value
         assertEquals(2, slides.size)
-        assertEquals("Hydrated movie-1", slides.first().title)
-        assertEquals(listOf("trailer1234"), slides.first().modeData.trailer?.trailerYtIds)
+        assertEquals("Routed movie-1", slides.first().title)
+        // PREVIEW depth: fetchIdleScreensaverMeta returns Meta with empty trailerYtIds;
+        // trailer candidates come from the warmFromCache path instead.
+        assertNull(slides.first().modeData.trailer)
         assertNull(slides.last().modeData.trailer)
-        verify(exactly = 2) {
-            metaRepository.getMetaFromAllAddons(any(), any(), true, true, "idle_screensaver")
-        }
+        coVerify(exactly = 2) { metadataRouterFacade.resolveRequest(any()) }
         coVerify(exactly = 0) {
             catalogRepository.refreshCatalogToDisk(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
@@ -308,7 +313,8 @@ class IdleScreensaverRepositoryTest {
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
-            traktDiscoverySnapshotStore = traktSnapshotStore
+            traktDiscoverySnapshotStore = traktSnapshotStore,
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         repository.warmFromCache()
@@ -419,7 +425,8 @@ class IdleScreensaverRepositoryTest {
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
-            traktDiscoverySnapshotStore = traktSnapshotStore
+            traktDiscoverySnapshotStore = traktSnapshotStore,
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         repository.warmFromCache()
@@ -503,15 +510,9 @@ class IdleScreensaverRepositoryTest {
         every { traktSettingsDataStore.catalogPreferences } returns flowOf(TraktCatalogPreferences())
         every { traktSnapshotStore.readActiveProfile() } returns null
         coEvery { mdbListRepository.enrichPreview(any()) } answers { firstArg() }
-        every {
-            metaRepository.getMetaFromAllAddons(
-                type = any(),
-                id = any(),
-                cacheOnDisk = true,
-                writeToDisk = true,
-                origin = "idle_screensaver"
-            )
-        } returns flowOf(NetworkResult.Error("missing"))
+        // resolveRequest returning null route → fetchIdleScreensaverMeta returns null → slides built from preview only
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        coEvery { metadataRouterFacade.resolveRequest(any()) } returns buildFacadeNullRouteResult()
         coEvery {
             catalogRepository.refreshCatalogToDisk(
                 addonBaseUrl = "https://v3-cinemeta.strem.io",
@@ -548,7 +549,8 @@ class IdleScreensaverRepositoryTest {
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
-            traktDiscoverySnapshotStore = traktSnapshotStore
+            traktDiscoverySnapshotStore = traktSnapshotStore,
+            metadataRouterFacade = metadataRouterFacade
         )
 
         repository.refreshOnColdBoot()
@@ -717,6 +719,65 @@ class IdleScreensaverRepositoryTest {
             language = null,
             links = listOf(MetaLink(name = "IMDb", category = "external", url = "https://example.com/$id")),
             trailerYtIds = if (includeTrailer) listOf("trailer1234") else emptyList()
+        )
+    }
+
+    private fun buildFacadeSuccessResult(
+        contentId: String,
+        contentType: ContentType
+    ): MetadataResolutionResult {
+        return MetadataResolutionResult(
+            route = MetadataRoute(
+                provider = MetadataPrimaryProvider.TVDB,
+                parentId = contentId,
+                mediaKind = if (contentType == ContentType.MOVIE) MetadataMediaKind.MOVIE else MetadataMediaKind.SERIES,
+                reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+                sourceContext = MetadataSourceContext(),
+                targetIds = mapOf(MetadataPrimaryProvider.TVDB to contentId),
+                trace = emptyList()
+            ),
+            plan = null,
+            resolverSchedule = ResolverSchedule(MetadataDepth.PREVIEW, emptyList(), emptyList()),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = contentId,
+                title = "Routed $contentId",
+                overview = null,
+                poster = "https://routed/$contentId/poster.jpg",
+                backdrop = "https://routed/$contentId/background.jpg",
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(
+                title = "Routed $contentId",
+                poster = "https://routed/$contentId/poster.jpg",
+                backdrop = "https://routed/$contentId/background.jpg"
+            ),
+            trace = emptyList()
+        )
+    }
+
+    private fun buildFacadeNullRouteResult(): MetadataResolutionResult {
+        return MetadataResolutionResult(
+            route = null,
+            plan = null,
+            resolverSchedule = ResolverSchedule(MetadataDepth.PREVIEW, emptyList(), emptyList()),
+            resolvedDocument = ResolvedMetadataDocument(
+                canonicalId = null,
+                title = null,
+                overview = null,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                rating = null,
+                runtimeMinutes = null,
+                fieldOwners = emptyMap(),
+                ignoredOverwrites = emptyList()
+            ),
+            displayMetadata = HomeDisplayMetadata(),
+            trace = emptyList()
         )
     }
 
