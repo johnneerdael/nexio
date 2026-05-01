@@ -128,6 +128,29 @@ class RuntimeMetadataIdentityLookupTest {
     }
 
     @Test
+    fun `imdbToTvdbSeries returns first TVDB series id from remote id search`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
+        val tvdbProvider = mockk<TvdbIntegrationProvider>()
+        coEvery { tvdbProvider.searchByRemoteId("tt0944947") } returns TvdbRemoteIdSearchResponse(
+            data = listOf(
+                TvdbRemoteIdSearchResult(series = TvdbSeriesBaseRecord(id = 121361)),
+                TvdbRemoteIdSearchResult(series = TvdbSeriesBaseRecord(id = 999999))
+            )
+        )
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.imdbToTvdbSeries("tt0944947")
+
+        assertEquals("121361", result)
+        coVerify(exactly = 1) { tvdbProvider.searchByRemoteId("tt0944947") }
+        coVerify(exactly = 0) { tmdbProvider.findImdbIdByTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbProvider.findTmdbIdByImdbId(any(), any()) }
+    }
+
+    @Test
     fun `imdbToTvdb skips remote id results without series ids`() = runTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
         val tvdbProvider = mockk<TvdbIntegrationProvider>()
