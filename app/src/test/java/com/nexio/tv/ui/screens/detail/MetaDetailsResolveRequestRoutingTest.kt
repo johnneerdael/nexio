@@ -1,0 +1,282 @@
+package com.nexio.tv.ui.screens.detail
+
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolverSchedule
+import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.repository.MetaRepository
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import io.mockk.slot
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Before
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class MetaDetailsResolveRequestRoutingTest {
+
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    /**
+     * Verifies that loadMeta calls metadataRouterFacade.resolveRequest() for a tvdb: series id,
+     * never falls through to getMetaFromAllAddons, and exposes displayMetadata.genres in the
+     * screen state.
+     */
+    @Test
+    fun `loadMeta for tvdb series uses resolveRequest and never calls getMetaFromAllAddons for non-addon-origin item`() =
+        runTest(dispatcher) {
+            // relaxed = true so that other facade methods (fetchTvEnrichment, fetchTmdbEnrichment,
+            // etc.) called from enrichMeta/applyMetaWithEnrichment don't throw.
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val metaRepository = mockk<MetaRepository>(relaxed = true)
+            val captured = slot<MetadataRequest>()
+
+            coEvery { facade.resolveRequest(capture(captured)) } returns buildTvdbResolutionResult()
+            // Stub fetchTvEnrichment so enrichMeta doesn't throw ClassCastException from relaxed mock.
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+
+            val viewModel = buildMetaDetailsViewModel(
+                // meta is needed for the factory — we supply a minimal placeholder.
+                // The real resolution path now goes through the facade, not metaRepository.
+                meta = buildMinimalSeriesMeta(),
+                itemId = "tvdb:355567",
+                itemType = "series",
+                addonBaseUrl = null, // no addon origin → last-resort branch is skipped
+                metaRepository = metaRepository,
+                metadataRouterFacade = facade
+            )
+
+            advanceUntilIdle()
+
+            // The router was called exactly once.
+            coVerify(exactly = 1) { facade.resolveRequest(any<MetadataRequest>()) }
+
+            // getMetaFromAllAddons must NOT be called for a non-addon-origin tvdb id.
+            coVerify(exactly = 0) {
+                metaRepository.getMetaFromAllAddons(
+                    type = any(),
+                    id = any(),
+                    cacheOnDisk = any(),
+                    writeToDisk = any(),
+                    origin = any()
+                )
+            }
+
+            // The captured request matches the expected content id and content type.
+            assertEquals("tvdb:355567", captured.captured.contentId)
+            assertEquals(ContentType.SERIES, captured.captured.contentType)
+
+            // The screen state exposes the displayMetadata fields from the resolution result.
+            val state = viewModel.uiState.value
+            assertFalse("isLoading should be false after loadMeta completes", state.isLoading)
+            val meta = state.meta
+            assertNotNull("meta should be populated", meta)
+            assertEquals("Sample TVDB Title", meta?.name)
+            assertEquals(listOf("Drama", "Sci-Fi"), meta?.genres)
+            assertEquals("2019", meta?.releaseInfo)
+        }
+
+    /**
+     * Verifies that when the router succeeds, getMeta (single-addon path) is also not called.
+     */
+    @Test
+    fun `loadMeta with addon origin falls back to getMeta only when router yields no route`() =
+        runTest(dispatcher) {
+            // relaxed = true so other facade methods called from enrichMeta don't throw.
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val metaRepository = mockk<MetaRepository>(relaxed = true)
+
+            // Router returns a result with no route (null route → fallback path).
+            coEvery { facade.resolveRequest(any()) } returns buildNoRouteResolutionResult()
+            // Stub fetchTvEnrichment so enrichMeta doesn't throw ClassCastException from relaxed mock.
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+
+            // getMeta returns success so the fallback path resolves cleanly.
+            coEvery {
+                metaRepository.getMeta(
+                    addonBaseUrl = any(),
+                    type = any(),
+                    id = any(),
+                    cacheOnDisk = any(),
+                    writeToDisk = any(),
+                    origin = any()
+                )
+            } returns kotlinx.coroutines.flow.flowOf(
+                com.nexio.tv.core.network.NetworkResult.Success(buildMinimalSeriesMeta())
+            )
+
+            val viewModel = buildMetaDetailsViewModel(
+                meta = buildMinimalSeriesMeta(),
+                itemId = "tvdb:355567",
+                itemType = "series",
+                addonBaseUrl = "https://addon.example.com",
+                metaRepository = metaRepository,
+                metadataRouterFacade = facade
+            )
+
+            advanceUntilIdle()
+
+            // Router was still called.
+            coVerify(exactly = 1) { facade.resolveRequest(any<MetadataRequest>()) }
+
+            // getMeta was called as the last-resort fallback.
+            coVerify(exactly = 1) {
+                metaRepository.getMeta(
+                    addonBaseUrl = "https://addon.example.com",
+                    type = "series",
+                    id = "tvdb:355567",
+                    cacheOnDisk = any(),
+                    writeToDisk = any(),
+                    origin = any()
+                )
+            }
+
+            // getMetaFromAllAddons must not be called even in the fallback path.
+            coVerify(exactly = 0) {
+                metaRepository.getMetaFromAllAddons(
+                    type = any(),
+                    id = any(),
+                    cacheOnDisk = any(),
+                    writeToDisk = any(),
+                    origin = any()
+                )
+            }
+        }
+
+    // ── helpers ──────────────────────────────────────────────────────────────────
+
+    private fun buildTvdbResolutionResult() = MetadataResolutionResult(
+        route = MetadataRoute(
+            provider = MetadataPrimaryProvider.TVDB,
+            parentId = "tvdb:355567",
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+            sourceContext = MetadataSourceContext(),
+            targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:355567"),
+            trace = emptyList()
+        ),
+        plan = null,
+        resolverSchedule = ResolverSchedule(
+            depth = MetadataDepth.DETAIL_CORE,
+            localResolvers = emptyList(),
+            networkResolvers = emptyList()
+        ),
+        resolvedDocument = ResolvedMetadataDocument(
+            canonicalId = "tvdb:355567",
+            title = "Sample TVDB Title",
+            overview = "Canonical overview",
+            poster = "tvdb-poster",
+            backdrop = "tvdb-backdrop",
+            logo = null,
+            rating = 8.4,
+            runtimeMinutes = 55,
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        ),
+        displayMetadata = HomeDisplayMetadata(
+            title = "Sample TVDB Title",
+            description = "Canonical overview",
+            genres = listOf("Drama", "Sci-Fi"),
+            releaseInfo = "2019",
+            runtime = "55m",
+            imdbRating = 8.4f,
+            poster = "tvdb-poster",
+            backdrop = "tvdb-backdrop"
+        ),
+        trace = emptyList()
+    )
+
+    private fun buildNoRouteResolutionResult() = MetadataResolutionResult(
+        route = null,
+        plan = null,
+        resolverSchedule = ResolverSchedule(
+            depth = MetadataDepth.DETAIL_CORE,
+            localResolvers = emptyList(),
+            networkResolvers = emptyList()
+        ),
+        resolvedDocument = ResolvedMetadataDocument(
+            canonicalId = null,
+            title = null,
+            overview = null,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            rating = null,
+            runtimeMinutes = null,
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        ),
+        displayMetadata = HomeDisplayMetadata(),
+        trace = emptyList()
+    )
+
+    /**
+     * Returns a [TvMetadataDecision] with no enrichment value — used to stub [fetchTvEnrichment]
+     * so that [enrichMeta] completes without ClassCastExceptions from relaxed mockk generics.
+     */
+    private fun noEnrichmentDecision(): TvMetadataDecision<TvMetadataEnrichment> =
+        TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+            value = null
+        )
+
+    private fun buildMinimalSeriesMeta() = Meta(
+        id = "tvdb:355567",
+        type = ContentType.SERIES,
+        rawType = "series",
+        name = "Minimal Series",
+        poster = null,
+        posterShape = PosterShape.POSTER,
+        background = null,
+        logo = null,
+        description = null,
+        releaseInfo = null,
+        imdbRating = null,
+        genres = emptyList(),
+        runtime = null,
+        director = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = null,
+        awards = null,
+        language = null,
+        links = emptyList()
+    )
+}
