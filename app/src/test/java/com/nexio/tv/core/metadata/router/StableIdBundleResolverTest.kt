@@ -122,7 +122,7 @@ class StableIdBundleResolverTest {
         )
 
         assertEquals("121361", bundle.canonical.tvdbSeriesId)
-        assertEquals("tt_bad", bundle.sidecars.imdbId)
+        assertEquals("tt0944947", bundle.sidecars.imdbId)
         assertEquals(
             listOf(
                 "imdbToTvdbSeries:tt_bad",
@@ -131,6 +131,34 @@ class StableIdBundleResolverTest {
             ),
             lookup.calls
         )
+    }
+
+    @Test
+    fun `negative tmdb tv imdb lookup does not suppress tmdb movie imdb lookup for same id`() = runTest {
+        val store = InMemoryIdMappingStore(nowEpochMs = { 10L })
+        val lookup = RecordingLookup(
+            tmdbTvToImdbResult = null,
+            tmdbMovieToImdbResult = "tt0137523"
+        )
+        val resolver = resolver(store = store, lookup = lookup)
+
+        resolver.resolve(
+            request(
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TVDB,
+                knownIds = ProviderIds(tmdb = "550")
+            )
+        )
+        val movieBundle = resolver.resolve(
+            request(
+                itemType = ContentType.MOVIE,
+                routeProvider = MetadataPrimaryProvider.TMDB,
+                knownIds = ProviderIds(tmdb = "550")
+            )
+        )
+
+        assertEquals("tt0137523", movieBundle.sidecars.imdbId)
+        assertEquals(listOf("tmdbTvToImdb:550", "tmdbMovieToImdb:550"), lookup.calls)
     }
 
     @Test
