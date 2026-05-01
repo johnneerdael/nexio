@@ -1,6 +1,6 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklLibrarySnapshotStore
 import com.nexio.tv.data.remote.dto.simkl.SimklActivityBucketDto
@@ -13,7 +13,6 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.ListMembershipChanges
-import com.nexio.tv.domain.repository.MetaRepository
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import io.mockk.coEvery
@@ -23,7 +22,6 @@ import io.mockk.verify
 import io.mockk.slot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -100,7 +98,7 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = mockk(relaxed = true),
             snapshotStore = snapshotStore,
-            metaRepository = metaRepository()
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         val items = service.observeAllItems().first()
@@ -142,7 +140,7 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = mockk(relaxed = true),
             snapshotStore = snapshotStore,
-            metaRepository = metaRepository()
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         service.refreshNow(force = true)
@@ -173,7 +171,7 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metaRepository = metaRepository()
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         service.refreshNow(force = true)
@@ -209,7 +207,7 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metaRepository = metaRepository()
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         service.refreshNow(force = true)
@@ -242,7 +240,7 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metaRepository = metaRepository()
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         service.refreshNow(force = true)
@@ -314,7 +312,7 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metaRepository = metaRepository()
+            metadataRouterFacade = mockk(relaxed = true)
         )
 
         service.refreshNow(force = true)
@@ -359,11 +357,4 @@ class SimklLibraryServiceTest {
         coEvery { remote.getAllItems(dateFrom = null, extended = "full", session = any()) } returns Response.success(emptyList())
     }
 
-    private fun metaRepository(): MetaRepository {
-        return mockk {
-            every { getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(
-                NetworkResult.Error("no metadata")
-            )
-        }
-    }
 }

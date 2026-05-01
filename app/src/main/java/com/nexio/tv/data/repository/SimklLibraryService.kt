@@ -3,6 +3,10 @@ package com.nexio.tv.data.repository
 import android.util.Log
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklLibrarySnapshotStore
@@ -13,13 +17,15 @@ import com.nexio.tv.data.remote.dto.simkl.SimklIdsDto
 import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
 import com.nexio.tv.data.repository.simkl.SimklLibraryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TrackingProvider
-import com.nexio.tv.domain.repository.MetaRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,7 +42,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,7 +52,7 @@ class SimklLibraryService @Inject constructor(
     private val simklAuthDataStore: SimklAuthDataStore,
     private val traktMutationOutboxCoordinator: ProviderMutationOutboxCoordinator,
     private val snapshotStore: SimklLibrarySnapshotStore,
-    private val metaRepository: MetaRepository,
+    private val metadataRouterFacade: MetadataRouterFacade,
     private val profileManager: ProfileManager? = null,
     private val ownershipService: IntegrationOwnershipService? = null
 ) {
@@ -91,6 +96,7 @@ class SimklLibraryService @Inject constructor(
         const val HOLD_KEY = "simkl:hold"
         const val DROPPED_KEY = "simkl:dropped"
         private val STATUS_KEYS = listOf(WATCHLIST_KEY, WATCHING_KEY, COMPLETED_KEY, HOLD_KEY, DROPPED_KEY)
+        private const val TAG = "SimklLibraryService"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -661,38 +667,44 @@ class SimklLibraryService @Inject constructor(
     }
 
     private suspend fun fetchMetadata(entry: LibraryEntry): LibraryMetadata? {
-        val typeCandidates = if (entry.type == "movie") listOf("movie") else listOf("series", "tv")
-        val idCandidates = buildList {
-            add(entry.id)
-            entry.imdbId?.takeIf { it.isNotBlank() }?.let(::add)
-            entry.tmdbId?.let { add("tmdb:$it") }
-            if (entry.id.startsWith("tmdb:")) add(entry.id.substringAfter(':'))
-            if (entry.id.startsWith("simkl:")) add(entry.id.substringAfter(':'))
-        }.distinct()
-        for (type in typeCandidates) {
-            for (id in idCandidates) {
-                val result = withTimeoutOrNull(3500L) {
-                    metaRepository.getMetaFromAllAddons(
-                        type = type,
-                        id = id,
-                        cacheOnDisk = false,
-                        origin = "library"
-                    ).first { it !is com.nexio.tv.core.network.NetworkResult.Loading }
-                } ?: continue
-                val meta = (result as? com.nexio.tv.core.network.NetworkResult.Success)?.data ?: continue
-                return LibraryMetadata(
-                    name = meta.name,
-                    poster = meta.poster,
-                    background = meta.background,
-                    logo = meta.logo,
-                    description = meta.description,
-                    releaseInfo = meta.releaseInfo,
-                    imdbRating = meta.imdbRating,
-                    genres = meta.genres
+        val request = MetadataRequest(
+            contentId = entry.id,
+            contentType = ContentType.fromString(entry.type),
+            sourceContext = MetadataSourceContext(
+                itemType = entry.type,
+                addonMetadata = HomeDisplayMetadata(
+                    title = entry.name,
+                    poster = entry.poster,
+                    backdrop = entry.background,
+                    logo = entry.logo,
+                    description = entry.description,
+                    releaseInfo = entry.releaseInfo,
+                    imdbRating = entry.imdbRating,
+                    genres = entry.genres
                 )
-            }
+            ),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+        val canonical = try {
+            metadataRouterFacade.resolveRequest(request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchMetadata resolveRequest failed for ${entry.id}: ${e.message}", e)
+            return null
         }
-        return null
+        if (canonical.route == null) return null
+        val display = canonical.displayMetadata
+        return LibraryMetadata(
+            name = display.title ?: entry.name,
+            poster = display.poster ?: entry.poster,
+            background = display.backdrop ?: entry.background,
+            logo = display.logo ?: entry.logo,
+            description = display.description ?: entry.description,
+            releaseInfo = display.releaseInfo ?: entry.releaseInfo,
+            imdbRating = display.imdbRating ?: entry.imdbRating,
+            genres = display.genres.takeIf { it.isNotEmpty() } ?: entry.genres
+        )
     }
 
     private fun addItemToList(snapshot: Snapshot, item: LibraryEntryInput, listKey: String): Snapshot {
