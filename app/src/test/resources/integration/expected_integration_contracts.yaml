@@ -2325,6 +2325,54 @@ apiShapes:
     responseHeaders:
       capture: [Retry-After]
     bestPracticeRules: [runtime-contract-baseline]
+  tmdb.search.people:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/search/person"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  tmdb.search.companies:
+    provider: TMDB
+    lifecycleStatus: PLANNED_NOT_ACTIVE
+    metadataRouterRequired: true
+    method: GET
+    path: "/search/company"
+    headerPolicy: tmdb-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
   tmdb.trending.movie:
     provider: TMDB
     lifecycleStatus: PLANNED_NOT_ACTIVE
