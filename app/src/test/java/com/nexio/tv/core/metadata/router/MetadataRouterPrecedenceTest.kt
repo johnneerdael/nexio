@@ -171,30 +171,37 @@ class MetadataRouterPrecedenceTest {
     }
 
     @Test
-    fun `negative mapping ttl is thirty days and positive mappings are permanent`() {
+    fun `mapping ttl policy applies source-specific expirations`() {
         val now = 1_000L
         val negativeExpiry = IdMappingTtlPolicy.expiresAt(IdMappingSource.NEGATIVE, now)
 
         assertEquals(now + IdMappingTtlPolicy.NEGATIVE_TTL_MS, negativeExpiry)
         assertEquals(null, IdMappingTtlPolicy.expiresAt(IdMappingSource.LOCAL, now))
-        assertEquals(null, IdMappingTtlPolicy.expiresAt(IdMappingSource.ROUTER_OBSERVED, now))
-        assertEquals(null, IdMappingTtlPolicy.expiresAt(IdMappingSource.FRIBB, now))
+        assertEquals(now + IdMappingTtlPolicy.POSITIVE_TTL_MS, IdMappingTtlPolicy.expiresAt(IdMappingSource.PROVIDER_LOOKUP, now))
+        assertEquals(now + IdMappingTtlPolicy.POSITIVE_TTL_MS, IdMappingTtlPolicy.expiresAt(IdMappingSource.RAIL_PREVIEW, now))
+        assertEquals(now + IdMappingTtlPolicy.POSITIVE_TTL_MS, IdMappingTtlPolicy.expiresAt(IdMappingSource.ROUTER_OBSERVED, now))
+        assertEquals(now + IdMappingTtlPolicy.STATIC_ANIME_TTL_MS, IdMappingTtlPolicy.expiresAt(IdMappingSource.FRIBB, now))
     }
 
     @Test
-    fun `mapping priority is local router observed fribb then negative`() = runTest {
+    fun `mapping priority is local provider lookup rail preview fribb router observed then negative`() = runTest {
         val sourceId = ParsedMetadataId(AnimeIdScheme.IMDB, "tt0388629", "tt0388629")
         val store = InMemoryIdMappingStore()
 
         store.persist(mapping(sourceId, "negative", IdMappingSource.NEGATIVE))
+        store.persist(mapping(sourceId, "provider", IdMappingSource.PROVIDER_LOOKUP))
+        store.persist(mapping(sourceId, "rail", IdMappingSource.RAIL_PREVIEW))
         store.persist(mapping(sourceId, "fribb", IdMappingSource.FRIBB))
         store.persist(mapping(sourceId, "router", IdMappingSource.ROUTER_OBSERVED))
         store.persist(mapping(sourceId, "local", IdMappingSource.LOCAL))
         store.persist(mapping(sourceId, "negative-again", IdMappingSource.NEGATIVE))
 
         assertEquals("local", store.lookupKitsu(sourceId)?.providerId)
-        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.LOCAL, IdMappingSource.FRIBB) < 0)
-        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.NEGATIVE, IdMappingSource.FRIBB) > 0)
+        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.LOCAL, IdMappingSource.PROVIDER_LOOKUP) < 0)
+        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.PROVIDER_LOOKUP, IdMappingSource.RAIL_PREVIEW) < 0)
+        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.RAIL_PREVIEW, IdMappingSource.FRIBB) < 0)
+        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.FRIBB, IdMappingSource.ROUTER_OBSERVED) < 0)
+        assertTrue(IdMappingTtlPolicy.comparePriority(IdMappingSource.NEGATIVE, IdMappingSource.ROUTER_OBSERVED) > 0)
     }
 
     @Test

@@ -15,11 +15,12 @@ import com.nexio.tv.domain.model.SourcePayloadQuality
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RailIdentityHarvesterTest {
     @Test
-    fun `harvest persists direct pairwise simkl imdb tmdb tvdb ids`() = runTest {
+    fun `harvest persists direct simkl source facts without simkl target mappings`() = runTest {
         val idMappingStore = InMemoryIdMappingStore()
         val harvester = RailIdentityHarvester(idMappingStore)
         val preview = RailItemPreview(
@@ -37,17 +38,18 @@ class RailIdentityHarvesterTest {
 
         val facts = harvester.harvest(preview)
 
-        assertEquals(12, facts.size)
+        assertEquals(9, facts.size)
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("simkl:12345")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tt1375666")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tt1375666")!!))
-        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.SIMKL, parseMetadataId("tt1375666")!!))
+        assertTrue(facts.none { it.provider == MetadataPrimaryProvider.SIMKL })
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tvdb:999")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tmdb:27205")!!))
+        assertTrue(facts.all { it.source == IdMappingSource.RAIL_PREVIEW })
     }
 
     @Test
-    fun `harvest persists direct pairwise trakt imdb tmdb tvdb ids`() = runTest {
+    fun `harvest persists direct trakt source facts without trakt target mappings`() = runTest {
         val idMappingStore = InMemoryIdMappingStore()
         val harvester = RailIdentityHarvester(idMappingStore)
         val preview = RailItemPreview(
@@ -65,11 +67,44 @@ class RailIdentityHarvesterTest {
 
         val facts = harvester.harvest(preview)
 
-        assertEquals(12, facts.size)
-        assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TRAKT, parseMetadataId("tt0133093")!!))
+        assertEquals(9, facts.size)
+        assertTrue(facts.none { it.provider == MetadataPrimaryProvider.TRAKT })
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.IMDB, parseMetadataId("trakt:67890")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TMDB, parseMetadataId("tvdb:777")!!))
         assertNotNull(idMappingStore.lookup(MetadataPrimaryProvider.TVDB, parseMetadataId("tmdb:603")!!))
+        assertTrue(facts.all { it.source == IdMappingSource.RAIL_PREVIEW })
+    }
+
+    @Test
+    fun `rail identity harvest never creates trakt or simkl target mappings`() = runTest {
+        val store = InMemoryIdMappingStore()
+        val harvester = RailIdentityHarvester(store)
+        val preview = RailItemPreview(
+            railId = "trakt_popular_series",
+            railSource = RailSource.BUILT_IN_TRAKT,
+            sourceProvider = ProviderId.TRAKT,
+            sourceItemId = "trakt:1",
+            itemType = ContentType.SERIES,
+            stableIds = ProviderIds(
+                trakt = "1",
+                simkl = "49108",
+                imdb = "tt0903747",
+                tmdb = "1396",
+                tvdb = "81189"
+            ),
+            display = RailDisplaySeed(title = "Breaking Bad"),
+            sourcePayloadQuality = SourcePayloadQuality.RICH_PREVIEW,
+            sourcePayloadHash = "hash",
+            generatedAtMs = 1_000L
+        )
+
+        val mappings = harvester.harvest(preview)
+
+        assertTrue(mappings.none { it.provider == MetadataPrimaryProvider.TRAKT })
+        assertTrue(mappings.none { it.provider == MetadataPrimaryProvider.SIMKL })
+        assertTrue(mappings.any { it.provider == MetadataPrimaryProvider.IMDB && it.providerId == "tt0903747" })
+        assertTrue(mappings.any { it.provider == MetadataPrimaryProvider.TMDB && it.providerId == "1396" })
+        assertTrue(mappings.any { it.provider == MetadataPrimaryProvider.TVDB && it.providerId == "81189" })
     }
 
     @Test
@@ -125,7 +160,7 @@ class RailIdentityHarvesterTest {
     }
 
     @Test
-    fun `harvested router observed fact does not overwrite fribb mapping`() = runTest {
+    fun `harvested rail preview fact follows mapping priority over fribb mapping`() = runTest {
         val imdbSource = parseMetadataId("tt1375666")!!
         val idMappingStore = InMemoryIdMappingStore()
         idMappingStore.persist(
@@ -153,6 +188,6 @@ class RailIdentityHarvesterTest {
 
         harvester.harvest(preview)
 
-        assertEquals("fribb-tmdb", idMappingStore.lookup(MetadataPrimaryProvider.TMDB, imdbSource)?.providerId)
+        assertEquals("27205", idMappingStore.lookup(MetadataPrimaryProvider.TMDB, imdbSource)?.providerId)
     }
 }
