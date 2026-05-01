@@ -1,8 +1,14 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.network.NetworkResult
+import android.util.Log
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.mergeFallback
@@ -12,7 +18,9 @@ import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import com.nexio.tv.ui.screensaver.IdleScreensaverTrailerModeData
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
+
+private const val TAG_SCREENSAVER_PREP = "IdleScreensaverPrep"
 
 internal data class PreparedIdleScreensaverItem(
     val preview: MetaPreview,
@@ -83,17 +91,63 @@ internal fun hasUsableIdleScreensaverDisplayData(
 
 internal suspend fun fetchIdleScreensaverMeta(
     preview: MetaPreview,
-    metaRepository: com.nexio.tv.domain.repository.MetaRepository
+    metadataRouterFacade: MetadataRouterFacade
 ): Meta? {
-    val result = runCatching {
-        metaRepository.getMetaFromAllAddons(
-            type = preview.apiType,
-            id = preview.id,
-            cacheOnDisk = true,
-            origin = "idle_screensaver"
-        ).first { networkResult -> networkResult !is NetworkResult.Loading }
-    }.getOrNull()
-    return (result as? NetworkResult.Success<*>)?.data as? Meta
+    val request = MetadataRequest(
+        contentId = preview.id,
+        contentType = preview.type,
+        sourceContext = MetadataSourceContext(
+            itemType = preview.apiType,
+            addonMetadata = preview.toHomeDisplayMetadata()
+        ),
+        depth = MetadataDepth.PREVIEW
+    )
+    val canonical = try {
+        metadataRouterFacade.resolveRequest(request)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG_SCREENSAVER_PREP, "fetchIdleScreensaverMeta resolveRequest failed for ${preview.id}: ${e.message}", e)
+        return null
+    }
+    if (canonical.route == null) return null
+    return canonical.toScreensaverMeta(preview)
+}
+
+/**
+ * Converts a [MetadataResolutionResult] to the [Meta] shape consumed by
+ * [mergeHydratedScreensaverMetadata]. Only the fields that shape needs are populated
+ * (title/poster/backdrop/logo/description/genres/releaseInfo/runtime/imdbRating/ratingSource/
+ * tomatoesRating/trailerYtIds); enrichment fields (cast, videos, etc.) are left empty.
+ */
+private fun MetadataResolutionResult.toScreensaverMeta(preview: MetaPreview): Meta {
+    val doc = resolvedDocument
+    val display = displayMetadata
+    return Meta(
+        id = doc.canonicalId ?: preview.id,
+        type = preview.type,
+        rawType = preview.apiType,
+        name = doc.title ?: display.title ?: preview.name,
+        poster = doc.poster ?: display.poster,
+        posterShape = PosterShape.POSTER,
+        background = doc.backdrop ?: display.backdrop,
+        logo = doc.logo ?: display.logo,
+        description = doc.overview ?: display.description,
+        releaseInfo = display.releaseInfo,
+        imdbRating = (doc.rating as? Number)?.toFloat() ?: display.imdbRating,
+        ratingSource = display.ratingSource,
+        genres = display.genres,
+        runtime = doc.runtimeMinutes?.let { "${it}m" } ?: display.runtime,
+        director = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = null,
+        awards = null,
+        language = null,
+        links = emptyList(),
+        trailerYtIds = emptyList(),
+        posterProviderTag = display.posterProviderTag
+    )
 }
 
 internal suspend fun buildIdleScreensaverSlides(

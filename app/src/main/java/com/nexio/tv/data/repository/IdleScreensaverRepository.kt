@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
@@ -62,7 +63,8 @@ class IdleScreensaverRepository @Inject constructor(
     private val mdbListRepository: MDBListRepository,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
-    private val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore
+    private val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore,
+    private val metadataRouterFacade: MetadataRouterFacade
 ) {
     private val refreshMutex = Mutex()
     private val _slides = MutableStateFlow<List<IdleScreensaverSlide>>(emptyList())
@@ -104,7 +106,7 @@ class IdleScreensaverRepository @Inject constructor(
             val preparedItems = prepareIdleScreensaverItems(
                 rows = selection.rows,
                 itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
-                hydrateMeta = { preview -> fetchIdleScreensaverMeta(preview, metaRepository) },
+                hydrateMeta = { preview -> fetchIdleScreensaverMeta(preview, metadataRouterFacade) },
                 enrichPreview = { preview -> mdbListRepository.enrichPreview(preview) }
             )
             publishPreparedContent(
