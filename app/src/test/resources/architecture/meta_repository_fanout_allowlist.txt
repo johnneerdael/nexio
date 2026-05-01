@@ -10,11 +10,15 @@
 /com/nexio/tv/domain/repository/MetaRepository.kt
 /com/nexio/tv/data/repository/MetaRepositoryImpl.kt
 
-# Stream selection — inherently addon-rooted (Stremio addon supplies streams)
+# Stream selection — addon-discovery pattern (no single originating Addon in
+# scope; iterates installed meta-capable addons until one answers).
+# hydrateAddonOriginItem(addon, ...) is called per candidate, so the type
+# signature contract holds per invocation. See KDoc at each call site.
 /com/nexio/tv/ui/screens/stream/StreamScreenViewModel.kt
 
-# Player runtime controllers — need Stremio composite Video.id for stream selection
-# (verified Tier 2 / Task 7 audit: no canonical pipeline equivalent)
+# Player runtime controllers — same addon-discovery pattern as
+# StreamScreenViewModel. Stremio composite Video.id requires querying any
+# installed addon that has the episode list / meta. See KDoc at each call site.
 /com/nexio/tv/ui/screens/player/PlayerRuntimeControllerStreams.kt
 /com/nexio/tv/ui/screens/player/PlayerRuntimeControllerMetadata.kt
 

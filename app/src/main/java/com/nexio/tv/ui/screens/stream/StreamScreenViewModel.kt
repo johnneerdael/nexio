@@ -825,6 +825,22 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
+    // Addon-discovery pattern (allow-listed in MetaRepositoryFanoutBoundaryTest):
+    // these sites do not have a single originating Addon in scope — the player /
+    // stream selection consumes data from any installed Stremio addon that can
+    // answer for this content id, not from a specific addon catalog rail.
+    //
+    // The iteration here is the legitimate "discover an addon that has data"
+    // behavior, not the forbidden "fan out across all addons because we lost
+    // track of the origin" pattern (which the rail-preview-first contract
+    // eliminated). hydrateAddonOriginItem(addon, ...) is called per discovered
+    // candidate — type signature still enforces the single-addon contract per
+    // invocation, while the loop is the explicit discovery mechanism.
+    //
+    // Future improvement: thread the originating Addon through PlayerNavigationArgs
+    // + StreamSelection state so this discovery becomes a single-addon lookup.
+    // See docs/superpowers/research/2026-05-01-rail-preview-first-gap-analysis.md
+    // for context.
     private suspend fun getEmbeddedStreamsFromMeta(installedAddons: List<Addon>): AddonStreams? {
         val metaId = contentId?.takeIf { it.isNotBlank() } ?: return null
         val metaAddons = installedAddons.filter { addon ->
@@ -858,6 +874,22 @@ class StreamScreenViewModel @Inject constructor(
         return null
     }
 
+    // Addon-discovery pattern (allow-listed in MetaRepositoryFanoutBoundaryTest):
+    // these sites do not have a single originating Addon in scope — the player /
+    // stream selection consumes data from any installed Stremio addon that can
+    // answer for this content id, not from a specific addon catalog rail.
+    //
+    // The iteration here is the legitimate "discover an addon that has data"
+    // behavior, not the forbidden "fan out across all addons because we lost
+    // track of the origin" pattern (which the rail-preview-first contract
+    // eliminated). hydrateAddonOriginItem(addon, ...) is called per discovered
+    // candidate — type signature still enforces the single-addon contract per
+    // invocation, while the loop is the explicit discovery mechanism.
+    //
+    // Future improvement: thread the originating Addon through PlayerNavigationArgs
+    // + StreamSelection state so this discovery becomes a single-addon lookup.
+    // See docs/superpowers/research/2026-05-01-rail-preview-first-gap-analysis.md
+    // for context.
     private fun loadMissingMetaDetailsIfNeeded() {
         val requiresMetadataLookup = genres.isNullOrBlank() || year.isNullOrBlank() || runtime == null
         if (!requiresMetadataLookup) return
