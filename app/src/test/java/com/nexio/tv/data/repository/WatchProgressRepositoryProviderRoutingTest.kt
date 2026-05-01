@@ -8,7 +8,6 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -121,7 +120,6 @@ class WatchProgressRepositoryProviderRoutingTest {
             trackingProviderStateService = trackingProviderStateService,
             trackingProgressService = trackingProgressService,
             traktMutationOutboxCoordinator = outbox,
-            metaRepository = mockk<MetaRepository>(relaxed = true),
             seasonMarkBatcher = mockk<SeasonMarkBatcher>(relaxed = true),
             traktAuthService = mockk(relaxed = true) {
                 every { currentTraktProfileId() } returns 1

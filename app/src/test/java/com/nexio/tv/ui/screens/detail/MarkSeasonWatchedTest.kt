@@ -420,7 +420,6 @@ class MarkSeasonWatchedTest {
                 trackingProviderStateService = trackingProviderStateService,
                 trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
-                metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
@@ -513,7 +512,6 @@ class MarkSeasonWatchedTest {
                 trackingProviderStateService = trackingProviderStateService,
                 trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
-                metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
@@ -619,7 +617,6 @@ class MarkSeasonWatchedTest {
                 trackingProviderStateService = trackingProviderStateService,
                 trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
-                metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
@@ -739,7 +736,6 @@ class MarkSeasonWatchedTest {
                 trackingProviderStateService = trackingProviderStateService,
                 trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
-                metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
@@ -814,7 +810,6 @@ class MarkSeasonWatchedTest {
                 trackingProviderStateService = trackingProviderStateService,
                 trackingProgressService = mockk(relaxed = true),
                 traktMutationOutboxCoordinator = outbox,
-                metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = mockk(relaxed = true),
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1

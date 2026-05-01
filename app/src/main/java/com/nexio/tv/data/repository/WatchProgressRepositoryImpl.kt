@@ -16,9 +16,9 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import javax.inject.Provider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,7 +45,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val trackingProviderStateService: TrackingProviderStateService,
     private val trackingProgressService: TrackingProgressService,
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
-    private val metaRepository: MetaRepository,
     private val seasonMarkBatcher: SeasonMarkBatcher,
     private val traktAuthService: TraktRepositoryAuthGateway,
     // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
@@ -141,7 +140,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         )
         val canonical = try {
             metadataRouterFacade.resolveRequest(request)
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "fetchContentMetadata resolveRequest failed for ${progress.contentId}: ${e.message}", e)

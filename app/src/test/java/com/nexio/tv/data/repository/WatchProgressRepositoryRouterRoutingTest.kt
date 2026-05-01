@@ -17,7 +17,6 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -35,7 +34,6 @@ class WatchProgressRepositoryRouterRoutingTest {
     @Test
     fun `fetchContentMetadata routes via resolveRequest with WatchProgress fields as addonMetadata`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
         val captured = slot<MetadataRequest>()
         coEvery { facade.resolveRequest(capture(captured)) } returns successResult()
 
@@ -55,11 +53,10 @@ class WatchProgressRepositoryRouterRoutingTest {
             lastWatched = 0L
         )
 
-        val repo = buildRepository(facade = facade, metaRepository = metaRepository)
+        val repo = buildRepository(facade = facade)
         repo.fetchContentMetadata(progress)
 
         coVerify(exactly = 1) { facade.resolveRequest(any()) }
-        coVerify(exactly = 0) { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) }
         val ctx = captured.captured.sourceContext
         assertNotNull(ctx.addonMetadata)
         assertEquals("Sample TV", ctx.addonMetadata!!.title)
@@ -71,7 +68,6 @@ class WatchProgressRepositoryRouterRoutingTest {
     @Test
     fun `fetchContentMetadata returns null when route is null`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
         coEvery { facade.resolveRequest(any()) } returns successResult().copy(route = null)
 
         val progress = WatchProgress(
@@ -90,7 +86,7 @@ class WatchProgressRepositoryRouterRoutingTest {
             lastWatched = 0L
         )
 
-        val repo = buildRepository(facade = facade, metaRepository = metaRepository)
+        val repo = buildRepository(facade = facade)
         val result = repo.fetchContentMetadata(progress)
 
         assertEquals(null, result)
@@ -99,7 +95,6 @@ class WatchProgressRepositoryRouterRoutingTest {
     @Test
     fun `fetchContentMetadata falls back to WatchProgress fields when displayMetadata has nulls`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
-        val metaRepository = mockk<MetaRepository>(relaxed = true)
         coEvery { facade.resolveRequest(any()) } returns successResult().copy(
             displayMetadata = HomeDisplayMetadata(title = null, poster = null, backdrop = null, logo = null)
         )
@@ -120,7 +115,7 @@ class WatchProgressRepositoryRouterRoutingTest {
             lastWatched = 0L
         )
 
-        val repo = buildRepository(facade = facade, metaRepository = metaRepository)
+        val repo = buildRepository(facade = facade)
         val result = repo.fetchContentMetadata(progress)
 
         assertNotNull(result)
@@ -131,8 +126,7 @@ class WatchProgressRepositoryRouterRoutingTest {
     }
 
     private fun buildRepository(
-        facade: MetadataRouterFacade,
-        metaRepository: MetaRepository
+        facade: MetadataRouterFacade
     ): WatchProgressRepositoryImpl {
         val trackingProviderStateService = mockk<TrackingProviderStateService> {
             every { state } returns flowOf(
@@ -158,7 +152,6 @@ class WatchProgressRepositoryRouterRoutingTest {
                 every { observeMovieWatched(any()) } returns flowOf(false)
             },
             traktMutationOutboxCoordinator = mockk<TraktMutationOutboxCoordinator>(relaxed = true),
-            metaRepository = metaRepository,
             seasonMarkBatcher = mockk<SeasonMarkBatcher>(relaxed = true),
             traktAuthService = mockk(relaxed = true) {
                 every { currentTraktProfileId() } returns 1
