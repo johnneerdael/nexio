@@ -13,8 +13,10 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
     override suspend fun tmdbMovieToImdb(tmdbId: String): String? =
         tmdbProvider.findImdbIdByTmdbId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null, "movie")
 
-    override suspend fun imdbToTmdbMovie(imdbId: String): String? =
-        tmdbProvider.findTmdbIdByImdbId(imdbId, "movie")?.toString()
+    override suspend fun imdbToTmdbMovie(imdbId: String): String? {
+        val normalizedImdbId = imdbId.trim().takeIf { it.isNotEmpty() } ?: return null
+        return tmdbProvider.findTmdbIdByImdbId(normalizedImdbId, "movie")?.toString()
+    }
 
     override suspend fun tmdbTvToImdb(tmdbId: String): String? =
         tmdbProvider.findImdbIdByTmdbId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null, "tv")
@@ -31,9 +33,10 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
             ?.remoteIds
             ?.firstOrNull { it.sourceName.equals("IMDB", ignoreCase = true) }
             ?.id
+            ?.takeIf { it.isNotBlank() }
 
     override suspend fun tmdbToTvdb(tmdbId: String): String? {
-        val imdbId = tmdbTvToImdb(tmdbId) ?: return null
+        val imdbId = tmdbTvToImdb(tmdbId)?.takeIf { it.isNotBlank() } ?: return null
         return imdbToTvdbSeries(imdbId)
     }
 
@@ -41,7 +44,7 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
         imdbToTvdbSeries(imdbId)
 
     override suspend fun tvdbToTmdb(tvdbId: String): String? {
-        val imdbId = tvdbSeriesToImdb(tvdbId) ?: return null
+        val imdbId = tvdbSeriesToImdb(tvdbId)?.takeIf { it.isNotBlank() } ?: return null
         return imdbToTmdbMovie(imdbId)
     }
 }

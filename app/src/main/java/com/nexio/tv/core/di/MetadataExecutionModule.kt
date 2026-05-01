@@ -2,6 +2,7 @@ package com.nexio.tv.core.di
 
 import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
 import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
+import com.nexio.tv.core.metadata.router.StableIdBundleResolver
 import com.nexio.tv.data.integration.metadata.KitsuMetadataProviderAdapter
 import com.nexio.tv.data.integration.metadata.RuntimeMetadataIdentityLookup
 import com.nexio.tv.data.integration.metadata.TmdbMetadataProviderAdapter
@@ -74,4 +75,7 @@ abstract class MetadataExecutionModule {
 
     @Binds
     abstract fun bindIdentityLookup(impl: RuntimeMetadataIdentityLookup): MetadataIdentityResolver.Lookup
+
+    @Binds
+    abstract fun bindStableIdBundleLookup(impl: RuntimeMetadataIdentityLookup): StableIdBundleResolver.Lookup
 }
