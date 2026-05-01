@@ -52,6 +52,7 @@ import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.AirDateGate
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.parseContentIds
+import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -626,39 +627,49 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 }
             } else {
-                // Last-resort B: no canonical route AND no addon origin. Try all addons as absolute
-                // fallback (covers legacy non-tvdb: ids like tt... where identity resolution
-                // could not produce a provider-native id). This path is intentionally kept as a
-                // safety net; canonical routing is always attempted first (above).
-                metaRepository.getMetaFromAllAddons(
-                    type = itemType,
-                    id = metaLookupId,
-                    cacheOnDisk = shouldCacheDetailMetaOnDisk,
-                    origin = detailMetaOrigin
-                ).collect { result ->
-                    when (result) {
-                        is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
-                        is NetworkResult.Error -> {
-                            if (tryApplyStreamOnlyFallback(result.message)) {
-                                _uiState.update { state ->
-                                    if (state.userMessage == null) {
-                                        state.copy(
-                                            userMessage = "Metadata unavailable. Opening stream selection.",
-                                            userMessageIsError = false
-                                        )
-                                    } else {
-                                        state
+                // Last-resort B: no canonical route AND no addon origin.
+                // Resolve addon from preferredAddonBaseUrl if available; otherwise emit error.
+                // Task 3 will refine this branch with full addon-origin-only gating.
+                val originAddon: Addon? = preferredAddonBaseUrl
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { baseUrl ->
+                        addonRepository.getCachedInstalledAddons()
+                            .firstOrNull { it.baseUrl == baseUrl }
+                    }
+                if (originAddon != null) {
+                    metaRepository.hydrateAddonOriginItem(
+                        addon = originAddon,
+                        type = itemType,
+                        id = metaLookupId,
+                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                        origin = detailMetaOrigin
+                    ).collect { result ->
+                        when (result) {
+                            is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
+                            is NetworkResult.Error -> {
+                                if (tryApplyStreamOnlyFallback(result.message)) {
+                                    _uiState.update { state ->
+                                        if (state.userMessage == null) {
+                                            state.copy(
+                                                userMessage = "Metadata unavailable. Opening stream selection.",
+                                                userMessageIsError = false
+                                            )
+                                        } else {
+                                            state
+                                        }
                                     }
+                                } else {
+                                    _uiState.update { it.copy(isLoading = false, error = result.message) }
                                 }
-                            } else {
-                                Log.w(TAG, "loadMeta: no canonical route AND no addon origin AND all-addons fallback failed for $metaLookupId")
-                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            }
+                            NetworkResult.Loading -> {
+                                _uiState.update { it.copy(isLoading = true) }
                             }
                         }
-                        NetworkResult.Loading -> {
-                            _uiState.update { it.copy(isLoading = true) }
-                        }
                     }
+                } else {
+                    Log.w(TAG, "loadMeta: no canonical route AND no resolvable addon origin for $metaLookupId")
+                    _uiState.update { it.copy(isLoading = false, error = "Could not resolve metadata for $metaLookupId") }
                 }
             }
         }

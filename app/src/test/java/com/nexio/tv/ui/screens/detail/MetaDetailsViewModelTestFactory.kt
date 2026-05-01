@@ -27,6 +27,7 @@ import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.LibrarySourceMode
+import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
@@ -129,7 +130,8 @@ fun buildMetaDetailsViewModel(
 fun defaultMetaRepository(meta: Meta): MetaRepository {
     val repo = mockk<MetaRepository>()
     every {
-        repo.getMetaFromAllAddons(
+        repo.hydrateAddonOriginItem(
+            addon = any(),
             type = any(),
             id = any(),
             cacheOnDisk = any(),

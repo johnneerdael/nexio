@@ -38,6 +38,7 @@ import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
 import com.nexio.tv.data.repository.benchmark.ShadowStreamDecision
 import com.nexio.tv.data.repository.benchmark.normalizedBenchmarkServiceKey
 import com.nexio.tv.data.repository.device.DeviceCapabilityRepository
+import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.Stream
@@ -506,7 +507,7 @@ class StreamScreenViewModel @Inject constructor(
                 }
 
                 if (shouldAttemptEmbeddedMetaStreamLookup()) {
-                    getEmbeddedStreamsFromMeta()?.let { embeddedAddonStreams ->
+                    getEmbeddedStreamsFromMeta(installedAddons)?.let { embeddedAddonStreams ->
                         Log.d(
                             TAG,
                             "Using embedded video streams for videoId=$videoId count=${embeddedAddonStreams.streams.size}"
@@ -824,27 +825,37 @@ class StreamScreenViewModel @Inject constructor(
         }
     }
 
-    private suspend fun getEmbeddedStreamsFromMeta(): AddonStreams? {
+    private suspend fun getEmbeddedStreamsFromMeta(installedAddons: List<Addon>): AddonStreams? {
         val metaId = contentId?.takeIf { it.isNotBlank() } ?: return null
-        val result = metaRepository.getMetaFromAllAddons(type = contentType, id = metaId)
-            .first { it !is NetworkResult.Loading }
-        val meta = (result as? NetworkResult.Success)?.data ?: return null
-        val video = meta.videos.firstOrNull { it.id == videoId } ?: return null
-        if (video.streams.isEmpty()) return null
+        val metaAddons = installedAddons.filter { addon ->
+            addon.resources.any { it.name == "meta" }
+        }
+        if (metaAddons.isEmpty()) return null
+        for (addon in metaAddons) {
+            val result = metaRepository.hydrateAddonOriginItem(
+                addon = addon,
+                type = contentType,
+                id = metaId
+            ).first { it !is NetworkResult.Loading }
+            val meta = (result as? NetworkResult.Success)?.data ?: continue
+            val video = meta.videos.firstOrNull { it.id == videoId } ?: continue
+            if (video.streams.isEmpty()) continue
 
-        val streams = video.streams.map { stream ->
-            stream.copy(
-                name = stream.name ?: stream.title ?: stream.description ?: EMBEDDED_STREAM_FALLBACK_NAME,
+            val streams = video.streams.map { stream ->
+                stream.copy(
+                    name = stream.name ?: stream.title ?: stream.description ?: EMBEDDED_STREAM_FALLBACK_NAME,
+                    addonName = EMBEDDED_STREAM_GROUP_NAME,
+                    addonLogo = null
+                )
+            }
+
+            return AddonStreams(
                 addonName = EMBEDDED_STREAM_GROUP_NAME,
-                addonLogo = null
+                addonLogo = null,
+                streams = streams
             )
         }
-
-        return AddonStreams(
-            addonName = EMBEDDED_STREAM_GROUP_NAME,
-            addonLogo = null,
-            streams = streams
-        )
+        return null
     }
 
     private fun loadMissingMetaDetailsIfNeeded() {
@@ -855,12 +866,22 @@ class StreamScreenViewModel @Inject constructor(
         if (metaId.isBlank() || contentType.isBlank()) return
 
         viewModelScope.launch {
-            val result = metaRepository.getMetaFromAllAddons(type = contentType, id = metaId)
-                .first { it !is NetworkResult.Loading }
+            val metaAddons = addonRepository.getInstalledAddons().first()
+                .filter { addon -> addon.resources.any { it.name == "meta" } }
+            var meta: Meta? = null
+            for (addon in metaAddons) {
+                val result = metaRepository.hydrateAddonOriginItem(
+                    addon = addon,
+                    type = contentType,
+                    id = metaId
+                ).first { it !is NetworkResult.Loading }
+                if (result is NetworkResult.Success) {
+                    meta = result.data
+                    break
+                }
+            }
+            if (meta == null) return@launch
 
-            if (result !is NetworkResult.Success) return@launch
-
-            val meta = result.data
             val metaGenres = meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
             val metaYear = meta.releaseInfo
                 ?.substringBefore("-")

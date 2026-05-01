@@ -505,10 +505,23 @@ internal fun PlayerRuntimeController.loadEpisodesIfNeeded() {
     scope.launch {
         _uiState.update { it.copy(isLoadingEpisodes = true, episodesError = null) }
 
-        when (
-            val result = metaRepository.getMetaFromAllAddons(type = type, id = id)
-                .first { it !is NetworkResult.Loading }
-        ) {
+        val metaAddons = addonRepository.getInstalledAddons().first()
+            .filter { addon -> addon.resources.any { it.name == "meta" } }
+
+        var successResult: NetworkResult.Success<com.nexio.tv.domain.model.Meta>? = null
+        for (addon in metaAddons) {
+            val result = metaRepository.hydrateAddonOriginItem(
+                addon = addon,
+                type = type,
+                id = id
+            ).first { it !is NetworkResult.Loading }
+            if (result is NetworkResult.Success) {
+                successResult = result
+                break
+            }
+        }
+
+        when (val result = successResult ?: NetworkResult.Error("No addon with meta resource returned episodes for $id")) {
             is NetworkResult.Success -> {
                 val allEpisodes = result.data.videos
                     .sortedWith(

@@ -20,19 +20,23 @@ internal fun PlayerRuntimeController.fetchMetaDetails(id: String?, type: String?
     if (id.isNullOrBlank() || type.isNullOrBlank()) return
 
     scope.launch {
-        when (
-            val result = metaRepository.getMetaFromAllAddons(type = type, id = id)
-                .first { it !is NetworkResult.Loading }
-        ) {
-            is NetworkResult.Success -> {
-                applyMetaDetails(result.data)
-                applyProviderLocalizedPlaybackMetadata(result.data)
-            }
-            is NetworkResult.Error -> {
-                
-            }
-            NetworkResult.Loading -> {
-                
+        val metaAddons = addonRepository.getInstalledAddons().first()
+            .filter { addon -> addon.resources.any { it.name == "meta" } }
+
+        for (addon in metaAddons) {
+            val result = metaRepository.hydrateAddonOriginItem(
+                addon = addon,
+                type = type,
+                id = id
+            ).first { it !is NetworkResult.Loading }
+            when (result) {
+                is NetworkResult.Success -> {
+                    applyMetaDetails(result.data)
+                    applyProviderLocalizedPlaybackMetadata(result.data)
+                    return@launch
+                }
+                is NetworkResult.Error -> { /* try next addon */ }
+                NetworkResult.Loading -> { /* no-op */ }
             }
         }
     }

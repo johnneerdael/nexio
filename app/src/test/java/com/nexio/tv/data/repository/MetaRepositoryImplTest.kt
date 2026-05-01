@@ -20,7 +20,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -96,13 +95,13 @@ class MetaRepositoryImplTest {
     }
 
     @Test
-    fun `getMetaFromAllAddons delegates to addon meta integration provider using addon id`() = runTest {
+    fun `hydrateAddonOriginItem delegates to addon meta integration provider using supplied addon id`() = runTest {
         val context = mockk<Context>()
         val provider = mockk<AddonMetaIntegrationProvider>()
         val addonRepository = mockk<AddonRepository>()
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val diskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
-        val addon = Addon(
+        val fixtureAddon = Addon(
             id = "community.addon",
             name = "Community Addon",
             version = "1.0.0",
@@ -128,7 +127,6 @@ class MetaRepositoryImplTest {
         coEvery { posterResolver.getActiveProvider() } returns null
         every { diskCacheStore.readMeta(any(), any(), any()) } returns null
         every { posterResolver.apply(any<Meta>(), null) } answers { firstArg() }
-        coEvery { addonRepository.getInstalledAddons() } returns flowOf(listOf(addon))
         coEvery {
             provider.getMeta(
                 addonId = "community.addon",
@@ -152,7 +150,8 @@ class MetaRepositoryImplTest {
             metadataDiskCacheStore = diskCacheStore
         )
 
-        val emissions = repository.getMetaFromAllAddons(
+        val emissions = repository.hydrateAddonOriginItem(
+            addon = fixtureAddon,
             type = "movie",
             id = "tt123",
             cacheOnDisk = true,

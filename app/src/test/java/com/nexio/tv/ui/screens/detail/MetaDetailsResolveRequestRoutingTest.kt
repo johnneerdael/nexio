@@ -55,11 +55,11 @@ class MetaDetailsResolveRequestRoutingTest {
 
     /**
      * Verifies that loadMeta calls metadataRouterFacade.resolveRequest() for a tvdb: series id,
-     * never falls through to getMetaFromAllAddons, and exposes displayMetadata.genres in the
+     * never falls through to hydrateAddonOriginItem, and exposes displayMetadata.genres in the
      * screen state.
      */
     @Test
-    fun `loadMeta for tvdb series uses resolveRequest and never calls getMetaFromAllAddons for non-addon-origin item`() =
+    fun `loadMeta for tvdb series uses resolveRequest and never calls hydrateAddonOriginItem for non-addon-origin item`() =
         runTest(dispatcher) {
             // relaxed = true so that other facade methods (fetchTvEnrichment, fetchTmdbEnrichment,
             // etc.) called from enrichMeta/applyMetaWithEnrichment don't throw.
@@ -77,7 +77,7 @@ class MetaDetailsResolveRequestRoutingTest {
                 meta = buildMinimalSeriesMeta(),
                 itemId = "tvdb:355567",
                 itemType = "series",
-                addonBaseUrl = null, // no addon origin → last-resort branch is skipped
+                addonBaseUrl = null, // no addon origin → last-resort branch emits error state
                 metaRepository = metaRepository,
                 metadataRouterFacade = facade
             )
@@ -87,9 +87,10 @@ class MetaDetailsResolveRequestRoutingTest {
             // The router was called exactly once.
             coVerify(exactly = 1) { facade.resolveRequest(any<MetadataRequest>()) }
 
-            // getMetaFromAllAddons must NOT be called for a non-addon-origin tvdb id.
+            // hydrateAddonOriginItem must NOT be called for a non-addon-origin tvdb id.
             coVerify(exactly = 0) {
-                metaRepository.getMetaFromAllAddons(
+                metaRepository.hydrateAddonOriginItem(
+                    addon = any(),
                     type = any(),
                     id = any(),
                     cacheOnDisk = any(),
@@ -167,9 +168,10 @@ class MetaDetailsResolveRequestRoutingTest {
                 )
             }
 
-            // getMetaFromAllAddons must not be called even in the fallback path.
+            // hydrateAddonOriginItem must not be called even in the fallback path.
             coVerify(exactly = 0) {
-                metaRepository.getMetaFromAllAddons(
+                metaRepository.hydrateAddonOriginItem(
+                    addon = any(),
                     type = any(),
                     id = any(),
                     cacheOnDisk = any(),
