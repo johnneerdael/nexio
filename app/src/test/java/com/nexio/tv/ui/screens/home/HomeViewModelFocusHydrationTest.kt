@@ -43,7 +43,6 @@ import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
-import com.nexio.tv.testutil.testProfileManager
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -243,8 +242,6 @@ class HomeViewModelFocusHydrationTest {
     private fun buildTestHomeViewModel(
         metadataRouterFacade: MetadataRouterFacade
     ): HomeViewModel {
-        val profileManager = testProfileManager(MutableStateFlow(1))
-
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
         val noOpTvRouter = mockk<com.nexio.tv.core.tvdb.TvMetadataRouter> {

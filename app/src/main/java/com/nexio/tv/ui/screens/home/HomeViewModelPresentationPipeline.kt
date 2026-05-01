@@ -6,8 +6,6 @@ import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
-import com.nexio.tv.core.metadata.router.MetadataSourceContext
-import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
@@ -22,6 +20,7 @@ import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.data.trailer.TrailerResolutionResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
@@ -411,20 +410,12 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 val request = MetadataRequest(
                     contentId = item.id,
                     contentType = item.type,
-                    sourceContext = MetadataSourceContext(
-                        itemType = item.rawType,
-                        addonMetadata = item.toHomeDisplayMetadata(),
-                        previewSourceRole = SourceRole.RAIL_PREVIEW,
-                        previewSourceProvider = item.firstPaintSourceProvider?.name?.lowercase(),
-                        previewStableIds = item.firstPaintStableIds,
-                        previewSourceItemId = item.firstPaintSourceItemId,
-                        previewRailSource = item.firstPaintRailSource?.name
-                    ),
+                    sourceContext = item.toHomeMetadataSourceContext(),
                     depth = MetadataDepth.PREVIEW
                 )
                 val result = try {
                     metadataRouterFacade.resolveRequest(request)
-                } catch (e: kotlinx.coroutines.CancellationException) {
+                } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     Log.w(HomeViewModel.TAG, "onItemFocus hydration failed for ${item.id}: ${e.message}", e)
