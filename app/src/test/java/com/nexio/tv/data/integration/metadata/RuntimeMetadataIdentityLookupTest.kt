@@ -151,6 +151,21 @@ class RuntimeMetadataIdentityLookupTest {
     }
 
     @Test
+    fun `imdbToTvdbSeries ignores blank IMDB id`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
+        val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.imdbToTvdbSeries("   ")
+
+        assertNull(result)
+        coVerify(exactly = 0) { tvdbProvider.searchByRemoteId(any()) }
+    }
+
+    @Test
     fun `imdbToTvdb skips remote id results without series ids`() = runTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>(relaxed = true)
         val tvdbProvider = mockk<TvdbIntegrationProvider>()
