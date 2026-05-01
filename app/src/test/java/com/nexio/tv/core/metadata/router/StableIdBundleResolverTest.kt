@@ -103,6 +103,37 @@ class StableIdBundleResolverTest {
     }
 
     @Test
+    fun `tvdb route bridges through tmdb tv after known imdb misses tvdb`() = runTest {
+        val lookup = RecordingLookup(
+            tmdbTvToImdbResult = "tt0944947",
+            imdbToTvdbSeriesResults = mapOf(
+                "tt_bad" to null,
+                "tt0944947" to "121361"
+            )
+        )
+        val resolver = resolver(lookup = lookup)
+
+        val bundle = resolver.resolve(
+            request(
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TVDB,
+                knownIds = ProviderIds(imdb = "tt_bad", tmdb = "1399")
+            )
+        )
+
+        assertEquals("121361", bundle.canonical.tvdbSeriesId)
+        assertEquals("tt_bad", bundle.sidecars.imdbId)
+        assertEquals(
+            listOf(
+                "imdbToTvdbSeries:tt_bad",
+                "tmdbTvToImdb:1399",
+                "imdbToTvdbSeries:tt0944947"
+            ),
+            lookup.calls
+        )
+    }
+
+    @Test
     fun `tmdb movie with known tmdb resolves imdb sidecar through provider lookup`() = runTest {
         val lookup = RecordingLookup(tmdbMovieToImdbResult = "tt0137523")
         val resolver = resolver(lookup = lookup)
@@ -240,6 +271,7 @@ class StableIdBundleResolverTest {
         private val imdbToTmdbMovieResult: String? = null,
         private val tmdbTvToImdbResult: String? = null,
         private val imdbToTvdbSeriesResult: String? = null,
+        private val imdbToTvdbSeriesResults: Map<String, String?> = emptyMap(),
         private val tvdbSeriesToImdbResult: String? = null
     ) : StableIdBundleResolver.Lookup {
         val calls = mutableListOf<String>()
@@ -262,7 +294,11 @@ class StableIdBundleResolverTest {
 
         override suspend fun imdbToTvdbSeries(imdbId: String): String? {
             calls += "imdbToTvdbSeries:$imdbId"
-            return imdbToTvdbSeriesResult
+            return if (imdbToTvdbSeriesResults.containsKey(imdbId)) {
+                imdbToTvdbSeriesResults[imdbId]
+            } else {
+                imdbToTvdbSeriesResult
+            }
         }
 
         override suspend fun tvdbSeriesToImdb(tvdbId: String): String? {
