@@ -76,15 +76,15 @@ class StableIdBundleResolver @Inject constructor(
                 if (tvdbSeriesId == null) {
                     val tmdbTvId = known.tmdb.presentStableId()
                     if (tmdbTvId != null) {
-                        val resolvedImdb = imdbId ?: resolveViaStoreOrProvider(
+                        val bridgeImdb = resolveViaStoreOrProvider(
                             sourceId = parsed(AnimeIdScheme.TMDB, tmdbTvId),
                             provider = MetadataPrimaryProvider.IMDB,
                             operation = "tmdbTvToImdb",
                             target = "IMDB",
                             evidence = evidence
                         ) { lookup.tmdbTvToImdb(tmdbTvId) }
-                        imdbId = imdbId ?: resolvedImdb
-                        tvdbSeriesId = resolvedImdb?.let { imdb ->
+                        imdbId = imdbId ?: bridgeImdb
+                        tvdbSeriesId = bridgeImdb?.let { imdb ->
                             resolveViaStoreOrProvider(
                                 sourceId = parsed(AnimeIdScheme.IMDB, imdb),
                                 provider = MetadataPrimaryProvider.TVDB,
