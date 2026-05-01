@@ -2,7 +2,6 @@ package com.nexio.tv.data.repository
 
 import android.os.SystemClock
 import android.util.Log
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.integration.railpreview.TraktRailPreviewMapper
@@ -24,13 +23,11 @@ import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTrendingMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTrendingShowItemDto
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 import com.nexio.tv.domain.model.toMetaPreview
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +46,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -201,7 +197,6 @@ private fun TraktDiscoverySnapshot.hasConfiguredDiscoveryContent(
 class TraktDiscoveryService @Inject constructor(
     private val traktAuthService: TraktRepositoryAuthGateway,
     private val traktIntegrationProvider: TraktIntegrationProvider,
-    private val metaRepository: MetaRepository,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: TraktDiscoverySnapshotStore,
@@ -892,36 +887,6 @@ class TraktDiscoveryService @Inject constructor(
             .replace(Regex("[^a-z0-9]+"), "_")
             .trim('_')
             .ifBlank { "custom" }
-    }
-
-    private suspend fun resolveMetaPreview(type: String, contentId: String): MetaPreview? {
-        val result = withTimeoutOrNull(2_000L) {
-            metaRepository.getMetaFromAllAddons(type = type, id = contentId)
-                .filter { it !is NetworkResult.Loading }
-                .first()
-        } ?: return null
-
-        val meta = (result as? NetworkResult.Success)?.data ?: return null
-        return posterRatingsUrlResolver.apply(meta.toMetaPreview(), activePosterProvider)
-    }
-
-    private fun Meta.toMetaPreview(): MetaPreview {
-        return MetaPreview(
-            id = id,
-            type = type,
-            rawType = rawType,
-            name = name,
-            poster = poster,
-            posterShape = posterShape,
-            background = background,
-            logo = logo,
-            description = description,
-            releaseInfo = releaseInfo,
-            imdbRating = imdbRating,
-            genres = genres,
-            trailerYtIds = trailerYtIds,
-            language = language
-        )
     }
 
     private fun fallbackContentId(ids: TraktIdsDto): String {
