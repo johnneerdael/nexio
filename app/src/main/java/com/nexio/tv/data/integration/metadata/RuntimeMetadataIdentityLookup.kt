@@ -21,12 +21,14 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
     override suspend fun tmdbTvToImdb(tmdbId: String): String? =
         tmdbProvider.findImdbIdByTmdbId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null, "tv")
 
-    override suspend fun imdbToTvdbSeries(imdbId: String): String? =
-        tvdbProvider.searchByRemoteId(imdbId)
+    override suspend fun imdbToTvdbSeries(imdbId: String): String? {
+        val normalizedImdbId = imdbId.trim().takeIf { it.isNotEmpty() } ?: return null
+        return tvdbProvider.searchByRemoteId(normalizedImdbId)
             ?.data
             .orEmpty()
             .firstNotNullOfOrNull { result -> result.series?.id }
             ?.toString()
+    }
 
     override suspend fun tvdbSeriesToImdb(tvdbId: String): String? =
         tvdbProvider.fetchSeriesExtended(MetadataProviderTargetIds.tvdbInt(tvdbId) ?: return null)
