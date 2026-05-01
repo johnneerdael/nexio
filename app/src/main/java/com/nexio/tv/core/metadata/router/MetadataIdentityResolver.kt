@@ -56,7 +56,7 @@ class MetadataIdentityResolver @Inject constructor(
         )
 
         if (lookupResult == null) {
-            // F-B-06: persist NEGATIVE mapping for 30-day TTL
+            // F-B-06: persist NEGATIVE mapping for 24-hour TTL
             if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
                 idMappingStore.persist(
                     IdMapping(
