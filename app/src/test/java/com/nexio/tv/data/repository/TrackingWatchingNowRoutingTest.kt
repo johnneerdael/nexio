@@ -32,6 +32,7 @@ class TrackingWatchingNowRoutingTest {
         )
         every { this@mockk.state } returns flowOf(state)
         coEvery { currentState() } returns state
+        coEvery { currentState(any<Int>()) } returns state
     }
 
     @Test
@@ -83,7 +84,7 @@ class TrackingWatchingNowRoutingTest {
             owner(1)
         )
 
-        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f) }
-        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any()) }
+        coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f, any(), any()) }
+        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
     }
 }

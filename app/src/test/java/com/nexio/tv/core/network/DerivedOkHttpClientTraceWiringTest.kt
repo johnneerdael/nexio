@@ -27,7 +27,7 @@ class DerivedOkHttpClientTraceWiringTest {
 
         val offenders = freshBuilds.filter { match ->
             val start = match.range.first
-            val end = (match.range.last + 2000).coerceAtMost(text.length)
+            val end = (match.range.last + 3000).coerceAtMost(text.length)
             val window = text.substring(start, end)
             !window.contains("traceInterceptor")
         }

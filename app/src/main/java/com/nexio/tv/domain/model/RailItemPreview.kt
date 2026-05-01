@@ -143,7 +143,7 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         description = display.overview,
         releaseInfo = display.year?.toString() ?: display.releaseDate?.take(4),
         runtime = display.runtimeText,
-        imdbRating = rating,
+        imdbRating = if (ratingSource != null) rating else null,
         ratingSource = ratingSource,
         genres = display.genres,
         trailerYtIds = when (val hint = display.trailerHint) {
