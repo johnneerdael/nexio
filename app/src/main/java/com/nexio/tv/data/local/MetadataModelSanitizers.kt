@@ -7,14 +7,20 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 
 internal fun MetaPreview.sanitizedForCache(): MetaPreview = copy(
     ratingSource = ratingSource.orDefault(),
     genres = genres.orEmpty(),
-    trailerYtIds = trailerYtIds.orEmpty()
+    trailerYtIds = trailerYtIds.orEmpty(),
+    // Cast to nullable before Elvis so the compiler does not flag it as redundant.
+    // Gson can inject null into these non-null fields on legacy cached JSON missing those fields.
+    firstPaintSource = (firstPaintSource as FirstPaintSource?) ?: FirstPaintSource.ADDON_META_PREVIEW,
+    firstPaintStableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
 )
 
 internal fun HomeDisplayMetadata.sanitizedForCache(): HomeDisplayMetadata = copy(
