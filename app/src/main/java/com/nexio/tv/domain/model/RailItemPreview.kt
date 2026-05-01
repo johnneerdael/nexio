@@ -85,7 +85,8 @@ data class RailDisplaySeed(
     val logoUrl: String? = null,
     val rating: RatingSeed? = null,
     val ratingText: String? = null,
-    val trailerHint: TrailerHint? = null
+    val trailerHint: TrailerHint? = null,
+    val tomatoesRating: Double? = null
 )
 
 data class RatingSeed(
@@ -143,8 +144,9 @@ fun RailItemPreview.toMetaPreview(): MetaPreview {
         description = display.overview,
         releaseInfo = display.year?.toString() ?: display.releaseDate?.take(4),
         runtime = display.runtimeText,
-        imdbRating = if (ratingSource != null) rating else null,
+        imdbRating = rating,
         ratingSource = ratingSource,
+        tomatoesRating = display.tomatoesRating,
         genres = display.genres,
         trailerYtIds = when (val hint = display.trailerHint) {
             is TrailerHint.YouTube -> listOf(hint.videoId)

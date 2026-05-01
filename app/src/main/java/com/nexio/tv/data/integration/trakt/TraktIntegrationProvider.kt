@@ -733,7 +733,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getMyShowsCalendar(
@@ -773,7 +772,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getTrendingMovies(
@@ -811,7 +809,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getTrendingShows(
@@ -849,7 +846,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularMovies(
@@ -887,7 +883,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularShows(
@@ -928,7 +923,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getRecommendations(
@@ -970,7 +964,6 @@ class TraktIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             scope = IntegrationScope.GlobalContent,
-            profileContext = profileContext(session),
             load = {
                 val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
                     traktApi.getPopularLists(

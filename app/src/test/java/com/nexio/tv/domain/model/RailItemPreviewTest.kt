@@ -306,7 +306,7 @@ class RailItemPreviewTest {
     }
 
     @Test
-    fun `rail preview omits unsupported rating provider from meta rating`() {
+    fun `rail preview preserves unsupported rating provider value without legacy badge source`() {
         val preview = RailItemPreview(
             railId = "mdblist_top_shows",
             railSource = RailSource.BUILT_IN_MDBLIST,
@@ -326,7 +326,7 @@ class RailItemPreviewTest {
         val meta = preview.toMetaPreview()
 
         assertEquals("mdblist:show:1", meta.id)
-        assertNull(meta.imdbRating)
+        assertEquals(8.9f, meta.imdbRating)
         assertNull(meta.ratingSource)
     }
 

@@ -188,6 +188,12 @@ class ProfileBoundaryArchitectureTest {
 
                 val specHeader = text.substring(specStart, loadStart)
                 val lineNumber = text.take(specStart).count { it == '\n' } + 1
+
+                // Global-content specs intentionally omit profileContext to share the cache across
+                // profiles and avoid ProfileBoundaryEnforcer rejections. They are validated
+                // separately by TraktAuthenticatedGlobalContentBoundaryTest.
+                if (specHeader.contains("scope = IntegrationScope.GlobalContent")) return@mapNotNull null
+
                 val violations = listOfNotNull(
                     if (specHeader.contains("scope = IntegrationScope.Profile(")) {
                         "uses IntegrationScope.Profile"

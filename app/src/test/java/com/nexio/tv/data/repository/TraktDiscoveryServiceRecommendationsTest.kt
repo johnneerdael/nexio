@@ -1,17 +1,14 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
-import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.TraktAuthDataStore
+import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.remote.TraktRequestGate
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
@@ -19,9 +16,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRecommendationItemDto
-import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
-import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -46,7 +41,7 @@ class TraktDiscoveryServiceRecommendationsTest {
                 movie = TraktMovieDto(
                     title = "Fight Club",
                     year = 1999,
-                    ids = TraktIdsDto(imdb = "tt0137523")
+                    ids = TraktIdsDto(trakt = 432, imdb = "tt0137523")
                 )
             )
         )
@@ -59,8 +54,7 @@ class TraktDiscoveryServiceRecommendationsTest {
         val service = buildService(
             traktApi = traktApi,
             traktIntegrationProvider = traktIntegrationProvider,
-            profileManager = testProfileManager(),
-            dataStoreFactory = profileDataStoreFactoryForTest()
+            profileManager = testProfileManager()
         )
 
         service.ensureFresh(force = true)
@@ -80,7 +74,7 @@ class TraktDiscoveryServiceRecommendationsTest {
                 movie = TraktMovieDto(
                     title = "The Dark Knight",
                     year = 2008,
-                    ids = TraktIdsDto(imdb = "tt0468569")
+                    ids = TraktIdsDto(trakt = 16, imdb = "tt0468569")
                 )
             )
         )
@@ -91,7 +85,7 @@ class TraktDiscoveryServiceRecommendationsTest {
                 show = TraktShowDto(
                     title = "Severance",
                     year = 2022,
-                    ids = TraktIdsDto(imdb = "tt11280740")
+                    ids = TraktIdsDto(trakt = 152374, imdb = "tt11280740")
                 )
             )
         )
@@ -101,7 +95,7 @@ class TraktDiscoveryServiceRecommendationsTest {
             TraktMovieDto(
                 title = "Dune",
                 year = 2021,
-                ids = TraktIdsDto(imdb = "tt1160419")
+                ids = TraktIdsDto(trakt = 190430, imdb = "tt1160419")
             )
         )
         coEvery {
@@ -110,7 +104,7 @@ class TraktDiscoveryServiceRecommendationsTest {
             TraktShowDto(
                 title = "The Last of Us",
                 year = 2023,
-                ids = TraktIdsDto(imdb = "tt3581920")
+                ids = TraktIdsDto(trakt = 136315, imdb = "tt3581920")
             )
         )
         coEvery {
@@ -123,7 +117,6 @@ class TraktDiscoveryServiceRecommendationsTest {
             traktApi = traktApi,
             traktIntegrationProvider = traktIntegrationProvider,
             profileManager = testProfileManager(),
-            dataStoreFactory = profileDataStoreFactoryForTest(),
             enabledCatalogs = setOf(
                 TraktCatalogIds.TRENDING_MOVIES,
                 TraktCatalogIds.TRENDING_SHOWS,
@@ -157,7 +150,7 @@ class TraktDiscoveryServiceRecommendationsTest {
                 show = TraktShowDto(
                     title = "Andor",
                     year = 2022,
-                    ids = TraktIdsDto(imdb = "tt9253284")
+                    ids = TraktIdsDto(trakt = 176678, imdb = "tt9253284")
                 ),
                 episode = TraktEpisodeDto(
                     season = 2,
@@ -174,7 +167,6 @@ class TraktDiscoveryServiceRecommendationsTest {
             traktApi = traktApi,
             traktIntegrationProvider = traktIntegrationProvider,
             profileManager = testProfileManager(),
-            dataStoreFactory = profileDataStoreFactoryForTest(),
             enabledCatalogs = setOf(TraktCatalogIds.CALENDAR)
         )
 
@@ -189,31 +181,18 @@ class TraktDiscoveryServiceRecommendationsTest {
         traktApi: TraktApi,
         traktIntegrationProvider: TraktIntegrationProvider,
         profileManager: ProfileManager,
-        dataStoreFactory: com.nexio.tv.data.local.ProfileDataStoreFactory,
         enabledCatalogs: Set<String> = setOf(TraktCatalogIds.RECOMMENDED_MOVIES)
     ): TraktDiscoveryService {
-        val authDataStore = TraktAuthDataStore(
-            factory = dataStoreFactory,
-            profileManager = profileManager
+        val authenticatedState = TraktAuthState(
+            accessToken = "access",
+            refreshToken = "refresh",
+            tokenType = "Bearer",
+            username = "johnneerdael",
+            userSlug = "johnneerdael"
         )
-        authDataStore.saveToken(
-            TraktTokenResponseDto(
-                accessToken = "access",
-                tokenType = "Bearer",
-                expiresIn = 3600,
-                refreshToken = "refresh",
-                createdAt = System.currentTimeMillis() / 1000L
-            )
-        )
-        authDataStore.saveUser(username = "johnneerdael", userSlug = "johnneerdael")
-        val authService = TraktAuthService(
-            traktIntegrationProvider = object : dagger.Lazy<TraktIntegrationProvider> { override fun get() = traktIntegrationProvider },
-            traktAuthDataStore = authDataStore,
-            requestGate = TraktRequestGate(),
-            profileManager = profileManager,
-            profileModeRouter = ProfileModeRouter(),
-            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
-        )
+        val authGateway = mockk<TraktRepositoryAuthGateway> {
+            coEvery { getCurrentAuthState() } returns authenticatedState
+        }
 
         val traktSettings = mockk<TraktSettingsDataStore>()
         every { traktSettings.catalogPreferences } returns flowOf(
@@ -234,10 +213,9 @@ class TraktDiscoveryServiceRecommendationsTest {
         val outbox = mockk<TraktMutationOutboxCoordinator>(relaxed = true)
         val progressService = mockk<TraktProgressService>(relaxed = true)
         coEvery { progressService.getRecentActivities(any()) } returns null
-        coEvery { traktApi.getLastActivities(any()) } returns Response.success(null)
 
         return TraktDiscoveryService(
-            traktAuthService = TraktRepositoryAuthGateway(authService),
+            traktAuthService = authGateway,
             traktIntegrationProvider = traktIntegrationProvider,
             traktSettingsDataStore = traktSettings,
             posterRatingsUrlResolver = posterResolver,

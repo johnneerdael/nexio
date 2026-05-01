@@ -692,9 +692,10 @@ class ProfileSettingsScopeContractTest {
         assertTrue(serviceSource.contains("val profileId: Int = 1"))
         assertTrue(serviceSource.contains("ProfileOwnedContinueWatchingSnapshot"))
         assertTrue(serviceSource.contains("rawSnapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)"))
-        assertTrue(homeSource.contains("ownedSnapshot.profileId != activeHomeProfileSession.profileId"))
-        assertTrue(homeSource.contains("if (ownedSnapshot.profileId != activeHomeProfileSession.profileId)"))
-        assertTrue(homeSource.contains("Skipping foreign continue watching snapshot"))
+        // F-G-01 path B: profile ownership is enforced at the typed API boundary via
+        // observeProfileSnapshot(profileId) rather than a manual filter in the collector.
+        assertTrue(homeSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
+        assertTrue(homeSource.contains("observeProfileSnapshot"))
     }
 
     @Test
@@ -721,7 +722,9 @@ class ProfileSettingsScopeContractTest {
         val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
 
         assertTrue(homeStateSource.contains("val initialContinueWatchingResolved: Boolean = false"))
-        assertTrue(homeContinueWatchingSource.contains("ownedSnapshot.profileId != activeHomeProfileSession.profileId"))
+        // F-G-01 path B: profile ownership is enforced at the typed API boundary via
+        // observeProfileSnapshot(profileId) rather than a manual filter/unwrap in the collector.
+        assertTrue(homeContinueWatchingSource.contains("observeProfileSnapshot(activeHomeProfileSession.profileId)"))
         assertTrue(homeContinueWatchingSource.contains("initialContinueWatchingResolved = true"))
         assertTrue(homeViewModelSource.contains("initialContinueWatchingResolved = false"))
         assertTrue(homeScreenSource.contains("uiState.initialContinueWatchingResolved"))

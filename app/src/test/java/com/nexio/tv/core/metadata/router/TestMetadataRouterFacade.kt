@@ -178,6 +178,11 @@ private class TestMetadataProviderAdapter(
             if (castMembers.isNotEmpty()) {
                 put(ResolvedField.CAST, FieldValue(castMembers, FieldOwner.PRIMARY))
             }
+            airsTime?.let { put(ResolvedField.AIRS_TIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalCountry?.let { put(ResolvedField.ORIGINAL_COUNTRY, FieldValue(it, FieldOwner.PRIMARY)) }
+            originalNetwork?.let { put(ResolvedField.ORIGINAL_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            latestNetwork?.let { put(ResolvedField.LATEST_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
+            platformName?.let { put(ResolvedField.PLATFORM_NAME, FieldValue(it, FieldOwner.PRIMARY)) }
         }
 
     private fun MetadataMediaKind.toContentType(): ContentType =

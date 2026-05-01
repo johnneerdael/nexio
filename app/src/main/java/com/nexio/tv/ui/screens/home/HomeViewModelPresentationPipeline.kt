@@ -4,8 +4,6 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.metadata.router.MetadataDepth
-import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
@@ -396,25 +394,18 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 }
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
-    // Rail-preview-first hydration (Tier 1): RAIL_PREVIEW items are routed through
-    // MetadataRouterFacade on focus so the canonical TVDB / TMDB / Kitsu pipeline runs
-    // and emits Nexio.MetaRoute trace events. Idempotent per item.id within this ViewModel
-    // instance via focusedItemHydrationStates. Deliberately does NOT mutate the rail snapshot
-    // or _uiState here — that is deferred to Tier 2.
+    // Rail-preview-first hydration: RAIL_PREVIEW items are routed through the same
+    // provider-localized canonical overlay path used by focused preview enrichment. PREVIEW
+    // depth is reserved for no-route first-paint ownership, so focused hydration must request
+    // DETAIL_CORE and then merge the canonical fields back into the existing catalog item.
     if (item.firstPaintSource == FirstPaintSource.RAIL_PREVIEW) {
         val itemKey = item.id
         val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
         if (currentHydrationState == RailHydrationState.PREVIEW_ONLY) {
             focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
             viewModelScope.launch {
-                val request = MetadataRequest(
-                    contentId = item.id,
-                    contentType = item.type,
-                    sourceContext = item.toHomeMetadataSourceContext(),
-                    depth = MetadataDepth.PREVIEW
-                )
-                val result = try {
-                    metadataRouterFacade.resolveRequest(request)
+                val enrichment = try {
+                    fetchProviderEnrichmentForPreview(item)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -422,15 +413,12 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                     focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
                     return@launch
                 }
-                if (result.route == null) {
+                if (enrichment == null) {
                     focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
                 } else {
                     focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
-                    // Tier 1 deliberately does NOT mutate the rail snapshot here.
-                    // The resolveRequest call above emits Nexio.MetaRoute trace events
-                    // (metadata.route_decision / metadata.identity_resolution /
-                    // metadata.field_selected) which prove the architecture works end-to-end
-                    // and warms the canonical-metadata cache for Tier 2 UI updates.
+                    prefetchedExternalMetaIds.add(item.id)
+                    updateCatalogItemWithProvider(item.id, enrichment)
                 }
             }
         }
@@ -772,7 +760,47 @@ internal fun applyTomatoesToTraktSnapshot(
     itemId: String,
     tomatoesRating: Double
 ): com.nexio.tv.data.repository.TraktDiscoverySnapshot {
-    return snapshot
+    // A record carries the itemId if its sourceItemId or any stableId prefix matches.
+    fun com.nexio.tv.domain.model.RailItemPreview.matchesId(id: String): Boolean =
+        sourceItemId == id || stableIds.imdb == id ||
+            (stableIds.tmdb != null && "tmdb:${stableIds.tmdb}" == id) ||
+            (stableIds.tvdb != null && "tvdb:${stableIds.tvdb}" == id) ||
+            (stableIds.kitsu != null && "kitsu:${stableIds.kitsu}" == id)
+
+    fun com.nexio.tv.domain.model.RailItemPreview.withTomatoesRating(
+        rating: Double
+    ): com.nexio.tv.domain.model.RailItemPreview = copy(display = display.copy(tomatoesRating = rating))
+
+    fun List<com.nexio.tv.domain.model.RailItemPreview>.applyTomatoes(
+        id: String,
+        rating: Double
+    ): List<com.nexio.tv.domain.model.RailItemPreview> {
+        if (none { it.matchesId(id) }) return this
+        return map { if (it.matchesId(id)) it.withTomatoesRating(rating) else it }
+    }
+
+    val allRecords = snapshot.trendingMovieItemRecords +
+        snapshot.trendingShowItemRecords +
+        snapshot.popularMovieItemRecords +
+        snapshot.popularShowItemRecords +
+        snapshot.recommendationMovieItemRecords +
+        snapshot.recommendationShowItemRecords +
+        snapshot.calendarItemRecords +
+        snapshot.customListCatalogs.flatMap { it.itemRecords }
+    if (allRecords.none { it.matchesId(itemId) }) return snapshot
+
+    return snapshot.copy(
+        trendingMovieItemRecords = snapshot.trendingMovieItemRecords.applyTomatoes(itemId, tomatoesRating),
+        trendingShowItemRecords = snapshot.trendingShowItemRecords.applyTomatoes(itemId, tomatoesRating),
+        popularMovieItemRecords = snapshot.popularMovieItemRecords.applyTomatoes(itemId, tomatoesRating),
+        popularShowItemRecords = snapshot.popularShowItemRecords.applyTomatoes(itemId, tomatoesRating),
+        recommendationMovieItemRecords = snapshot.recommendationMovieItemRecords.applyTomatoes(itemId, tomatoesRating),
+        recommendationShowItemRecords = snapshot.recommendationShowItemRecords.applyTomatoes(itemId, tomatoesRating),
+        calendarItemRecords = snapshot.calendarItemRecords.applyTomatoes(itemId, tomatoesRating),
+        customListCatalogs = snapshot.customListCatalogs.map { catalog ->
+            catalog.copy(itemRecords = catalog.itemRecords.applyTomatoes(itemId, tomatoesRating))
+        }
+    )
 }
 
 internal fun applyTomatoesOverridesToTraktSnapshot(

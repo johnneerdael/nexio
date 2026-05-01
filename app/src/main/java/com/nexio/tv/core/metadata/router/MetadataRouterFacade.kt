@@ -868,7 +868,12 @@ class MetadataRouterFacade(
             language = language,
             castMembers = castMembers,
             productionCompanies = productionCompanies,
-            networks = networks
+            networks = networks,
+            airsTime = airsTime,
+            originalCountry = originalCountry,
+            originalNetwork = originalNetwork,
+            latestNetwork = latestNetwork,
+            platformName = platformName
         )
 
     private fun MetadataPrimaryProvider?.toTvProvider(): TvProvider =
