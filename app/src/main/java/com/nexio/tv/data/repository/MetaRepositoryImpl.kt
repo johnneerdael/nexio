@@ -336,6 +336,28 @@ class MetaRepositoryImpl @Inject constructor(
         return URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
     
+    override suspend fun readCachedMeta(type: String, id: String): Meta? {
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        val typeCandidates = buildMetaTypeCandidates(type, id)
+        val idCandidates = buildMetaIdCandidates(id)
+        val primaryType = typeCandidates.firstOrNull() ?: type.trim()
+        val primaryId = idCandidates.firstOrNull() ?: id.trim()
+        val cacheKey = "$primaryType:$primaryId:$providerToken"
+        addonMetaCache[cacheKey]?.let { return it }
+        metaCache[cacheKey]?.let { cached ->
+            addonMetaCache[cacheKey] = cached
+            return cached
+        }
+        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+        val itemKeys = buildMetaItemKeys(typeCandidates, idCandidates, type, id)
+        return readCachedMeta(itemKeys, languageTag, providerToken)?.sanitizeCastMembers()?.also { cached ->
+            addonMetaCache[cacheKey] = cached
+            metaCache[cacheKey] = cached
+            Log.d(TAG, "Meta disk cache hit origin=idle_screensaver_cache itemKey=${itemKeys.firstOrNull().orEmpty()}")
+        }
+    }
+
     override fun clearCache() {
         metaCache.clear()
         addonMetaCache.clear()
