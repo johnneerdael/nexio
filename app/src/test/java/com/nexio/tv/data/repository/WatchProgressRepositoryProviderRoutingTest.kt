@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
@@ -127,7 +128,8 @@ class WatchProgressRepositoryProviderRoutingTest {
             },
             snapshotServiceProvider = Provider {
                 mockk<ContinueWatchingSnapshotService>(relaxed = true)
-            }
+            },
+            metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)
         )
     }
 
