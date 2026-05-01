@@ -405,7 +405,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
                 origin = any()
             )
         } returns flowOf(NetworkResult.Success(seasonOneMeta))
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Success(seasonTwoMeta))
+        every { metaRepository.hydrateAddonOriginItem(any(), any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Success(seasonTwoMeta))
 
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.KITSU,

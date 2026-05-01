@@ -30,7 +30,6 @@ import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
-import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -213,7 +212,6 @@ class IdleScreensaverRepositoryTest {
     fun `refreshOnColdBoot hydrates trakt source items into slides via resolveRequest`() = runBlocking {
         val addonRepository = mockk<AddonRepository>()
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
         val mdbListRepository = mockk<MDBListRepository>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
@@ -245,7 +243,6 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             addonRepository = addonRepository,
             catalogRepository = catalogRepository,
-            metaRepository = metaRepository,
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
@@ -270,10 +267,9 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
-    fun `warmFromCache publishes trakt idle pool from cached metadata without MDBList enrichment`() = runBlocking {
+    fun `warmFromCache publishes trakt idle pool from preview data without meta hydration`() = runBlocking {
         val addonRepository = mockk<AddonRepository>()
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
-        val metaRepository = mockk<MetaRepository>()
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
@@ -295,22 +291,10 @@ class IdleScreensaverRepositoryTest {
             )
         )
         every { traktSnapshotStore.readActiveProfile() } returns snapshot
-        coEvery {
-            metaRepository.getCachedMetaFromAllAddons(
-                type = any(),
-                id = any(),
-                origin = "idle_screensaver_cache"
-            )
-        } answers {
-            val type = firstArg<String>()
-            val id = secondArg<String>()
-            buildMeta(id = id, type = type, includeTrailer = true)
-        }
 
         val repository = IdleScreensaverRepository(
             addonRepository = addonRepository,
             catalogRepository = catalogRepository,
-            metaRepository = metaRepository,
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
@@ -320,12 +304,12 @@ class IdleScreensaverRepositoryTest {
 
         repository.warmFromCache()
 
+        // warmFromCache no longer calls getCachedMetaFromAllAddons — it uses preview data directly.
         assertEquals(2, repository.slides.value.size)
-        assertEquals(2, repository.trailerCandidates.value.size)
-        assertEquals("Hydrated movie-1", repository.slides.value.first().title)
-        coVerify(exactly = 2) {
-            metaRepository.getCachedMetaFromAllAddons(any(), any(), "idle_screensaver_cache")
-        }
+        // No trailer candidates since meta hydration is skipped in warmFromCache.
+        assertEquals(0, repository.trailerCandidates.value.size)
+        // Title comes from preview name (the id), not hydrated meta.
+        assertEquals("movie-1", repository.slides.value.first().title)
         coVerify(exactly = 0) { mdbListRepository.enrichPreview(any()) }
         coVerify(exactly = 0) {
             catalogRepository.refreshCatalogToDisk(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
@@ -336,7 +320,6 @@ class IdleScreensaverRepositoryTest {
     fun `warmFromCache uses cached cinemeta catalogs without network refresh`() = runBlocking {
         val addonRepository = mockk<AddonRepository>()
         val catalogRepository = mockk<CatalogRepository>()
-        val metaRepository = mockk<MetaRepository>()
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
@@ -407,22 +390,10 @@ class IdleScreensaverRepositoryTest {
                 allowNetworkRefresh = false
             )
         } returns flowOf(NetworkResult.Success(showRow))
-        coEvery {
-            metaRepository.getCachedMetaFromAllAddons(
-                type = any(),
-                id = any(),
-                origin = "idle_screensaver_cache"
-            )
-        } answers {
-            val type = firstArg<String>()
-            val id = secondArg<String>()
-            buildMeta(id = id, type = type, includeTrailer = true)
-        }
 
         val repository = IdleScreensaverRepository(
             addonRepository = addonRepository,
             catalogRepository = catalogRepository,
-            metaRepository = metaRepository,
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
@@ -432,8 +403,9 @@ class IdleScreensaverRepositoryTest {
 
         repository.warmFromCache()
 
+        // warmFromCache no longer hydrates meta — trailer candidates always 0 from this path.
         assertEquals(2, repository.slides.value.size)
-        assertEquals(2, repository.trailerCandidates.value.size)
+        assertEquals(0, repository.trailerCandidates.value.size)
         verify(exactly = 1) {
             catalogRepository.getCatalogCachedFirst(
                 addonBaseUrl = "https://v3-cinemeta.strem.io",
@@ -476,7 +448,6 @@ class IdleScreensaverRepositoryTest {
     fun `refreshOnColdBoot falls back to cinemeta popular movie and series sources when trakt is not eligible even without trailer metadata`() = runBlocking {
         val addonRepository = mockk<AddonRepository>()
         val catalogRepository = mockk<CatalogRepository>()
-        val metaRepository = mockk<MetaRepository>()
         val mdbListRepository = mockk<MDBListRepository>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
@@ -546,7 +517,6 @@ class IdleScreensaverRepositoryTest {
         val repository = IdleScreensaverRepository(
             addonRepository = addonRepository,
             catalogRepository = catalogRepository,
-            metaRepository = metaRepository,
             mdbListRepository = mdbListRepository,
             traktAuthDataStore = traktAuthDataStore,
             traktSettingsDataStore = traktSettingsDataStore,

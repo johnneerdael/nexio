@@ -454,7 +454,7 @@ class HomeCatalogRefreshCoordinatorTest {
             renderedRows
         )
         verify(exactly = 0) {
-            metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
+            metaRepository.hydrateAddonOriginItem(any(), any(), any(), any(), any(), any())
         }
         verify(exactly = 0) {
             metaRepository.getMeta(any(), any(), any(), any(), any(), any())

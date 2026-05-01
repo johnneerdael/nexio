@@ -121,7 +121,8 @@ class MetaRepositoryImpl @Inject constructor(
         emit(NetworkResult.Error("Meta not found"))
     }
 
-    override fun getMetaFromAllAddons(
+    override fun hydrateAddonOriginItem(
+        addon: Addon,
         type: String,
         id: String,
         cacheOnDisk: Boolean,
@@ -154,88 +155,12 @@ class MetaRepositoryImpl @Inject constructor(
 
         emit(NetworkResult.Loading)
 
-        val addons = addonRepository.getInstalledAddons().first()
-
-        val metaResourceAddons = addons.filter { addon ->
-            addon.resources.any { it.name == "meta" }
-        }
-
-        // Priority order:
-        // 1) addons that explicitly support requested type
-        // 2) addons that support inferred canonical type (for custom catalog types)
-        // 3) top addon in installed order that exposes meta resource
-        val prioritizedCandidates = linkedSetOf<Pair<Addon, String>>()
-        typeCandidates.forEach { candidateType ->
-            addons.forEach { addon ->
-                if (addon.supportsMetaType(candidateType)) {
-                    prioritizedCandidates.add(addon to candidateType)
-                }
-            }
-        }
-        metaResourceAddons.firstOrNull()?.let { topMetaAddon ->
-            val fallbackType = typeCandidates.firstOrNull { topMetaAddon.supportsMetaType(it) }
-                ?: typeCandidates.firstOrNull()
-                ?: type.trim()
-            prioritizedCandidates.add(topMetaAddon to fallbackType)
-        }
-
-        if (prioritizedCandidates.isEmpty()) {
-            // Last resort: try addons that declare the raw type (legacy behavior).
-            val fallbackAddons = addons.filter { addon ->
-                addon.rawTypes.any { rawType -> typeCandidates.any { rawType.equals(it, ignoreCase = true) } }
-            }
-
-            for (addon in fallbackAddons) {
-                for (candidateType in typeCandidates) {
-                    for (candidateId in idCandidates) {
-                        val url = buildMetaUrl(addon.baseUrl, candidateType, candidateId)
-                        when (
-                            val result = addonMetaIntegrationProvider.getMeta(
-                                addonId = addon.id,
-                                metaUrl = url
-                            )
-                        ) {
-                            is NetworkResult.Success -> {
-                                val metaDto = result.data.meta
-                                if (metaDto != null) {
-                                    val episodeLabel = context.getString(R.string.episodes_episode)
-                                    val meta = posterRatingsUrlResolver
-                                        .apply(metaDto.toDomain(episodeLabel), activePosterProvider)
-                                        .sanitizeCastMembers()
-                                    addonMetaCache[cacheKey] = meta
-                                    metaCache[cacheKey] = meta
-                                    if (cacheOnDisk && writeToDisk) {
-                                        writeMetaDiskAliases(
-                                            candidateType = candidateType,
-                                            candidateId = candidateId,
-                                            languageTag = languageTag,
-                                            providerToken = providerToken,
-                                            meta = meta
-                                        )
-                                    } else {
-                                        Log.d(TAG, "Meta disk cache bypassed origin=$origin itemKey=$candidateType:$candidateId")
-                                    }
-                                    emit(NetworkResult.Success(meta))
-                                    return@flow
-                                }
-                            }
-                            else -> { /* Try next addon/id candidate */ }
-                        }
-                    }
-                }
-            }
-
-            emit(NetworkResult.Error("No addons support meta for type: ${typeCandidates.joinToString("|")}"))
-            return@flow
-        }
-
-        // Try each candidate until we find meta.
-        for ((addon, candidateType) in prioritizedCandidates) {
+        for (candidateType in typeCandidates) {
             for (candidateId in idCandidates) {
                 val url = buildMetaUrl(addon.baseUrl, candidateType, candidateId)
                 Log.d(
                     TAG,
-                    "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$candidateId url=${sanitizeUrlForLogs(url)}"
+                    "hydrateAddonOriginItem addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$candidateId url=${sanitizeUrlForLogs(url)}"
                 )
                 when (
                     val result = addonMetaIntegrationProvider.getMeta(
@@ -265,20 +190,20 @@ class MetaRepositoryImpl @Inject constructor(
                             }
                             Log.d(
                                 TAG,
-                                "Meta fetch success addonId=${addon.id} type=$candidateType id=$candidateId"
+                                "hydrateAddonOriginItem fetch success addonId=${addon.id} type=$candidateType id=$candidateId"
                             )
                             emit(NetworkResult.Success(meta))
                             return@flow
                         }
                         Log.d(
                             TAG,
-                            "Meta response was null addonId=${addon.id} type=$candidateType id=$candidateId"
+                            "hydrateAddonOriginItem meta response was null addonId=${addon.id} type=$candidateType id=$candidateId"
                         )
                     }
                     is NetworkResult.Error -> {
                         Log.w(
                             TAG,
-                            "Meta fetch failed addonId=${addon.id} type=$candidateType id=$candidateId code=${result.code} message=${result.message}"
+                            "hydrateAddonOriginItem fetch failed addonId=${addon.id} type=$candidateType id=$candidateId code=${result.code} message=${result.message}"
                         )
                     }
                     NetworkResult.Loading -> { /* no-op */ }
@@ -286,7 +211,7 @@ class MetaRepositoryImpl @Inject constructor(
             }
         }
 
-        emit(NetworkResult.Error("Meta not found in any addon"))
+        emit(NetworkResult.Error("Meta not found via addon ${addon.id}"))
     }
 
     private fun writeMetaDiskAliases(
@@ -303,34 +228,6 @@ class MetaRepositoryImpl @Inject constructor(
                 providerToken = providerToken,
                 meta = meta
             )
-        }
-    }
-
-    override suspend fun getCachedMetaFromAllAddons(
-        type: String,
-        id: String,
-        origin: String
-    ): Meta? {
-        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
-        val providerToken = posterProviderCacheToken(activePosterProvider)
-        val typeCandidates = buildMetaTypeCandidates(type, id)
-        val idCandidates = buildMetaIdCandidates(id)
-        val primaryType = typeCandidates.firstOrNull() ?: type.trim()
-        val primaryId = idCandidates.firstOrNull() ?: id.trim()
-        val cacheKey = "$primaryType:$primaryId:$providerToken"
-        addonMetaCache[cacheKey]?.let { cached ->
-            return cached
-        }
-        metaCache[cacheKey]?.let { cached ->
-            addonMetaCache[cacheKey] = cached
-            return cached
-        }
-        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
-        val itemKeys = buildMetaItemKeys(typeCandidates, idCandidates, type, id)
-        return readCachedMeta(itemKeys, languageTag, providerToken)?.sanitizeCastMembers()?.also { cached ->
-            addonMetaCache[cacheKey] = cached
-            metaCache[cacheKey] = cached
-            Log.d(TAG, "Meta disk cache hit origin=$origin itemKey=${itemKeys.firstOrNull().orEmpty()}")
         }
     }
 

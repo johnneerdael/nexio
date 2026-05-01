@@ -22,12 +22,6 @@
 # AND canonical router yielded no result
 /com/nexio/tv/ui/screens/detail/MetaDetailsViewModel.kt
 
-# IdleScreensaverRepository — cached read from disk (getCachedMetaFromAllAddons),
-# not fan-out. Tier 2 Task 2 migrated the network path; cached path is deferred
-# pending architecture decision on whether MetadataDiskCacheStore should expose
-# a router-aware reader. Safe for now (no fan-out, no addon HTTP).
-/com/nexio/tv/data/repository/IdleScreensaverRepository.kt
-
 # CanonicalMetaResolver KDoc reference (pre-existing — not a real call site;
 # remove after the KDoc is updated to use the renamed API)
 # /com/nexio/tv/core/metadata/router/CanonicalMetaResolver.kt

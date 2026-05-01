@@ -13,7 +13,6 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import javax.inject.Inject
@@ -59,7 +58,6 @@ private data class ScreensaverRowSelection(
 class IdleScreensaverRepository @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
-    private val metaRepository: MetaRepository,
     private val mdbListRepository: MDBListRepository,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
@@ -78,13 +76,7 @@ class IdleScreensaverRepository @Inject constructor(
             val preparedItems = prepareIdleScreensaverItems(
                 rows = selection.rows,
                 itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
-                hydrateMeta = { preview ->
-                    metaRepository.getCachedMetaFromAllAddons(
-                        type = preview.apiType,
-                        id = preview.id,
-                        origin = "idle_screensaver_cache"
-                    )
-                },
+                hydrateMeta = { _ -> null },
                 enrichPreview = { preview -> preview }
             )
             publishPreparedContent(

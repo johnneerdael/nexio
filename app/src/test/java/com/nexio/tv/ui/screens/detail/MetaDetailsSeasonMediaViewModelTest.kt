@@ -989,7 +989,8 @@ class MetaDetailsSeasonMediaViewModelTest {
     ): MetaDetailsViewModel {
         val metaRepository = mockk<MetaRepository>()
         every {
-            metaRepository.getMetaFromAllAddons(
+            metaRepository.hydrateAddonOriginItem(
+                addon = any(),
                 type = any(),
                 id = any(),
                 cacheOnDisk = any(),
