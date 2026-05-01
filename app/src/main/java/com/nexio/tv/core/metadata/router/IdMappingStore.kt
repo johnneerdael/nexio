@@ -1,6 +1,13 @@
 package com.nexio.tv.core.metadata.router
 
-enum class IdMappingSource { FRIBB, LOCAL, ROUTER_OBSERVED, NEGATIVE }
+enum class IdMappingSource {
+    LOCAL,
+    PROVIDER_LOOKUP,
+    RAIL_PREVIEW,
+    FRIBB,
+    ROUTER_OBSERVED,
+    NEGATIVE
+}
 
 data class IdMapping(
     val sourceId: ParsedMetadataId,
@@ -12,10 +19,19 @@ data class IdMapping(
 )
 
 object IdMappingTtlPolicy {
-    const val NEGATIVE_TTL_MS: Long = 30L * 24L * 60L * 60L * 1_000L
+    const val POSITIVE_TTL_MS: Long = 7L * 24L * 60L * 60L * 1_000L
+    const val STATIC_ANIME_TTL_MS: Long = 30L * 24L * 60L * 60L * 1_000L
+    const val NEGATIVE_TTL_MS: Long = 24L * 60L * 60L * 1_000L
 
     fun expiresAt(source: IdMappingSource, nowEpochMs: Long): Long? =
-        if (source == IdMappingSource.NEGATIVE) nowEpochMs + NEGATIVE_TTL_MS else null
+        when (source) {
+            IdMappingSource.LOCAL -> null
+            IdMappingSource.PROVIDER_LOOKUP,
+            IdMappingSource.RAIL_PREVIEW,
+            IdMappingSource.ROUTER_OBSERVED -> nowEpochMs + POSITIVE_TTL_MS
+            IdMappingSource.FRIBB -> nowEpochMs + STATIC_ANIME_TTL_MS
+            IdMappingSource.NEGATIVE -> nowEpochMs + NEGATIVE_TTL_MS
+        }
 
     fun comparePriority(incoming: IdMappingSource, existing: IdMappingSource): Int =
         priority(incoming) - priority(existing)
@@ -23,9 +39,11 @@ object IdMappingTtlPolicy {
     private fun priority(source: IdMappingSource): Int =
         when (source) {
             IdMappingSource.LOCAL -> 0
-            IdMappingSource.FRIBB -> 1
-            IdMappingSource.ROUTER_OBSERVED -> 2
-            IdMappingSource.NEGATIVE -> 3
+            IdMappingSource.PROVIDER_LOOKUP -> 1
+            IdMappingSource.RAIL_PREVIEW -> 2
+            IdMappingSource.FRIBB -> 3
+            IdMappingSource.ROUTER_OBSERVED -> 4
+            IdMappingSource.NEGATIVE -> 5
         }
 }
 

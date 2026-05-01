@@ -30,13 +30,29 @@ class RailIdentityHarvester @Inject constructor(
             explicitIds.forEach { source ->
                 explicitIds.forEach { target ->
                     val provider = target.provider
-                    if (provider != null && source.id != target.id) {
+                    if (
+                        provider != null &&
+                        provider.isCanonicalOrSidecarTarget() &&
+                        source.id != target.id
+                    ) {
                         add(source.id.mappingTo(provider, target.id.value, railId))
                     }
                 }
             }
         }
     }
+
+    private fun MetadataPrimaryProvider.isCanonicalOrSidecarTarget(): Boolean =
+        when (this) {
+            MetadataPrimaryProvider.TMDB,
+            MetadataPrimaryProvider.TVDB,
+            MetadataPrimaryProvider.KITSU,
+            MetadataPrimaryProvider.IMDB -> true
+            MetadataPrimaryProvider.TRAKT,
+            MetadataPrimaryProvider.SIMKL,
+            MetadataPrimaryProvider.RPDB,
+            MetadataPrimaryProvider.TOP_POSTERS -> false
+        }
 
     private fun ProviderIds.directIds(): List<DirectStableId> =
         listOfNotNull(
@@ -72,7 +88,7 @@ class RailIdentityHarvester @Inject constructor(
             sourceId = this,
             provider = provider,
             providerId = providerId,
-            source = IdMappingSource.ROUTER_OBSERVED,
+            source = IdMappingSource.RAIL_PREVIEW,
             evidence = "rail preview $railId explicit stableIds"
         )
 

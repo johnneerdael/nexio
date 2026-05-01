@@ -24,14 +24,15 @@ class LocalIdMappingStore @Inject constructor(
             return
         }
 
-        val expiresAt = mapping.expiresAtEpochMs ?: IdMappingTtlPolicy.expiresAt(mapping.source, System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val expiresAt = mapping.expiresAtEpochMs ?: IdMappingTtlPolicy.expiresAt(mapping.source, now)
         dao.upsertMediaIdentity(
             MediaIdentityEntity(
                 mediaKey = mediaKey,
                 mediaType = mapping.sourceId.scheme.name,
                 title = null,
                 year = null,
-                updatedAtEpochMs = System.currentTimeMillis()
+                updatedAtEpochMs = now
             )
         )
         dao.upsertExternalIds(
