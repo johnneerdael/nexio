@@ -59,6 +59,7 @@ import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -281,6 +282,13 @@ class HomeViewModel @Inject constructor(
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
+    /** Tracks per-item hydration state so RAIL_PREVIEW items are routed through MetadataRouter at
+     *  most once per ViewModel instance. Seeded with [RailHydrationState.PREVIEW_ONLY] via
+     *  [withDefault]. Updated to [RailHydrationState.HYDRATING] when a focus hydration coroutine
+     *  is launched and to [RailHydrationState.CANONICAL_READY] or
+     *  [RailHydrationState.HYDRATION_FAILED_USING_PREVIEW] when it completes. */
+    internal val focusedItemHydrationStates: MutableMap<String, RailHydrationState> =
+        mutableMapOf<String, RailHydrationState>().withDefault { RailHydrationState.PREVIEW_ONLY }
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var activePosterListPickerInput: LibraryEntryInput? = null
