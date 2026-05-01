@@ -4,6 +4,8 @@ import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbOrganizationService
 import com.nexio.tv.domain.model.MetaCompanyKind
@@ -26,17 +28,32 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.PersonDetail
+import com.nexio.tv.domain.model.ProviderId
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class MetadataRouterFacade @Inject constructor(
+class MetadataRouterFacade(
     private val router: MetadataRouter,
     private val providerPlanExecutor: ProviderPlanExecutor,
     private val resolverOrchestrator: ResolverOrchestrator,
     private val identityResolver: MetadataIdentityResolver,
     private val providerPlanRunner: ProviderPlanRunner,
     private val fieldResolver: FieldResolver,
+    private val stableIdBundleResolver: StableIdBundleResolver = StableIdBundleResolver(
+        idMappingStore = InMemoryIdMappingStore(),
+        lookup = object : StableIdBundleResolver.Lookup {
+            override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
+            override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+            override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
+            override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
+            override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null
+        }
+    ),
+    private val traceEvents: TraceMetadataEvents = TraceMetadataEvents(
+        sink = NoopRuntimeTraceSink,
+        sessionId = { null }
+    ),
     private val metadataSecondaryRepository: MetadataSecondaryRepository? = null,
     private val trailerService: TrailerService? = null,
     private val trailerResolver: TrailerResolver? = null,
@@ -45,6 +62,45 @@ class MetadataRouterFacade @Inject constructor(
     private val organizationPersonResolver: OrganizationPersonResolver? = null,
     private val tmdbOrganizationService: TmdbOrganizationService? = null
 ) {
+    @Inject
+    constructor(
+        router: MetadataRouter,
+        providerPlanExecutor: ProviderPlanExecutor,
+        resolverOrchestrator: ResolverOrchestrator,
+        identityResolver: MetadataIdentityResolver,
+        providerPlanRunner: ProviderPlanRunner,
+        fieldResolver: FieldResolver,
+        idMappingStore: IdMappingStore,
+        stableIdBundleLookup: StableIdBundleResolver.Lookup,
+        traceEvents: TraceMetadataEvents,
+        metadataSecondaryRepository: MetadataSecondaryRepository? = null,
+        trailerService: TrailerService? = null,
+        trailerResolver: TrailerResolver? = null,
+        reviewResolver: ReviewResolver? = null,
+        recommendationResolver: RecommendationResolver? = null,
+        organizationPersonResolver: OrganizationPersonResolver? = null,
+        tmdbOrganizationService: TmdbOrganizationService? = null
+    ) : this(
+        router = router,
+        providerPlanExecutor = providerPlanExecutor,
+        resolverOrchestrator = resolverOrchestrator,
+        identityResolver = identityResolver,
+        providerPlanRunner = providerPlanRunner,
+        fieldResolver = fieldResolver,
+        stableIdBundleResolver = StableIdBundleResolver(
+            idMappingStore = idMappingStore,
+            lookup = stableIdBundleLookup
+        ),
+        traceEvents = traceEvents,
+        metadataSecondaryRepository = metadataSecondaryRepository,
+        trailerService = trailerService,
+        trailerResolver = trailerResolver,
+        reviewResolver = reviewResolver,
+        recommendationResolver = recommendationResolver,
+        organizationPersonResolver = organizationPersonResolver,
+        tmdbOrganizationService = tmdbOrganizationService
+    )
+
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
         val routed = router.route(request)
         val route = identityResolver.resolve(routed)
@@ -52,6 +108,29 @@ class MetadataRouterFacade @Inject constructor(
             throw MetadataRouteFailure.IdentityResolutionFailed(route.parentId, route.provider)
         }
         return route
+    }
+
+    suspend fun resolveStableIdBundle(
+        request: MetadataRequest,
+        trigger: StableIdResolutionTrigger,
+        itemKey: String
+    ): StableIdBundle {
+        val route = routeRequest(request)
+        val bundle = stableIdBundleResolver.resolve(
+            StableIdBundleRequest(
+                itemKey = itemKey,
+                itemType = request.contentType,
+                routeProvider = route.provider,
+                knownIds = request.sourceContext.previewStableIds,
+                sourceProvider = request.sourceContext.previewSourceProvider
+                    ?.let { raw -> ProviderId.entries.firstOrNull { it.name == raw } },
+                sourceItemId = request.sourceContext.previewSourceItemId,
+                railId = request.sourceContext.previewRailSource,
+                trigger = trigger
+            )
+        )
+        traceEvents.emitStableIdBundle(bundle, trigger)
+        return bundle
     }
 
     suspend fun resolveRequest(request: MetadataRequest): MetadataResolutionResult {
