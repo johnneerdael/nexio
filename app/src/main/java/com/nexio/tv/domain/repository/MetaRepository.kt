@@ -33,5 +33,14 @@ interface MetaRepository {
         origin: String = "default"
     ): Flow<NetworkResult<Meta>>
 
+    /**
+     * Reads cached metadata for the given [type] and [id] directly from the disk cache without
+     * triggering any network fan-out. Returns null when no cached entry exists.
+     *
+     * Use this instead of [hydrateAddonOriginItem] when you only need enriched metadata that has
+     * already been fetched and persisted (e.g. warm-start screensaver slides).
+     */
+    suspend fun readCachedMeta(type: String, id: String): Meta?
+
     fun clearCache()
 }
