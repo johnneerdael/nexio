@@ -61,14 +61,14 @@ class IdleScreensaverResolveRequestTest {
     }
 
     @Test
-    fun `fetchIdleScreensaverMeta uses MetadataDepth PREVIEW`() = runTest {
+    fun `fetchIdleScreensaverMeta uses MetadataDepth DETAIL_CORE for canonical hydration`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val captured = slot<MetadataRequest>()
         coEvery { facade.resolveRequest(capture(captured)) } returns successResult()
 
         fetchIdleScreensaverMeta(samplePreview, facade)
 
-        assertEquals(MetadataDepth.PREVIEW, captured.captured.depth)
+        assertEquals(MetadataDepth.DETAIL_CORE, captured.captured.depth)
     }
 
     @Test
@@ -92,6 +92,22 @@ class IdleScreensaverResolveRequestTest {
         assertEquals("Sample", result!!.name)
         assertEquals("tvdb-poster", result.poster)
         assertEquals("tvdb-backdrop", result.background)
+    }
+
+    @Test
+    fun `fetchIdleScreensaverMeta canonical title from displayMetadata overrides input preview title`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val canonicalResult = successResult().copy(
+            resolvedDocument = successResult().resolvedDocument.copy(title = "Canonical Title"),
+            displayMetadata = successResult().displayMetadata.copy(title = "Canonical Title")
+        )
+        coEvery { facade.resolveRequest(any()) } returns canonicalResult
+
+        val result = fetchIdleScreensaverMeta(samplePreview, facade)
+
+        assertNotNull(result)
+        // samplePreview.name = "Sample"; canonical displayMetadata.title = "Canonical Title"
+        assertEquals("Canonical Title", result!!.name)
     }
 
     @Test

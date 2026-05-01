@@ -100,7 +100,7 @@ internal suspend fun fetchIdleScreensaverMeta(
             itemType = preview.apiType,
             addonMetadata = preview.toHomeDisplayMetadata()
         ),
-        depth = MetadataDepth.PREVIEW
+        depth = MetadataDepth.DETAIL_CORE
     )
     val canonical = try {
         metadataRouterFacade.resolveRequest(request)
