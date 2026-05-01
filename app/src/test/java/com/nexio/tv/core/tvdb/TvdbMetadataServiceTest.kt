@@ -236,7 +236,7 @@ class TvdbMetadataServiceTest {
 
         assertNull(enrichment)
         assertEquals(false, fixture.cacheStore.contains("tvdb:series:121361:eng:native:enrichment"))
-        assertTrue(fixture.backoffManager.isBlocked(IntegrationProvider.TVDB, IntegrationScope.Global))
+        assertTrue(fixture.backoffManager.isBlocked(IntegrationProvider.TVDB, IntegrationScope.GlobalContent))
         coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false) }
     }
 
