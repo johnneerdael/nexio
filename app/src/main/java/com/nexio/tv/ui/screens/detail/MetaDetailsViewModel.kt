@@ -19,6 +19,7 @@ import com.nexio.tv.core.metadata.router.MetadataRouter
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
@@ -55,7 +56,9 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.PosterShape
@@ -564,54 +567,60 @@ class MetaDetailsViewModel @Inject constructor(
             loadingSeasonAvailability.clear()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
-            val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
+            // preferExternalMetaAddonDetail is now a no-op for the detail screen —
+            // the canonical MetadataRouter subsumes the choice.
+            layoutPreferenceDataStore.preferExternalMetaAddonDetail.first() // consumed but not branched on
 
-            if (preferExternal) {
-                // 1) Try meta addons first
-                metaRepository.getMetaFromAllAddons(
+            val metadataRequest = MetadataRequest(
+                contentId = metaLookupId,
+                contentType = ContentType.fromString(itemType),
+                sourceContext = MetadataSourceContext(
+                    itemType = itemType,
+                    addonMetadata = _uiState.value.meta?.toHomeDisplayMetadata()
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+
+            val canonical = try {
+                metadataRouterFacade.resolveRequest(metadataRequest)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "loadMeta resolveRequest failed for $metaLookupId: ${e.message}", e)
+                null
+            }
+
+            if (canonical != null && canonical.route != null) {
+                val meta = canonical.toMeta(
+                    contentId = metaLookupId,
+                    contentType = ContentType.fromString(itemType)
+                )
+                applyMetaWithEnrichment(meta)
+            } else if (preferredAddonBaseUrl != null) {
+                // Last-resort A: item came from an addon catalog rail and the router yielded nothing.
+                metaRepository.getMeta(
+                    addonBaseUrl = preferredAddonBaseUrl,
                     type = itemType,
                     id = metaLookupId,
                     cacheOnDisk = shouldCacheDetailMetaOnDisk,
                     origin = detailMetaOrigin
                 ).collect { result ->
                     when (result) {
-                        is NetworkResult.Success -> {
-                            applyMetaWithEnrichment(result.data)
-                        }
+                        is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
                         is NetworkResult.Error -> {
-                            // 2) Fallback: try originating addon if meta addons failed
-                            val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
-                            val preferredMeta: Meta? = preferred?.let { baseUrl ->
-                                when (val fallbackResult = metaRepository.getMeta(
-                                    addonBaseUrl = baseUrl,
-                                    type = itemType,
-                                    id = metaLookupId,
-                                    cacheOnDisk = shouldCacheDetailMetaOnDisk,
-                                    origin = detailMetaOrigin
-                                )
-                                    .first { it !is NetworkResult.Loading }) {
-                                    is NetworkResult.Success -> fallbackResult.data
-                                    else -> null
-                                }
-                            }
-
-                            if (preferredMeta != null) {
-                                applyMetaWithEnrichment(preferredMeta)
-                            } else {
-                                if (tryApplyStreamOnlyFallback(result.message)) {
-                                    _uiState.update { state ->
-                                        if (state.userMessage == null) {
-                                            state.copy(
-                                                userMessage = "Metadata unavailable. Opening stream selection.",
-                                                userMessageIsError = false
-                                            )
-                                        } else {
-                                            state
-                                        }
+                            if (tryApplyStreamOnlyFallback(result.message)) {
+                                _uiState.update { state ->
+                                    if (state.userMessage == null) {
+                                        state.copy(
+                                            userMessage = "Metadata unavailable. Opening stream selection.",
+                                            userMessageIsError = false
+                                        )
+                                    } else {
+                                        state
                                     }
-                                } else {
-                                    _uiState.update { it.copy(isLoading = false, error = result.message) }
                                 }
+                            } else {
+                                _uiState.update { it.copy(isLoading = false, error = result.message) }
                             }
                         }
                         NetworkResult.Loading -> {
@@ -620,52 +629,37 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 }
             } else {
-                // Original: prefer catalog addon
-                val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
-                val preferredMeta: Meta? = preferred?.let { baseUrl ->
-                    when (val result = metaRepository.getMeta(
-                        addonBaseUrl = baseUrl,
-                        type = itemType,
-                        id = metaLookupId,
-                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
-                        origin = detailMetaOrigin
-                    )
-                        .first { it !is NetworkResult.Loading }) {
-                        is NetworkResult.Success -> result.data
-                        else -> null
-                    }
-                }
-
-                if (preferredMeta != null) {
-                    applyMetaWithEnrichment(preferredMeta)
-                } else {
-                    metaRepository.getMetaFromAllAddons(
-                        type = itemType,
-                        id = metaLookupId,
-                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
-                        origin = detailMetaOrigin
-                    ).collect { result ->
-                        when (result) {
-                            is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
-                            is NetworkResult.Error -> {
-                                if (tryApplyStreamOnlyFallback(result.message)) {
-                                    _uiState.update { state ->
-                                        if (state.userMessage == null) {
-                                            state.copy(
-                                                userMessage = "Metadata unavailable. Opening stream selection.",
-                                                userMessageIsError = false
-                                            )
-                                        } else {
-                                            state
-                                        }
+                // Last-resort B: no canonical route AND no addon origin. Try all addons as absolute
+                // fallback (covers legacy non-tvdb: ids like tt... where identity resolution
+                // could not produce a provider-native id). This path is intentionally kept as a
+                // safety net; canonical routing is always attempted first (above).
+                metaRepository.getMetaFromAllAddons(
+                    type = itemType,
+                    id = metaLookupId,
+                    cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                    origin = detailMetaOrigin
+                ).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
+                        is NetworkResult.Error -> {
+                            if (tryApplyStreamOnlyFallback(result.message)) {
+                                _uiState.update { state ->
+                                    if (state.userMessage == null) {
+                                        state.copy(
+                                            userMessage = "Metadata unavailable. Opening stream selection.",
+                                            userMessageIsError = false
+                                        )
+                                    } else {
+                                        state
                                     }
-                                } else {
-                                    _uiState.update { it.copy(isLoading = false, error = result.message) }
                                 }
+                            } else {
+                                Log.w(TAG, "loadMeta: no canonical route AND no addon origin AND all-addons fallback failed for $metaLookupId")
+                                _uiState.update { it.copy(isLoading = false, error = result.message) }
                             }
-                            NetworkResult.Loading -> {
-                                _uiState.update { it.copy(isLoading = true) }
-                            }
+                        }
+                        NetworkResult.Loading -> {
+                            _uiState.update { it.copy(isLoading = true) }
                         }
                     }
                 }
@@ -1666,7 +1660,10 @@ class MetaDetailsViewModel @Inject constructor(
         val episodeMap = episodeDecision.value.orEmpty()
         if (episodeMap.isEmpty()) return targetMeta
 
-        if (targetMeta.videos.isEmpty() && episodeDecision.provider == TvProvider.KITSU) {
+        // When the meta arrived with no pre-existing episode structure (e.g. from the canonical
+        // router path which returns videos=emptyList()), build video stubs from the episode map
+        // so that the enrichment results (runtimes, thumbnails, etc.) are not silently discarded.
+        if (targetMeta.videos.isEmpty()) {
             return targetMeta.copy(
                 videos = buildKitsuEpisodeVideos(
                     seriesId = targetMeta.id,
@@ -3121,6 +3118,43 @@ class MetaDetailsViewModel @Inject constructor(
             }
         }
     }
+}
+
+/**
+ * Converts a [MetadataResolutionResult] from [MetadataRouterFacade.resolveRequest] to the legacy
+ * [Meta] shape expected by [MetaDetailsViewModel.applyMetaWithEnrichment].
+ *
+ * cast / videos / director / writer etc. are left empty because [applyMetaWithEnrichment]
+ * calls [enrichMeta] which chains [fetchTvEnrichment] / [fetchTmdbEnrichment] /
+ * [fetchTvEpisodeEnrichment] after this returns — those enrich the missing fields.
+ */
+private fun MetadataResolutionResult.toMeta(contentId: String, contentType: ContentType): Meta {
+    val doc = resolvedDocument
+    val display = displayMetadata
+    return Meta(
+        id = doc.canonicalId ?: contentId,
+        type = contentType,
+        rawType = contentType.toApiString(),
+        name = doc.title ?: display.title.orEmpty(),
+        poster = doc.poster ?: display.poster,
+        posterShape = PosterShape.POSTER,
+        background = doc.backdrop ?: display.backdrop,
+        logo = doc.logo ?: display.logo,
+        description = doc.overview ?: display.description,
+        releaseInfo = display.releaseInfo,
+        imdbRating = (doc.rating as? Number)?.toFloat() ?: display.imdbRating,
+        ratingSource = display.ratingSource,
+        genres = display.genres,
+        runtime = doc.runtimeMinutes?.let { "${it}m" } ?: display.runtime,
+        director = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = null,
+        awards = null,
+        language = null,
+        links = emptyList(),
+        posterProviderTag = display.posterProviderTag
+    )
 }
 
 internal fun parseDetailApiTypeToContentType(apiType: String?): ContentType? {
