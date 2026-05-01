@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRouter
@@ -22,7 +21,6 @@ import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
@@ -117,13 +115,6 @@ class TraktDiscoveryServiceCustomListTest {
             profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
         )
 
-        val metaRepository = mockk<MetaRepository>()
-        every {
-            metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any())
-        } returns flowOf(NetworkResult.Error("missing"))
-        coEvery { metaRepository.getCachedMetaFromAllAddons(any(), any(), any()) } returns null
-        every { metaRepository.clearCache() } returns Unit
-
         val traktSettings = mockk<TraktSettingsDataStore>()
         every { traktSettings.catalogPreferences } returns flowOf(
             TraktCatalogPreferences(selectedPopularListKeys = setOf("me/anime"))
@@ -144,7 +135,6 @@ class TraktDiscoveryServiceCustomListTest {
         return TraktDiscoveryService(
             traktAuthService = TraktRepositoryAuthGateway(authService),
             traktIntegrationProvider = traktIntegrationProvider,
-            metaRepository = metaRepository,
             traktSettingsDataStore = traktSettings,
             posterRatingsUrlResolver = posterResolver,
             snapshotStore = snapshotStore,

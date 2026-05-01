@@ -4,7 +4,6 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.integration.railpreview.SimklRailPreviewMapper
@@ -15,13 +14,11 @@ import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.remote.dto.simkl.SimklDiscoveryItemDto
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.RailItemPreview
 import com.nexio.tv.domain.model.toLegacyRailItemPreviews
 import com.nexio.tv.domain.model.toMetaPreview
-import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,7 +34,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -136,7 +132,6 @@ private data class SimklCatalogSource(
 @OptIn(ExperimentalCoroutinesApi::class)
 class SimklDiscoveryService @Inject constructor(
     private val simklIntegrationProvider: SimklIntegrationProvider,
-    private val metaRepository: MetaRepository,
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: SimklDiscoverySnapshotStore,
@@ -370,32 +365,4 @@ class SimklDiscoveryService @Inject constructor(
         return preferredSimklExternalContentId(detailIds)
     }
 
-    private suspend fun resolveMetaPreview(type: String, contentId: String): MetaPreview? {
-        val result = withTimeoutOrNull(2_000L) {
-            metaRepository.getMetaFromAllAddons(type = type, id = contentId)
-                .filter { it !is NetworkResult.Loading }
-                .first()
-        } ?: return null
-        val meta = (result as? NetworkResult.Success<Meta>)?.data ?: return null
-        return posterRatingsUrlResolver.apply(meta.toMetaPreview(), activePosterProvider)
-    }
-
-    private fun Meta.toMetaPreview(): MetaPreview {
-        return MetaPreview(
-            id = id,
-            type = type,
-            rawType = rawType,
-            name = name,
-            poster = poster,
-            posterShape = posterShape,
-            background = background,
-            logo = logo,
-            description = description,
-            releaseInfo = releaseInfo,
-            imdbRating = imdbRating,
-            genres = genres,
-            trailerYtIds = trailerYtIds,
-            language = language
-        )
-    }
 }
