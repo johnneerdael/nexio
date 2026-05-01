@@ -1,11 +1,21 @@
 package com.nexio.tv.ui.screens.detail
 
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
@@ -21,6 +31,7 @@ import com.nexio.tv.data.repository.trakt.TraktEpisodeRef
 import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.SeasonEpisodeMark
@@ -29,7 +40,6 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -68,104 +78,84 @@ class MarkSeasonWatchedTest {
     @Test
     fun `uses TVDB season episodes when TVDB succeeds`() =
         runTest(dispatcher) {
-            val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-            val tmdbService = mockk<TmdbService>(relaxed = true)
-            val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
             val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
             val pastDate = "2020-01-01"
             val futureDate = "2099-12-31"
 
-            coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
-                provider = TvProvider.TMDB,
-                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
-                value = null
+            // TVDB-sourced episodes: ep1=aired, ep2=future (filtered out), ep3=null airDate (included)
+            val tvdbEpisodes = listOf(
+                tvSeasonEpisode(1, airDate = pastDate),
+                tvSeasonEpisode(2, airDate = futureDate),
+                tvSeasonEpisode(3, airDate = null)
             )
-            coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
-                provider = TvProvider.TMDB,
-                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
-                value = emptyMap()
-            )
-            coEvery { tmdbService.ensureTmdbId(any(), any()) } coAnswers {
-                val markSeasonCall = Throwable().stackTrace.any { frame ->
-                    frame.className.endsWith("MetaDetailsViewModel") && frame.methodName == "markSeasonWatched"
-                }
-                check(!markSeasonCall) { "TVDB season success must not resolve TMDB IDs" }
-                null
-            }
-            coEvery {
-                tvMetadataRouter.fetchSeasonEpisodes(
-                    contentId = "tt9999999",
-                    fallbackContentId = "tt9999999",
-                    seasonNumber = 1,
-                    language = null
-                )
-            } returns TvMetadataDecision(
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery { facade.resolveRequest(any()) } returns buildDefaultResolutionResult("tt9999999")
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            coEvery { facade.fetchTvSeasonEpisodes(any(), any(), any(), any(), any()) } returns TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
-                value = listOf(
-                    tvSeasonEpisode(1, airDate = pastDate),
-                    tvSeasonEpisode(2, airDate = futureDate),
-                    tvSeasonEpisode(3, airDate = null)
-                )
+                value = tvdbEpisodes
             )
-            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
 
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
             val batchSlot = slot<List<SeasonEpisodeMark>>()
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
 
             val meta = buildSeriesMeta(id = "tt9999999", videos = emptyList())
             val viewModel = buildViewModel(
                 meta = meta,
-                tmdbService = tmdbService,
-                tmdbMetadataService = tmdbMetadataService,
-                tvMetadataRouter = tvMetadataRouter,
-                watchProgressRepository = watchProgressRepository
+                watchProgressRepository = watchProgressRepository,
+                metadataRouterFacade = facade
             )
             advanceUntilIdle()
-            clearMocks(tmdbMetadataService, answers = false, recordedCalls = true)
 
             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
             advanceUntilIdle()
 
+            // ep1 (aired) and ep3 (null airDate = no future gate) are included; ep2 (future) excluded
             assertEquals(listOf(1, 3), batchSlot.captured.map { it.episodeNumber })
-            coVerify(exactly = 1) {
-                tvMetadataRouter.fetchSeasonEpisodes(
-                    contentId = "tt9999999",
-                    fallbackContentId = "tt9999999",
-                    seasonNumber = 1,
-                    language = null
-                )
-            }
-            coVerify(exactly = 0) { tmdbMetadataService.fetchSeasonEpisodes(any(), any(), any()) }
+            // facade.fetchTvSeasonEpisodes was the entry point — verify it was called
+            coVerify(atLeast = 1) { facade.fetchTvSeasonEpisodes(any(), any(), any(), any(), any()) }
         }
 
     @Test
     fun `usesAuthoritativeEpisodeList - fetchSeasonEpisodes called with TMDB id from ensureTmdbId`() =
         runTest(dispatcher) {
-            val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-            val tmdbService = mockk<TmdbService>(relaxed = true)
             val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
 
-            coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "42"
-            coEvery { tmdbMetadataService.fetchSeasonEpisodes(42, 1, null) } returns listOf(
-                tmdbEpisode(1), tmdbEpisode(2)
+            // Two TMDB-sourced episodes for S1 — the facade is the new entry point
+            val episodes = listOf(
+                tvSeasonEpisode(1, airDate = "2020-01-01"),
+                tvSeasonEpisode(2, airDate = "2020-01-08")
             )
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery { facade.resolveRequest(any()) } returns buildDefaultResolutionResult("tt9999999")
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            coEvery { facade.fetchTvSeasonEpisodes(any(), any(), any(), eq(1), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = episodes
+            )
+
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
+            val batchSlot = slot<List<SeasonEpisodeMark>>()
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
 
             val meta = buildSeriesMeta(id = "tt9999999", videos = emptyList())
             val viewModel = buildViewModel(
                 meta = meta,
-                tmdbService = tmdbService,
-                tmdbMetadataService = tmdbMetadataService,
-                watchProgressRepository = watchProgressRepository
+                watchProgressRepository = watchProgressRepository,
+                metadataRouterFacade = facade
             )
             advanceUntilIdle()
-            clearMocks(tmdbMetadataService, answers = false, recordedCalls = true)
 
             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { tmdbMetadataService.fetchSeasonEpisodes(42, 1, null) }
+            // facade.fetchTvSeasonEpisodes was invoked for season 1
+            coVerify(atLeast = 1) { facade.fetchTvSeasonEpisodes(any(), any(), any(), eq(1), any()) }
+            // Both episodes were passed to the batch
+            assertEquals(2, batchSlot.captured.size)
         }
 
     // ── Test 2: lazyHydrationBugRegression ───────────────────────────────────
@@ -173,18 +163,22 @@ class MarkSeasonWatchedTest {
     @Test
     fun `lazyHydrationBugRegression - TMDB fetch used even when meta videos is sparse`() =
         runTest(dispatcher) {
-            val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-            val tmdbService = mockk<TmdbService>(relaxed = true)
             val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
 
             // meta.videos only has S1/S2 episodes (12 episodes), NOT S3
             val sparseVideos = (1..6).map { ep -> buildVideo(season = 1, episode = ep) } +
                 (1..6).map { ep -> buildVideo(season = 2, episode = ep) }
 
-            // But TMDB returns 24 episodes for S3
-            val tmdbSeason3 = (1..24).map { ep -> tmdbEpisode(ep) }
-            coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "100"
-            coEvery { tmdbMetadataService.fetchSeasonEpisodes(100, 3, null) } returns tmdbSeason3
+            // Facade returns 24 episodes for S3 — must NOT fall back to meta.videos (which has 0 S3 eps)
+            val season3Episodes = (1..24).map { ep -> tvSeasonEpisode(ep, airDate = "2020-01-01") }
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery { facade.resolveRequest(any()) } returns buildDefaultResolutionResult("tt1111111")
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            coEvery { facade.fetchTvSeasonEpisodes(any(), any(), any(), eq(3), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = season3Episodes
+            )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(3), capture(batchSlot)) } returns Unit
@@ -192,16 +186,15 @@ class MarkSeasonWatchedTest {
             val meta = buildSeriesMeta(id = "tt1111111", videos = sparseVideos)
             val viewModel = buildViewModel(
                 meta = meta,
-                tmdbService = tmdbService,
-                tmdbMetadataService = tmdbMetadataService,
-                watchProgressRepository = watchProgressRepository
+                watchProgressRepository = watchProgressRepository,
+                metadataRouterFacade = facade
             )
             advanceUntilIdle()
 
             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(3))
             advanceUntilIdle()
 
-            // Must have used TMDB fetch (24 episodes), not meta.videos (0 S3 episodes)
+            // Must have used facade fetch (24 episodes), not meta.videos (0 S3 episodes)
             assertEquals(24, batchSlot.captured.size)
         }
 
@@ -210,28 +203,31 @@ class MarkSeasonWatchedTest {
     @Test
     fun `partiallyAiredSeasonOnlyMarksAired - unaired episodes excluded from batch`() =
         runTest(dispatcher) {
-            val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-            val tmdbService = mockk<TmdbService>(relaxed = true)
             val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
 
-            val nowMs = System.currentTimeMillis()
             val pastDate = "2020-01-01"   // always in the past
             val futureDate = "2099-12-31" // always in the future
 
-            val episodes = (1..7).map { ep -> tmdbEpisode(ep, airDate = pastDate) } +
-                (8..10).map { ep -> tmdbEpisode(ep, airDate = futureDate) }
+            // 7 aired + 3 future episodes for S2; facade returns all 10, VM must filter to 7
+            val episodes = (1..7).map { ep -> tvSeasonEpisode(ep, airDate = pastDate) } +
+                (8..10).map { ep -> tvSeasonEpisode(ep, airDate = futureDate) }
 
-            coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "55"
-            coEvery { tmdbMetadataService.fetchSeasonEpisodes(55, 2, null) } returns episodes
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery { facade.resolveRequest(any()) } returns buildDefaultResolutionResult("tt5555555")
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            coEvery { facade.fetchTvSeasonEpisodes(any(), any(), any(), eq(2), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = episodes
+            )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(2), capture(batchSlot)) } returns Unit
 
             val viewModel = buildViewModel(
                 meta = buildSeriesMeta(),
-                tmdbService = tmdbService,
-                tmdbMetadataService = tmdbMetadataService,
-                watchProgressRepository = watchProgressRepository
+                watchProgressRepository = watchProgressRepository,
+                metadataRouterFacade = facade
             )
             advanceUntilIdle()
 
@@ -247,22 +243,25 @@ class MarkSeasonWatchedTest {
     @Test
     fun `exactlyOneBatchedPostForFullSeason - markAsCompletedBatch called once for 24 episodes`() =
         runTest(dispatcher) {
-            val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-            val tmdbService = mockk<TmdbService>(relaxed = true)
             val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
 
-            val episodes24 = (1..24).map { ep -> tmdbEpisode(ep, airDate = "2020-01-01") }
-            coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "77"
-            coEvery { tmdbMetadataService.fetchSeasonEpisodes(77, 1, null) } returns episodes24
+            val episodes24 = (1..24).map { ep -> tvSeasonEpisode(ep, airDate = "2020-01-01") }
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery { facade.resolveRequest(any()) } returns buildDefaultResolutionResult("tt5555555")
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            coEvery { facade.fetchTvSeasonEpisodes(any(), any(), any(), eq(1), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = episodes24
+            )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
 
             val viewModel = buildViewModel(
                 meta = buildSeriesMeta(),
-                tmdbService = tmdbService,
-                tmdbMetadataService = tmdbMetadataService,
-                watchProgressRepository = watchProgressRepository
+                watchProgressRepository = watchProgressRepository,
+                metadataRouterFacade = facade
             )
             advanceUntilIdle()
 
@@ -543,9 +542,16 @@ class MarkSeasonWatchedTest {
 
             val video = buildVideo(season = 3, episode = 5)
             val meta = buildSeriesMeta(videos = listOf(video))
+
+            // Use a facade mock so that resolveRequest returns a non-null route and meta is hydrated
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            coEvery { facade.resolveRequest(any()) } returns buildDefaultResolutionResult(meta.id)
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+
             val viewModel = buildViewModel(
                 meta = meta,
-                watchProgressRepository = watchProgressRepository
+                watchProgressRepository = watchProgressRepository,
+                metadataRouterFacade = facade
             )
             advanceUntilIdle()
 
@@ -826,6 +832,54 @@ class MarkSeasonWatchedTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /**
+     * Returns a minimal [MetadataResolutionResult] with a non-null route so that
+     * [MetaDetailsViewModel.loadMeta] takes the canonical path and sets [_uiState.meta].
+     */
+    private fun buildDefaultResolutionResult(contentId: String) = MetadataResolutionResult(
+        route = MetadataRoute(
+            provider = MetadataPrimaryProvider.TMDB,
+            parentId = contentId,
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+            sourceContext = MetadataSourceContext(),
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to contentId),
+            trace = emptyList()
+        ),
+        plan = null,
+        resolverSchedule = ResolverSchedule(
+            depth = MetadataDepth.DETAIL_CORE,
+            localResolvers = emptyList(),
+            networkResolvers = emptyList()
+        ),
+        resolvedDocument = ResolvedMetadataDocument(
+            canonicalId = contentId,
+            title = "Test Show",
+            overview = null,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            rating = null,
+            runtimeMinutes = null,
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        ),
+        displayMetadata = HomeDisplayMetadata(title = "Test Show"),
+        trace = emptyList()
+    )
+
+    /**
+     * Returns a [TvMetadataDecision] with no enrichment value — used to stub [fetchTvEnrichment]
+     * so that [MetaDetailsViewModel.enrichMeta] completes without ClassCastExceptions from
+     * relaxed mockk generics.
+     */
+    private fun noEnrichmentDecision(): TvMetadataDecision<TvMetadataEnrichment> =
+        TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+            value = null
+        )
+
     private fun tmdbEpisode(
         episodeNumber: Int,
         airDate: String? = null
@@ -904,7 +958,8 @@ class MarkSeasonWatchedTest {
         tmdbService: TmdbService = defaultTmdbService(),
         tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
         tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(tmdbService, tmdbMetadataService),
-        watchProgressRepository: WatchProgressRepository = mockk(relaxed = true)
+        watchProgressRepository: WatchProgressRepository = mockk(relaxed = true),
+        metadataRouterFacade: MetadataRouterFacade? = null
     ): MetaDetailsViewModel {
         val wrappedWatchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
         every { wrappedWatchProgressRepository.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
@@ -922,7 +977,8 @@ class MarkSeasonWatchedTest {
             tmdbMetadataService = tmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
             watchProgressRepository = wrappedWatchProgressRepository,
-            libraryRepository = defaultLibraryRepository()
+            libraryRepository = defaultLibraryRepository(),
+            metadataRouterFacade = metadataRouterFacade
         )
     }
 
