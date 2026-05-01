@@ -1,0 +1,338 @@
+package com.nexio.tv.ui.screens.home
+
+import android.content.Context
+import com.nexio.tv.core.integration.IntegrationOwnershipService
+import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.ResolverSchedule
+import com.nexio.tv.core.metadata.router.SourceRole
+import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
+import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.HomeCatalogSnapshotStore
+import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
+import com.nexio.tv.data.repository.TrackingProviderStateService
+import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
+import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailHydrationState
+import com.nexio.tv.domain.model.RailSource
+import com.nexio.tv.domain.repository.AddonRepository
+import com.nexio.tv.domain.repository.CatalogRepository
+import com.nexio.tv.domain.repository.LibraryRepository
+import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.testutil.testProfileManager
+import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * Regression guard for Task 2 of the rail-preview-first hydration plan.
+ *
+ * Verifies that [HomeViewModel.onItemFocusPipeline] fires
+ * [MetadataRouterFacade.resolveRequest] exactly once for RAIL_PREVIEW items,
+ * skips it for ADDON_META_PREVIEW items, and is idempotent for repeated focus
+ * of the same item (via [HomeViewModel.focusedItemHydrationStates]).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class HomeViewModelFocusHydrationTest {
+
+    private val testDispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `onItemFocus for rail-preview tvdb item triggers MetadataRouter resolveRequest`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        // Capture all calls into a list so we can filter by depth.
+        val allCaptured = mutableListOf<MetadataRequest>()
+        coEvery { facade.resolveRequest(capture(allCaptured)) } returns successResult()
+
+        val viewModel = buildTestHomeViewModel(metadataRouterFacade = facade)
+        val railPreviewItem = railPreviewMetaPreview()
+
+        viewModel.onItemFocus(railPreviewItem)
+        advanceUntilIdle()
+
+        // Exactly one PREVIEW-depth call must come from our new RAIL_PREVIEW hydration code.
+        // (The existing enrichment pipeline may also call at DETAIL_CORE depth — that's fine.)
+        coVerify(exactly = 1) {
+            facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
+        }
+        // The PREVIEW call should target the item's id and type with RAIL_PREVIEW source role.
+        val previewCall = allCaptured.firstOrNull { it.depth == MetadataDepth.PREVIEW }
+            ?: error("No PREVIEW-depth call was captured — our hydration code did not run")
+        assertEquals("tvdb:355567", previewCall.contentId)
+        assertEquals(ContentType.SERIES, previewCall.contentType)
+        assertEquals(SourceRole.RAIL_PREVIEW, previewCall.sourceContext.previewSourceRole)
+    }
+
+    @Test
+    fun `onItemFocus for already-canonical item does not trigger MetadataRouter at PREVIEW depth`() = runTest(testDispatcher) {
+        // Use a relaxed facade so the existing enrichment path (DETAIL_CORE) can call resolveRequest
+        // without crashing — we only assert that our new RAIL_PREVIEW hydration does NOT fire.
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val viewModel = buildTestHomeViewModel(metadataRouterFacade = facade)
+
+        val addonMetaItem = MetaPreview(
+            id = "tvdb:355567",
+            type = ContentType.SERIES,
+            name = "Sample",
+            poster = "p",
+            posterShape = PosterShape.POSTER,
+            background = "b",
+            logo = "l",
+            description = "d",
+            releaseInfo = "2019",
+            imdbRating = 8.4f,
+            genres = listOf("Drama"),
+            // ADDON_META_PREVIEW: already has full preview data, no RAIL_PREVIEW router hydration needed
+            firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW,
+            firstPaintSourceProvider = ProviderId.ADDON,
+            firstPaintStableIds = ProviderIds(tvdb = "355567"),
+            firstPaintRailSource = RailSource.ADDON_CATALOG,
+            firstPaintSourceItemId = "tvdb:355567"
+        )
+
+        viewModel.onItemFocus(addonMetaItem)
+        viewModel.onItemFocus(addonMetaItem)  // second focus — still no-op for our hydration
+        advanceUntilIdle()
+
+        // Our new RAIL_PREVIEW hydration must NOT fire for ADDON_META_PREVIEW items.
+        // The existing enrichment pipeline may call resolveRequest at DETAIL_CORE depth — that's OK.
+        coVerify(exactly = 0) {
+            facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
+        }
+    }
+
+    @Test
+    fun `onItemFocus for the same rail-preview item twice only triggers MetadataRouter once at PREVIEW depth`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        coEvery { facade.resolveRequest(any<MetadataRequest>()) } returns successResult()
+
+        val viewModel = buildTestHomeViewModel(metadataRouterFacade = facade)
+        val railPreviewItem = railPreviewMetaPreview()
+
+        viewModel.onItemFocus(railPreviewItem)
+        viewModel.onItemFocus(railPreviewItem)  // second focus — idempotent
+        advanceUntilIdle()
+
+        // focusedItemHydrationStates transitions PREVIEW_ONLY → HYDRATING on first call,
+        // so the second call sees a non-PREVIEW_ONLY state and skips our RAIL_PREVIEW hydration.
+        // The existing enrichment pipeline is separate and may call at DETAIL_CORE depth.
+        coVerify(exactly = 1) {
+            facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    private fun railPreviewMetaPreview() = MetaPreview(
+        id = "tvdb:355567",
+        type = ContentType.SERIES,
+        name = "Sample",
+        poster = null,
+        posterShape = PosterShape.POSTER,
+        background = null,
+        logo = null,
+        description = null,
+        releaseInfo = "2019",
+        imdbRating = null,
+        genres = emptyList(),
+        firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+        firstPaintSourceProvider = ProviderId.TRAKT,
+        firstPaintStableIds = ProviderIds(tvdb = "355567", trakt = "1"),
+        firstPaintRailSource = RailSource.BUILT_IN_TRAKT,
+        firstPaintSourceItemId = "trakt:show:1"
+    )
+
+    private fun successResult() = MetadataResolutionResult(
+        route = MetadataRoute(
+            provider = MetadataPrimaryProvider.TVDB,
+            parentId = "tvdb:355567",
+            mediaKind = MetadataMediaKind.SERIES,
+            reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
+            sourceContext = MetadataSourceContext(),
+            targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:355567"),
+            trace = emptyList()
+        ),
+        plan = null,
+        resolverSchedule = ResolverSchedule(MetadataDepth.PREVIEW, emptyList(), emptyList()),
+        resolvedDocument = ResolvedMetadataDocument(
+            canonicalId = "tvdb:355567",
+            title = "Canonical Title",
+            overview = null,
+            poster = "tvdb-poster",
+            backdrop = "tvdb-backdrop",
+            logo = null,
+            rating = 8.4,
+            runtimeMinutes = 55,
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        ),
+        displayMetadata = HomeDisplayMetadata(
+            title = "Canonical Title",
+            genres = listOf("Drama"),
+            poster = "tvdb-poster",
+            backdrop = "tvdb-backdrop"
+        ),
+        trace = emptyList()
+    )
+
+    /**
+     * Constructs a real [HomeViewModel] wired for focus-hydration tests.
+     *
+     * All collaborators except [metadataRouterFacade] use [mockk(relaxed = true)] so the
+     * [HomeViewModel.init] block can launch its observers without crashing.
+     * [ProfileManager] is set to profile 1 (the default legacy profile) so
+     * [HomeViewModel.startHomeProfileSession] resolves [ProfileModeRoute.DefaultLegacyRoute].
+     *
+     * We use a real [ProfileModeRouter] (not mocked) so the sealed-interface [when]
+     * expression in [HomeViewModel.startHomeProfileSession] matches correctly.
+     *
+     * [Dispatchers.Main] must be set to a test dispatcher (done in [setUp]/[tearDown]) so
+     * that [viewModelScope] uses the test scheduler and [advanceUntilIdle] drains coroutines.
+     */
+    private fun buildTestHomeViewModel(
+        metadataRouterFacade: MetadataRouterFacade
+    ): HomeViewModel {
+        val profileManager = testProfileManager(MutableStateFlow(1))
+
+        // ProviderLocalizedMetadataResolver wraps the facade under test.
+        // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
+        val noOpTvRouter = mockk<com.nexio.tv.core.tvdb.TvMetadataRouter> {
+            coEvery { fetchEnrichment(any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+                value = null
+            )
+            coEvery { fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+                value = emptyMap()
+            )
+            coEvery { fetchSeasonEpisodes(any(), any(), any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+                value = emptyList()
+            )
+        }
+
+        val profileModeRouter = ProfileModeRouter()
+
+        // ProfileManager with profileSwitched SharedFlow so observeProfileSwitches()
+        // in init doesn't NPE when it accesses profileManager.profileSwitched.
+        val profileManagerWithSwitch = mockk<com.nexio.tv.core.profile.ProfileManager>(relaxed = true) {
+            every { activeProfileId } returns MutableStateFlow(1)
+            every { profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
+        }
+
+        // accountSyncRefreshNotifier and catalogPriorityHydrationNotifier have `.events`
+        // SharedFlow<Long> which is collected in viewModelScope.launch {} during init.
+        // Relaxed mocks for SharedFlow emit null which causes KotlinNothingValueException,
+        // so we explicitly stub events to emptyFlow() (never-emitting).
+        // Stub events as a never-emitting SharedFlow so the collect {} in init doesn't
+        // throw KotlinNothingValueException from a relaxed-mock null emission.
+        val neverEmittingEvents = MutableSharedFlow<Long>(extraBufferCapacity = 0)
+        val accountSyncRefreshNotifier = mockk<AccountSyncRefreshNotifier>(relaxed = true) {
+            every { events } returns neverEmittingEvents
+        }
+        val catalogPriorityHydrationNotifier = mockk<com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier>(relaxed = true) {
+            every { events } returns neverEmittingEvents
+        }
+
+        return HomeViewModel(
+            addonRepository = mockk(relaxed = true),
+            catalogRepository = mockk(relaxed = true),
+            watchProgressRepository = mockk(relaxed = true),
+            libraryRepository = mockk(relaxed = true),
+            metaRepository = mockk(relaxed = true),
+            layoutPreferenceDataStore = mockk(relaxed = true),
+            tmdbSettingsDataStore = mockk(relaxed = true),
+            tmdbCatalogSettingsDataStore = mockk(relaxed = true),
+            kitsuCatalogSettingsDataStore = mockk(relaxed = true),
+            traktSettingsDataStore = mockk(relaxed = true),
+            mdbListSettingsDataStore = mockk(relaxed = true),
+            simklSettingsDataStore = mockk(relaxed = true),
+            playerSettingsDataStore = mockk(relaxed = true),
+            traktDiscoverySnapshotStore = mockk(relaxed = true),
+            simklDiscoverySnapshotStore = mockk(relaxed = true),
+            mdbListDiscoverySnapshotStore = mockk(relaxed = true),
+            continueWatchingSnapshotService = mockk(relaxed = true),
+            trackingScrobbleService = mockk(relaxed = true),
+            traktDiscoveryService = mockk(relaxed = true),
+            simklDiscoveryService = mockk(relaxed = true),
+            mdbListDiscoveryService = mockk(relaxed = true),
+            tmdbDiscoveryService = mockk(relaxed = true),
+            kitsuDiscoveryService = mockk(relaxed = true),
+            mdbListRepository = mockk(relaxed = true),
+            titleRatingOverrideRepository = mockk(relaxed = true),
+            tmdbService = mockk(relaxed = true),
+            metadataRouterFacade = metadataRouterFacade,
+            providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(metadataRouterFacade),
+            trailerService = mockk(relaxed = true),
+            trailerSettingsDataStore = mockk(relaxed = true),
+            accountSyncRefreshNotifier = accountSyncRefreshNotifier,
+            catalogPriorityHydrationNotifier = catalogPriorityHydrationNotifier,
+            homeCatalogSnapshotStore = mockk(relaxed = true),
+            homeCatalogRefreshCoordinator = mockk(relaxed = true),
+            debugSettingsDataStore = mockk(relaxed = true),
+            metadataDiskCacheStore = mockk(relaxed = true),
+            syntheticHomeCatalogStore = mockk(relaxed = true),
+            profileManager = profileManagerWithSwitch,
+            profileModeRouter = profileModeRouter,
+            profileBoundary = mockk(relaxed = true),
+            trackingProviderStateService = mockk(relaxed = true),
+            playbackIdleGateState = PlaybackIdleGateState(),
+            integrationOwnershipService = mockk(relaxed = true),
+            appContext = mockk<Context>(relaxed = true)
+        )
+    }
+}

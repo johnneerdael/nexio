@@ -4,14 +4,20 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
@@ -391,6 +397,54 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 }
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
+    // Rail-preview-first hydration (Tier 1): RAIL_PREVIEW items are routed through
+    // MetadataRouterFacade on focus so the canonical TVDB / TMDB / Kitsu pipeline runs
+    // and emits Nexio.MetaRoute trace events. Idempotent per item.id within this ViewModel
+    // instance via focusedItemHydrationStates. Deliberately does NOT mutate the rail snapshot
+    // or _uiState here — that is deferred to Tier 2.
+    if (item.firstPaintSource == FirstPaintSource.RAIL_PREVIEW) {
+        val itemKey = item.id
+        val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
+        if (currentHydrationState == RailHydrationState.PREVIEW_ONLY) {
+            focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
+            viewModelScope.launch {
+                val request = MetadataRequest(
+                    contentId = item.id,
+                    contentType = item.type,
+                    sourceContext = MetadataSourceContext(
+                        itemType = item.rawType,
+                        addonMetadata = item.toHomeDisplayMetadata(),
+                        previewSourceRole = SourceRole.RAIL_PREVIEW,
+                        previewSourceProvider = item.firstPaintSourceProvider?.name?.lowercase(),
+                        previewStableIds = item.firstPaintStableIds,
+                        previewSourceItemId = item.firstPaintSourceItemId,
+                        previewRailSource = item.firstPaintRailSource?.name
+                    ),
+                    depth = MetadataDepth.PREVIEW
+                )
+                val result = try {
+                    metadataRouterFacade.resolveRequest(request)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(HomeViewModel.TAG, "onItemFocus hydration failed for ${item.id}: ${e.message}", e)
+                    focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
+                    return@launch
+                }
+                if (result.route == null) {
+                    focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
+                } else {
+                    focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
+                    // Tier 1 deliberately does NOT mutate the rail snapshot here.
+                    // The resolveRequest call above emits Nexio.MetaRoute trace events
+                    // (metadata.route_decision / metadata.identity_resolution /
+                    // metadata.field_selected) which prove the architecture works end-to-end
+                    // and warms the canonical-metadata cache for Tier 2 UI updates.
+                }
+            }
+        }
+    }
+
     if (!isNonPlaybackHomeWorkAllowed()) return
 
     if (isFocusEnrichmentBlocked(
