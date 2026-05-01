@@ -31,6 +31,15 @@ class CustomImdbTitleRatingsRepository @Inject constructor(
         fallbackItemType: String
     ): Double? {
         val imdbId = resolveImdbId(contentId, fallbackItemId, contentType, fallbackItemType) ?: return null
+        return getTitleRatingForResolvedImdbId(imdbId)
+    }
+
+    suspend fun getTitleRatingByImdbId(imdbId: String): Double? {
+        val clean = imdbId.trim().takeIf { it.startsWith("tt") } ?: return null
+        return getTitleRatingForResolvedImdbId(clean)
+    }
+
+    private suspend fun getTitleRatingForResolvedImdbId(imdbId: String): Double? {
         val cacheKey = imdbId
         val now = nowMsProvider()
         cache[cacheKey]?.takeIf { it.expiresAtMs > now }?.let { return it.rating }

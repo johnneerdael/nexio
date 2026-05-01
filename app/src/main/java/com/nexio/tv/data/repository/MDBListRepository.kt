@@ -70,7 +70,8 @@ class MDBListRepository @Inject constructor(
     suspend fun getRatingsForMeta(
         meta: Meta,
         fallbackItemId: String,
-        fallbackItemType: String
+        fallbackItemType: String,
+        imdbIdOverride: String? = null
     ): MDBListRatingsResult? {
         val settings = settingsDataStore.settings.first()
         if (!settings.enabled) return null
@@ -86,7 +87,8 @@ class MDBListRepository @Inject constructor(
             fallbackItemId = fallbackItemId,
             fallbackItemType = fallbackItemType,
             apiKey = apiKey,
-            providers = enabledProviders
+            providers = enabledProviders,
+            imdbIdOverride = imdbIdOverride
         )
     }
 
@@ -95,12 +97,15 @@ class MDBListRepository @Inject constructor(
         fallbackItemId: String,
         fallbackItemType: String,
         apiKey: String,
-        providers: List<ProviderType>
+        providers: List<ProviderType>,
+        imdbIdOverride: String? = null
     ): MDBListRatingsResult? {
         if (providers.isEmpty()) return null
 
         val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
-        val imdbId = resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType) ?: return null
+        val imdbId = imdbIdOverride?.trim()?.takeIf { it.startsWith("tt") }
+            ?: resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType)
+            ?: return null
 
         val providerHash = providers.map { it.apiValue }.sorted().joinToString(",")
         val cacheKey = "$mediaType:$imdbId:$providerHash:${apiKey.hashCode()}"
@@ -140,7 +145,7 @@ class MDBListRepository @Inject constructor(
         return deferred.await()
     }
 
-    suspend fun enrichPreview(preview: MetaPreview): MetaPreview {
+    suspend fun enrichPreview(preview: MetaPreview, imdbIdOverride: String? = null): MetaPreview {
         val settings = settingsDataStore.settings.first()
         if (!settings.enabled) return preview
 
@@ -159,7 +164,8 @@ class MDBListRepository @Inject constructor(
             providers = buildList {
                 if (needsImdb) add(ProviderType.IMDB)
                 if (needsTomatoes) add(ProviderType.TOMATOES)
-            }
+            },
+            imdbIdOverride = imdbIdOverride
         ) ?: return preview
 
         return preview.copy(
