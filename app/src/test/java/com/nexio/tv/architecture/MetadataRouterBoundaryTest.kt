@@ -32,7 +32,13 @@ class MetadataRouterBoundaryTest {
                 "/com/nexio/tv/data/integration/metadata/TmdbRecommendationMetadataAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TmdbTrailerMetadataAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TmdbOrganizationPersonAdapter.kt",
-                "/com/nexio/tv/data/integration/metadata/TvdbTrailerMetadataAdapter.kt"
+                "/com/nexio/tv/data/integration/metadata/TvdbTrailerMetadataAdapter.kt",
+                // The service files themselves define the class names the regex matches on; they are
+                // the canonical homes for TmdbMetadataService / KitsuMetadataService / TvdbMetadataService
+                // and must remain allowlisted so the scan ignores their own class declarations.
+                "/com/nexio/tv/core/tmdb/TmdbMetadataService.kt",
+                "/com/nexio/tv/core/anime/KitsuMetadataService.kt",
+                "/com/nexio/tv/core/tvdb/TvdbMetadataService.kt"
             )
         )
 
@@ -84,14 +90,24 @@ class MetadataRouterBoundaryTest {
 
     @Test
     fun `home preview paths do not execute router preview requests`() {
+        // Files in this set use MetadataDepth.PREVIEW intentionally for focus-triggered
+        // cache-warming (Tier 1 Task 2 of rail-preview-hydration). These calls are lightweight
+        // cache-warm + trace events and do NOT mutate the rail snapshot, so they do not violate
+        // the addon-only first-paint contract.
+        val allowedSuffixes = setOf(
+            "HomeViewModelPresentationPipeline.kt"
+        )
+
         val homeFiles = File("app/src/main/java/com/nexio/tv/ui/screens/home")
             .walkTopDown()
             .filter { file -> file.isFile && file.extension == "kt" }
             .toList()
 
-        val offenders = homeFiles.filter { file ->
-            Regex("""\bMetadataDepth\.PREVIEW\b""").containsMatchIn(file.readText())
-        }.map { it.invariantSeparatorsPath }
+        val offenders = homeFiles
+            .filterNot { file -> allowedSuffixes.any { suffix -> file.name == suffix } }
+            .filter { file ->
+                Regex("""\bMetadataDepth\.PREVIEW\b""").containsMatchIn(file.readText())
+            }.map { it.invariantSeparatorsPath }
 
         if (offenders.isNotEmpty()) {
             fail("Home preview rendering must stay addon-only and must not invoke MetadataRouter PREVIEW: $offenders")

@@ -16,7 +16,13 @@ class NoDirectOkHttpOutsideRuntimeTransportPackagesTest {
                 ".openConnection()" to Regex("""\.\s*openConnection\s*\("""),
                 "URL(...).openConnection(" to Regex("""\bURL\s*\([^\n]+\)\s*\.\s*openConnection\s*\(""")
             ),
-            allowedPaths = productionAllowedPathSuffixes("/com/nexio/tv/core/di/") +
+            allowedPaths = productionAllowedPathSuffixes(
+                    "/com/nexio/tv/core/di/",
+                    // TracedTransport references HttpURLConnection only in its KDoc summary
+                    // ("raw HttpURLConnection, native streaming, etc."). No actual URL or
+                    // connection is opened here — the class wraps caller-supplied lambdas.
+                    "/com/nexio/tv/core/trace/TracedTransport.kt"
+                ) +
                 productionAllowedPathContainsAll(
                     "/com/nexio/tv/data/integration/",
                     "/transport/"
