@@ -247,6 +247,7 @@ class FieldResolver @Inject constructor(
             )
         }
 
+        @Suppress("UNCHECKED_CAST")
         return ResolvedMetadataDocument(
             canonicalId = fields[ResolvedField.CANONICAL_ID] as? String,
             title = fields[ResolvedField.TITLE] as? String,
@@ -256,6 +257,19 @@ class FieldResolver @Inject constructor(
             logo = fields[ResolvedField.LOGO] as? String,
             rating = fields[ResolvedField.RATING],
             runtimeMinutes = fields[ResolvedField.RUNTIME] as? Int,
+            genres = (fields[ResolvedField.GENRES] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            releaseDate = fields[ResolvedField.RELEASE_DATE] as? String,
+            ageRating = fields[ResolvedField.AGE_RATING] as? String,
+            countries = (fields[ResolvedField.COUNTRIES] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            language = fields[ResolvedField.LANGUAGE] as? String,
+            castMembers = (fields[ResolvedField.CAST] as? List<*>)
+                ?.filterIsInstance<com.nexio.tv.domain.model.MetaCastMember>() ?: emptyList(),
+            productionCompanies = (fields[ResolvedField.ORGANIZATION_LIST] as? List<*>)
+                ?.filterIsInstance<com.nexio.tv.domain.model.MetaCompany>()
+                ?.filter { it.kind == com.nexio.tv.domain.model.MetaCompanyKind.COMPANY } ?: emptyList(),
+            networks = (fields[ResolvedField.ORGANIZATION_LIST] as? List<*>)
+                ?.filterIsInstance<com.nexio.tv.domain.model.MetaCompany>()
+                ?.filter { it.kind == com.nexio.tv.domain.model.MetaCompanyKind.NETWORK } ?: emptyList(),
             fieldOwners = owners,
             ignoredOverwrites = ignoredOverwrites,
             localization = localization,

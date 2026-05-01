@@ -40,14 +40,27 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 
 /**
+ * Sentinel addon base URL used in tests to seed the ViewModel with the initial meta's
+ * videos and links. When the canonical resolver path is taken, the production code in
+ * [MetaDetailsViewModel.loadMeta] loads from this URL so that the initial episode list
+ * and franchise link structure are visible immediately — matching the pre-canonical
+ * architecture where the addon meta was the primary source of initial data.
+ */
+const val TEST_INITIAL_META_ADDON_URL = "test://initial"
+
+/**
  * Shared factory for constructing [MetaDetailsViewModel] in unit tests.
  * All parameters have sensible defaults — override only what the test cares about.
+ *
+ * The [addonBaseUrl] defaults to [TEST_INITIAL_META_ADDON_URL] so that the production
+ * "seed initial videos/links from addon" path fires and the test [meta]'s videos and
+ * links are preserved through the canonical resolver path.
  */
 fun buildMetaDetailsViewModel(
     meta: Meta,
     itemId: String = meta.id,
     itemType: String = "series",
-    addonBaseUrl: String? = null,
+    addonBaseUrl: String? = TEST_INITIAL_META_ADDON_URL,
     metaRepository: MetaRepository = defaultMetaRepository(meta),
     tmdbService: TmdbService = defaultTmdbService(),
     tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
@@ -136,6 +149,18 @@ fun defaultMetaRepository(meta: Meta): MetaRepository {
     every {
         repo.hydrateAddonOriginItem(
             addon = any(),
+            type = any(),
+            id = any(),
+            cacheOnDisk = any(),
+            writeToDisk = any(),
+            origin = any()
+        )
+    } returns flowOf(NetworkResult.Success(meta))
+    // Seed the test-initial URL so that the canonical-path addon-seed step in
+    // MetaDetailsViewModel.loadMeta() can load the initial meta's videos and links.
+    every {
+        repo.getMeta(
+            addonBaseUrl = TEST_INITIAL_META_ADDON_URL,
             type = any(),
             id = any(),
             cacheOnDisk = any(),
