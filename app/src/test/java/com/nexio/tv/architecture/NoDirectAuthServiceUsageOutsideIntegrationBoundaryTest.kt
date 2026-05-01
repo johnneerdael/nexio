@@ -30,7 +30,10 @@ class NoDirectAuthServiceUsageOutsideIntegrationBoundaryTest {
                 "/com/nexio/tv/data/repository/TraktSettingsAuthGateway.kt",
                 "/com/nexio/tv/core/tvdb/TvdbSettingsAuthGateway.kt",
                 "/com/nexio/tv/data/remote/SimklRequestGate.kt",
-                "/com/nexio/tv/data/remote/TraktRequestGate.kt"
+                "/com/nexio/tv/data/remote/TraktRequestGate.kt",
+                // TraktCatalogRailSource references TraktAuthService only in a KDoc comment
+                // explaining the session-derivation caveat for global rails. No real injection.
+                "/com/nexio/tv/data/catalog/rails/TraktCatalogRailSource.kt"
             )
         )
 

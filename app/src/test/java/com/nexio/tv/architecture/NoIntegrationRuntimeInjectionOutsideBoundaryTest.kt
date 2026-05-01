@@ -22,10 +22,15 @@ class NoIntegrationRuntimeInjectionOutsideBoundaryTest {
         // KitsuAuthService, RealDebridAuthService, and SimklAuthService reference [IntegrationRuntime]
         // only in KDoc comments explaining WHY they predate the integration boundary.
         // No actual injection or runtime usage occurs in these files.
+        //
+        // CatalogRailSource (F2-A-02 / cluster 2 integration-runtime-phase-a): the interface KDoc
+        // mandates that implementers route fetches through `IntegrationRuntime`. The interface itself
+        // does NOT inject or use IntegrationRuntime — it only names it in documentation.
         val kdocOnlyCarveOutSuffixes = setOf(
             "data/repository/KitsuAuthService.kt",
             "data/repository/RealDebridAuthService.kt",
-            "data/repository/SimklAuthService.kt"
+            "data/repository/SimklAuthService.kt",
+            "core/catalog/rails/CatalogRailSource.kt"
         )
 
         val offenders = rawOffenders.filterNot { path ->
