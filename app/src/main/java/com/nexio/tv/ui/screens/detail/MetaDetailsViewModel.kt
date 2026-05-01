@@ -628,49 +628,11 @@ class MetaDetailsViewModel @Inject constructor(
                 }
             } else {
                 // Last-resort B: no canonical route AND no addon origin.
-                // Resolve addon from preferredAddonBaseUrl if available; otherwise emit error.
-                // Task 3 will refine this branch with full addon-origin-only gating.
-                val originAddon: Addon? = preferredAddonBaseUrl
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { baseUrl ->
-                        addonRepository.getCachedInstalledAddons()
-                            .firstOrNull { it.baseUrl == baseUrl }
-                    }
-                if (originAddon != null) {
-                    metaRepository.hydrateAddonOriginItem(
-                        addon = originAddon,
-                        type = itemType,
-                        id = metaLookupId,
-                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
-                        origin = detailMetaOrigin
-                    ).collect { result ->
-                        when (result) {
-                            is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
-                            is NetworkResult.Error -> {
-                                if (tryApplyStreamOnlyFallback(result.message)) {
-                                    _uiState.update { state ->
-                                        if (state.userMessage == null) {
-                                            state.copy(
-                                                userMessage = "Metadata unavailable. Opening stream selection.",
-                                                userMessageIsError = false
-                                            )
-                                        } else {
-                                            state
-                                        }
-                                    }
-                                } else {
-                                    _uiState.update { it.copy(isLoading = false, error = result.message) }
-                                }
-                            }
-                            NetworkResult.Loading -> {
-                                _uiState.update { it.copy(isLoading = true) }
-                            }
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "loadMeta: no canonical route AND no resolvable addon origin for $metaLookupId")
-                    _uiState.update { it.copy(isLoading = false, error = "Could not resolve metadata for $metaLookupId") }
-                }
+                // The else-if above captures all non-blank preferredAddonBaseUrl cases, so this
+                // branch is only reached when preferredAddonBaseUrl is null or blank.
+                // hydrateAddonOriginItem requires a verified addon origin — emit error instead.
+                Log.w(TAG, "loadMeta: no canonical route AND no resolvable addon origin for $metaLookupId")
+                _uiState.update { it.copy(isLoading = false, error = "Could not resolve metadata for $metaLookupId") }
             }
         }
     }

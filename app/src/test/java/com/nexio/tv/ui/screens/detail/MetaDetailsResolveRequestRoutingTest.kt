@@ -15,10 +15,12 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.metadata.router.MetadataRouteFailure
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -184,6 +186,57 @@ class MetaDetailsResolveRequestRoutingTest {
             val state = viewModel.uiState.value
             assertFalse("isLoading should be false after fallback path completes", state.isLoading)
             assertNotNull("meta should be populated after getMeta fallback succeeds", state.meta)
+        }
+
+    /**
+     * Verifies that when both the canonical router and preferredAddonBaseUrl are absent,
+     * the else branch emits an error state and never calls hydrateAddonOriginItem.
+     *
+     * This guards the Task 3 invariant: the last-resort branch is addon-origin-only —
+     * if there is no addon origin, it must emit an error state rather than fan out.
+     */
+    @Test
+    fun `loadMeta with no canonical route and no addon origin emits error state`() =
+        runTest(dispatcher) {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+            val metaRepository = mockk<MetaRepository>(relaxed = true)
+            val addonRepository = mockk<AddonRepository>(relaxed = true)
+
+            // Force canonical to fail so the else branch is reached.
+            coEvery { facade.resolveRequest(any<MetadataRequest>()) } throws
+                MetadataRouteFailure.IdentityResolutionFailed(
+                    "imdb:tt00000",
+                    MetadataPrimaryProvider.TMDB
+                )
+
+            val viewModel = buildMetaDetailsViewModel(
+                meta = buildMinimalSeriesMeta(),
+                itemId = "imdb:tt00000",
+                itemType = "movie",
+                addonBaseUrl = null, // no preferredAddonBaseUrl → else branch always emits error
+                metaRepository = metaRepository,
+                metadataRouterFacade = facade,
+                addonRepository = addonRepository
+            )
+
+            advanceUntilIdle()
+
+            // hydrateAddonOriginItem must NOT be called when there is no addon origin.
+            coVerify(exactly = 0) {
+                metaRepository.hydrateAddonOriginItem(
+                    addon = any(),
+                    type = any(),
+                    id = any(),
+                    cacheOnDisk = any(),
+                    writeToDisk = any(),
+                    origin = any()
+                )
+            }
+
+            // The screen state must reflect the error condition.
+            val state = viewModel.uiState.value
+            assertNotNull("error should be set when no addon origin is available", state.error)
+            assertFalse("isLoading should be false after error state is emitted", state.isLoading)
         }
 
     // ── helpers ──────────────────────────────────────────────────────────────────
