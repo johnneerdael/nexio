@@ -33,7 +33,9 @@ class ContinueWatchingSnapshotServiceObserveProfileSnapshotTest {
      */
     private fun buildService(): ContinueWatchingSnapshotService {
         val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
-            every { state } returns flowOf(EffectiveTrackingProviderState())
+            // Use authenticated state so the service's live pipeline does not clear
+            // rawSnapshotState/snapshotState when the test seeds them via reflection.
+            every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
         }
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
             every { dismissedNextUpKeys } returns flowOf(emptySet())

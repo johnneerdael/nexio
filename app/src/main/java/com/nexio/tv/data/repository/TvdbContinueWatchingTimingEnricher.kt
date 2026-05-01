@@ -35,7 +35,15 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
                     contentType = ContentType.SERIES,
                     seasonNumbers = listOf(entry.season)
                 )
+                // Use DETAIL_CORE depth with no seasonNumber for series-level enrichment
+                // (airsTime, originalCountry, etc.), and a separate request for episode metadata.
                 val metadataRequest = MetadataRequest(
+                    contentId = entry.contentId,
+                    contentType = ContentType.SERIES,
+                    sourceContext = MetadataSourceContext(itemType = entry.contentType),
+                    depth = MetadataDepth.DETAIL_CORE
+                )
+                val episodeMetadataRequest = MetadataRequest(
                     contentId = entry.contentId,
                     contentType = ContentType.SERIES,
                     sourceContext = MetadataSourceContext(itemType = entry.contentType),
@@ -43,7 +51,7 @@ class TvdbContinueWatchingTimingEnricher @Inject constructor(
                     depth = MetadataDepth.SEASON
                 )
                 val seriesDecision = metadataRouterFacade.fetchTvEnrichment(metadataRequest, request)
-                val episodeDecision = metadataRouterFacade.fetchTvEpisodeEnrichment(metadataRequest, request)
+                val episodeDecision = metadataRouterFacade.fetchTvEpisodeEnrichment(episodeMetadataRequest, request)
                 val series = seriesDecision.value
                 val episodeAiredDate = episodeDecision.value
                     ?.get(entry.season to entry.episode)

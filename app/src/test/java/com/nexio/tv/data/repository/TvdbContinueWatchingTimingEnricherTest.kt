@@ -26,7 +26,7 @@ class TvdbContinueWatchingTimingEnricherTest {
 
     @Test
     fun `enrich adds exact tvdb availability to next up entry`() = runTest {
-        val router = mockk<TvMetadataRouter>()
+        val router = mockk<TvMetadataRouter>(relaxed = true)
         val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val entry = nextUpEntry()
         val expected = availabilityCalculator.computeAvailability(
@@ -57,7 +57,7 @@ class TvdbContinueWatchingTimingEnricherTest {
 
     @Test
     fun `enrich preserves provider first aired while tvdb exact wins later`() = runTest {
-        val router = mockk<TvMetadataRouter>()
+        val router = mockk<TvMetadataRouter>(relaxed = true)
         val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val providerFirstAiredMs = 1_000L
         val entry = nextUpEntry(firstAired = "2026-04-14", firstAiredMs = providerFirstAiredMs)
@@ -75,7 +75,7 @@ class TvdbContinueWatchingTimingEnricherTest {
 
     @Test
     fun `enrich records date only diagnostic when airsTime is missing`() = runTest {
-        val router = mockk<TvMetadataRouter>()
+        val router = mockk<TvMetadataRouter>(relaxed = true)
         val enricher = TvdbContinueWatchingTimingEnricher(testMetadataRouterFacade(router), availabilityCalculator)
         val entry = nextUpEntry(firstAired = "2026-04-15")
 

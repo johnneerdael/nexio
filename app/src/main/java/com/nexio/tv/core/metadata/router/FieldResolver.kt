@@ -270,6 +270,11 @@ class FieldResolver @Inject constructor(
             networks = (fields[ResolvedField.ORGANIZATION_LIST] as? List<*>)
                 ?.filterIsInstance<com.nexio.tv.domain.model.MetaCompany>()
                 ?.filter { it.kind == com.nexio.tv.domain.model.MetaCompanyKind.NETWORK } ?: emptyList(),
+            airsTime = fields[ResolvedField.AIRS_TIME] as? String,
+            originalCountry = fields[ResolvedField.ORIGINAL_COUNTRY] as? String,
+            originalNetwork = fields[ResolvedField.ORIGINAL_NETWORK] as? String,
+            latestNetwork = fields[ResolvedField.LATEST_NETWORK] as? String,
+            platformName = fields[ResolvedField.PLATFORM_NAME] as? String,
             fieldOwners = owners,
             ignoredOverwrites = ignoredOverwrites,
             localization = localization,

@@ -1,15 +1,11 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
-import com.nexio.tv.core.profile.ProfileBoundary
-import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.remote.TraktRequestGate
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
@@ -18,10 +14,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListSeasonDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
-import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
 import io.mockk.every
@@ -60,7 +54,7 @@ class TraktDiscoveryServiceCustomListTest {
                     show = TraktShowDto(
                         title = "Anime Show",
                         year = 2025,
-                        ids = TraktIdsDto(imdb = "tt7654321")
+                        ids = TraktIdsDto(trakt = 999999, imdb = "tt7654321")
                     )
                 )
             )
@@ -68,7 +62,6 @@ class TraktDiscoveryServiceCustomListTest {
 
         val service = buildService(
             traktApi = traktApi,
-            dataStoreFactory = profileDataStoreFactoryForTest(),
             traktIntegrationProvider = traktIntegrationProvider
         )
 
@@ -88,32 +81,19 @@ class TraktDiscoveryServiceCustomListTest {
 
     private suspend fun buildService(
         traktApi: TraktApi,
-        dataStoreFactory: com.nexio.tv.data.local.ProfileDataStoreFactory,
         traktIntegrationProvider: TraktIntegrationProvider
     ): TraktDiscoveryService {
         val profileManager = testProfileManager()
-        val authDataStore = TraktAuthDataStore(
-            factory = dataStoreFactory,
-            profileManager = profileManager
+        val authenticatedState = com.nexio.tv.data.local.TraktAuthState(
+            accessToken = "access",
+            refreshToken = "refresh",
+            tokenType = "Bearer",
+            username = "johnneerdael",
+            userSlug = "johnneerdael"
         )
-        authDataStore.saveToken(
-            TraktTokenResponseDto(
-                accessToken = "access",
-                tokenType = "Bearer",
-                expiresIn = 3600,
-                refreshToken = "refresh",
-                createdAt = System.currentTimeMillis() / 1000L
-            )
-        )
-        authDataStore.saveUser(username = "johnneerdael", userSlug = "johnneerdael")
-        val authService = TraktAuthService(
-            traktIntegrationProvider = object : dagger.Lazy<TraktIntegrationProvider> { override fun get() = traktIntegrationProvider },
-            traktAuthDataStore = authDataStore,
-            requestGate = TraktRequestGate(),
-            profileManager = profileManager,
-            profileModeRouter = ProfileModeRouter(),
-            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
-        )
+        val authGateway = mockk<TraktRepositoryAuthGateway> {
+            coEvery { getCurrentAuthState() } returns authenticatedState
+        }
 
         val traktSettings = mockk<TraktSettingsDataStore>()
         every { traktSettings.catalogPreferences } returns flowOf(
@@ -133,7 +113,7 @@ class TraktDiscoveryServiceCustomListTest {
         coEvery { progressService.getRecentActivities(any()) } returns null
 
         return TraktDiscoveryService(
-            traktAuthService = TraktRepositoryAuthGateway(authService),
+            traktAuthService = authGateway,
             traktIntegrationProvider = traktIntegrationProvider,
             traktSettingsDataStore = traktSettings,
             posterRatingsUrlResolver = posterResolver,

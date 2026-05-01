@@ -52,7 +52,12 @@ enum class ResolvedField {
     REVIEWS,
     TRAILERS,
     RECOMMENDATIONS,
-    TRACKING
+    TRACKING,
+    AIRS_TIME,
+    ORIGINAL_COUNTRY,
+    ORIGINAL_NETWORK,
+    LATEST_NETWORK,
+    PLATFORM_NAME
 }
 
 enum class FieldOwner {
@@ -162,6 +167,11 @@ data class ResolvedMetadataDocument(
     val castMembers: List<com.nexio.tv.domain.model.MetaCastMember> = emptyList(),
     val productionCompanies: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
     val networks: List<com.nexio.tv.domain.model.MetaCompany> = emptyList(),
+    val airsTime: String? = null,
+    val originalCountry: String? = null,
+    val originalNetwork: String? = null,
+    val latestNetwork: String? = null,
+    val platformName: String? = null,
     val fieldOwners: Map<ResolvedField, FieldOwner>,
     val ignoredOverwrites: List<IgnoredFieldOverwrite>,
     val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),

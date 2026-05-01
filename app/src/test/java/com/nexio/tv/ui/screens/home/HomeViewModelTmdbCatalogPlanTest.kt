@@ -11,8 +11,11 @@ import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.RailSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -164,6 +167,10 @@ class HomeViewModelTmdbCatalogPlanTest {
     }
 
     private fun meta(id: String, title: String): MetaPreview {
+        // Build with fields that survive the CatalogRow→RailPreviewCatalogRowRecord→CatalogRow
+        // round-trip that TmdbDiscoverySnapshot applies. The round-trip sets firstPaintSource
+        // to RAIL_PREVIEW, firstPaintRailSource to ADDON_CATALOG, clears ratingSource to null,
+        // and populates firstPaintStableIds/firstPaintSourceItemId from the item id.
         return MetaPreview(
             id = id,
             type = ContentType.MOVIE,
@@ -176,7 +183,12 @@ class HomeViewModelTmdbCatalogPlanTest {
             description = null,
             releaseInfo = null,
             imdbRating = null,
-            genres = emptyList()
+            ratingSource = null,
+            genres = emptyList(),
+            firstPaintSource = FirstPaintSource.RAIL_PREVIEW,
+            firstPaintRailSource = RailSource.ADDON_CATALOG,
+            firstPaintSourceItemId = id,
+            firstPaintStableIds = ProviderIds(imdb = id)
         )
     }
 }
