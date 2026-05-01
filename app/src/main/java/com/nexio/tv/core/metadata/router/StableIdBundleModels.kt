@@ -23,9 +23,9 @@ data class CanonicalStableIds(
 ) {
     fun providerNativeIdFor(provider: MetadataPrimaryProvider): String? =
         when (provider) {
-            MetadataPrimaryProvider.TMDB -> tmdbMovieId
-            MetadataPrimaryProvider.TVDB -> tvdbSeriesId
-            MetadataPrimaryProvider.KITSU -> kitsuAnimeId
+            MetadataPrimaryProvider.TMDB -> tmdbMovieId.toPresentStableId()
+            MetadataPrimaryProvider.TVDB -> tvdbSeriesId.toPresentStableId()
+            MetadataPrimaryProvider.KITSU -> kitsuAnimeId.toPresentStableId()
             MetadataPrimaryProvider.IMDB,
             MetadataPrimaryProvider.TRAKT,
             MetadataPrimaryProvider.SIMKL,
@@ -91,11 +91,17 @@ private fun resolveStableIdBundleStatus(
     canonical: CanonicalStableIds,
     sidecars: SidecarStableIds
 ): StableIdBundleStatus {
-    val hasCanonical = canonical.tmdbMovieId != null || canonical.tvdbSeriesId != null || canonical.kitsuAnimeId != null
+    val hasCanonical = canonical.tmdbMovieId.isPresentStableId() ||
+        canonical.tvdbSeriesId.isPresentStableId() ||
+        canonical.kitsuAnimeId.isPresentStableId()
     if (!hasCanonical) return StableIdBundleStatus.UNRESOLVED
-    return if (sidecars.imdbId != null) {
+    return if (sidecars.imdbId.isPresentStableId()) {
         StableIdBundleStatus.CANONICAL_AND_RATING_READY
     } else {
         StableIdBundleStatus.CANONICAL_READY_RATING_UNRESOLVED
     }
 }
+
+private fun String?.isPresentStableId(): Boolean = !isNullOrBlank()
+
+private fun String?.toPresentStableId(): String? = takeUnless { it.isNullOrBlank() }
