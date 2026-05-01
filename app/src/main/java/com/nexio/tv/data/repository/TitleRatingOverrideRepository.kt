@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -11,7 +12,21 @@ class TitleRatingOverrideRepository @Inject constructor(
     private val customImdbTitleRatingsRepository: CustomImdbTitleRatingsRepository,
     private val mdbListRepository: MDBListRepository
 ) {
-    suspend fun enrichPreview(preview: MetaPreview): MetaPreview {
+    suspend fun enrichPreview(
+        preview: MetaPreview,
+        stableIdBundle: StableIdBundle? = null
+    ): MetaPreview {
+        val stableImdbId = stableIdBundle?.sidecars?.imdbId
+        val stableCustomRating = stableImdbId?.let {
+            customImdbTitleRatingsRepository.getTitleRatingByImdbId(it)
+        }
+        if (stableCustomRating != null) {
+            return preview.copy(
+                imdbRating = stableCustomRating.toFloat(),
+                ratingSource = TitleRatingSource.IMDB
+            )
+        }
+
         val customRating = customImdbTitleRatingsRepository.getTitleRating(
             contentId = preview.id,
             fallbackItemId = preview.id,
@@ -25,10 +40,26 @@ class TitleRatingOverrideRepository @Inject constructor(
             )
         }
 
-        return mdbListRepository.enrichPreview(preview)
+        return mdbListRepository.enrichPreview(preview, imdbIdOverride = stableImdbId)
     }
 
-    suspend fun enrichMeta(meta: Meta, fallbackItemId: String, fallbackItemType: String): Meta {
+    suspend fun enrichMeta(
+        meta: Meta,
+        fallbackItemId: String,
+        fallbackItemType: String,
+        stableIdBundle: StableIdBundle? = null
+    ): Meta {
+        val stableImdbId = stableIdBundle?.sidecars?.imdbId
+        val stableCustomRating = stableImdbId?.let {
+            customImdbTitleRatingsRepository.getTitleRatingByImdbId(it)
+        }
+        if (stableCustomRating != null) {
+            return meta.copy(
+                imdbRating = stableCustomRating.toFloat(),
+                ratingSource = TitleRatingSource.IMDB
+            )
+        }
+
         val customRating = customImdbTitleRatingsRepository.getTitleRating(
             contentId = meta.id,
             fallbackItemId = fallbackItemId,
@@ -45,7 +76,8 @@ class TitleRatingOverrideRepository @Inject constructor(
         val mdblistRating = mdbListRepository.getRatingsForMeta(
             meta = meta,
             fallbackItemId = fallbackItemId,
-            fallbackItemType = fallbackItemType
+            fallbackItemType = fallbackItemType,
+            imdbIdOverride = stableImdbId
         )?.ratings?.imdb
 
         return if (mdblistRating != null) {
