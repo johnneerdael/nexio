@@ -1,5 +1,7 @@
 package com.nexio.tv.core.trace
 
+import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -225,6 +227,42 @@ class TraceMetadataEvents(
                     "ignoredInputs" to ignoredInputs,
                     "targetIdRequiresIdentityResolution" to targetIdRequiresIdentityResolution,
                     "targetIds" to targetIds
+                )
+            )
+        )
+    }
+
+    fun emitStableIdBundle(
+        bundle: StableIdBundle,
+        trigger: StableIdResolutionTrigger
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "metadata.stable_id_bundle",
+                payload = mapOf(
+                    "itemKey" to bundle.itemKey,
+                    "itemType" to bundle.itemType.name,
+                    "status" to bundle.status.name,
+                    "trigger" to trigger.name,
+                    "tmdbMovieId" to bundle.canonical.tmdbMovieId,
+                    "tvdbSeriesId" to bundle.canonical.tvdbSeriesId,
+                    "kitsuAnimeId" to bundle.canonical.kitsuAnimeId,
+                    "imdbId" to bundle.sidecars.imdbId,
+                    "networkExecuted" to bundle.evidence.any { it.networkExecuted },
+                    "evidence" to bundle.evidence.map { evidence ->
+                        mapOf(
+                            "source" to evidence.source,
+                            "target" to evidence.target,
+                            "networkExecuted" to evidence.networkExecuted,
+                            "resultId" to evidence.resultId
+                        )
+                    }
                 )
             )
         )
