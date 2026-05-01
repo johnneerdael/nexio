@@ -36,7 +36,7 @@ class StableIdBundleResolver @Inject constructor(
         var tmdbMovieId: String? = null
         var tvdbSeriesId: String? = null
         var kitsuAnimeId: String? = null
-        var imdbId: String? = known.imdb.presentStableId()
+        var imdbId: String? = known.imdb.presentImdbId()
 
         when (request.routeProvider) {
             MetadataPrimaryProvider.TMDB -> {
@@ -52,7 +52,7 @@ class StableIdBundleResolver @Inject constructor(
                     }
                 if (imdbId == null && tmdbMovieId != null) {
                     imdbId = resolveViaStoreOrProvider(
-                        sourceId = parsed(AnimeIdScheme.TMDB, tmdbMovieId),
+                        sourceId = tmdbMovieSourceId(tmdbMovieId),
                         provider = MetadataPrimaryProvider.IMDB,
                         operation = "tmdbMovieToImdb",
                         target = "IMDB",
@@ -77,7 +77,7 @@ class StableIdBundleResolver @Inject constructor(
                     val tmdbTvId = known.tmdb.presentStableId()
                     if (tmdbTvId != null) {
                         val bridgeImdb = resolveViaStoreOrProvider(
-                            sourceId = parsed(AnimeIdScheme.TMDB, tmdbTvId),
+                            sourceId = tmdbTvSourceId(tmdbTvId),
                             provider = MetadataPrimaryProvider.IMDB,
                             operation = "tmdbTvToImdb",
                             target = "IMDB",
@@ -92,6 +92,9 @@ class StableIdBundleResolver @Inject constructor(
                                 target = "TVDB",
                                 evidence = evidence
                             ) { lookup.imdbToTvdbSeries(imdb) }
+                        }
+                        if (tvdbSeriesId != null) {
+                            imdbId = bridgeImdb
                         }
                     }
                 }
@@ -204,6 +207,16 @@ class StableIdBundleResolver @Inject constructor(
     private fun parsed(scheme: AnimeIdScheme, id: String): ParsedMetadataId =
         MetadataIdParser.parse("${scheme.name.lowercase()}:$id")
 
+    private fun tmdbMovieSourceId(id: String): ParsedMetadataId {
+        val value = id.presentStableId() ?: id
+        return ParsedMetadataId(AnimeIdScheme.TMDB, "movie:$value", "tmdb:movie:$value")
+    }
+
+    private fun tmdbTvSourceId(id: String): ParsedMetadataId {
+        val value = id.presentStableId() ?: id
+        return ParsedMetadataId(AnimeIdScheme.TMDB, "tv:$value", "tmdb:tv:$value")
+    }
+
     private suspend fun resolveKitsuFromStore(
         known: ProviderIds,
         evidence: MutableList<StableIdEvidence>
@@ -230,4 +243,13 @@ class StableIdBundleResolver @Inject constructor(
 
     private fun String?.presentStableId(): String? =
         this?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun String?.presentImdbId(): String? {
+        val value = presentStableId() ?: return null
+        val parsed = MetadataIdParser.parse(value)
+        return when (parsed.scheme) {
+            AnimeIdScheme.IMDB -> parsed.value.presentStableId()
+            else -> value.lowercase()
+        }
+    }
 }
