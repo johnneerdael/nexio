@@ -3,7 +3,11 @@ package com.nexio.tv.data.repository
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.integration.IntegrationCallResult
-import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
@@ -28,7 +32,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
-import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.domain.model.ContentType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +50,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
@@ -54,7 +58,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import retrofit2.Response
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -88,7 +91,7 @@ internal fun shouldPreferEpisodeHistoryEntry(
 class TraktProgressService @Inject constructor(
     private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
-    private val metaRepository: MetaRepository
+    private val metadataRouterFacade: MetadataRouterFacade
 ) {
     data class NextUpEntry(
         val contentId: String,
@@ -1738,7 +1741,6 @@ class TraktProgressService @Inject constructor(
             }
 
             val episodeInfo = findEpisodeInfo(candidate.contentId, season, episode)
-                ?: return TraktNextUpValidationResult.UnresolvedEpisode
             TraktNextUpValidationResult.CurrentAiredNextEpisode(
                 candidate.copy(
                     season = season,
@@ -2055,7 +2057,7 @@ class TraktProgressService @Inject constructor(
             }
     }
 
-    private data class ResolvedEpisodeInfo(
+    internal data class ResolvedEpisodeInfo(
         val videoId: String,
         val released: String? = null
     )
@@ -2070,49 +2072,46 @@ class TraktProgressService @Inject constructor(
         contentId: String,
         season: Int,
         episode: Int
-    ): ResolvedEpisodeInfo {
-        return findEpisodeInfo(contentId, season, episode)
-            ?: ResolvedEpisodeInfo(videoId = "$contentId:$season:$episode")
-    }
+    ): ResolvedEpisodeInfo = findEpisodeInfo(contentId, season, episode)
 
-    private suspend fun findEpisodeInfo(
+    internal suspend fun findEpisodeInfo(
         contentId: String,
         season: Int,
         episode: Int
-    ): ResolvedEpisodeInfo? {
+    ): ResolvedEpisodeInfo {
         val key = "$contentId:$season:$episode"
         episodeInfoCache[key]?.let { return it }
 
-        val candidates = buildList {
-            add(contentId)
-            if (contentId.startsWith("tmdb:")) add(contentId.substringAfter(':'))
-            if (contentId.startsWith("trakt:")) add(contentId.substringAfter(':'))
-        }.distinct()
-
-        for (candidate in candidates) {
-            for (type in listOf("series", "tv")) {
-                val result = withTimeoutOrNull(2500) {
-                    metaRepository.getMetaFromAllAddons(type = type, id = candidate)
-                        .first { it !is NetworkResult.Loading }
-                } ?: continue
-
-                val meta = (result as? NetworkResult.Success)?.data ?: continue
-                val video = meta.videos.firstOrNull {
-                    it.season == season && it.episode == episode
-                }
-
-                if (video != null && !video.id.isNullOrBlank()) {
-                    val info = ResolvedEpisodeInfo(
-                        videoId = video.id,
-                        released = video.released
-                    )
-                    episodeInfoCache[key] = info
-                    return info
-                }
-            }
+        val request = MetadataRequest(
+            contentId = contentId,
+            contentType = ContentType.fromString("series"),
+            sourceContext = MetadataSourceContext(itemType = "series"),
+            seasonNumber = season,
+            depth = MetadataDepth.SEASON
+        )
+        val episodeMap = try {
+            metadataRouterFacade.fetchTvEpisodeEnrichment(
+                metadataRequest = request,
+                tvRequest = TvMetadataRequest(
+                    contentId = contentId,
+                    contentType = ContentType.fromString("series"),
+                    seasonNumbers = listOf(season)
+                )
+            ).value
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "findEpisodeInfo fetchTvEpisodeEnrichment failed for $contentId s${season}e${episode}: ${e.message}", e)
+            null
         }
 
-        return null
+        val episodeMeta = episodeMap?.get(season to episode)
+        val info = ResolvedEpisodeInfo(
+            videoId = key,
+            released = episodeMeta?.airDate
+        )
+        episodeInfoCache[key] = info
+        return info
     }
 
     private fun progressKey(progress: WatchProgress): String {
@@ -2294,56 +2293,33 @@ class TraktProgressService @Inject constructor(
         }
     }
 
-    private suspend fun fetchContentMetadata(
+    internal suspend fun fetchContentMetadata(
         contentId: String,
         contentType: String
     ): ContentMetadata? {
-        val typeCandidates = buildList {
-            val normalized = contentType.lowercase()
-            if (normalized.isNotBlank()) add(normalized)
-            if (normalized in listOf("series", "tv")) {
-                add("series")
-                add("tv")
-            } else {
-                add("movie")
-            }
-        }.distinct()
-
-        val idCandidates = buildList {
-            add(contentId)
-            if (contentId.startsWith("tmdb:")) add(contentId.substringAfter(':'))
-            if (contentId.startsWith("trakt:")) add(contentId.substringAfter(':'))
-        }.distinct()
-
-        for (type in typeCandidates) {
-            for (candidateId in idCandidates) {
-                val result = withTimeoutOrNull(3500) {
-                    metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
-                        .first { it !is NetworkResult.Loading }
-                } ?: continue
-
-                val meta = (result as? NetworkResult.Success)?.data ?: continue
-                val episodes = meta.videos
-                    .mapNotNull { video ->
-                        val season = video.season ?: return@mapNotNull null
-                        val episode = video.episode ?: return@mapNotNull null
-                        (season to episode) to EpisodeMetadata(
-                            title = video.title,
-                            thumbnail = video.thumbnail
-                        )
-                    }
-                    .toMap()
-
-                return ContentMetadata(
-                    name = meta.name,
-                    poster = meta.poster,
-                    backdrop = meta.background,
-                    logo = meta.logo,
-                    episodes = episodes
-                )
-            }
+        val request = MetadataRequest(
+            contentId = contentId,
+            contentType = ContentType.fromString(contentType),
+            sourceContext = MetadataSourceContext(itemType = contentType),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+        val canonical = try {
+            metadataRouterFacade.resolveRequest(request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchContentMetadata resolveRequest failed for $contentId: ${e.message}", e)
+            return null
         }
-        return null
+        if (canonical.route == null) return null
+        val display = canonical.displayMetadata
+        return ContentMetadata(
+            name = display.title,
+            poster = display.poster,
+            backdrop = display.backdrop,
+            logo = display.logo,
+            episodes = emptyMap()
+        )
     }
 
     suspend fun addHistoryBatch(
