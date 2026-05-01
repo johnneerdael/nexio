@@ -1,12 +1,18 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.core.network.NetworkResult
+import android.util.Log
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.simkl.SimklProgressHistoryMutationAdapter
 import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.data.repository.trakt.TraktProgressHistoryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.WatchProgress
@@ -21,7 +27,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -30,7 +35,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,14 +50,19 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val traktAuthService: TraktRepositoryAuthGateway,
     // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
     //   → WatchProgressRepositoryImpl → ContinueWatchingSnapshotService
-    private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>
+    private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>,
+    private val metadataRouterFacade: MetadataRouterFacade
 ) : WatchProgressRepository {
-    private data class EpisodeMetadata(
+    companion object {
+        private const val TAG = "WatchProgressRepo"
+    }
+
+    internal data class EpisodeMetadata(
         val title: String?,
         val thumbnail: String?
     )
 
-    private data class ContentMetadata(
+    internal data class ContentMetadata(
         val name: String?,
         val poster: String?,
         val backdrop: String?,
@@ -92,8 +101,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
                 try {
                     val metadata = fetchContentMetadata(
-                        contentId = contentId,
-                        contentType = progress.contentType
+                        progress = progress
                     ) ?: return@launch
                     metadataState.update { current ->
                         current + (contentId to metadata)
@@ -116,56 +124,38 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun fetchContentMetadata(
-        contentId: String,
-        contentType: String
-    ): ContentMetadata? {
-        val typeCandidates = buildList {
-            val normalized = contentType.lowercase()
-            if (normalized.isNotBlank()) add(normalized)
-            if (normalized in listOf("series", "tv")) {
-                add("series")
-                add("tv")
-            } else {
-                add("movie")
-            }
-        }.distinct()
-
-        val idCandidates = buildList {
-            add(contentId)
-            if (contentId.startsWith("tmdb:")) add(contentId.substringAfter(':'))
-            if (contentId.startsWith("trakt:")) add(contentId.substringAfter(':'))
-        }.distinct()
-
-        for (type in typeCandidates) {
-            for (candidateId in idCandidates) {
-                val result = withTimeoutOrNull(3500) {
-                    metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
-                        .first { it !is NetworkResult.Loading }
-                } ?: continue
-
-                val meta = (result as? NetworkResult.Success)?.data ?: continue
-                val episodes = meta.videos
-                    .mapNotNull { video ->
-                        val season = video.season ?: return@mapNotNull null
-                        val episode = video.episode ?: return@mapNotNull null
-                        (season to episode) to EpisodeMetadata(
-                            title = video.title,
-                            thumbnail = video.thumbnail
-                        )
-                    }
-                    .toMap()
-
-                return ContentMetadata(
-                    name = meta.name,
-                    poster = meta.poster,
-                    backdrop = meta.background,
-                    logo = meta.logo,
-                    episodes = episodes
+    internal suspend fun fetchContentMetadata(progress: WatchProgress): ContentMetadata? {
+        val request = MetadataRequest(
+            contentId = progress.contentId,
+            contentType = ContentType.fromString(progress.contentType),
+            sourceContext = MetadataSourceContext(
+                itemType = progress.contentType,
+                addonMetadata = HomeDisplayMetadata(
+                    title = progress.name,
+                    poster = progress.poster,
+                    backdrop = progress.backdrop,
+                    logo = progress.logo
                 )
-            }
+            ),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+        val canonical = try {
+            metadataRouterFacade.resolveRequest(request)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchContentMetadata resolveRequest failed for ${progress.contentId}: ${e.message}", e)
+            return null
         }
-        return null
+        if (canonical.route == null) return null
+        val display = canonical.displayMetadata
+        return ContentMetadata(
+            name = display.title ?: progress.name,
+            poster = display.poster ?: progress.poster,
+            backdrop = display.backdrop ?: progress.backdrop,
+            logo = display.logo ?: progress.logo,
+            episodes = emptyMap()
+        )
     }
 
     private fun enrichWithMetadata(

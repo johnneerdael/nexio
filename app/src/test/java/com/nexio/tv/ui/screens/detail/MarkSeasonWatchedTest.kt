@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.detail
 
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -424,7 +425,8 @@ class MarkSeasonWatchedTest {
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
                 },
-                snapshotServiceProvider = Provider { snapshotService }
+                snapshotServiceProvider = Provider { snapshotService },
+                metadataRouterFacade = mockk(relaxed = true)
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -516,7 +518,8 @@ class MarkSeasonWatchedTest {
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
                 },
-                snapshotServiceProvider = Provider { snapshotService }
+                snapshotServiceProvider = Provider { snapshotService },
+                metadataRouterFacade = mockk(relaxed = true)
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -621,7 +624,8 @@ class MarkSeasonWatchedTest {
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
                 },
-                snapshotServiceProvider = Provider { snapshotService }
+                snapshotServiceProvider = Provider { snapshotService },
+                metadataRouterFacade = mockk(relaxed = true)
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -740,7 +744,8 @@ class MarkSeasonWatchedTest {
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
                 },
-                snapshotServiceProvider = Provider { snapshotService }
+                snapshotServiceProvider = Provider { snapshotService },
+                metadataRouterFacade = mockk(relaxed = true)
             )
 
             val meta = buildSeriesMeta(id = showId)
@@ -814,7 +819,8 @@ class MarkSeasonWatchedTest {
                 traktAuthService = mockk(relaxed = true) {
                     every { currentTraktProfileId() } returns 1
                 },
-                snapshotServiceProvider = Provider { snapshotService }
+                snapshotServiceProvider = Provider { snapshotService },
+                metadataRouterFacade = mockk(relaxed = true)
             )
 
             val meta = buildSeriesMeta(id = showId)
