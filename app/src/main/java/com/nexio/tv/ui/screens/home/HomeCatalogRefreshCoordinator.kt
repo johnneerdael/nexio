@@ -10,6 +10,7 @@ import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
@@ -36,6 +37,7 @@ import com.nexio.tv.domain.repository.CatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -342,15 +344,14 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             if (telemetryEnabled) {
                 onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
             }
-            runCatching {
+            try {
                 val hydrated = overlayProviderLocalizedMetadata(item, onLog)
-                val stableIdBundle = runCatching {
-                    metadataRouterFacade.resolveStableIdBundle(
-                        request = hydrated.toStableIdMetadataRequest(languageTag = languageTag),
-                        trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
-                        itemKey = itemKey
-                    )
-                }.getOrNull()
+                val stableIdBundle = metadataRouterFacade.resolveStableIdBundleOrNull(
+                    request = hydrated.toStableIdMetadataRequest(languageTag = languageTag),
+                    trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                    itemKey = itemKey,
+                    onLog = onLog
+                )
                 val enriched = titleRatingOverrideRepository.enrichPreview(hydrated, stableIdBundle)
                 val displayReady = posterRatingsUrlResolver.apply(enriched, activePosterProvider)
                 val originalDisplay = item.toHomeDisplayMetadata().withoutProviderArtwork()
@@ -362,6 +363,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         metadata = hydratedDisplay
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Preserve legacy best-effort visible hydration behavior.
             }
         }
         onLog(
@@ -530,6 +535,29 @@ private fun MetaPreview.toStableIdMetadataRequest(languageTag: String): Metadata
         language = languageTag,
         depth = MetadataDepth.DETAIL_CORE
     )
+
+private suspend fun MetadataRouterFacade.resolveStableIdBundleOrNull(
+    request: MetadataRequest,
+    trigger: StableIdResolutionTrigger,
+    itemKey: String,
+    onLog: (String, String?) -> Unit
+): StableIdBundle? {
+    return try {
+        resolveStableIdBundle(
+            request = request,
+            trigger = trigger,
+            itemKey = itemKey
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        onLog(
+            "stable_id_bundle_failed",
+            "trigger=${trigger.name} itemKey=$itemKey error=${e::class.java.simpleName}"
+        )
+        null
+    }
+}
 
 internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadataEnrichment): MetaPreview {
     return copy(

@@ -214,6 +214,42 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `hero enrichment falls back to legacy rating enrichment when focused stable bundle resolution fails`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val item = railPreviewMetaPreview().copy(
+            type = ContentType.MOVIE,
+            rawType = "movie"
+        )
+
+        coEvery { facade.resolveRequest(any()) } returns successResult()
+        coEvery {
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${item.id}"
+            )
+        } throws IllegalStateException("identity backend unavailable")
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), null) } answers {
+            firstArg<MetaPreview>().copy(imdbRating = 7.7f)
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = facade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository
+        )
+
+        val enriched = viewModel.enrichHeroItemsPipeline(
+            items = listOf(item),
+            settings = TmdbSettings()
+        )
+
+        assertEquals("Canonical Title", enriched.single().name)
+        assertEquals(7.7f, enriched.single().imdbRating)
+        coVerify(exactly = 1) { titleRatingOverrideRepository.enrichPreview(any(), null) }
+    }
+
+    @Test
     fun `focused enrichment flush resolves focused stable bundle and passes it to title rating enrichment`() = runTest(testDispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
@@ -239,7 +275,8 @@ class HomeViewModelFocusHydrationTest {
 
         val viewModel = buildTestHomeViewModel(
             metadataRouterFacade = facade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            nonPlaybackHomeWorkAllowed = true
         )
         viewModel.catalogsMap["addon_movie_popular"] = CatalogRow(
             addonId = "addon",
@@ -270,6 +307,61 @@ class HomeViewModelFocusHydrationTest {
             )
             titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
         }
+    }
+
+    @Test
+    fun `focused enrichment flush resolves stable bundle once for duplicate item across rows`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val stableIdBundle = stableIdBundle()
+        val focusedItem = railPreviewMetaPreview().copy(
+            type = ContentType.MOVIE,
+            rawType = "movie"
+        )
+
+        coEvery { facade.resolveRequest(any()) } returns successResult()
+        coEvery {
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${focusedItem.id}"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
+            firstArg<MetaPreview>().copy(imdbRating = 9.9f)
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = facade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            nonPlaybackHomeWorkAllowed = true
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(focusedItem),
+            hasMore = false
+        )
+        viewModel.catalogsMap["addon_movie_popular"] = row
+        viewModel.catalogsMap["addon_movie_featured"] = row.copy(catalogId = "featured", catalogName = "Featured")
+
+        viewModel.onItemFocus(focusedItem)
+        advanceUntilIdle()
+
+        assertEquals(9.9f, viewModel.catalogsMap.getValue("addon_movie_popular").items.single().imdbRating)
+        assertEquals(9.9f, viewModel.catalogsMap.getValue("addon_movie_featured").items.single().imdbRating)
+        coVerify(exactly = 1) {
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${focusedItem.id}"
+            )
+        }
+        coVerify(exactly = 2) { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) }
     }
 
     // -------------------------------------------------------------------------
@@ -359,7 +451,8 @@ class HomeViewModelFocusHydrationTest {
      */
     private fun buildTestHomeViewModel(
         metadataRouterFacade: MetadataRouterFacade,
-        titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true)
+        titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true),
+        nonPlaybackHomeWorkAllowed: Boolean = false
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -402,6 +495,11 @@ class HomeViewModelFocusHydrationTest {
         }
         val catalogPriorityHydrationNotifier = mockk<com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier>(relaxed = true) {
             every { events } returns neverEmittingEvents
+        }
+        val playbackIdleGateState = PlaybackIdleGateState().also { gate ->
+            if (!nonPlaybackHomeWorkAllowed) {
+                gate.onPlayerSessionStarted()
+            }
         }
 
         return HomeViewModel(
@@ -446,7 +544,7 @@ class HomeViewModelFocusHydrationTest {
             profileModeRouter = profileModeRouter,
             profileBoundary = mockk(relaxed = true),
             trackingProviderStateService = mockk(relaxed = true),
-            playbackIdleGateState = PlaybackIdleGateState(),
+            playbackIdleGateState = playbackIdleGateState,
             integrationOwnershipService = mockk(relaxed = true),
             appContext = mockk<Context>(relaxed = true)
         )

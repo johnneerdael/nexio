@@ -6,6 +6,7 @@ import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -573,22 +574,28 @@ private suspend fun HomeViewModel.flushMetadataEnrichmentPipeline() {
 
     var changed = false
     val changedCatalogKeys = mutableSetOf<String>()
+    val stableIdBundlesByItemKey = mutableMapOf<String, StableIdBundle?>()
     catalogsMap.forEach { (key, row) ->
         var mutableItems: MutableList<MetaPreview>? = null
         row.items.forEachIndexed { index, currentItem ->
+            val itemKey = "${currentItem.apiType}:${currentItem.id}"
             val providerEnrichment = providerByItemId[currentItem.id]
             val hydratedItem = mergeFocusedItemEnrichment(
                 currentItem = currentItem,
                 providerEnrichment = providerEnrichment,
                 externalMeta = null
             )
-            val stableIdBundle = if (providerEnrichment == null) null else runCatching {
-                metadataRouterFacade.resolveStableIdBundle(
+            val stableIdBundle = if (providerEnrichment == null) {
+                null
+            } else if (stableIdBundlesByItemKey.containsKey(itemKey)) {
+                stableIdBundlesByItemKey[itemKey]
+            } else {
+                resolveStableIdBundleOrNull(
                     request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
                     trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                    itemKey = "${currentItem.apiType}:${currentItem.id}"
-                )
-            }.getOrNull()
+                    itemKey = itemKey
+                ).also { stableIdBundlesByItemKey[itemKey] = it }
+            }
             val mergedItem = titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
             if (mergedItem != currentItem) {
                 val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
@@ -716,6 +723,29 @@ private fun MetaPreview.toStableIdMetadataRequest(languageTag: String): Metadata
         depth = MetadataDepth.DETAIL_CORE
     )
 
+private suspend fun HomeViewModel.resolveStableIdBundleOrNull(
+    request: MetadataRequest,
+    trigger: StableIdResolutionTrigger,
+    itemKey: String
+): StableIdBundle? {
+    return try {
+        metadataRouterFacade.resolveStableIdBundle(
+            request = request,
+            trigger = trigger,
+            itemKey = itemKey
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(
+            HomeViewModel.TAG,
+            "Stable ID bundle resolution failed trigger=${trigger.name} itemKey=$itemKey: ${e.message}",
+            e
+        )
+        null
+    }
+}
+
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     items: List<MetaPreview>,
     settings: TmdbSettings
@@ -733,14 +763,14 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                         externalMeta = null,
                         tmdbSettings = settings
                     )
-                    val stableIdBundle = runCatching {
-                        metadataRouterFacade.resolveStableIdBundle(
-                            request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
-                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                            itemKey = "${item.apiType}:${item.id}"
-                        )
-                    }.getOrNull()
+                    val stableIdBundle = resolveStableIdBundleOrNull(
+                        request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
+                        trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                        itemKey = "${item.apiType}:${item.id}"
+                    )
                     titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
                     item

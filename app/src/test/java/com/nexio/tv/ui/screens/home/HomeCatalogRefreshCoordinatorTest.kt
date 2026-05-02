@@ -60,6 +60,7 @@ import io.mockk.mockk
 import io.mockk.Runs
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -69,6 +70,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class HomeCatalogRefreshCoordinatorTest {
@@ -650,6 +652,114 @@ class HomeCatalogRefreshCoordinatorTest {
                 itemKey = "movie:1007757"
             )
             titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
+        }
+    }
+
+    @Test
+    fun `visible hydration falls back to legacy rating enrichment and logs when stable bundle resolution fails`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val logs = mutableListOf<Pair<String, String?>>()
+        val cachedMetadata = slot<HomeDisplayMetadata>()
+        val firstPaintItem = preview(id = "1007757", poster = null).copy(
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Swapped",
+            imdbRating = 0.0f,
+            ratingSource = TitleRatingSource.TMDB
+        )
+
+        every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(any(), any()) } returns false
+        every {
+            metadataDiskCacheStore.writeHomeDisplayMetadata(
+                itemKey = "movie:1007757",
+                languageTag = "en",
+                metadata = capture(cachedMetadata)
+            )
+        } just Runs
+        coEvery { metadataRouterFacade.resolveRequest(any()) } returns successResult()
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        } throws IllegalStateException("identity backend unavailable")
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), null) } answers {
+            firstArg<MetaPreview>().copy(
+                imdbRating = 8.8f,
+                ratingSource = TitleRatingSource.IMDB
+            )
+        }
+        every { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+
+        coordinator(
+            catalogRepository = catalogRepository,
+            metadataRouterFacade = metadataRouterFacade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchVisibleItems(
+            items = listOf(firstPaintItem),
+            telemetryEnabled = false,
+            onLog = { event, payload -> logs += event to payload }
+        )
+
+        assertEquals(8.8f, cachedMetadata.captured.imdbRating)
+        assertEquals(TitleRatingSource.IMDB, cachedMetadata.captured.ratingSource)
+        assertTrue(
+            logs.any { (event, payload) ->
+                event == "stable_id_bundle_failed" &&
+                    payload?.contains("trigger=VISIBLE_HOME_HYDRATION") == true &&
+                    payload.contains("itemKey=movie:1007757")
+            }
+        )
+        coVerify(exactly = 1) { titleRatingOverrideRepository.enrichPreview(any(), null) }
+    }
+
+    @Test
+    fun `visible hydration rethrows cancellation from stable bundle resolution`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val firstPaintItem = preview(id = "1007757", poster = null).copy(
+            type = ContentType.MOVIE,
+            rawType = "movie"
+        )
+        val cancellation = CancellationException("cancelled")
+
+        every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(any(), any()) } returns false
+        coEvery { metadataRouterFacade.resolveRequest(any()) } returns successResult()
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        } throws cancellation
+
+        try {
+            coordinator(
+                catalogRepository = catalogRepository,
+                metadataRouterFacade = metadataRouterFacade,
+                titleRatingOverrideRepository = titleRatingOverrideRepository,
+                metadataDiskCacheStore = metadataDiskCacheStore,
+                posterRatingsUrlResolver = posterRatingsUrlResolver
+            ).hydrateAndPrefetchVisibleItems(
+                items = listOf(firstPaintItem),
+                telemetryEnabled = false,
+                onLog = { _, _ -> }
+            )
+            fail("Expected CancellationException")
+        } catch (actual: CancellationException) {
+            assertEquals(cancellation, actual)
         }
     }
 
