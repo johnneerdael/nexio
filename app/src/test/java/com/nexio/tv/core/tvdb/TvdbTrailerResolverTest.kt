@@ -53,4 +53,29 @@ class TvdbTrailerResolverTest {
             provider.fetchSeriesExtended(tvdbId = 100, meta = null, short = false)
         }
     }
+
+    @Test
+    fun `trailer resolver does not send explicit anime ids to tvdb remote lookup`() = runTest {
+        val settingsDataStore = mockk<TvdbSettingsDataStore>()
+        every { settingsDataStore.settings } returns MutableStateFlow(TvdbSettings(enabled = true))
+        val identityService = mockk<TvdbIdentityService>(relaxed = true)
+        val provider = mockk<TvdbIntegrationProvider>(relaxed = true)
+        val resolver = TvdbTrailerResolver(
+            tvdbSettingsDataStore = settingsDataStore,
+            tvdbIdentityService = identityService,
+            tvdbIntegrationProvider = provider,
+            tvdbTrailerMapper = TvdbTrailerMapper()
+        )
+
+        val result = resolver.resolveTitleTrailer(
+            contentId = "kitsu:48649",
+            type = "tv",
+            title = "Anime",
+            year = "2026"
+        )
+
+        assertEquals(TvdbTrailerLookupResult.Missing, result)
+        coVerify(exactly = 0) { identityService.resolveSeriesByRemoteId(any(), any()) }
+        coVerify(exactly = 0) { provider.fetchSeriesExtended(any(), any(), any()) }
+    }
 }

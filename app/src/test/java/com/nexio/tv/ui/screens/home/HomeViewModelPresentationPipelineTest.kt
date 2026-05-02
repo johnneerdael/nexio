@@ -195,6 +195,15 @@ class HomeViewModelPresentationPipelineTest {
     }
 
     @Test
+    fun `tmdb trailer id lookup is skipped for tv and explicit anime ids`() {
+        assertEquals(true, shouldSkipTmdbTrailerIdLookup("tt0944947", "series"))
+        assertEquals(true, shouldSkipTmdbTrailerIdLookup("kitsu:48649", "movie"))
+        assertEquals(true, shouldSkipTmdbTrailerIdLookup("mal:21", "movie"))
+        assertEquals(false, shouldSkipTmdbTrailerIdLookup("tt0137523", "movie"))
+        assertEquals(false, shouldSkipTmdbTrailerIdLookup("tmdb:550", "movie"))
+    }
+
+    @Test
     fun `mergeFocusedItemEnrichment carries external trailer ids into the preview`() {
         val preview = testPreview("tt15940132", "War Machine")
         val merged = mergeFocusedItemEnrichment(

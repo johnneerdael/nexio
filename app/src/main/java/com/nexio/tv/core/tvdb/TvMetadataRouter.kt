@@ -215,7 +215,12 @@ class TvMetadataRouter @Inject constructor(
         val animeId = firstAnimeId(request) ?: return null
         val mediaKind = request.contentType.toAnimeMediaKind()
         val episodes = kitsuMetadataService?.fetchSeasonEpisodes(animeId, mediaKind, seasonNumber).orEmpty()
-        if (episodes.isEmpty()) return null
+        if (episodes.isEmpty()) {
+            if (request.hasExplicitAnimeOnlyId()) {
+                return missingKitsuDecision(request, animeId, emptyList())
+            }
+            return null
+        }
         return TvMetadataDecision(
             provider = TvProvider.KITSU,
             reason = TvMetadataDecisionReason.KITSU_SUCCESS,
@@ -260,7 +265,13 @@ class TvMetadataRouter @Inject constructor(
     ): TvMetadataDecision<TvMetadataEnrichment>? {
         val animeId = firstAnimeId(request) ?: return null
         val mediaKind = request.contentType.toAnimeMediaKind()
-        val enrichment = kitsuMetadataService?.fetchEnrichment(animeId, mediaKind) ?: return null
+        val enrichment = kitsuMetadataService?.fetchEnrichment(animeId, mediaKind)
+        if (enrichment == null) {
+            if (request.hasExplicitAnimeOnlyId()) {
+                return missingKitsuDecision(request, animeId, null)
+            }
+            return null
+        }
         return TvMetadataDecision(
             provider = TvProvider.KITSU,
             reason = TvMetadataDecisionReason.KITSU_SUCCESS,
@@ -277,7 +288,12 @@ class TvMetadataRouter @Inject constructor(
         val animeId = firstAnimeId(request) ?: return null
         val mediaKind = request.contentType.toAnimeMediaKind()
         val episodes = kitsuMetadataService?.fetchEpisodeEnrichment(animeId, mediaKind, request.seasonNumbers).orEmpty()
-        if (episodes.isEmpty()) return null
+        if (episodes.isEmpty()) {
+            if (request.hasExplicitAnimeOnlyId()) {
+                return missingKitsuDecision(request, animeId, emptyMap())
+            }
+            return null
+        }
         return TvMetadataDecision(
             provider = TvProvider.KITSU,
             reason = TvMetadataDecisionReason.KITSU_SUCCESS,
@@ -292,6 +308,30 @@ class TvMetadataRouter @Inject constructor(
         val candidates = listOf(request.contentId, request.fallbackContentId)
         return candidates.firstOrNull { AnimeStremioId.parse(it) != null }
     }
+
+    private fun TvMetadataRequest.hasExplicitAnimeOnlyId(): Boolean {
+        val candidates = listOf(contentId, fallbackContentId)
+        return candidates.any(AnimeStremioId::isExplicitAnimeOnlyId)
+    }
+
+    private fun <T> missingKitsuDecision(
+        request: TvMetadataRequest,
+        animeId: String,
+        value: T?
+    ): TvMetadataDecision<T> =
+        TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_PAYLOAD_MISSING,
+            value = value,
+            diagnostics = listOf(
+                diagnostic(
+                    TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_PAYLOAD_MISSING,
+                    request.contentId,
+                    provider = TvProvider.KITSU,
+                    detail = "kitsu_payload_missing_for_explicit_anime_id:$animeId"
+                )
+            )
+        )
 
     private fun ContentType.toAnimeMediaKind(): ContentMediaKind =
         if (this == ContentType.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
@@ -374,6 +414,7 @@ class TvMetadataRouter @Inject constructor(
         val normalized = trimmed.lowercase()
 
         return when {
+            AnimeStremioId.isExplicitAnimeOnlyId(trimmed) -> null
             normalized.startsWith("tvdb:") -> {
                 trimmed.substringAfter(':').toIntOrNull()?.let { tvdbIdentityService.resolveSeriesByTvdbId(it) }
             }

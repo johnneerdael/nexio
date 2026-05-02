@@ -16,6 +16,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TvMetadataRouterKitsuTest {
@@ -91,6 +92,83 @@ class TvMetadataRouterKitsuTest {
         assertEquals("Asteroid Blues", decision.value?.first()?.metadata?.title)
         coVerify(exactly = 0) { tvdbIdentity.resolveSeriesByRemoteId(any(), any()) }
         coVerify(exactly = 0) { tvdbMetadata.fetchSeasonEpisodes(any(), any(), any()) }
+    }
+
+    @Test
+    fun `explicit anime id does not fall through to tvdb when kitsu payload is missing`() = runTest {
+        val kitsu = mockk<KitsuMetadataService>()
+        val tvdbIdentity = mockk<TvdbIdentityService>(relaxed = true)
+        val tvdbMetadata = mockk<TvdbMetadataService>(relaxed = true)
+        val tmdb = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadata = mockk<TmdbMetadataService>(relaxed = true)
+        val router = router(kitsu, tvdbIdentity, tvdbMetadata, tmdb, tmdbMetadata)
+
+        coEvery { kitsu.fetchEnrichment("kitsu:48649", ContentMediaKind.SERIES) } returns null
+
+        val decision = router.fetchEnrichment(
+            TvMetadataRequest(
+                contentId = "kitsu:48649",
+                contentType = ContentType.SERIES,
+                language = "en-US"
+            )
+        )
+
+        assertEquals(TvProvider.KITSU, decision.provider)
+        assertEquals(TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_PAYLOAD_MISSING, decision.reason)
+        assertNull(decision.value)
+        coVerify(exactly = 0) { tvdbIdentity.resolveSeriesByRemoteId(any(), any()) }
+        coVerify(exactly = 0) { tmdb.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadata.fetchEnrichment(any(), any(), any()) }
+    }
+
+    @Test
+    fun `explicit anime id does not fall through to tvdb for missing kitsu season episodes`() = runTest {
+        val kitsu = mockk<KitsuMetadataService>()
+        val tvdbIdentity = mockk<TvdbIdentityService>(relaxed = true)
+        val tvdbMetadata = mockk<TvdbMetadataService>(relaxed = true)
+        val router = router(kitsu, tvdbIdentity, tvdbMetadata)
+
+        coEvery { kitsu.fetchSeasonEpisodes("mal:21", ContentMediaKind.SERIES, 1) } returns emptyList()
+
+        val decision = router.fetchSeasonEpisodes(
+            contentId = "mal:21",
+            fallbackContentId = null,
+            seasonNumber = 1,
+            language = "en-US"
+        )
+
+        assertEquals(TvProvider.KITSU, decision.provider)
+        assertEquals(TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_PAYLOAD_MISSING, decision.reason)
+        assertEquals(emptyList<TvSeasonEpisode>(), decision.value)
+        coVerify(exactly = 0) { tvdbIdentity.resolveSeriesByRemoteId(any(), any()) }
+        coVerify(exactly = 0) { tvdbMetadata.fetchSeasonEpisodes(any(), any(), any()) }
+    }
+
+    @Test
+    fun `explicit anime id does not fall through to tvdb for missing kitsu episode enrichment`() = runTest {
+        val kitsu = mockk<KitsuMetadataService>()
+        val tvdbIdentity = mockk<TvdbIdentityService>(relaxed = true)
+        val tvdbMetadata = mockk<TvdbMetadataService>(relaxed = true)
+        val router = router(kitsu, tvdbIdentity, tvdbMetadata)
+
+        coEvery {
+            kitsu.fetchEpisodeEnrichment("anilist:21", ContentMediaKind.SERIES, listOf(1))
+        } returns emptyMap()
+
+        val decision = router.fetchEpisodeEnrichment(
+            TvMetadataRequest(
+                contentId = "anilist:21",
+                contentType = ContentType.SERIES,
+                language = "en-US",
+                seasonNumbers = listOf(1)
+            )
+        )
+
+        assertEquals(TvProvider.KITSU, decision.provider)
+        assertEquals(TvMetadataDecisionReason.PROVIDER_LOCALIZED_CANONICAL_PAYLOAD_MISSING, decision.reason)
+        assertEquals(emptyMap<Pair<Int, Int>, TvEpisodeMetadata>(), decision.value)
+        coVerify(exactly = 0) { tvdbIdentity.resolveSeriesByRemoteId(any(), any()) }
+        coVerify(exactly = 0) { tvdbMetadata.fetchEpisodeEnrichment(any(), any(), any()) }
     }
 
     @Test

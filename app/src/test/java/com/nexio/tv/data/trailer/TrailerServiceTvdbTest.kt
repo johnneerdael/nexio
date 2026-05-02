@@ -30,6 +30,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -202,7 +203,10 @@ class TrailerServiceTvdbTest {
         },
         metadataDiskCacheStore: MetadataDiskCacheStore = mockk(relaxed = true),
         tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
-        addonRepository: AddonRepository = mockk(relaxed = true),
+        trailerTmdbProvider: TrailerTmdbProvider? = null,
+        addonRepository: AddonRepository = mockk<AddonRepository>().also {
+            every { it.getInstalledAddons() } returns flowOf(emptyList())
+        },
         streamRepository: StreamRepository = mockk(relaxed = true),
         tvdbTrailerResolver: TvdbTrailerResolver? = null
     ): TrailerService {
@@ -210,7 +214,7 @@ class TrailerServiceTvdbTest {
             trailerBackendProvider = mockk<TrailerBackendProvider>(relaxed = true),
             inAppYouTubeExtractor = inAppYouTubeExtractor,
             tmdbMetadataService = tmdbMetadataService,
-            trailerTmdbProvider = TrailerTmdbProvider(
+            trailerTmdbProvider = trailerTmdbProvider ?: TrailerTmdbProvider(
                 tmdbIntegrationProvider = mockk(relaxed = true),
                 metadataDiskCacheStore = metadataDiskCacheStore,
                 tmdbSettingsDataStore = tmdbSettingsDataStore
@@ -309,6 +313,90 @@ class TrailerServiceTvdbTest {
 
         // TMDB fallback is permitted (may or may not be called depending on API key availability)
         // The key assertion is that TVDB success above prevented TMDB calls
+    }
+
+    @Test
+    fun `explicit anime tv trailer does not fall through to tmdb fallback`() = runTest {
+        val trailerTmdbProvider = mockk<TrailerTmdbProvider>()
+        coEvery { trailerTmdbProvider.getTmdbApiKey() } returns "tmdb-key"
+        coEvery { trailerTmdbProvider.resolveLatestAiredSeasonNumber(any(), any(), any()) } returns 1
+        coEvery { trailerTmdbProvider.fetchTvVideos(any(), any(), any()) } returns emptyList()
+
+        val tvdbTrailerResolver = mockk<TvdbTrailerResolver>()
+        coEvery { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
+            TvdbTrailerLookupResult.Missing
+
+        val service = createTrailerService(
+            trailerTmdbProvider = trailerTmdbProvider,
+            tvdbTrailerResolver = tvdbTrailerResolver
+        )
+
+        val result = service.resolveTrailer(
+            title = "Anime",
+            year = "2026",
+            tmdbId = "1396",
+            type = "series",
+            contentId = "kitsu:48649"
+        )
+
+        assertNull(result)
+        coVerify(exactly = 0) { trailerTmdbProvider.resolveLatestAiredSeasonNumber(any(), any(), any()) }
+        coVerify(exactly = 0) { trailerTmdbProvider.fetchTvVideos(any(), any(), any()) }
+    }
+
+    @Test
+    fun `explicit anime movie trailer does not use tmdb movie fallback`() = runTest {
+        val trailerTmdbProvider = mockk<TrailerTmdbProvider>()
+        coEvery { trailerTmdbProvider.getTmdbApiKey() } returns "tmdb-key"
+        coEvery { trailerTmdbProvider.fetchMovieVideos(any(), any(), any()) } returns emptyList()
+
+        val service = createTrailerService(trailerTmdbProvider = trailerTmdbProvider)
+
+        val result = service.resolveTrailer(
+            title = "Anime Film",
+            year = "2026",
+            tmdbId = "550",
+            type = "movie",
+            contentId = "mal:21"
+        )
+
+        assertNull(result)
+        coVerify(exactly = 0) { trailerTmdbProvider.fetchMovieVideos(any(), any(), any()) }
+    }
+
+    @Test
+    fun `explicit anime media availability skips tmdb title and season fallbacks`() = runTest {
+        val trailerTmdbProvider = mockk<TrailerTmdbProvider>()
+        coEvery { trailerTmdbProvider.getTmdbApiKey() } returns "tmdb-key"
+        coEvery { trailerTmdbProvider.fetchTvVideos(any(), any(), any()) } returns emptyList()
+        coEvery { trailerTmdbProvider.fetchSeasonVideos(any(), any(), any(), any()) } returns emptyList()
+
+        val tvdbTrailerResolver = mockk<TvdbTrailerResolver>()
+        coEvery { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
+            TvdbTrailerLookupResult.Missing
+
+        val service = createTrailerService(
+            trailerTmdbProvider = trailerTmdbProvider,
+            tvdbTrailerResolver = tvdbTrailerResolver
+        )
+
+        val titleAvailable = service.getTitleMediaAvailability(
+            tmdbId = "1396",
+            type = "series",
+            contentId = "anilist:21"
+        )
+        val seasonAvailable = service.getSeasonMediaAvailability(
+            tmdbId = "1396",
+            type = "series",
+            seasonNumber = 1,
+            contentId = "anilist:21"
+        )
+
+        assertFalse(titleAvailable)
+        assertFalse(seasonAvailable.hasTrailerOrTeaser)
+        assertFalse(seasonAvailable.hasRecap)
+        coVerify(exactly = 0) { trailerTmdbProvider.fetchTvVideos(any(), any(), any()) }
+        coVerify(exactly = 0) { trailerTmdbProvider.fetchSeasonVideos(any(), any(), any(), any()) }
     }
 
     @Test

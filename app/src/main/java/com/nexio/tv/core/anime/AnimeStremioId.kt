@@ -15,6 +15,17 @@ data class AnimeStremioId(
     val value: String
 ) {
     companion object {
+        private val explicitAnimeOnlySources = setOf(
+            AnimeIdSource.KITSU,
+            AnimeIdSource.MAL,
+            AnimeIdSource.ANILIST,
+            AnimeIdSource.ANIDB
+        )
+
+        fun isExplicitAnimeOnlyId(raw: String?): Boolean {
+            return parse(raw)?.source in explicitAnimeOnlySources
+        }
+
         fun parse(raw: String?): AnimeStremioId? {
             val trimmed = raw?.trim().orEmpty()
             if (trimmed.isBlank()) return null

@@ -450,6 +450,32 @@ class RailPreviewLifecycleArchitectureTest {
         }
     }
 
+    @Test
+    fun `built in synthetic rail renewal publishes preview rows before hydration`() {
+        val source = homeFile("HomeViewModelCatalogPipeline.kt").readText()
+        val renewalFunctions = listOf(
+            "renewTraktSyntheticSnapshotPipeline",
+            "renewSimklSyntheticSnapshotPipeline",
+            "renewMDBListSyntheticSnapshotPipeline",
+            "renewKitsuSyntheticSnapshotPipeline",
+            "renewTmdbSyntheticSnapshotPipeline"
+        )
+        val offenders = renewalFunctions.mapNotNull { functionName ->
+            val body = functionSource(source, functionName)
+            val blocksFirstPaint = body.contains("hydrateAndPrefetchRows(") ||
+                body.contains(".replaceRows(")
+            functionName.takeIf { blocksFirstPaint }
+        }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Built-in synthetic rail renewal must publish RailItemPreview/MetaPreview rows directly. " +
+                    "Visible-item hydration may run later, but first paint must not be blocked by " +
+                    "hydrateAndPrefetchRows or hydrated row replacement in: $offenders"
+            )
+        }
+    }
+
     private fun homeFile(name: String): File = File(homeDirectory, name).also { file ->
         assertTrue("Required Home source file is missing: ${file.path}", file.isFile)
     }
