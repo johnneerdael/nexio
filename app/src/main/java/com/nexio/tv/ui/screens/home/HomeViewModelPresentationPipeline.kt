@@ -22,7 +22,9 @@ import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.data.trailer.TrailerResolutionResult
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
@@ -753,6 +755,8 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     if (items.isEmpty()) return items
 
     return coroutineScope {
+        val stableIdBundlesByItemKey = ConcurrentHashMap<String, Deferred<StableIdBundle?>>()
+        val batchScope = this
         items.map { item ->
             async(Dispatchers.IO) {
                 try {
@@ -763,11 +767,16 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                         externalMeta = null,
                         tmdbSettings = settings
                     )
-                    val stableIdBundle = resolveStableIdBundleOrNull(
-                        request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
-                        trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                        itemKey = "${item.apiType}:${item.id}"
-                    )
+                    val itemKey = "${item.apiType}:${item.id}"
+                    val stableIdBundle = stableIdBundlesByItemKey.computeIfAbsent(itemKey) {
+                        batchScope.async(Dispatchers.IO) {
+                            resolveStableIdBundleOrNull(
+                                request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
+                                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                                itemKey = itemKey
+                            )
+                        }
+                    }.await()
                     titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
                 } catch (e: CancellationException) {
                     throw e
