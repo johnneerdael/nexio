@@ -361,8 +361,7 @@ data class SubtitleTranslationSyncSettings(
 
 @Serializable
 data class WyzieSyncSettings(
-    val enabled: Boolean = true,
-    val apiKey: String? = null
+    val enabled: Boolean = true
 )
 
 @Serializable

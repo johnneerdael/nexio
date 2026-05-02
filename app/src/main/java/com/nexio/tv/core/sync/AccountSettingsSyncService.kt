@@ -127,6 +127,8 @@ private const val OMDB_SECRET_TYPE = "omdb_api_key"
 private const val OMDB_SECRET_REF = "integration:omdb"
 private const val TRANSLATION_SECRET_TYPE = "translation_api_key"
 private const val TRANSLATION_SECRET_REF = "integration:subtitle-translation"
+private const val WYZIE_SECRET_TYPE = "wyzie_api_key"
+private const val WYZIE_SECRET_REF = "integration:wyzie"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
 private const val GEMINI_SECRET_REF = "integration:gemini"
 private const val RPDB_SECRET_TYPE = "rpdb_api_key"
@@ -417,6 +419,11 @@ class AccountSettingsSyncService @Inject constructor(
                 TRANSLATION_SECRET_REF,
                 subtitleTranslationSettings.apiKey
             )
+            syncApiKeySecretToRemote(
+                WYZIE_SECRET_TYPE,
+                WYZIE_SECRET_REF,
+                wyzieSettingsDataStore.settings.first().apiKey.orEmpty()
+            )
             legacyGeminiApiKeySecretForPush(
                 providerName = subtitleTranslationSettings.provider.name,
                 translationApiKey = subtitleTranslationSettings.apiKey
@@ -592,10 +599,9 @@ class AccountSettingsSyncService @Inject constructor(
                 gemini = GeminiSyncSettings(
                     enabled = subtitleTranslation.enabled
                 ),
-                wyzie = run {
-                    val s = wyzieSettingsDataStore.settings.first()
-                    WyzieSyncSettings(enabled = s.enabled, apiKey = s.apiKey)
-                },
+                wyzie = WyzieSyncSettings(
+                    enabled = wyzieSettingsDataStore.settings.first().enabled,
+                ),
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.rpdbEnabled,
                     topPostersEnabled = posterRatings.topPostersEnabled
@@ -741,8 +747,8 @@ class AccountSettingsSyncService @Inject constructor(
         )
         val remoteWyzie = settings.integrations.wyzie
         wyzieSettingsDataStore.setEnabled(remoteWyzie.enabled)
-        if (remoteWyzie.apiKey != null) {
-            wyzieSettingsDataStore.setApiKey(remoteWyzie.apiKey)
+        resolveApiKeySecretOrNull(WYZIE_SECRET_TYPE, WYZIE_SECRET_REF)?.let {
+            wyzieSettingsDataStore.setApiKey(it)
         }
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
@@ -845,8 +851,8 @@ class AccountSettingsSyncService @Inject constructor(
         )
         val remoteWyzie = settings.integrations.wyzie
         wyzieSettingsDataStore.setEnabled(remoteWyzie.enabled)
-        if (remoteWyzie.apiKey != null) {
-            wyzieSettingsDataStore.setApiKey(remoteWyzie.apiKey)
+        resolveApiKeySecretOrNull(WYZIE_SECRET_TYPE, WYZIE_SECRET_REF)?.let {
+            wyzieSettingsDataStore.setApiKey(it)
         }
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
