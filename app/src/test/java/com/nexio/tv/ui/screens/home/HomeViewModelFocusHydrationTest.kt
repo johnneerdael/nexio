@@ -34,6 +34,7 @@ import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -207,6 +208,65 @@ class HomeViewModelFocusHydrationTest {
                 request = any(),
                 trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
                 itemKey = "movie:${item.id}"
+            )
+            titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
+        }
+    }
+
+    @Test
+    fun `focused enrichment flush resolves focused stable bundle and passes it to title rating enrichment`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val providerRequests = mutableListOf<MetadataRequest>()
+        val bundleRequests = mutableListOf<MetadataRequest>()
+        val stableIdBundle = stableIdBundle()
+        val focusedItem = railPreviewMetaPreview().copy(
+            type = ContentType.MOVIE,
+            rawType = "movie"
+        )
+
+        coEvery { facade.resolveRequest(capture(providerRequests)) } returns successResult()
+        coEvery {
+            facade.resolveStableIdBundle(
+                request = capture(bundleRequests),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${focusedItem.id}"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
+            firstArg<MetaPreview>().copy(imdbRating = 9.9f)
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = facade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository
+        )
+        viewModel.catalogsMap["addon_movie_popular"] = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(focusedItem),
+            hasMore = false
+        )
+
+        viewModel.onItemFocus(focusedItem)
+        advanceUntilIdle()
+
+        val updatedItem = viewModel.catalogsMap.getValue("addon_movie_popular").items.single()
+        assertEquals("Canonical Title", updatedItem.name)
+        assertEquals(9.9f, updatedItem.imdbRating)
+        assertEquals(MetadataDepth.DETAIL_CORE, providerRequests.single().depth)
+        assertEquals(MetadataDepth.DETAIL_CORE, bundleRequests.single().depth)
+        assertEquals(SourceRole.RAIL_PREVIEW, bundleRequests.single().sourceContext.previewSourceRole)
+        coVerifyOrder {
+            facade.resolveRequest(any())
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${focusedItem.id}"
             )
             titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
         }
