@@ -1,0 +1,152 @@
+package com.nexio.tv.ui.screens.home
+
+import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.HydratedHomeFieldTrace
+import com.nexio.tv.domain.model.HydratedHomeOverlay
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.TitleRatingSource
+import com.nexio.tv.domain.model.hydratedHomeDisplayHash
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
+import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
+import org.junit.Test
+
+class HomeHydrationOverlayApplierTest {
+    @Test
+    fun `overlay replaces display fields on matching item without changing row order`() {
+        val first = preview("tmdb:550", "Preview title")
+        val second = preview("tmdb:551", "Second")
+        val row = row(listOf(first, second))
+        val overlay = overlay(
+            itemKey = "movie:tmdb:550",
+            fields = HomeDisplayMetadata(
+                title = "Canonical title",
+                poster = "poster.jpg",
+                backdrop = "background.jpg",
+                logo = "logo.png",
+                description = "Canonical overview",
+                genres = listOf("Drama"),
+                releaseInfo = "1999",
+                runtime = "139 min",
+                imdbRating = 8.8f,
+                ratingSource = TitleRatingSource.IMDB,
+                tomatoesRating = 79.0,
+                posterProviderTag = "tmdb"
+            )
+        )
+
+        val updated = row.applyHydratedHomeOverlays(mapOf("movie:tmdb:550" to overlay))
+
+        assertEquals(listOf("tmdb:550", "tmdb:551"), updated.items.map { it.id })
+        assertEquals("Canonical title", updated.items.first().name)
+        assertEquals("poster.jpg", updated.items.first().poster)
+        assertEquals("background.jpg", updated.items.first().background)
+        assertEquals("logo.png", updated.items.first().logo)
+        assertEquals("Canonical overview", updated.items.first().description)
+        assertEquals(listOf("Drama"), updated.items.first().genres)
+        assertEquals("1999", updated.items.first().releaseInfo)
+        assertEquals("139 min", updated.items.first().runtime)
+        assertEquals(8.8f, updated.items.first().imdbRating ?: 0f, 0f)
+        assertEquals(TitleRatingSource.IMDB, updated.items.first().ratingSource)
+        assertEquals(79.0, updated.items.first().tomatoesRating ?: 0.0, 0.0)
+        assertEquals("tmdb", updated.items.first().posterProviderTag)
+        assertEquals("Second", updated.items.last().name)
+    }
+
+    @Test
+    fun `row and list instances are reused when overlay display does not change items`() {
+        val item = preview("tmdb:550", "Same title")
+        val row = row(listOf(item))
+        val rows = listOf(row)
+        val overlay = overlay(
+            itemKey = "movie:tmdb:550",
+            fields = item.toHomeDisplayMetadata()
+        )
+
+        val updatedRow = row.applyHydratedHomeOverlays(mapOf("movie:tmdb:550" to overlay))
+        val updatedRows = rows.applyHydratedHomeOverlays(mapOf("movie:tmdb:550" to overlay))
+
+        assertSame(row, updatedRow)
+        assertSame(rows, updatedRows)
+    }
+
+    @Test
+    fun `overlays apply by item key without provider-specific rendering branches`() {
+        val first = preview("tmdb:550", "Preview")
+        val second = preview("imdb:tt0137523", "Preview")
+        val rows = listOf(row(listOf(first, second)))
+        val tmdbOverlay = overlay(
+            itemKey = "movie:tmdb:550",
+            canonicalProvider = ProviderId.TMDB,
+            fields = HomeDisplayMetadata(title = "TMDB Canonical")
+        )
+        val imdbOverlay = overlay(
+            itemKey = "movie:imdb:tt0137523",
+            canonicalProvider = ProviderId.IMDB,
+            fields = HomeDisplayMetadata(title = "IMDb Canonical")
+        )
+
+        val updated = rows.applyHydratedHomeOverlays(
+            mapOf(
+                "movie:tmdb:550" to tmdbOverlay,
+                "movie:imdb:tt0137523" to imdbOverlay
+            )
+        )
+
+        assertEquals(listOf("TMDB Canonical", "IMDb Canonical"), updated.single().items.map { it.name })
+        val applierSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeHydrationOverlayApplier.kt").readText()
+        assertFalse(applierSource.contains("ProviderId."))
+    }
+
+    private fun preview(id: String, title: String) = MetaPreview(
+        id = id,
+        type = ContentType.MOVIE,
+        rawType = "movie",
+        name = title,
+        poster = null,
+        posterShape = PosterShape.POSTER,
+        background = null,
+        logo = null,
+        description = null,
+        releaseInfo = null,
+        imdbRating = null,
+        genres = emptyList()
+    )
+
+    private fun row(items: List<MetaPreview>) = CatalogRow(
+        addonId = "addon",
+        addonName = "Addon",
+        addonBaseUrl = "https://addon.example",
+        catalogId = "popular",
+        catalogName = "Popular",
+        type = ContentType.MOVIE,
+        items = items,
+        hasMore = false
+    )
+
+    private fun overlay(
+        itemKey: String,
+        canonicalProvider: ProviderId = ProviderId.TMDB,
+        fields: HomeDisplayMetadata
+    ) = HydratedHomeOverlay(
+        overlayKey = "canonical:${canonicalProvider.name}:550:type:MOVIE:lang:en:policy:1",
+        itemKey = itemKey,
+        canonicalProvider = canonicalProvider,
+        canonicalId = "550",
+        imdbId = "tt0137523",
+        contentType = ContentType.MOVIE,
+        languageTag = "en",
+        fields = fields,
+        fieldTrace = listOf(HydratedHomeFieldTrace("TITLE", canonicalProvider.name, "PRIMARY")),
+        displayHash = fields.hydratedHomeDisplayHash(),
+        updatedAtMs = 1L,
+        staleAtMs = 2L,
+        expiresAtMs = 3L
+    )
+}
