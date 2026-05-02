@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 @Singleton
@@ -179,7 +180,7 @@ class HydratedHomeOverlayStore @Inject constructor(
     private fun prefs() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private fun incrementVersion() {
-        version.value = version.value + 1
+        version.update { it + 1 }
     }
 
     private fun overlayPrefsKey(overlayKey: String): String = "$OVERLAY_PREFIX${overlayKey.trim()}"
@@ -202,6 +203,8 @@ class HydratedHomeOverlayStore @Inject constructor(
         expectedPolicyVersion: Int?
     ): Boolean {
         if (this.overlayKey != overlayKey) return false
+        if (!hasCanonicalIdentity()) return false
+        if (canonicalOverlayKey() != overlayKey) return false
         if (displayHash != fields.hydratedHomeDisplayHash()) return false
         if (expectedCanonicalProvider != null && canonicalProvider != expectedCanonicalProvider) return false
         if (expectedCanonicalId != null && canonicalId.trim() != expectedCanonicalId.trim()) return false
@@ -211,6 +214,18 @@ class HydratedHomeOverlayStore @Inject constructor(
 
         return true
     }
+
+    private fun HydratedHomeOverlay.hasCanonicalIdentity(): Boolean =
+        canonicalId.isNotBlank() && languageTag.isNotBlank()
+
+    private fun HydratedHomeOverlay.canonicalOverlayKey(): String =
+        hydratedHomeOverlayKey(
+            canonicalProvider = canonicalProvider,
+            canonicalId = canonicalId,
+            contentType = contentType,
+            languageTag = languageTag,
+            policyVersion = policyVersion
+        )
 
     private companion object {
         const val TAG = "HydratedHomeOverlayStore"
