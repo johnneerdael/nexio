@@ -476,6 +476,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                             focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
                             prefetchedExternalMetaIds.add(itemKey)
                         }
+                        overlayApplied
                     }
                 )
             } catch (e: CancellationException) {
@@ -533,6 +534,7 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
                         focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
                         prefetchedExternalMetaIds.add(itemKey)
                     }
+                    overlayApplied
                 }
             )
         } catch (e: CancellationException) {
@@ -602,6 +604,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                         if (overlayApplied) {
                             prefetchedExternalMetaIds.add(itemKey)
                         }
+                        overlayApplied
                     }
                 )
             }

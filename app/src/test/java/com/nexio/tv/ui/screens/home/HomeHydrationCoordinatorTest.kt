@@ -96,7 +96,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 7L },
-            onOverlayApplied = { applied = it }
+            onOverlayApplied = {
+                applied = it
+                true
+            }
         )
 
         assertSame(overlaySlot.captured, result)
@@ -104,6 +107,8 @@ class HomeHydrationCoordinatorTest {
         assertEquals("Canonical title", overlaySlot.captured.fields.title)
         assertEquals("Canonical overview", overlaySlot.captured.fields.description)
         assertEquals("poster.jpg", overlaySlot.captured.fields.poster)
+        assertEquals(listOf("Canonical Genre"), overlaySlot.captured.fields.genres)
+        assertEquals("1999-10-15", overlaySlot.captured.fields.releaseInfo)
         assertEquals(8.8f, overlaySlot.captured.fields.imdbRating ?: 0f, 0f)
         assertEquals(TitleRatingSource.IMDB, overlaySlot.captured.fields.ratingSource)
         assertEquals(ProviderId.TMDB, overlaySlot.captured.canonicalProvider)
@@ -139,7 +144,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 8L },
-            onOverlayApplied = { applied = true }
+            onOverlayApplied = {
+                applied = true
+                true
+            }
         )
 
         assertNull(result)
@@ -175,7 +183,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { generation },
-            onOverlayApplied = { applied = true }
+            onOverlayApplied = {
+                applied = true
+                true
+            }
         )
 
         assertNull(result)
@@ -209,7 +220,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 8L },
-            onOverlayApplied = { applied = true }
+            onOverlayApplied = {
+                applied = true
+                true
+            }
         )
 
         assertNull(result)
@@ -245,7 +259,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { generation },
-            onOverlayApplied = { applied = true }
+            onOverlayApplied = {
+                applied = true
+                true
+            }
         )
 
         assertNull(result)
@@ -280,7 +297,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { generation },
-            onOverlayApplied = { applied = true }
+            onOverlayApplied = {
+                applied = true
+                true
+            }
         )
 
         assertNull(result)
@@ -321,7 +341,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 7L },
-            onOverlayApplied = { applied = it }
+            onOverlayApplied = {
+                applied = it
+                true
+            }
         )
 
         assertSame(overlaySlot.captured, result)
@@ -365,7 +388,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 7L },
-            onOverlayApplied = { applied = it }
+            onOverlayApplied = {
+                applied = it
+                true
+            }
         )
 
         assertSame(overlaySlot.captured, result)
@@ -396,7 +422,10 @@ class HomeHydrationCoordinatorTest {
             languageTag = "en-US",
             expectedGeneration = 7L,
             currentGeneration = { 7L },
-            onOverlayApplied = { applied = true }
+            onOverlayApplied = {
+                applied = true
+                true
+            }
         )
 
         assertNull(result)
@@ -405,6 +434,37 @@ class HomeHydrationCoordinatorTest {
         coVerify(exactly = 0) { ratings.enrichPreview(any(), any()) }
         assertEquals(
             listOf("home.hydration_started", "home.hydration_failed_using_preview"),
+            sink.events.map { it.eventType }
+        )
+    }
+
+    @Test
+    fun `rejected applied overlay writes durable overlay but does not emit applied trace`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>()
+        val ratings = mockk<TitleRatingOverrideRepository>()
+        val sink = RecordingTraceSink()
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+
+        val result = coordinator(facade, store, ratings, sink).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { false }
+        )
+
+        assertNull(result)
+        assertEquals("550", overlaySlot.captured.canonicalId)
+        assertEquals(
+            listOf("home.hydration_started", "home.hydration_overlay_written"),
             sink.events.map { it.eventType }
         )
     }
@@ -475,7 +535,8 @@ class HomeHydrationCoordinatorTest {
             logo = null,
             rating = 8.4,
             runtimeMinutes = 139,
-            genres = listOf("Drama"),
+            genres = listOf("Canonical Genre"),
+            releaseDate = "1999-10-15",
             fieldOwners = mapOf(ResolvedField.TITLE to FieldOwner.PRIMARY),
             ignoredOverwrites = emptyList(),
             sourceRoles = mapOf(ResolvedField.TITLE to SourceRole.PRIMARY),
@@ -487,7 +548,9 @@ class HomeHydrationCoordinatorTest {
             poster = "poster.jpg",
             backdrop = "backdrop.jpg",
             imdbRating = 8.4f,
-            ratingSource = TitleRatingSource.TMDB
+            ratingSource = TitleRatingSource.TMDB,
+            genres = listOf("Canonical Genre"),
+            releaseInfo = "1999-10-15"
         ),
         trace = emptyList()
     )

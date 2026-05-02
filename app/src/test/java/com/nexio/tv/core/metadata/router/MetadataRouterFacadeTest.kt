@@ -61,6 +61,31 @@ class MetadataRouterFacadeTest {
     }
 
     @Test
+    fun `metadata facade maps canonical genres and release date into display metadata`() = runTest {
+        val adapter = GenreReleaseMetadataProviderAdapter(MetadataPrimaryProvider.TMDB)
+
+        val result = facade(adapter).resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:550",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        title = "Preview title",
+                        genres = listOf("Preview"),
+                        releaseInfo = "1999"
+                    )
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals(listOf("Canonical Genre"), result.resolvedDocument.genres)
+        assertEquals("1999-10-15", result.resolvedDocument.releaseDate)
+        assertEquals(listOf("Canonical Genre"), result.displayMetadata.genres)
+        assertEquals("1999-10-15", result.displayMetadata.releaseInfo)
+    }
+
+    @Test
     fun `rail preview source context participates in production field resolution`() = runTest {
         val adapter = RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)
         val sink = RecordingTraceSink()
@@ -453,6 +478,25 @@ class MetadataRouterFacadeTest {
                 episodeMetadata = episodeMetadata
             )
         }
+    }
+
+    private class GenreReleaseMetadataProviderAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean = true
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = route.provider,
+                    fields = mapOf(
+                        ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY),
+                        ResolvedField.GENRES to FieldValue(listOf("Canonical Genre"), FieldOwner.PRIMARY),
+                        ResolvedField.RELEASE_DATE to FieldValue("1999-10-15", FieldOwner.PRIMARY)
+                    )
+                )
+            )
     }
 
     private class FakeTmdbExternalIdLookup(

@@ -100,7 +100,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `onItemFocus for rail-preview item delegates focused hydration to coordinator`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Boolean>()
         val item = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
         val overlay = overlay(
             itemKey = "movie:${item.id}",
@@ -149,7 +149,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `onItemFocus for non-rail item delegates focused hydration to coordinator`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Boolean>()
         val item = railPreviewMetaPreview().copy(
             type = ContentType.MOVIE,
             rawType = "movie",
@@ -204,7 +204,7 @@ class HomeViewModelFocusHydrationTest {
         var currentLanguage = "en"
         val traceSink = RecordingTraceSink()
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Boolean>()
         val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
         val overlay = overlay(
             itemKey = "movie:${visible.id}",
@@ -255,7 +255,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `visible home hydration delegates to coordinator and publishes overlay`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Unit>()
+        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Boolean>()
         val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
         val duplicate = visible.copy(name = "Duplicate copy")
         val overlay = overlay(
@@ -452,7 +452,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `focused completion guard is scoped by home overlay item key`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Unit>()
+        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Boolean>()
         coEvery {
             homeHydrationCoordinator.hydrate(
                 item = any(),
@@ -524,7 +524,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `adjacent item preload delegates hydration to coordinator and publishes overlay`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Boolean>()
         val item = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
         val overlay = overlay(
             itemKey = "movie:${item.id}",
@@ -601,7 +601,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `hero enrichment delegates to coordinator and applies overlay fields`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Boolean>()
         val item = railPreviewMetaPreview()
             .copy(type = ContentType.MOVIE, rawType = "movie", poster = "preview-poster")
         val overlay = overlay(
@@ -660,7 +660,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `hero enrichment respects disabled overlay field groups`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
-        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Boolean>()
         val item = railPreviewMetaPreview().copy(
             type = ContentType.MOVIE,
             rawType = "movie",

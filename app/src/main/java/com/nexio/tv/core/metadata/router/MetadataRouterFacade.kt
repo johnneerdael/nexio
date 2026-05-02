@@ -862,7 +862,9 @@ class MetadataRouterFacade(
             runtime = runtimeMinutes?.toString() ?: fallback.runtime,
             imdbRating = (rating as? Number)?.toFloat() ?: fallback.imdbRating,
             poster = poster ?: fallback.poster,
-            backdrop = backdrop ?: fallback.backdrop
+            backdrop = backdrop ?: fallback.backdrop,
+            releaseInfo = releaseDate ?: fallback.releaseInfo,
+            genres = genres.ifEmpty { fallback.genres }
         )
 
     private fun ResolvedMetadataDocument.toTvMetadataEnrichment(): TvMetadataEnrichment =
