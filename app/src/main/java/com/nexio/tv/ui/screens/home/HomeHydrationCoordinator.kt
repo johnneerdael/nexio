@@ -51,7 +51,7 @@ class HomeHydrationCoordinator @Inject constructor(
         languageTag: String,
         expectedGeneration: Long,
         currentGeneration: () -> Long,
-        onOverlayApplied: (HydratedHomeOverlay) -> Unit
+        onOverlayApplied: (HydratedHomeOverlay) -> Boolean
     ): HydratedHomeOverlay? {
         val itemKey = item.homeOverlayItemKey()
         traceEvents.emitHomeHydrationStarted(
@@ -130,7 +130,10 @@ class HomeHydrationCoordinator @Inject constructor(
                 imdbId = overlay.imdbId,
                 displayHash = overlay.displayHash
             )
-            onOverlayApplied(overlay)
+            val overlayAccepted = onOverlayApplied(overlay)
+            if (!overlayAccepted) {
+                return null
+            }
             traceEvents.emitHomeHydrationApplied(
                 railId = item.firstPaintRailSource?.name,
                 itemKey = itemKey,
