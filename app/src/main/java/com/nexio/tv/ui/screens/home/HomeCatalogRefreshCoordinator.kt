@@ -167,6 +167,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     externalMeta = null
                 )
                 val localized = overlayProviderLocalizedMetadata(merged, onLog)
+                // This path can hydrate every refreshed row item, so keep stable-bundle routing
+                // in the existing visible/focused hydration paths where work is bounded.
                 val enriched = titleRatingOverrideRepository.enrichPreview(localized)
                 posterRatingsUrlResolver.apply(enriched, activePosterProvider)
             }

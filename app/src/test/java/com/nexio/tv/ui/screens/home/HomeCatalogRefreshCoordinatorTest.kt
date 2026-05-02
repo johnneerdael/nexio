@@ -500,6 +500,111 @@ class HomeCatalogRefreshCoordinatorTest {
         coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint() }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized refresh schedules visible bundle hydration after successful catalog refresh`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val uiState = MutableStateFlow(HomeUiState())
+        val visiblePreview = preview(id = "tt-visible-refresh", poster = "poster").copy(
+            description = "Visible catalog payload",
+            releaseInfo = "2026"
+        )
+        val hiddenPreview = preview(id = "tt-hidden-refresh", poster = "poster").copy(
+            description = "Hidden full-row payload",
+            releaseInfo = "2026"
+        )
+        val displayRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(visiblePreview),
+            hasMore = false
+        )
+        val fullRow = displayRow.copy(items = listOf(visiblePreview, hiddenPreview))
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns catalogsMap
+        every { viewModel._uiState } returns uiState
+        every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
+            TmdbDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        coEvery { viewModel.flushCatalogRowsForFirstPaint() } coAnswers {
+            fullCatalogRows.value = listOf(fullRow)
+            uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
+        }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } coAnswers {
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            val onRawCatalogBatchComplete = arg<suspend () -> Unit>(6)
+            onCatalogReady(
+                "addon_movie_popular",
+                fullRow,
+                CatalogItemDiff(addedOrChanged = fullRow.items, removed = emptyList())
+            )
+            onRawCatalogBatchComplete()
+            1
+        }
+        coEvery {
+            coordinator.hydrateAndPrefetchVisibleItems(any(), any(), any())
+        } returns Unit
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration = 1L, reason = "account_sync")
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        coVerify(exactly = 1) {
+            coordinator.hydrateAndPrefetchVisibleItems(
+                items = listOf(visiblePreview),
+                telemetryEnabled = false,
+                onLog = any()
+            )
+        }
+    }
+
     @Test
     fun `hydrated catalog republish preserves appended row items and loading state`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()

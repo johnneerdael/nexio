@@ -1199,6 +1199,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
             "tmdbGroups=${persistedTmdbSyntheticGroups.size} tmdbRows=${persistedTmdbSyntheticGroups.sumOf { it.rows.size }}"
     )
 
+    val visibleItemsBeforeSettle = _uiState.value.catalogRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .toList()
+
     // Recompute rows once at the end so Home settles on the renewed merged snapshot.
     runCatching {
         lastCatalogComputationSignature = null
@@ -1209,13 +1214,24 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
-    if (refreshedCatalogCount.get() == 0 && activeCatalogItemKeys.isNotEmpty()) {
-        val visibleItems = _fullCatalogRows.value
+    val visibleItems = _uiState.value.catalogRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .toList()
+        .ifEmpty { visibleItemsBeforeSettle }
+    if (visibleItems.isNotEmpty()) {
+        homeCatalogRefreshCoordinator.hydrateAndPrefetchVisibleItems(
+            items = visibleItems,
+            telemetryEnabled = startupPerfTelemetryEnabled,
+            onLog = { event, details -> logStartupPerf(event, details) }
+        )
+    } else if (refreshedCatalogCount.get() == 0 && activeCatalogItemKeys.isNotEmpty()) {
+        val fallbackVisibleItems = _fullCatalogRows.value
             .asSequence()
             .flatMap { row -> row.items.asSequence() }
             .toList()
         homeCatalogRefreshCoordinator.hydrateAndPrefetchVisibleItems(
-            items = visibleItems,
+            items = fallbackVisibleItems,
             telemetryEnabled = startupPerfTelemetryEnabled,
             onLog = { event, details -> logStartupPerf(event, details) }
         )
