@@ -353,6 +353,9 @@ class MetadataAuditRunner private constructor(
 
         val route = result?.route?.toAuditEvent(itemId = metaPreview.id, itemType = metaPreview.apiType)
         if (route != null) trace.onRoute(route)
+        val stableIdBundle = route?.let { resolvedRoute ->
+            spec.toStableIdBundleEvent(resolvedRoute)
+        }
         val providerPlan = result?.plan?.toAuditEvent(itemId = metaPreview.id)
         if (providerPlan != null) trace.onProviderPlan(providerPlan)
         val resolverSchedule = result?.resolverSchedule?.let { schedule ->
@@ -442,6 +445,7 @@ class MetadataAuditRunner private constructor(
             addonFields = spec.previewFields,
             firstPaint = firstPaint,
             routing = route,
+            stableIdBundle = stableIdBundle,
             providerPlan = providerPlan,
             runtimeCalls = trace.events.mapNotNull { (it as? AuditEvent.RuntimeCall)?.event },
             cacheDecisions = trace.events.mapNotNull { (it as? AuditEvent.CacheDecisionEventRecord)?.event },
@@ -453,7 +457,7 @@ class MetadataAuditRunner private constructor(
             productionCallerOwnership = emptyList(),
             localization = trace.events.mapNotNull { (it as? AuditEvent.Localization)?.event }.firstOrNull(),
             violations = trace.events.mapNotNull { (it as? AuditEvent.PolicyViolation)?.event },
-            events = trace.events,
+            events = stableIdBundle?.let { trace.events + AuditEvent.StableIdBundle(it) } ?: trace.events,
             railSource = metaPreview.firstPaintRailSource?.name,
             sourceProvider = metaPreview.firstPaintSourceProvider?.name,
             sourcePayloadFieldsUsed = spec.previewFields.filterValues { it != null }.keys,
@@ -507,11 +511,39 @@ class MetadataAuditRunner private constructor(
     private fun RailScenarioSpec.stableIds(): ProviderIds {
         val targetValues = targetIds.values
         return ProviderIds(
+            imdb = imdbId,
             tmdb = targetValues.idValue("tmdb"),
             tvdb = targetValues.idValue("tvdb"),
             trakt = itemId.takeIf { sourceProvider == "TRAKT" },
             simkl = itemId.takeIf { sourceProvider == "SIMKL" },
             kitsu = itemId.removePrefix("kitsu:").takeIf { sourceProvider == "KITSU" }
+        )
+    }
+
+    private fun RailScenarioSpec.toStableIdBundleEvent(route: RouteEvent): StableIdBundleEvent {
+        val canonicalId = targetIds[route.provider] ?: route.targetIds[route.provider]
+        val stableIds = stableIds()
+        return StableIdBundleEvent(
+            itemKey = "$itemType:$itemId",
+            itemType = itemType,
+            trigger = "VISIBLE_HOME_HYDRATION",
+            status = if (stableIds.imdb.isNullOrBlank()) {
+                "CANONICAL_READY_RATING_UNRESOLVED"
+            } else {
+                "CANONICAL_AND_RATING_READY"
+            },
+            canonicalProvider = route.provider.name,
+            canonicalId = canonicalId,
+            imdbId = stableIds.imdb,
+            networkExecuted = requiresIdentityNetwork,
+            evidence = listOf(
+                StableIdBundleEvidenceEvent(
+                    source = if (requiresIdentityNetwork) "provider.identity_lookup" else "knownIds",
+                    target = route.provider.name,
+                    networkExecuted = requiresIdentityNetwork,
+                    resultId = canonicalId
+                )
+            )
         )
     }
 
@@ -924,6 +956,7 @@ class MetadataAuditRunner private constructor(
                     com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB to "tmdb:1399",
                     com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB to "tvdb:121361"
                 ),
+                imdbId = "tt0944947",
                 usedInputs = setOf("railSource", "sourceProvider", "tmdb.ids.tvdb"),
                 hydratedFields = mapOf(
                     "title" to "TVDB Hydrated Series",
@@ -1034,6 +1067,8 @@ private data class RailScenarioSpec(
     val routeProvider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider? = null,
     val apiShapeId: String = "",
     val targetIds: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String> = emptyMap(),
+    val imdbId: String? = null,
+    val requiresIdentityNetwork: Boolean = false,
     val usedInputs: Set<String> = emptySet(),
     val hydratedFields: Map<String, String?> = emptyMap()
 )

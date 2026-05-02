@@ -32,6 +32,7 @@ enum class Severity {
 sealed interface AuditEvent {
     data class FirstPaint(val event: FirstPaintEvent) : AuditEvent
     data class Route(val event: RouteEvent) : AuditEvent
+    data class StableIdBundle(val event: StableIdBundleEvent) : AuditEvent
     data class ProviderPlan(val event: ProviderPlanEvent) : AuditEvent
     data class RuntimeCall(val event: RuntimeCallEvent) : AuditEvent
     data class CacheDecisionEventRecord(val event: CacheDecisionEvent) : AuditEvent
@@ -66,6 +67,25 @@ data class RouteEvent(
     val targetIdRequiresIdentityResolution: Boolean,
     val usedInputs: Set<String>,
     val ignoredInputs: Set<String>
+)
+
+data class StableIdBundleEvent(
+    val itemKey: String,
+    val itemType: String,
+    val trigger: String,
+    val status: String,
+    val canonicalProvider: String?,
+    val canonicalId: String?,
+    val imdbId: String?,
+    val networkExecuted: Boolean,
+    val evidence: List<StableIdBundleEvidenceEvent>
+)
+
+data class StableIdBundleEvidenceEvent(
+    val source: String,
+    val target: String,
+    val networkExecuted: Boolean,
+    val resultId: String?
 )
 
 data class ProviderPlanEvent(
@@ -225,6 +245,7 @@ data class ItemExecutionReport(
     val addonFields: Map<String, String?>,
     val firstPaint: FirstPaintEvent,
     val routing: RouteEvent?,
+    val stableIdBundle: StableIdBundleEvent? = null,
     val providerPlan: ProviderPlanEvent?,
     val runtimeCalls: List<RuntimeCallEvent>,
     val cacheDecisions: List<CacheDecisionEvent>,

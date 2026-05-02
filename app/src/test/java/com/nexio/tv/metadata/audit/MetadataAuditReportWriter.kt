@@ -46,6 +46,7 @@ class MetadataAuditReportWriter {
                 appendLine("      \"sourceProvider\": ${nullableStringJson(item.sourceProvider)},")
                 appendLine("      \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
                 appendLine("      \"routingAfterVisible\": ${routeJson(item.routingAfterVisible, indent = "      ")},")
+                appendLine("      \"metadata.stable_id_bundle\": ${stableIdBundleJson(item.stableIdBundle)},")
                 appendLine("      \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
@@ -72,23 +73,20 @@ class MetadataAuditReportWriter {
             bundle.reports.forEachIndexed { reportIndex, report ->
                 appendLine("    {")
                 appendLine("      \"fixtureName\": ${jsonString(report.fixtureName)},")
-                appendLine("      \"scenario\": ${jsonString(report.scenario.name)},")
+                appendLine("      \"scenario\":${jsonString(report.scenario.name)},")
                 appendLine("      \"verdict\": ${jsonString(report.verdict.name)},")
                 appendLine("      \"items\": [")
                 report.items.forEachIndexed { itemIndex, item ->
                     appendLine("        {")
                     appendLine("          \"itemId\": ${jsonString(item.itemId)},")
                     appendLine("          \"itemType\": ${jsonString(item.itemType)},")
-                    appendLine("          \"firstPaint\": {")
-                    appendLine("            \"source\": ${jsonString(item.firstPaint.source)},")
-                    appendLine("            \"routerExecuted\": ${item.firstPaint.routerExecuted},")
-                    appendLine("            \"networkExecuted\": ${item.firstPaint.networkExecuted}")
-                    appendLine("          },")
+                    appendLine("          \"firstPaint\":${firstPaintJson(item.firstPaint)},")
                     appendLine("          \"routing\": ${routeJson(item.routing, indent = "          ")},")
                     appendLine("          \"railSource\": ${nullableStringJson(item.railSource)},")
                     appendLine("          \"sourceProvider\": ${nullableStringJson(item.sourceProvider)},")
                     appendLine("          \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
                     appendLine("          \"routingAfterVisible\": ${routeJson(item.routingAfterVisible, indent = "          ")},")
+                    appendLine("          \"metadata.stable_id_bundle\": ${stableIdBundleJson(item.stableIdBundle)},")
                     appendLine("          \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
                     appendLine("          \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
                     appendLine("          \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
@@ -149,6 +147,7 @@ class MetadataAuditReportWriter {
                 appendLine("- Network executed: `${item.firstPaint.networkExecuted}`")
                 appendLine()
                 appendRailPreview(item)
+                appendStableIdBundle(item.stableIdBundle)
 
                 item.routing?.let { route ->
                     appendLine("### Routing")
@@ -223,6 +222,7 @@ class MetadataAuditReportWriter {
                     appendLine("| `${item.firstPaint.source}` | `${item.firstPaint.routerExecuted}` | `${item.firstPaint.networkExecuted}` |")
                     appendLine()
                     appendRailPreview(item)
+                    appendStableIdBundle(item.stableIdBundle)
                     item.routing?.let { route ->
                         appendLine("#### Routing")
                         appendLine("| Provider | Media kind | Reason | Used inputs | Ignored inputs | Pre-resolution identity required | Execution identity resolved |")
@@ -323,6 +323,21 @@ class MetadataAuditReportWriter {
         }
     }
 
+    private fun StringBuilder.appendStableIdBundle(event: StableIdBundleEvent?) {
+        if (event == null) return
+        appendLine("#### Stable ID Bundle")
+        appendLine()
+        appendLine("| Field | Value |")
+        appendLine("|---|---|")
+        appendLine("| Trigger | `${event.trigger}` |")
+        appendLine("| Status | `${event.status}` |")
+        appendLine("| Canonical provider | `${event.canonicalProvider}` |")
+        appendLine("| Canonical ID | `${event.canonicalId}` |")
+        appendLine("| IMDb ID | `${event.imdbId}` |")
+        appendLine("| Network executed | `${event.networkExecuted}` |")
+        appendLine()
+    }
+
     private fun StringBuilder.appendIdentityResolution(event: IdentityResolutionEvent?) {
         event ?: return
         appendLine("#### Identity resolution")
@@ -365,6 +380,17 @@ class MetadataAuditReportWriter {
         route?.let {
             """{"parentId":${jsonString(it.parentId)},"provider":${jsonString(it.provider.name)},"mediaKind":${jsonString(it.mediaKind.name)},"reason":${jsonString(it.reason.name)},"preResolutionTargetIdRequiresIdentityResolution":${it.preResolutionTargetIdRequiresIdentityResolution},"executionTargetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"executionIdentityResolved":${!it.targetIdRequiresIdentityResolution},"usedInputs":${stringArrayJson(it.usedInputs)},"ignoredInputs":${stringArrayJson(it.ignoredInputs)}}"""
         } ?: "null"
+
+    private fun firstPaintJson(event: FirstPaintEvent): String =
+        """{"source":${jsonString(event.source)},"routerExecuted":${event.routerExecuted},"networkExecuted":${event.networkExecuted}}"""
+
+    private fun stableIdBundleJson(event: StableIdBundleEvent?): String =
+        event?.let {
+            """{"eventType":"metadata.stable_id_bundle","itemKey":${jsonString(it.itemKey)},"itemType":${jsonString(it.itemType)},"trigger":${jsonString(it.trigger)},"status":${jsonString(it.status)},"canonicalProvider":${nullableStringJson(it.canonicalProvider)},"canonicalId":${nullableStringJson(it.canonicalId)},"imdbId":${nullableStringJson(it.imdbId)},"networkExecuted":${it.networkExecuted},"evidence":[${it.evidence.joinToString { evidence -> stableIdBundleEvidenceJson(evidence) }}]}"""
+        } ?: "null"
+
+    private fun stableIdBundleEvidenceJson(event: StableIdBundleEvidenceEvent): String =
+        """{"source":${jsonString(event.source)},"target":${jsonString(event.target)},"networkExecuted":${event.networkExecuted},"resultId":${nullableStringJson(event.resultId)}}"""
 
     private fun providerPlanJson(plan: ProviderPlanEvent?, indent: String): String =
         plan?.let {
