@@ -123,6 +123,11 @@ contractSources:
     sourceFile: "apiblueprints/full-audit.md"
     sourceType: "audit scope classification"
     reviewer: "IntegrationRuntime audit"
+  WYZIE_SUBTITLES:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
   MDBLIST:
     lifecycleStatus: ACTIVE_RUNTIME_COVERED
     sourceFile: "apiblueprints/tidb-mdblist.md"
@@ -2099,6 +2104,30 @@ apiShapes:
       scope: Global
       providerConcurrency: 1
       playbackBehavior: allowed during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  wyzie.search:
+    provider: WYZIE_SUBTITLES
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/search"
+    headerPolicy: subtitle-provider-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: ProviderConfig
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
     requestContract:
       requiredQuery: {}
       optionalQuery: {}

@@ -831,6 +831,19 @@ playback.opensubtitles_hash:
   expectedRuntimePolicy:
     default: Disabled
 
+wyzie.search:
+  provider: WYZIE_SUBTITLES
+  headerPolicy: subtitle-provider-v1
+  method: GET
+  path: "/search"
+  bulkShape: subtitle list
+  authContext: none-or-provider-specific
+  redactionRules: hash/redact credentials and URLs
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
 playback.preflight_head:
   provider: ADDON
   headerPolicy: addon-json-v1
