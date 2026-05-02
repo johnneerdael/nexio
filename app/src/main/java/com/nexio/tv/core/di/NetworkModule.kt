@@ -536,6 +536,47 @@ object NetworkModule {
     fun provideTrailerApi(@Named("trailer") retrofit: Retrofit): TrailerApi =
         retrofit.create(TrailerApi::class.java)
 
+    // --- Wyzie subtitles ---
+
+    @Provides
+    @Singleton
+    @Named("wyzie")
+    fun provideWyzieOkHttpClient(
+        okHttpClient: OkHttpClient,
+        wyzieKeyInterceptor: com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieKeyInterceptor,
+    ): OkHttpClient {
+        return okHttpClient.newBuilder()
+            .addInterceptor(wyzieKeyInterceptor)
+            .callTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("wyzie")
+    fun provideWyzieRetrofit(
+        @Named("wyzie") okHttpClient: OkHttpClient,
+        moshi: Moshi,
+    ): Retrofit {
+        // Add the source string-or-array adapter to a per-call Moshi instance so it's not
+        // shared with other Retrofit clients that don't expect it.
+        val wyzieMoshi = moshi.newBuilder()
+            .add(com.nexio.tv.data.remote.dto.WyzieSourceJsonAdapter())
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("https://sub.wyzie.io/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(wyzieMoshi))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideWyzieSubtitleApi(
+        @Named("wyzie") retrofit: Retrofit,
+    ): com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieSubtitleApi =
+        retrofit.create(com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieSubtitleApi::class.java)
+
     @Provides
     @Singleton
     @Named("aniSkip")
