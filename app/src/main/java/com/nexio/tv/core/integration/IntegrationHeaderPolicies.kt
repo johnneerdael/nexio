@@ -61,6 +61,7 @@ object IntegrationHeaderPolicies {
             IntegrationProvider.GITHUB -> GITHUB_JSON_V1
             IntegrationProvider.YOUTUBE_TRAILER -> YOUTUBE_HTML_V1
             IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
-            IntegrationProvider.SUBTITLE_TRANSLATION -> SUBTITLE_PROVIDER_V1
+            IntegrationProvider.SUBTITLE_TRANSLATION,
+            IntegrationProvider.WYZIE_SUBTITLES -> SUBTITLE_PROVIDER_V1
         }
 }
