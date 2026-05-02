@@ -454,6 +454,7 @@ class HomeViewModel @Inject constructor(
                     inMemoryHomeSnapshot = null
                     pendingRestoredCatalogSnapshot = null
                     pendingHomeSnapshotPersist = null
+                    invalidateHydratedHomeOverlayScope()
                     persistedTraktSyntheticGroups = emptyList()
                     persistedSimklSyntheticGroups = emptyList()
                     persistedMDBListSyntheticGroups = emptyList()

@@ -212,10 +212,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     pendingRestoredCatalogSnapshot = null
     pendingHomeSnapshotPersist = null
     homeSnapshotPersistJob?.cancel()
-    hydratedHomeOverlayObserverJob?.cancel()
-    hydratedHomeOverlayObserverJob = null
-    hydratedHomeOverlayObserverSignature = null
-    hydratedHomeOverlaysByItemKey.value = emptyMap()
+    invalidateHydratedHomeOverlayScope(scheduleRows = false)
     modernCarouselRowBuildCache.continueWatchingItems = emptyList()
     modernCarouselRowBuildCache.continueWatchingRow = null
     modernCarouselRowBuildCache.catalogRows.clear()
@@ -395,6 +392,17 @@ internal fun shouldPublishHydratedHomeOverlays(
     current: Map<String, HydratedHomeOverlay>,
     next: Map<String, HydratedHomeOverlay>
 ): Boolean = current != next
+
+internal fun HomeViewModel.invalidateHydratedHomeOverlayScope(scheduleRows: Boolean = true) {
+    hydratedHomeOverlayObserverJob?.cancel()
+    hydratedHomeOverlayObserverJob = null
+    hydratedHomeOverlayObserverSignature = null
+    hydratedHomeOverlaysByItemKey.value = emptyMap()
+    lastCatalogComputationSignature = null
+    if (scheduleRows) {
+        scheduleUpdateCatalogRows()
+    }
+}
 
 internal fun composeHydratedHomeOverlaySnapshot(
     displayRows: List<CatalogRow>,
