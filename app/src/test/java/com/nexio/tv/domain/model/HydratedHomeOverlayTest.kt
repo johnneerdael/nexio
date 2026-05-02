@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class HydratedHomeOverlayTest {
@@ -29,6 +30,59 @@ class HydratedHomeOverlayTest {
     }
 
     @Test
+    fun `display hash distinguishes single genre containing separator from multiple genres`() {
+        val singleGenre = HomeDisplayMetadata(genres = listOf("A|B")).hydratedHomeDisplayHash()
+        val multipleGenres = HomeDisplayMetadata(genres = listOf("A", "B")).hydratedHomeDisplayHash()
+
+        assertNotEquals(singleGenre, multipleGenres)
+    }
+
+    @Test
+    fun `display hash distinguishes field separator inside text from adjacent field values`() {
+        val separator = "\u001F"
+        val embeddedSeparator = HomeDisplayMetadata(title = "A${separator}B").hydratedHomeDisplayHash()
+        val adjacentFields = HomeDisplayMetadata(title = "A", logo = "B").hydratedHomeDisplayHash()
+
+        assertNotEquals(embeddedSeparator, adjacentFields)
+    }
+
+    @Test
+    fun `display hash defaults from fields`() {
+        val fields = HomeDisplayMetadata(title = "Fight Club")
+        val overlay = HydratedHomeOverlay(
+            overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+            itemKey = "movie:tmdb:550",
+            canonicalProvider = ProviderId.TMDB,
+            canonicalId = "550",
+            imdbId = "tt0137523",
+            contentType = ContentType.MOVIE,
+            languageTag = "en",
+            policyVersion = 1,
+            fields = fields,
+            fieldTrace = emptyList(),
+            updatedAtMs = 1_000L,
+            staleAtMs = 2_000L,
+            expiresAtMs = 3_000L,
+            state = HomeItemHydrationState.CANONICAL_READY
+        )
+
+        assertEquals(fields.hydratedHomeDisplayHash(), overlay.displayHash)
+    }
+
+    @Test
+    fun `display hash must match fields when supplied`() {
+        try {
+            hydratedOverlay(
+                fields = HomeDisplayMetadata(title = "Fight Club"),
+                displayHash = HomeDisplayMetadata(title = "Different").hydratedHomeDisplayHash()
+            )
+            fail("Expected mismatched displayHash to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message.orEmpty().contains("displayHash"))
+        }
+    }
+
+    @Test
     fun `freshness uses stale and expiry timestamps`() {
         val overlay = hydratedOverlay(
             updatedAtMs = 1_000L,
@@ -45,7 +99,9 @@ class HydratedHomeOverlayTest {
     private fun hydratedOverlay(
         updatedAtMs: Long,
         staleAtMs: Long,
-        expiresAtMs: Long
+        expiresAtMs: Long,
+        fields: HomeDisplayMetadata = HomeDisplayMetadata(title = "Fight Club"),
+        displayHash: String = fields.hydratedHomeDisplayHash()
     ) = HydratedHomeOverlay(
         overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
         itemKey = "movie:tmdb:550",
@@ -55,7 +111,7 @@ class HydratedHomeOverlayTest {
         contentType = ContentType.MOVIE,
         languageTag = "en",
         policyVersion = 1,
-        fields = HomeDisplayMetadata(title = "Fight Club"),
+        fields = fields,
         fieldTrace = listOf(
             HydratedHomeFieldTrace(
                 field = "TITLE",
@@ -63,10 +119,31 @@ class HydratedHomeOverlayTest {
                 sourceRole = "PRIMARY"
             )
         ),
-        displayHash = HomeDisplayMetadata(title = "Fight Club").hydratedHomeDisplayHash(),
+        displayHash = displayHash,
         updatedAtMs = updatedAtMs,
         staleAtMs = staleAtMs,
         expiresAtMs = expiresAtMs,
+        state = HomeItemHydrationState.CANONICAL_READY
+    )
+
+    private fun hydratedOverlay(
+        fields: HomeDisplayMetadata,
+        displayHash: String = fields.hydratedHomeDisplayHash()
+    ) = HydratedHomeOverlay(
+        overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+        itemKey = "movie:tmdb:550",
+        canonicalProvider = ProviderId.TMDB,
+        canonicalId = "550",
+        imdbId = "tt0137523",
+        contentType = ContentType.MOVIE,
+        languageTag = "en",
+        policyVersion = 1,
+        fields = fields,
+        fieldTrace = emptyList(),
+        displayHash = displayHash,
+        updatedAtMs = 1_000L,
+        staleAtMs = 2_000L,
+        expiresAtMs = 3_000L,
         state = HomeItemHydrationState.CANONICAL_READY
     )
 }
