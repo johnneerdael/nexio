@@ -84,7 +84,17 @@ class HomeHydrationCoordinator @Inject constructor(
                 return null
             }
 
-            val bundle = resolveStableIdBundleOrNull(result.route, request, trigger, itemKey)
+            val stableIds = resolveStableIdBundle(result.route, request, trigger, itemKey)
+            if (currentGeneration() != expectedGeneration) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "generation_mismatch",
+                    trigger = trigger.name
+                )
+                return null
+            }
+
+            val bundle = stableIds.bundle
             val overlay = result.toHydratedHomeOverlay(
                 item = item,
                 itemKey = itemKey,
@@ -136,8 +146,8 @@ class HomeHydrationCoordinator @Inject constructor(
                 displayHashAfter = overlay.displayHash,
                 rowOrderChanged = false,
                 focusChanged = false,
-                networkExecuted = bundle?.evidence?.any { it.networkExecuted } == true,
-                cacheDecision = cacheDecision(bundle)
+                networkExecuted = stableIds.networkExecuted,
+                cacheDecision = stableIds.cacheDecision
             )
             overlay
         } catch (error: CancellationException) {
@@ -200,24 +210,25 @@ class HomeHydrationCoordinator @Inject constructor(
         return null
     }
 
-    private suspend fun resolveStableIdBundleOrNull(
+    private suspend fun resolveStableIdBundle(
         route: MetadataRoute?,
         request: MetadataRequest,
         trigger: StableIdResolutionTrigger,
         itemKey: String
-    ): StableIdBundle? {
-        route ?: return null
+    ): StableIdBundleResolution {
+        route ?: return StableIdBundleResolution.unavailable()
         return try {
-            metadataRouterFacade.resolveStableIdBundle(
+            val bundle = metadataRouterFacade.resolveStableIdBundle(
                 route = route,
                 request = request,
                 trigger = trigger,
                 itemKey = itemKey
             )
+            StableIdBundleResolution.available(bundle)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            null
+            StableIdBundleResolution.unavailable()
         }
     }
 
@@ -356,13 +367,38 @@ class HomeHydrationCoordinator @Inject constructor(
         if (before.backdrop != after.backdrop) add("backdrop")
     }
 
-    private fun cacheDecision(bundle: StableIdBundle?): String =
-        if (bundle?.evidence?.any { it.networkExecuted } == true) "MISS_THEN_WRITE" else "HIT_OR_LOCAL"
-
     private data class CanonicalIdentity(
         val provider: ProviderId,
         val id: String
     )
+
+    private data class StableIdBundleResolution(
+        val bundle: StableIdBundle?,
+        val networkExecuted: Boolean,
+        val cacheDecision: String
+    ) {
+        companion object {
+            fun available(bundle: StableIdBundle): StableIdBundleResolution {
+                val networkExecuted = bundle.evidence.any { it.networkExecuted }
+                return StableIdBundleResolution(
+                    bundle = bundle,
+                    networkExecuted = networkExecuted,
+                    cacheDecision = if (networkExecuted) {
+                        "MISS_THEN_WRITE"
+                    } else {
+                        "HIT_OR_LOCAL"
+                    }
+                )
+            }
+
+            fun unavailable(): StableIdBundleResolution =
+                StableIdBundleResolution(
+                    bundle = null,
+                    networkExecuted = false,
+                    cacheDecision = "STABLE_ID_UNAVAILABLE"
+                )
+        }
+    }
 
     private companion object {
         const val HOME_OVERLAY_POLICY_VERSION = 1

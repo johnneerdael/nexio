@@ -258,6 +258,42 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `generation change during stable id resolution avoids rating enrichment write and apply`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val ratings = mockk<TitleRatingOverrideRepository>()
+        val sink = RecordingTraceSink()
+        var generation = 7L
+        var applied = false
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } answers {
+            generation = 8L
+            stableBundle("movie:550")
+        }
+        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
+
+        val result = coordinator(facade, store, ratings, sink).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { generation },
+            onOverlayApplied = { applied = true }
+        )
+
+        assertNull(result)
+        assertFalse(applied)
+        coVerify(exactly = 0) { ratings.enrichPreview(any(), any()) }
+        coVerify(exactly = 0) { store.upsert(any(), any()) }
+        assertEquals(
+            listOf("home.hydration_started", "home.hydration_ignored"),
+            sink.events.map { it.eventType }
+        )
+    }
+
+    @Test
     fun `stable bundle failure still writes and applies canonical overlay with nullable rating enrichment`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
@@ -299,6 +335,9 @@ class HomeHydrationCoordinatorTest {
             listOf("home.hydration_started", "home.hydration_overlay_written", "home.hydration_applied"),
             sink.events.map { it.eventType }
         )
+        val appliedPayload = sink.events.last().payload as Map<*, *>
+        assertEquals("STABLE_ID_UNAVAILABLE", appliedPayload["cacheDecision"])
+        assertEquals(false, appliedPayload["networkExecuted"])
     }
 
     @Test
