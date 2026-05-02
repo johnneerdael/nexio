@@ -200,7 +200,7 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "playback", "formatter"), json.keys)
-        assertEquals(7, json["schemaVersion"]?.toString()?.toInt())
+        assertEquals(8, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals(
             "\"[[chip:cached]]\"",
@@ -345,7 +345,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 7`() {
+    fun `build account config sync rpc params includes contract version 8`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -370,7 +370,7 @@ class AccountConfigSyncContractTest {
         assertEquals("\"app\"", pushParams["p_source"].toString())
         assertTrue(pushParams.containsKey("p_settings_payload"))
         assertEquals(ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION, pullParams["p_contract_version"]?.toString()?.toInt())
-        assertEquals(7, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
+        assertEquals(8, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
     }
 
     @Test
@@ -423,6 +423,7 @@ class AccountConfigSyncContractTest {
                 animeSkipEnabled = MutableSharedFlow<Unit>(),
                 animeSkipClientId = MutableSharedFlow<Unit>(),
                 subtitleTranslationSettings = MutableSharedFlow<Unit>(),
+                wyzieSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
                 premiumizeSettings = MutableSharedFlow<Unit>(),
                 premiumizeAccountState = MutableSharedFlow<Unit>(),
@@ -464,6 +465,7 @@ class AccountConfigSyncContractTest {
                 animeSkipEnabled = MutableSharedFlow<Unit>(),
                 animeSkipClientId = MutableSharedFlow<Unit>(),
                 subtitleTranslationSettings = MutableSharedFlow<Unit>(),
+                wyzieSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
                 premiumizeSettings = MutableSharedFlow<Unit>(),
                 premiumizeAccountState = MutableSharedFlow<Unit>(),
@@ -649,6 +651,7 @@ class AccountConfigSyncContractTest {
                 animeSkipEnabled = animeSkipEnabled,
                 animeSkipClientId = animeSkipClientId,
                 subtitleTranslationSettings = subtitleTranslationSettings,
+                wyzieSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = posterRatingsSettings,
                 premiumizeSettings = premiumizeSettings,
                 premiumizeAccountState = premiumizeAccountState,
