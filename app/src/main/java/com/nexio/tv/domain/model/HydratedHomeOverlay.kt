@@ -35,12 +35,18 @@ data class HydratedHomeOverlay(
     val policyVersion: Int = DEFAULT_HOME_OVERLAY_POLICY_VERSION,
     val fields: HomeDisplayMetadata,
     val fieldTrace: List<HydratedHomeFieldTrace>,
-    val displayHash: String,
+    val displayHash: String = fields.hydratedHomeDisplayHash(),
     val updatedAtMs: Long,
     val staleAtMs: Long,
     val expiresAtMs: Long,
     val state: HomeItemHydrationState = HomeItemHydrationState.CANONICAL_READY
 ) {
+    init {
+        require(displayHash == fields.hydratedHomeDisplayHash()) {
+            "displayHash must match fields.hydratedHomeDisplayHash()"
+        }
+    }
+
     fun isStale(nowMs: Long): Boolean = nowMs >= staleAtMs
 
     fun isExpired(nowMs: Long): Boolean = nowMs >= expiresAtMs
@@ -57,21 +63,47 @@ fun hydratedHomeOverlayKey(
 }
 
 fun HomeDisplayMetadata.hydratedHomeDisplayHash(): String {
-    val raw = listOf(
-        title.orEmpty(),
-        logo.orEmpty(),
-        description.orEmpty(),
-        genres.joinToString("|"),
-        releaseInfo.orEmpty(),
-        runtime.orEmpty(),
-        imdbRating?.toString().orEmpty(),
-        ratingSource?.name.orEmpty(),
-        tomatoesRating?.toString().orEmpty(),
-        poster.orEmpty(),
-        posterProviderTag.orEmpty(),
-        backdrop.orEmpty()
-    ).joinToString(separator = "\u001F")
+    val raw = buildString {
+        appendLengthPrefixed("title", title.orEmpty())
+        appendLengthPrefixed("logo", logo.orEmpty())
+        appendLengthPrefixed("description", description.orEmpty())
+        appendList("genres", genres)
+        appendLengthPrefixed("releaseInfo", releaseInfo.orEmpty())
+        appendLengthPrefixed("runtime", runtime.orEmpty())
+        appendLengthPrefixed("imdbRating", imdbRating?.toString().orEmpty())
+        appendLengthPrefixed("ratingSource", ratingSource?.name.orEmpty())
+        appendLengthPrefixed("tomatoesRating", tomatoesRating?.toString().orEmpty())
+        appendLengthPrefixed("poster", poster.orEmpty())
+        appendLengthPrefixed("posterProviderTag", posterProviderTag.orEmpty())
+        appendLengthPrefixed("backdrop", backdrop.orEmpty())
+    }
     val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
 
     return digest.joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+}
+
+private fun StringBuilder.appendLengthPrefixed(name: String, value: String) {
+    append(name.length)
+    append(':')
+    append(name)
+    append('=')
+    append(value.length)
+    append(':')
+    append(value)
+    append(';')
+}
+
+private fun StringBuilder.appendList(name: String, values: List<String>) {
+    append(name.length)
+    append(':')
+    append(name)
+    append('[')
+    append(values.size)
+    append(']')
+    values.forEach { value ->
+        append(value.length)
+        append(':')
+        append(value)
+    }
+    append(';')
 }
