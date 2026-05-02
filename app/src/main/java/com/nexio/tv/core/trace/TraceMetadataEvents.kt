@@ -294,112 +294,112 @@ class TraceMetadataEvents(
     }
 
     fun emitHomeHydrationStarted(
+        railId: String,
         itemKey: String,
-        rowKey: String,
-        source: String,
-        profileHash: String?,
-        language: String,
-        cacheDecision: String,
-        networkExecuted: Boolean
+        firstPaintSource: String,
+        trigger: String,
+        priority: String,
+        workClass: String
     ) {
         emitHomeHydrationEvent(
             eventType = "home.hydration_started",
             payload = mapOf(
+                "railId" to railId,
                 "itemKey" to itemKey,
-                "rowKey" to rowKey,
-                "source" to source,
-                "profileHash" to profileHash,
-                "language" to language,
-                "cacheDecision" to cacheDecision,
-                "networkExecuted" to networkExecuted
+                "firstPaintSource" to firstPaintSource,
+                "trigger" to trigger,
+                "priority" to priority,
+                "workClass" to workClass
             )
         )
     }
 
     fun emitHomeHydrationOverlayWritten(
         itemKey: String,
-        overlayKey: String,
-        changedFields: List<String>,
-        overlayHash: String,
-        cacheDecision: String,
-        networkExecuted: Boolean
+        canonicalProvider: String,
+        canonicalId: String,
+        imdbId: String?,
+        displayHash: String
     ) {
         emitHomeHydrationEvent(
             eventType = "home.hydration_overlay_written",
             payload = mapOf(
                 "itemKey" to itemKey,
-                "overlayKey" to overlayKey,
-                "changedFields" to changedFields,
-                "overlayHash" to overlayHash,
-                "cacheDecision" to cacheDecision,
-                "networkExecuted" to networkExecuted
+                "canonicalProvider" to canonicalProvider,
+                "canonicalId" to canonicalId,
+                "imdbId" to imdbId,
+                "displayHash" to displayHash
             )
         )
     }
 
     fun emitHomeHydrationApplied(
+        railId: String,
         itemKey: String,
-        rowKey: String,
+        firstPaintSource: String,
+        canonicalProvider: String,
+        canonicalId: String,
+        imdbId: String?,
+        trigger: String,
+        priority: String,
+        workClass: String,
         changedFields: List<String>,
-        beforeHash: String,
-        afterHash: String,
-        rowOrderStable: Boolean,
-        focusedItemStable: Boolean,
-        cacheDecision: String,
-        networkExecuted: Boolean
+        displayHashBefore: String,
+        displayHashAfter: String,
+        rowOrderChanged: Boolean,
+        focusChanged: Boolean,
+        networkExecuted: Boolean,
+        cacheDecision: String
     ) {
         emitHomeHydrationEvent(
             eventType = "home.hydration_applied",
             payload = mapOf(
+                "railId" to railId,
                 "itemKey" to itemKey,
-                "rowKey" to rowKey,
+                "firstPaintSource" to firstPaintSource,
+                "canonicalProvider" to canonicalProvider,
+                "canonicalId" to canonicalId,
+                "imdbId" to imdbId,
+                "trigger" to trigger,
+                "priority" to priority,
+                "workClass" to workClass,
                 "changedFields" to changedFields,
-                "beforeHash" to beforeHash,
-                "afterHash" to afterHash,
-                "rowOrderStable" to rowOrderStable,
-                "focusedItemStable" to focusedItemStable,
-                "cacheDecision" to cacheDecision,
-                "networkExecuted" to networkExecuted
+                "displayHashBefore" to displayHashBefore,
+                "displayHashAfter" to displayHashAfter,
+                "rowOrderChanged" to rowOrderChanged,
+                "focusChanged" to focusChanged,
+                "networkExecuted" to networkExecuted,
+                "cacheDecision" to cacheDecision
             )
         )
     }
 
     fun emitHomeHydrationIgnored(
         itemKey: String,
-        rowKey: String,
         reason: String,
-        startedProfileHash: String?,
-        activeProfileHash: String?
+        trigger: String
     ) {
         emitHomeHydrationEvent(
             eventType = "home.hydration_ignored",
             payload = mapOf(
                 "itemKey" to itemKey,
-                "rowKey" to rowKey,
                 "reason" to reason,
-                "startedProfileHash" to startedProfileHash,
-                "activeProfileHash" to activeProfileHash
+                "trigger" to trigger
             )
         )
     }
 
     fun emitHomeHydrationFailedUsingPreview(
         itemKey: String,
-        rowKey: String,
         reason: String,
-        previewHash: String,
-        cacheDecision: String,
-        networkExecuted: Boolean
+        trigger: String
     ) {
         emitHomeHydrationEvent(
             eventType = "home.hydration_failed_using_preview",
             payload = mapOf(
                 "itemKey" to itemKey,
-                "rowKey" to rowKey,
                 "reason" to reason,
-                "previewHash" to previewHash,
-                "cacheDecision" to cacheDecision,
-                "networkExecuted" to networkExecuted
+                "trigger" to trigger
             )
         )
     }

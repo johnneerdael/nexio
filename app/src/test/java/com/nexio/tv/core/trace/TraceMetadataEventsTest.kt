@@ -61,47 +61,47 @@ class TraceMetadataEventsTest {
         val events = TraceMetadataEvents(sink, sessionId = { "home-session" })
 
         events.emitHomeHydrationStarted(
+            railId = "trending",
             itemKey = "home:tmdb:movie:550",
-            rowKey = "trending",
-            source = "VISIBLE",
-            profileHash = "profile-a",
-            language = "en-US",
-            cacheDecision = "MISS",
-            networkExecuted = true
+            firstPaintSource = "RAIL_PREVIEW",
+            trigger = "VISIBLE",
+            priority = "HIGH",
+            workClass = "NETWORK"
         )
         events.emitHomeHydrationOverlayWritten(
             itemKey = "home:tmdb:movie:550",
-            overlayKey = "tmdb:movie:550:en-US",
-            changedFields = listOf("title", "poster", "rating"),
-            overlayHash = "overlay-hash",
-            cacheDecision = "WRITE",
-            networkExecuted = true
+            canonicalProvider = "tmdb",
+            canonicalId = "550",
+            imdbId = "tt0137523",
+            displayHash = "overlay-hash"
         )
         events.emitHomeHydrationApplied(
+            railId = "trending",
             itemKey = "home:tmdb:movie:550",
-            rowKey = "trending",
+            firstPaintSource = "RAIL_PREVIEW",
+            canonicalProvider = "tmdb",
+            canonicalId = "550",
+            imdbId = "tt0137523",
+            trigger = "VISIBLE",
+            priority = "HIGH",
+            workClass = "NETWORK",
             changedFields = listOf("title", "poster", "rating"),
-            beforeHash = "preview-hash",
-            afterHash = "overlay-hash",
-            rowOrderStable = true,
-            focusedItemStable = true,
-            cacheDecision = "MISS_THEN_WRITE",
-            networkExecuted = true
+            displayHashBefore = "preview-hash",
+            displayHashAfter = "overlay-hash",
+            rowOrderChanged = false,
+            focusChanged = false,
+            networkExecuted = true,
+            cacheDecision = "MISS_THEN_WRITE"
         )
         events.emitHomeHydrationIgnored(
             itemKey = "home:tmdb:movie:550",
-            rowKey = "trending",
             reason = "profile_generation_changed",
-            startedProfileHash = "profile-a",
-            activeProfileHash = "profile-b"
+            trigger = "VISIBLE"
         )
         events.emitHomeHydrationFailedUsingPreview(
             itemKey = "home:tmdb:movie:550",
-            rowKey = "trending",
             reason = "identity_resolution_failed",
-            previewHash = "preview-hash",
-            cacheDecision = "MISS",
-            networkExecuted = true
+            trigger = "VISIBLE"
         )
 
         assertEquals(
@@ -119,56 +119,164 @@ class TraceMetadataEventsTest {
     }
 
     @Test
-    fun `home hydration applied includes item hashes stability network and cache info`() {
+    fun `home hydration started includes planned scheduling fields only`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
+
+        events.emitHomeHydrationStarted(
+            railId = "popular-series",
+            itemKey = "home:tmdb:series:1399",
+            firstPaintSource = "ADDON_META_PREVIEW",
+            trigger = "FOCUS",
+            priority = "MEDIUM",
+            workClass = "CACHE"
+        )
+
+        val envelope = sink.events.single()
+        assertEquals("home.hydration_started", envelope.eventType)
+        val payload = envelope.payload as Map<*, *>
+        assertEquals(
+            setOf("railId", "itemKey", "firstPaintSource", "trigger", "priority", "workClass"),
+            payload.keys
+        )
+        assertEquals("popular-series", payload["railId"])
+        assertEquals("home:tmdb:series:1399", payload["itemKey"])
+        assertEquals("ADDON_META_PREVIEW", payload["firstPaintSource"])
+        assertEquals("FOCUS", payload["trigger"])
+        assertEquals("MEDIUM", payload["priority"])
+        assertEquals("CACHE", payload["workClass"])
+    }
+
+    @Test
+    fun `home hydration overlay written includes planned canonical identity fields only`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
+
+        events.emitHomeHydrationOverlayWritten(
+            itemKey = "home:tmdb:series:1399",
+            canonicalProvider = "tvdb",
+            canonicalId = "121361",
+            imdbId = "tt0944947",
+            displayHash = "overlay-456"
+        )
+
+        val envelope = sink.events.single()
+        assertEquals("home.hydration_overlay_written", envelope.eventType)
+        val payload = envelope.payload as Map<*, *>
+        assertEquals(
+            setOf("itemKey", "canonicalProvider", "canonicalId", "imdbId", "displayHash"),
+            payload.keys
+        )
+        assertEquals("home:tmdb:series:1399", payload["itemKey"])
+        assertEquals("tvdb", payload["canonicalProvider"])
+        assertEquals("121361", payload["canonicalId"])
+        assertEquals("tt0944947", payload["imdbId"])
+        assertEquals("overlay-456", payload["displayHash"])
+    }
+
+    @Test
+    fun `home hydration applied includes planned canonical hashes stability network and cache fields only`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
 
         events.emitHomeHydrationApplied(
+            railId = "popular-series",
             itemKey = "home:tmdb:series:1399",
-            rowKey = "popular-series",
+            firstPaintSource = "RAIL_PREVIEW",
+            canonicalProvider = "tvdb",
+            canonicalId = "121361",
+            imdbId = "tt0944947",
+            trigger = "VISIBLE",
+            priority = "HIGH",
+            workClass = "NETWORK",
             changedFields = listOf("title", "description", "rating"),
-            beforeHash = "before-123",
-            afterHash = "after-456",
-            rowOrderStable = true,
-            focusedItemStable = false,
-            cacheDecision = "CACHE_HIT",
-            networkExecuted = false
+            displayHashBefore = "before-123",
+            displayHashAfter = "after-456",
+            rowOrderChanged = false,
+            focusChanged = true,
+            networkExecuted = false,
+            cacheDecision = "CACHE_HIT"
         )
 
         val envelope = sink.events.single()
         assertEquals("home.hydration_applied", envelope.eventType)
         val payload = envelope.payload as Map<*, *>
+        assertEquals(
+            setOf(
+                "railId",
+                "itemKey",
+                "firstPaintSource",
+                "canonicalProvider",
+                "canonicalId",
+                "imdbId",
+                "trigger",
+                "priority",
+                "workClass",
+                "changedFields",
+                "displayHashBefore",
+                "displayHashAfter",
+                "rowOrderChanged",
+                "focusChanged",
+                "networkExecuted",
+                "cacheDecision"
+            ),
+            payload.keys
+        )
+        assertEquals("popular-series", payload["railId"])
         assertEquals("home:tmdb:series:1399", payload["itemKey"])
-        assertEquals("popular-series", payload["rowKey"])
+        assertEquals("RAIL_PREVIEW", payload["firstPaintSource"])
+        assertEquals("tvdb", payload["canonicalProvider"])
+        assertEquals("121361", payload["canonicalId"])
+        assertEquals("tt0944947", payload["imdbId"])
+        assertEquals("VISIBLE", payload["trigger"])
+        assertEquals("HIGH", payload["priority"])
+        assertEquals("NETWORK", payload["workClass"])
         assertEquals(listOf("title", "description", "rating"), payload["changedFields"])
-        assertEquals("before-123", payload["beforeHash"])
-        assertEquals("after-456", payload["afterHash"])
-        assertEquals(true, payload["rowOrderStable"])
-        assertEquals(false, payload["focusedItemStable"])
-        assertEquals("CACHE_HIT", payload["cacheDecision"])
+        assertEquals("before-123", payload["displayHashBefore"])
+        assertEquals("after-456", payload["displayHashAfter"])
+        assertEquals(false, payload["rowOrderChanged"])
+        assertEquals(true, payload["focusChanged"])
         assertEquals(false, payload["networkExecuted"])
+        assertEquals("CACHE_HIT", payload["cacheDecision"])
     }
 
     @Test
-    fun `home hydration ignored records ignore reason`() {
+    fun `home hydration ignored records ignore reason and trigger only`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
 
         events.emitHomeHydrationIgnored(
             itemKey = "home:tmdb:movie:11",
-            rowKey = "watchlist",
             reason = "language_changed",
-            startedProfileHash = "profile-en",
-            activeProfileHash = "profile-fr"
+            trigger = "FOCUS"
         )
 
         val envelope = sink.events.single()
         assertEquals("home.hydration_ignored", envelope.eventType)
         val payload = envelope.payload as Map<*, *>
+        assertEquals(setOf("itemKey", "reason", "trigger"), payload.keys)
         assertEquals("home:tmdb:movie:11", payload["itemKey"])
-        assertEquals("watchlist", payload["rowKey"])
         assertEquals("language_changed", payload["reason"])
-        assertEquals("profile-en", payload["startedProfileHash"])
-        assertEquals("profile-fr", payload["activeProfileHash"])
+        assertEquals("FOCUS", payload["trigger"])
+    }
+
+    @Test
+    fun `home hydration failed using preview records reason and trigger only`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
+
+        events.emitHomeHydrationFailedUsingPreview(
+            itemKey = "home:tmdb:movie:11",
+            reason = "identity_resolution_failed",
+            trigger = "VISIBLE"
+        )
+
+        val envelope = sink.events.single()
+        assertEquals("home.hydration_failed_using_preview", envelope.eventType)
+        val payload = envelope.payload as Map<*, *>
+        assertEquals(setOf("itemKey", "reason", "trigger"), payload.keys)
+        assertEquals("home:tmdb:movie:11", payload["itemKey"])
+        assertEquals("identity_resolution_failed", payload["reason"])
+        assertEquals("VISIBLE", payload["trigger"])
     }
 }
