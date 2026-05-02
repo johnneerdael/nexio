@@ -522,7 +522,7 @@ class MetadataExecutionAuditGoldenTest {
 
         val json = File(outputDir, "metadata-execution-report.json").readText()
         val markdown = File(outputDir, "metadata-execution-report.md").readText()
-        JSONObject(json)
+        val root = JSONObject(json)
         assertTrue(json.contains("\"schemaVersion\""))
         assertTrue(json.contains("\"gitSha\""))
         assertTrue(json.contains("\"gitWorktree\""))
@@ -535,14 +535,25 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(json.contains("\"localization\""))
         assertTrue(json.contains("\"providerFallbackUsed\""))
         assertTrue(json.contains("productionCallerOwnership"))
-        assertTrue(json.contains("\"eventType\":\"metadata.stable_id_bundle\""))
-        assertTrue(json.contains("\"metadata.stable_id_bundle\""))
-        assertTrue(json.contains("\"scenario\":\"tmdb-tv-rail-preview-then-tvdb-hydration\""))
-        assertTrue(json.contains("\"canonicalProvider\":\"TVDB\""))
-        assertTrue(json.contains("\"imdbId\":\"tt0944947\""))
-        assertTrue(json.contains("\"firstPaint\":{\"source\":\"RAIL_PREVIEW\""))
-        assertTrue(json.contains("\"routerExecuted\":false"))
-        assertTrue(json.contains("\"networkExecuted\":false"))
+
+        val tmdbTvRailReport = root
+            .getJSONArray("reports")
+            .objects()
+            .single { it.getString("scenario") == "tmdb-tv-rail-preview-then-tvdb-hydration" }
+        val tmdbTvRailItem = tmdbTvRailReport.getJSONArray("items").getJSONObject(0)
+        val firstPaint = tmdbTvRailItem.getJSONObject("firstPaint")
+        val stableIdBundle = tmdbTvRailItem.getJSONObject("metadata.stable_id_bundle")
+
+        assertEquals("RAIL_PREVIEW", firstPaint.getString("source"))
+        assertFalse(firstPaint.getBoolean("routerExecuted"))
+        assertFalse(firstPaint.getBoolean("networkExecuted"))
+        assertEquals("metadata.stable_id_bundle", stableIdBundle.getString("eventType"))
+        assertEquals("TVDB", stableIdBundle.getString("canonicalProvider"))
+        assertEquals("tvdb:121361", stableIdBundle.getString("canonicalId"))
+        assertEquals("tt0944947", stableIdBundle.getString("imdbId"))
+        assertFalse(stableIdBundle.getBoolean("networkExecuted"))
+        assertEquals("VISIBLE_HOME_HYDRATION", stableIdBundle.getString("trigger"))
+
         assertFalse(json.contains("\"targetProvider\":\"TRAKT\""))
         assertFalse(json.contains("\"targetProvider\":\"SIMKL\""))
         assertTrue(markdown.contains("Metadata Execution Audit Bundle"))
@@ -588,6 +599,9 @@ class MetadataExecutionAuditGoldenTest {
     private fun MetadataExecutionReportBundle.localizedScenario(name: String): LocalizationEvent =
         reports.single { it.scenario.name == name }.items.single().localization
             ?: error("Missing localization event for $name")
+
+    private fun org.json.JSONArray.objects(): List<JSONObject> =
+        (0 until length()).map { getJSONObject(it) }
 
     private val Int.daysMs: Long get() = this * 24L * 60L * 60L * 1_000L
 }
