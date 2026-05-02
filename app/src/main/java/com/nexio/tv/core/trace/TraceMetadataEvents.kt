@@ -293,6 +293,117 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitHomeHydrationStarted(
+        itemKey: String,
+        rowKey: String,
+        source: String,
+        profileHash: String?,
+        language: String,
+        cacheDecision: String,
+        networkExecuted: Boolean
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.hydration_started",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "rowKey" to rowKey,
+                "source" to source,
+                "profileHash" to profileHash,
+                "language" to language,
+                "cacheDecision" to cacheDecision,
+                "networkExecuted" to networkExecuted
+            )
+        )
+    }
+
+    fun emitHomeHydrationOverlayWritten(
+        itemKey: String,
+        overlayKey: String,
+        changedFields: List<String>,
+        overlayHash: String,
+        cacheDecision: String,
+        networkExecuted: Boolean
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.hydration_overlay_written",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "overlayKey" to overlayKey,
+                "changedFields" to changedFields,
+                "overlayHash" to overlayHash,
+                "cacheDecision" to cacheDecision,
+                "networkExecuted" to networkExecuted
+            )
+        )
+    }
+
+    fun emitHomeHydrationApplied(
+        itemKey: String,
+        rowKey: String,
+        changedFields: List<String>,
+        beforeHash: String,
+        afterHash: String,
+        rowOrderStable: Boolean,
+        focusedItemStable: Boolean,
+        cacheDecision: String,
+        networkExecuted: Boolean
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.hydration_applied",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "rowKey" to rowKey,
+                "changedFields" to changedFields,
+                "beforeHash" to beforeHash,
+                "afterHash" to afterHash,
+                "rowOrderStable" to rowOrderStable,
+                "focusedItemStable" to focusedItemStable,
+                "cacheDecision" to cacheDecision,
+                "networkExecuted" to networkExecuted
+            )
+        )
+    }
+
+    fun emitHomeHydrationIgnored(
+        itemKey: String,
+        rowKey: String,
+        reason: String,
+        startedProfileHash: String?,
+        activeProfileHash: String?
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.hydration_ignored",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "rowKey" to rowKey,
+                "reason" to reason,
+                "startedProfileHash" to startedProfileHash,
+                "activeProfileHash" to activeProfileHash
+            )
+        )
+    }
+
+    fun emitHomeHydrationFailedUsingPreview(
+        itemKey: String,
+        rowKey: String,
+        reason: String,
+        previewHash: String,
+        cacheDecision: String,
+        networkExecuted: Boolean
+    ) {
+        emitHomeHydrationEvent(
+            eventType = "home.hydration_failed_using_preview",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "rowKey" to rowKey,
+                "reason" to reason,
+                "previewHash" to previewHash,
+                "cacheDecision" to cacheDecision,
+                "networkExecuted" to networkExecuted
+            )
+        )
+    }
+
     fun emitLocalizationPlan(
         contentId: String,
         provider: String,
@@ -328,6 +439,24 @@ class TraceMetadataEvents(
                     "perEpisodeFallbacksAllowed" to perEpisodeFallbacksAllowed,
                     "localeCollapsedToFallback" to localeCollapsedToFallback  // F2-E-01
                 )
+            )
+        )
+    }
+
+    private fun emitHomeHydrationEvent(
+        eventType: String,
+        payload: Map<String, Any?>
+    ) {
+        val sid = sessionId() ?: return
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = eventType,
+                payload = payload
             )
         )
     }
