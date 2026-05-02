@@ -378,7 +378,7 @@ class MetadataAuditReportWriter {
 
     private fun routeJson(route: RouteEvent?, indent: String): String =
         route?.let {
-            """{"parentId":${jsonString(it.parentId)},"provider":${jsonString(it.provider.name)},"mediaKind":${jsonString(it.mediaKind.name)},"reason":${jsonString(it.reason.name)},"preResolutionTargetIdRequiresIdentityResolution":${it.preResolutionTargetIdRequiresIdentityResolution},"executionTargetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"executionIdentityResolved":${!it.targetIdRequiresIdentityResolution},"usedInputs":${stringArrayJson(it.usedInputs)},"ignoredInputs":${stringArrayJson(it.ignoredInputs)}}"""
+            """{"parentId":${jsonString(it.parentId)},"provider":${jsonString(it.provider.name)},"mediaKind":${jsonString(it.mediaKind.name)},"reason":${jsonString(it.reason.name)},"targetIds":${providerTargetMapJson(it.targetIds)},"preResolutionTargetIdRequiresIdentityResolution":${it.preResolutionTargetIdRequiresIdentityResolution},"executionTargetIdRequiresIdentityResolution":${it.targetIdRequiresIdentityResolution},"executionIdentityResolved":${!it.targetIdRequiresIdentityResolution},"usedInputs":${stringArrayJson(it.usedInputs)},"ignoredInputs":${stringArrayJson(it.ignoredInputs)}}"""
         } ?: "null"
 
     private fun firstPaintJson(event: FirstPaintEvent): String =
@@ -460,6 +460,9 @@ class MetadataAuditReportWriter {
 
     private fun stringMapJson(values: Map<String, String>): String =
         "{${values.entries.joinToString { "${jsonString(it.key)}:${jsonString(it.value)}" }}}"
+
+    private fun providerTargetMapJson(values: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String>): String =
+        "{${values.entries.joinToString { "${jsonString(it.key.name)}:${jsonString(it.value)}" }}}"
 
     private fun jsonString(value: String): String =
         buildString {
