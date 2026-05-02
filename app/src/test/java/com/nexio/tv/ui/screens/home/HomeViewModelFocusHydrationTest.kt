@@ -8,6 +8,10 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
@@ -144,6 +148,7 @@ class HomeViewModelFocusHydrationTest {
     @Test
     fun `visible home hydration ignores overlay applied after language changes`() = runTest(testDispatcher) {
         var currentLanguage = "en"
+        val traceSink = RecordingTraceSink()
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
         val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
@@ -171,7 +176,8 @@ class HomeViewModelFocusHydrationTest {
             metadataRouterFacade = mockk(relaxed = true),
             homeHydrationCoordinator = homeHydrationCoordinator,
             nonPlaybackHomeWorkAllowed = true,
-            currentLanguageTagProvider = { currentLanguage }
+            currentLanguageTagProvider = { currentLanguage },
+            traceEvents = TraceMetadataEvents(traceSink) { "home-trace" }
         )
         viewModel.homeProfileGeneration = 7L
 
@@ -183,6 +189,13 @@ class HomeViewModelFocusHydrationTest {
 
         assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
         assertNull(viewModel.catalogUpdateJob)
+        assertEquals(1, traceSink.events.size)
+        val traceEvent = traceSink.events.single()
+        val tracePayload = traceEvent.payload as Map<*, *>
+        assertEquals("home.hydration_ignored", traceEvent.eventType)
+        assertEquals("movie:${visible.id}", tracePayload["itemKey"])
+        assertEquals("language_changed", tracePayload["reason"])
+        assertEquals(StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION.name, tracePayload["trigger"])
     }
 
     @Test
@@ -347,6 +360,53 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `adjacent item preload delegates hydration to coordinator and publishes overlay`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val item = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val overlay = overlay(
+            itemKey = "movie:${item.id}",
+            fields = HomeDisplayMetadata(title = "Canonical Adjacent")
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.ADJACENT,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = capture(overlayCallback)
+            )
+        } coAnswers {
+            overlayCallback.captured.invoke(overlay)
+            overlay
+        }
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+
+        viewModel.preloadAdjacentItem(item)
+        advanceUntilIdle()
+
+        assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
+        assertNotNull(viewModel.catalogUpdateJob)
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.ADJACENT,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+    }
+
+    @Test
     fun `onItemFocus for the same rail-preview item twice only delegates focused hydration once`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         coEvery {
@@ -490,7 +550,8 @@ class HomeViewModelFocusHydrationTest {
         titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true),
         nonPlaybackHomeWorkAllowed: Boolean = false,
         homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true),
-        currentLanguageTagProvider: () -> String = { "en" }
+        currentLanguageTagProvider: () -> String = { "en" },
+        traceEvents: TraceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null }
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -590,7 +651,20 @@ class HomeViewModelFocusHydrationTest {
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
             homeHydrationCoordinator = homeHydrationCoordinator,
+            traceEvents = traceEvents,
             appContext = mockk<Context>(relaxed = true)
         ).also(createdViewModels::add)
+    }
+
+    private class RecordingTraceSink : RuntimeTraceSink {
+        val events = mutableListOf<TraceEventEnvelope<*>>()
+
+        override fun emit(event: TraceEventEnvelope<*>) {
+            events += event
+        }
+
+        override fun eventsWritten(): Long = events.size.toLong()
+
+        override fun eventsDropped(): Long = 0L
     }
 }

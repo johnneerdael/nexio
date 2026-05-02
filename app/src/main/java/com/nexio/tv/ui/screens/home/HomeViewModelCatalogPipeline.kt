@@ -409,16 +409,22 @@ internal fun HomeViewModel.isCurrentHomeHydrationScope(
     expectedGeneration: Long,
     expectedLanguageTag: String
 ): Boolean {
-    return isCurrentHomeProfileGeneration(expectedGeneration) &&
-        profileBoundary.currentLanguageTag() == expectedLanguageTag
+    return homeHydrationScopeMismatchReason(expectedGeneration, expectedLanguageTag) == null
 }
 
 internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
     overlay: HydratedHomeOverlay,
     expectedGeneration: Long,
-    expectedLanguageTag: String
+    expectedLanguageTag: String,
+    trigger: StableIdResolutionTrigger
 ): Boolean {
-    if (!isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag)) {
+    val mismatchReason = homeHydrationScopeMismatchReason(expectedGeneration, expectedLanguageTag)
+    if (mismatchReason != null) {
+        traceEvents.emitHomeHydrationIgnored(
+            itemKey = overlay.itemKey,
+            reason = mismatchReason,
+            trigger = trigger.name
+        )
         return false
     }
 
@@ -436,6 +442,19 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
         scheduleUpdateCatalogRows()
     }
     return true
+}
+
+private fun HomeViewModel.homeHydrationScopeMismatchReason(
+    expectedGeneration: Long,
+    expectedLanguageTag: String
+): String? {
+    if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
+        return "generation_mismatch"
+    }
+    if (profileBoundary.currentLanguageTag() != expectedLanguageTag) {
+        return "language_changed"
+    }
+    return null
 }
 
 internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
@@ -461,7 +480,8 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
                 applyHydratedHomeOverlayFromCoordinator(
                     overlay = overlay,
                     expectedGeneration = expectedGeneration,
-                    expectedLanguageTag = languageTag
+                    expectedLanguageTag = languageTag,
+                    trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
                 )
             }
         )

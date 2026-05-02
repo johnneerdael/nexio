@@ -18,6 +18,7 @@ import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -142,6 +143,7 @@ class HomeViewModel @Inject constructor(
     internal val homeRailHydrationExecutor: HomeRailHydrationExecutor = NoOpHomeRailHydrationExecutor,
     internal val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
     internal val homeHydrationCoordinator: HomeHydrationCoordinator,
+    internal val traceEvents: TraceMetadataEvents,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
