@@ -90,6 +90,7 @@ private enum class IntegrationSettingsSection {
     MdbList,
     AnimeSkip,
     SubtitleTranslation,
+    WyzieSubtitles,
     PosterRatings
 }
 
@@ -225,6 +226,7 @@ fun SettingsScreen(
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
+    val integrationWyzieSubtitlesFocusRequester = remember { FocusRequester() }
     val integrationPosterRatingsFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
@@ -418,6 +420,7 @@ fun SettingsScreen(
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
+                            wyzieSubtitlesFocusRequester = integrationWyzieSubtitlesFocusRequester,
                             posterRatingsFocusRequester = integrationPosterRatingsFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
                         )
@@ -649,6 +652,7 @@ private fun IntegrationSettingsContent(
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     subtitleTranslationFocusRequester: FocusRequester,
+    wyzieSubtitlesFocusRequester: FocusRequester,
     posterRatingsFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
@@ -663,6 +667,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Omdb,
             IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
+            IntegrationSettingsSection.WyzieSubtitles,
             IntegrationSettingsSection.PosterRatings
         )
     }
@@ -689,6 +694,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
+            IntegrationSettingsSection.WyzieSubtitles -> wyzieSubtitlesFocusRequester
             IntegrationSettingsSection.PosterRatings -> posterRatingsFocusRequester
         }
         runCatching { requester.requestFocus() }
@@ -795,6 +801,13 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
                                 )
                             }
+                            item(key = "integration_hub_wyzie_subtitles") {
+                                SettingsActionRow(
+                                    title = "Wyzie subtitles",
+                                    subtitle = "Search subtitles via OpenSubtitles, SubDL, and more",
+                                    onClick = { onSelectSection(IntegrationSettingsSection.WyzieSubtitles) }
+                                )
+                            }
                             item(key = "integration_hub_poster_ratings") {
                                 SettingsActionRow(
                                     title = stringResource(R.string.poster_ratings_title),
@@ -871,6 +884,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.SubtitleTranslation -> {
             SubtitleTranslationSettingsContent(
                 initialFocusRequester = subtitleTranslationFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.WyzieSubtitles -> {
+            WyzieSubtitleSettingsContent(
+                initialFocusRequester = wyzieSubtitlesFocusRequester
             )
         }
 
