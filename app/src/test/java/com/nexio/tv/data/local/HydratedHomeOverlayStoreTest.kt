@@ -221,6 +221,31 @@ class HydratedHomeOverlayStoreTest {
     }
 
     @Test
+    fun `persisted overlay with mismatched canonical identity is ignored for aliases`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val overlay = overlay(itemKey = "movie:tmdb:550")
+        store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
+
+        prefs.edit()
+            .putString(
+                "overlay::${overlay.overlayKey}",
+                prefs.getString("overlay::${overlay.overlayKey}", null)!!
+                    .replace("\"canonicalId\":\"550\"", "\"canonicalId\":\"551\"")
+            )
+            .apply()
+
+        assertEquals(
+            emptyMap<String, HydratedHomeOverlay>(),
+            store.readForItemKeys(
+                itemKeys = setOf("movie:tmdb:550"),
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+    }
+
+    @Test
     fun `persisted overlay with mismatched language scope is ignored for aliases`() = runTest {
         val prefs = InMemorySharedPreferences()
         val store = HydratedHomeOverlayStore(mockContext(prefs))
