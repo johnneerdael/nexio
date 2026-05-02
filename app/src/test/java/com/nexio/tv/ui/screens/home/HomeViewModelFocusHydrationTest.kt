@@ -27,6 +27,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
@@ -596,6 +597,8 @@ class HomeViewModelFocusHydrationTest {
             trackingProviderStateService = mockk(relaxed = true),
             playbackIdleGateState = playbackIdleGateState,
             integrationOwnershipService = mockk(relaxed = true),
+            hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
+            homeHydrationCoordinator = mockk<HomeHydrationCoordinator>(relaxed = true),
             appContext = mockk<Context>(relaxed = true)
         ).also(createdViewModels::add)
     }
