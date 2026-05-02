@@ -325,38 +325,40 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         onLog("metadata_hydrate_start", "catalogKey=$catalogKey items=${uniqueItems.size}")
         uniqueItems.forEach { item ->
             val itemKey = "${item.apiType}:${item.id}"
-            val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
-                itemKey = itemKey,
-                languageTag = languageTag
-            ) || metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(
+            val cachedHomeDisplayMetadata = metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(
                 itemKey = itemKey,
                 languageTag = languageTag
             )
+            val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
+                itemKey = itemKey,
+                languageTag = languageTag
+            ) || cachedHomeDisplayMetadata != null
             if (hasCachedMetadata) {
                 metadataCachedCount += 1
                 if (telemetryEnabled) {
                     onLog("item_metadata_cached", "catalogKey=$catalogKey itemKey=$itemKey")
                 }
-                return@forEach
-            }
-            if (itemKey !in runtimeHydrationKeys) {
-                return@forEach
-            }
-            metadataFetchCount += 1
-            if (telemetryEnabled) {
-                onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
             }
             try {
-                val hydrated = overlayProviderLocalizedMetadata(item, onLog)
+                val shouldHydrateProviderMetadata = !hasCachedMetadata && itemKey in runtimeHydrationKeys
+                val stableRatingSeed = if (shouldHydrateProviderMetadata) {
+                    metadataFetchCount += 1
+                    if (telemetryEnabled) {
+                        onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
+                    }
+                    overlayProviderLocalizedMetadata(item, onLog)
+                } else {
+                    cachedHomeDisplayMetadata?.applyTo(item) ?: item
+                }
                 val stableIdBundle = metadataRouterFacade.resolveStableIdBundleOrNull(
-                    request = hydrated.toStableIdMetadataRequest(languageTag = languageTag),
+                    request = stableRatingSeed.toStableIdMetadataRequest(languageTag = languageTag),
                     trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
                     itemKey = itemKey,
                     onLog = onLog
                 )
-                val enriched = titleRatingOverrideRepository.enrichPreview(hydrated, stableIdBundle)
+                val enriched = titleRatingOverrideRepository.enrichPreview(stableRatingSeed, stableIdBundle)
                 val displayReady = posterRatingsUrlResolver.apply(enriched, activePosterProvider)
-                val originalDisplay = item.toHomeDisplayMetadata().withoutProviderArtwork()
+                val originalDisplay = stableRatingSeed.toHomeDisplayMetadata().withoutProviderArtwork()
                 val hydratedDisplay = displayReady.toHomeDisplayMetadata().withoutProviderArtwork()
                 if (hydratedDisplay != originalDisplay) {
                     metadataDiskCacheStore.writeHomeDisplayMetadata(
@@ -367,7 +369,11 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                onLog(
+                    "visible_metadata_hydration_failed",
+                    "catalogKey=$catalogKey itemKey=$itemKey error=${e::class.java.simpleName}"
+                )
                 // Preserve legacy best-effort visible hydration behavior.
             }
         }
