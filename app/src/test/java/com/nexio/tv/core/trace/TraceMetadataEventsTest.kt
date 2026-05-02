@@ -1,5 +1,6 @@
 package com.nexio.tv.core.trace
 
+import com.google.gson.Gson
 import com.nexio.tv.core.integration.RecordingTraceSink
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -167,7 +168,7 @@ class TraceMetadataEventsTest {
             payload.keys
         )
         assertTrue(payload.containsKey("railId"))
-        assertEquals(null, payload["railId"])
+        assertEquals("none", payload["railId"])
     }
 
     @Test
@@ -311,8 +312,46 @@ class TraceMetadataEventsTest {
         )
         assertTrue(payload.containsKey("railId"))
         assertTrue(payload.containsKey("cacheDecision"))
-        assertEquals(null, payload["railId"])
-        assertEquals(null, payload["cacheDecision"])
+        assertEquals("none", payload["railId"])
+        assertEquals("none", payload["cacheDecision"])
+    }
+
+    @Test
+    fun `home hydration nullable optional fields survive default gson serialization`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
+
+        events.emitHomeHydrationOverlayWritten(
+            itemKey = "home:tmdb:series:1399",
+            canonicalProvider = "tvdb",
+            canonicalId = "121361",
+            imdbId = null,
+            displayHash = "overlay-456"
+        )
+        events.emitHomeHydrationApplied(
+            railId = null,
+            itemKey = "home:tmdb:series:1399",
+            firstPaintSource = "RAIL_PREVIEW",
+            canonicalProvider = "tvdb",
+            canonicalId = "121361",
+            imdbId = null,
+            trigger = "VISIBLE",
+            priority = "LOW",
+            workClass = "NETWORK",
+            changedFields = emptyList(),
+            displayHashBefore = "before-123",
+            displayHashAfter = "after-456",
+            rowOrderChanged = false,
+            focusChanged = false,
+            networkExecuted = false,
+            cacheDecision = null
+        )
+
+        val jsonLines = sink.events.map { Gson().toJson(it) }
+        assertTrue(jsonLines[0].contains("\"imdbId\":\"none\""))
+        assertTrue(jsonLines[1].contains("\"railId\":\"none\""))
+        assertTrue(jsonLines[1].contains("\"imdbId\":\"none\""))
+        assertTrue(jsonLines[1].contains("\"cacheDecision\":\"none\""))
     }
 
     @Test

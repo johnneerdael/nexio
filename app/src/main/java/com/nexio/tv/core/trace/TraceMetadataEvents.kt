@@ -304,7 +304,7 @@ class TraceMetadataEvents(
         emitHomeHydrationEvent(
             eventType = "home.hydration_started",
             payload = mapOf(
-                "railId" to railId,
+                "railId" to optionalTraceValue(railId),
                 "itemKey" to itemKey,
                 "firstPaintSource" to firstPaintSource,
                 "trigger" to trigger,
@@ -327,7 +327,7 @@ class TraceMetadataEvents(
                 "itemKey" to itemKey,
                 "canonicalProvider" to canonicalProvider,
                 "canonicalId" to canonicalId,
-                "imdbId" to imdbId,
+                "imdbId" to optionalTraceValue(imdbId),
                 "displayHash" to displayHash
             )
         )
@@ -354,12 +354,12 @@ class TraceMetadataEvents(
         emitHomeHydrationEvent(
             eventType = "home.hydration_applied",
             payload = mapOf(
-                "railId" to railId,
+                "railId" to optionalTraceValue(railId),
                 "itemKey" to itemKey,
                 "firstPaintSource" to firstPaintSource,
                 "canonicalProvider" to canonicalProvider,
                 "canonicalId" to canonicalId,
-                "imdbId" to imdbId,
+                "imdbId" to optionalTraceValue(imdbId),
                 "trigger" to trigger,
                 "priority" to priority,
                 "workClass" to workClass,
@@ -369,7 +369,7 @@ class TraceMetadataEvents(
                 "rowOrderChanged" to rowOrderChanged,
                 "focusChanged" to focusChanged,
                 "networkExecuted" to networkExecuted,
-                "cacheDecision" to cacheDecision
+                "cacheDecision" to optionalTraceValue(cacheDecision)
             )
         )
     }
@@ -459,5 +459,11 @@ class TraceMetadataEvents(
                 payload = payload
             )
         )
+    }
+
+    private fun optionalTraceValue(value: String?): String = value ?: OPTIONAL_NONE
+
+    private companion object {
+        const val OPTIONAL_NONE = "none"
     }
 }
