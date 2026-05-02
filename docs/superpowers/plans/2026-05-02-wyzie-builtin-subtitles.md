@@ -125,7 +125,7 @@ data class WyzieIdHints(
 
 - [ ] **Step 2: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 3: Commit**
@@ -182,7 +182,7 @@ enum class WyzieSource(val apiName: String, val displayName: String) {
 
 - [ ] **Step 2: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 3: Commit**
@@ -337,7 +337,7 @@ class WyzieSourceRouterTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSourceRouterTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSourceRouterTest`
 Expected: FAIL with "Unresolved reference: WyzieSourceRouter".
 
 - [ ] **Step 3: Write minimal implementation**
@@ -397,7 +397,7 @@ object WyzieSourceRouter {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSourceRouterTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSourceRouterTest`
 Expected: PASS — 10 tests.
 
 - [ ] **Step 5: Commit**
@@ -516,7 +516,7 @@ class WyzieIdHintsParserTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieIdHintsParserTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieIdHintsParserTest`
 Expected: FAIL with "Unresolved reference: WyzieIdHintsParser".
 
 - [ ] **Step 3: Write minimal implementation**
@@ -571,7 +571,7 @@ object WyzieIdHintsParser {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieIdHintsParserTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieIdHintsParserTest`
 Expected: PASS — 12 tests.
 
 - [ ] **Step 5: Commit**
@@ -737,7 +737,7 @@ class WyzieSubtitleDtoTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.remote.dto.WyzieSubtitleDtoTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.remote.dto.WyzieSubtitleDtoTest`
 Expected: FAIL with "Unresolved reference: WyzieSubtitleDto" / "WyzieSourceJsonAdapter".
 
 - [ ] **Step 3: Write minimal implementation**
@@ -827,7 +827,7 @@ No additional imports beyond what's shown above.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.remote.dto.WyzieSubtitleDtoTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.remote.dto.WyzieSubtitleDtoTest`
 Expected: PASS — 6 tests.
 
 - [ ] **Step 5: Commit**
@@ -939,7 +939,7 @@ class WyzieResultMapperTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieResultMapperTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieResultMapperTest`
 Expected: FAIL with "Unresolved reference: WyzieResultMapper".
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1005,7 +1005,7 @@ object WyzieResultMapper {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieResultMapperTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieResultMapperTest`
 Expected: This will FAIL during compilation because the drawable resources don't exist yet. Continue to step 5; do not commit yet.
 
 - [ ] **Step 5: Add placeholder drawables to satisfy R-class generation**
@@ -1058,7 +1058,7 @@ Body for each (substitute the values from the row):
 
 - [ ] **Step 6: Re-run mapper test**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieResultMapperTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieResultMapperTest`
 Expected: PASS — 8 tests.
 
 - [ ] **Step 7: Commit**
@@ -1179,7 +1179,7 @@ class WyzieSettingsDataStoreTest {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.local.WyzieSettingsDataStoreTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.local.WyzieSettingsDataStoreTest`
 Expected: FAIL — "Unresolved reference: WyzieSettingsDataStore".
 
 - [ ] **Step 4: Write the DataStore**
@@ -1242,7 +1242,7 @@ class WyzieSettingsDataStore @Inject constructor(
 
 - [ ] **Step 5: Re-run test**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.local.WyzieSettingsDataStoreTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.local.WyzieSettingsDataStoreTest`
 Expected: PASS — 5 tests.
 
 - [ ] **Step 6: Commit**
@@ -1287,7 +1287,7 @@ object SubtitleApiShapes {
 
 - [ ] **Step 3: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 4: Commit**
@@ -1431,7 +1431,7 @@ Append the following providers near the other named OkHttp/Retrofit providers (a
 
 - [ ] **Step 4: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 5: Commit**
@@ -1769,7 +1769,7 @@ class WyzieSubtitleIntegrationProviderTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProviderTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProviderTest`
 Expected: FAIL — "Unresolved reference: WyzieSubtitleIntegrationProvider".
 
 - [ ] **Step 3: Write the provider**
@@ -1897,7 +1897,7 @@ class WyzieSubtitleIntegrationProvider @Inject constructor(
 
 - [ ] **Step 4: Re-run test**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProviderTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProviderTest`
 Expected: PASS — 14 tests.
 
 - [ ] **Step 5: Commit**
@@ -1958,7 +1958,7 @@ interface SubtitleRepository {
 
 - [ ] **Step 2: Compile (existing impl will fail until Task 12)**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD FAILED — `SubtitleRepositoryImpl` doesn't satisfy the new signature. That's fine; Task 12 fixes it.
 
 - [ ] **Step 3: Don't commit yet — proceed to Task 12, then commit both together.**
@@ -2134,7 +2134,7 @@ Do the same one-line update inside `SubtitleRepositoryAddonRoutingTest.kt` for a
 
 - [ ] **Step 2: Run the tests; they should fail to compile**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.data.repository.SubtitleRepositoryImplTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.data.repository.SubtitleRepositoryImplTest`
 Expected: FAIL — constructor doesn't accept the third argument yet.
 
 - [ ] **Step 3: Update `SubtitleRepositoryImpl` to take the Wyzie provider and run the second lane**
@@ -2365,12 +2365,12 @@ class SubtitleRepositoryImpl @Inject constructor(
 
 - [ ] **Step 4: Re-run the repository tests**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.data.repository.SubtitleRepository*"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.data.repository.SubtitleRepository*"`
 Expected: PASS — all existing tests + 4 new ones.
 
 - [ ] **Step 5: Run the full test suite to catch any other callers**
 
-Run: `./gradlew :app:testDebugUnitTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest`
 Expected: PASS. If any other test references `SubtitleRepository.getSubtitles` and breaks compile, add the new defaulted args at the call site (no behavior change since they default to `EMPTY`/null).
 
 - [ ] **Step 6: Commit**
@@ -2417,12 +2417,12 @@ Locate the existing `subtitleRepository.getSubtitles(...)` call (around line 77)
 
 - [ ] **Step 2: Verify with the existing player test**
 
-Run: `./gradlew :app:testDebugUnitTest --tests com.nexio.tv.ui.screens.player.PlayerRuntimeControllerAddonSubtitleOverlayTest`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests com.nexio.tv.ui.screens.player.PlayerRuntimeControllerAddonSubtitleOverlayTest`
 Expected: PASS (the new params default to harmless values — `EMPTY` and `null` — for any test that constructs the controller without overriding them).
 
 - [ ] **Step 3: Compile the full app**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 4: Commit**
@@ -2493,7 +2493,7 @@ internal fun maskWyzieKey(key: String?): String {
 
 - [ ] **Step 2: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 3: Commit**
@@ -2649,7 +2649,7 @@ implementation("com.google.zxing:core:3.5.3")
 
 - [ ] **Step 3: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 4: Commit**
@@ -2685,7 +2685,7 @@ Mirror the existing `SubtitleTranslationSettingsScreen` `composable {…}` regis
 
 - [ ] **Step 4: Compile + smoke-build**
 
-Run: `./gradlew :app:assembleDebug`
+Run: `./gradlew :app:assembleUniversalDebug`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 5: Commit**
@@ -2730,7 +2730,7 @@ Find the `const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 7` line and change to
 
 - [ ] **Step 4: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD FAILED — `AccountSettingsSyncService` doesn't populate the new field. Task 18 fixes that.
 
 - [ ] **Step 5: Don't commit yet — proceed to Task 18.**
@@ -2781,12 +2781,12 @@ Find each block that calls `subtitleTranslationSettingsDataStore.saveSyncedPubli
 
 - [ ] **Step 5: Compile**
 
-Run: `./gradlew :app:compileDebugKotlin`
+Run: `./gradlew :app:compileUniversalDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **Step 6: Run sync-related tests**
 
-Run: `./gradlew :app:testDebugUnitTest --tests "com.nexio.tv.core.sync.*"`
+Run: `./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.sync.*"`
 Expected: PASS. If a test asserts on the contract version (`assertEquals(7, ...)`), update it to `8`.
 
 - [ ] **Step 7: Commit**
@@ -2942,7 +2942,7 @@ Manual verification on a real Android TV (or Fire TV) device. Record results in 
 - [ ] **Step 1: Install the debug APK and configure a key**
 
 ```bash
-./gradlew :app:installDebug
+./gradlew :app:installUniversalDebug
 # Open Settings → Wyzie subtitles. Show QR. Scan with phone, redeem at sub.wyzie.io/redeem.
 # Use "Enter key" to paste the key. Confirm masked display shows wyzie-XXX•••YYY.
 ```
