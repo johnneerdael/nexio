@@ -4,6 +4,7 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
@@ -63,13 +64,27 @@ class HomeHydrationCoordinator @Inject constructor(
         )
 
         return try {
+            if (currentGeneration() != expectedGeneration) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "generation_mismatch",
+                    trigger = trigger.name
+                )
+                return null
+            }
+
             val request = item.toMetadataRequest(languageTag)
             val result = metadataRouterFacade.resolveRequest(request)
-            val bundle = metadataRouterFacade.resolveStableIdBundle(
-                request = request,
-                trigger = trigger,
-                itemKey = itemKey
-            )
+            if (currentGeneration() != expectedGeneration) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "generation_mismatch",
+                    trigger = trigger.name
+                )
+                return null
+            }
+
+            val bundle = resolveStableIdBundleOrNull(result.route, request, trigger, itemKey)
             val overlay = result.toHydratedHomeOverlay(
                 item = item,
                 itemKey = itemKey,
@@ -121,7 +136,7 @@ class HomeHydrationCoordinator @Inject constructor(
                 displayHashAfter = overlay.displayHash,
                 rowOrderChanged = false,
                 focusChanged = false,
-                networkExecuted = bundle.evidence.any { it.networkExecuted },
+                networkExecuted = bundle?.evidence?.any { it.networkExecuted } == true,
                 cacheDecision = cacheDecision(bundle)
             )
             overlay
@@ -135,7 +150,7 @@ class HomeHydrationCoordinator @Inject constructor(
     private suspend fun MetadataResolutionResult.toHydratedHomeOverlay(
         item: MetaPreview,
         itemKey: String,
-        bundle: StableIdBundle,
+        bundle: StableIdBundle?,
         languageTag: String
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
@@ -158,7 +173,7 @@ class HomeHydrationCoordinator @Inject constructor(
             itemKey = itemKey,
             canonicalProvider = canonicalIdentity.provider,
             canonicalId = canonicalIdentity.id,
-            imdbId = bundle.sidecars.imdbId,
+            imdbId = bundle?.sidecars?.imdbId ?: item.firstPaintStableIds.imdb,
             contentType = item.type,
             languageTag = languageTag,
             policyVersion = HOME_OVERLAY_POLICY_VERSION,
@@ -183,6 +198,27 @@ class HomeHydrationCoordinator @Inject constructor(
             trigger = trigger.name
         )
         return null
+    }
+
+    private suspend fun resolveStableIdBundleOrNull(
+        route: MetadataRoute?,
+        request: MetadataRequest,
+        trigger: StableIdResolutionTrigger,
+        itemKey: String
+    ): StableIdBundle? {
+        route ?: return null
+        return try {
+            metadataRouterFacade.resolveStableIdBundle(
+                route = route,
+                request = request,
+                trigger = trigger,
+                itemKey = itemKey
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            null
+        }
     }
 
     private fun MetaPreview.toMetadataRequest(languageTag: String): MetadataRequest =
@@ -211,18 +247,18 @@ class HomeHydrationCoordinator @Inject constructor(
     private fun canonicalIdentity(
         routeProvider: MetadataPrimaryProvider?,
         document: ResolvedMetadataDocument,
-        bundle: StableIdBundle
+        bundle: StableIdBundle?
     ): CanonicalIdentity? {
         val routedIdentity = routeProvider
             ?.toProviderId()
             ?.let { provider ->
                 routeProvider
-                    .let { bundle.canonical.providerNativeIdFor(it) }
+                    .let { bundle?.canonical?.providerNativeIdFor(it) }
                     ?.let { id -> CanonicalIdentity(provider, id) }
             }
         return routedIdentity
             ?: document.canonicalIdentity()
-            ?: bundle.canonicalIdentity()
+            ?: bundle?.canonicalIdentity()
     }
 
     private fun ResolvedMetadataDocument.homeFieldTrace(
@@ -257,18 +293,19 @@ class HomeHydrationCoordinator @Inject constructor(
 
     private fun overlayAliases(
         item: MetaPreview,
-        bundle: StableIdBundle,
+        bundle: StableIdBundle?,
         itemKey: String
     ): Set<String> = buildSet {
         add(itemKey)
-        addStableAliases(item.apiType, bundle.source.observedIds)
+        addStableAliases(item.apiType, item.firstPaintStableIds)
+        bundle?.source?.observedIds?.let { addStableAliases(item.apiType, it) }
         addStableAliases(
             item.apiType,
             ProviderIds(
-                imdb = bundle.sidecars.imdbId,
-                tmdb = bundle.canonical.tmdbMovieId,
-                tvdb = bundle.canonical.tvdbSeriesId,
-                kitsu = bundle.canonical.kitsuAnimeId
+                imdb = bundle?.sidecars?.imdbId,
+                tmdb = bundle?.canonical?.tmdbMovieId,
+                tvdb = bundle?.canonical?.tvdbSeriesId,
+                kitsu = bundle?.canonical?.kitsuAnimeId
             )
         )
     }
@@ -309,8 +346,8 @@ class HomeHydrationCoordinator @Inject constructor(
         if (before.backdrop != after.backdrop) add("backdrop")
     }
 
-    private fun cacheDecision(bundle: StableIdBundle): String =
-        if (bundle.evidence.any { it.networkExecuted }) "MISS_THEN_WRITE" else "HIT_OR_LOCAL"
+    private fun cacheDecision(bundle: StableIdBundle?): String =
+        if (bundle?.evidence?.any { it.networkExecuted } == true) "MISS_THEN_WRITE" else "HIT_OR_LOCAL"
 
     private data class CanonicalIdentity(
         val provider: ProviderId,

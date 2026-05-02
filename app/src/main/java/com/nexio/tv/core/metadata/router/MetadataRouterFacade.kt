@@ -116,6 +116,20 @@ class MetadataRouterFacade(
         itemKey: String
     ): StableIdBundle {
         val route = routeRequest(request)
+        return resolveStableIdBundle(
+            route = route,
+            request = request,
+            trigger = trigger,
+            itemKey = itemKey
+        )
+    }
+
+    suspend fun resolveStableIdBundle(
+        route: MetadataRoute,
+        request: MetadataRequest,
+        trigger: StableIdResolutionTrigger,
+        itemKey: String
+    ): StableIdBundle {
         val bundle = stableIdBundleResolver.resolve(
             StableIdBundleRequest(
                 itemKey = itemKey,
