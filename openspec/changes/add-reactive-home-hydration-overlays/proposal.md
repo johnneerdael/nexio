@@ -25,5 +25,5 @@ first paint preview -> stable ID bundle -> canonical hydration -> hydrated overl
 
 - Affected specs: `home-startup-refresh`.
 - Affected code: home ViewModel pipelines, metadata trace events, metadata audit tests, local overlay persistence.
-- No provider authority rule changes.
+- No provider authority or routing rule changes.
 - No new provider-specific renderer, hydration scheduler, FieldResolver, or rating resolver.
