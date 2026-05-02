@@ -661,15 +661,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun resolveMetaLookupId(itemId: String, itemType: String): String {
         val raw = itemId.trim()
-        if (!raw.startsWith("tmdb:", ignoreCase = true)) return raw
-
-        val tmdbNumericId = raw
-            .substringAfter(':', missingDelimiterValue = "")
-            .substringBefore(':')
-            .toIntOrNull()
-            ?: return raw
-
-        return tmdbService.tmdbToImdb(tmdbNumericId, itemType) ?: raw
+        return raw
     }
 
     private fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {

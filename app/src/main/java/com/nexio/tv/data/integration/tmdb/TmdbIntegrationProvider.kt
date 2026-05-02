@@ -640,6 +640,14 @@ class TmdbIntegrationProvider private constructor(
     }
 
     suspend fun findImdbIdByTmdbId(tmdbId: Int, mediaType: String): String? {
+        return fetchExternalIdsByTmdbId(tmdbId = tmdbId, mediaType = mediaType)?.imdbId
+    }
+
+    suspend fun findTvdbIdByTmdbTvId(tmdbId: Int): Int? {
+        return fetchExternalIdsByTmdbId(tmdbId = tmdbId, mediaType = "tv")?.tvdbId
+    }
+
+    private suspend fun fetchExternalIdsByTmdbId(tmdbId: Int, mediaType: String): TmdbExternalIdsResponse? {
         val credential = credential()
         if (credential.missing) return null
 
@@ -649,7 +657,6 @@ class TmdbIntegrationProvider private constructor(
             else -> TmdbApiShapes.MOVIE_CORE
         }
         val operationKey = "tmdb.external_ids.$normalizedType"
-
         return when (
             val result = runtime.call(
                 IntegrationCallSpec(
@@ -677,7 +684,7 @@ class TmdbIntegrationProvider private constructor(
                 )
             )
         ) {
-            is IntegrationCallResult.Success<TmdbExternalIdsResponse> -> result.value.imdbId
+            is IntegrationCallResult.Success<TmdbExternalIdsResponse> -> result.value
             else -> null
         }
     }

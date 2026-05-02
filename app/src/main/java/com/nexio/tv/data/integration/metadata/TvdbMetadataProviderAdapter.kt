@@ -1,6 +1,9 @@
 package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.metadata.router.FieldOwner
+import com.nexio.tv.core.metadata.router.FieldValue
+import com.nexio.tv.core.metadata.router.MetadataCandidate
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
@@ -10,12 +13,14 @@ import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.tvdb.TvdbAdvancedMetadataMapper
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import javax.inject.Inject
 
 class TvdbMetadataProviderAdapter @Inject constructor(
     private val integrationProvider: TvdbIntegrationProvider,
-    private val traceEvents: TraceMetadataEvents
+    private val traceEvents: TraceMetadataEvents,
+    private val advancedMetadataMapper: TvdbAdvancedMetadataMapper = TvdbAdvancedMetadataMapper()
 ) : MetadataProviderAdapter {
     override val provider: MetadataPrimaryProvider = MetadataPrimaryProvider.TVDB
 
@@ -78,7 +83,7 @@ class TvdbMetadataProviderAdapter @Inject constructor(
                     extended = extended,
                     englishTranslation = english.value,
                     requestedTranslation = requested
-                )
+                ).withAdvancedFields(extended)
             }
             TvdbApiShapes.SERIES_EPISODES_LANGUAGE -> {
                 val bundle = integrationProvider.fetchLocalizedSeasonEpisodeBundle(
@@ -156,6 +161,29 @@ class TvdbMetadataProviderAdapter @Inject constructor(
             episodeMetadata = episodeMetadata,
             localizationPayloads = localizationPayloads
         )
+    }
+
+    private fun MetadataCandidate.withAdvancedFields(
+        extended: com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord?
+    ): MetadataCandidate {
+        if (extended == null) return this
+        val advanced = advancedMetadataMapper.mapAdvancedMetadata(
+            series = extended,
+            preferredCountryCodes = listOf("us", "usa")
+        )
+        val fields = fields.toMutableMap()
+        if (advanced.castMembers.isNotEmpty()) {
+            fields[ResolvedField.CAST] = FieldValue(advanced.castMembers, FieldOwner.PRIMARY)
+        }
+        val organizations = advanced.productionCompanies + advanced.networks
+        if (organizations.isNotEmpty()) {
+            fields[ResolvedField.ORGANIZATION_LIST] = FieldValue(organizations, FieldOwner.PRIMARY)
+        }
+        if (advanced.genres.isNotEmpty()) {
+            fields[ResolvedField.GENRES] = FieldValue(advanced.genres, FieldOwner.PRIMARY)
+        }
+        advanced.ageRating?.let { fields[ResolvedField.AGE_RATING] = FieldValue(it, FieldOwner.PRIMARY) }
+        return copy(fields = fields)
     }
 
     private companion object {

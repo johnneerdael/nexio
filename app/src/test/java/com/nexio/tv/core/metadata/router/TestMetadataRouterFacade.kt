@@ -32,7 +32,8 @@ fun testMetadataRouterFacade(
         providerPlanExecutor = ProviderPlanExecutor(),
         resolverOrchestrator = ResolverOrchestrator(),
         identityResolver = MetadataIdentityResolver(object : MetadataIdentityResolver.Lookup {
-            override suspend fun tmdbToTvdb(tmdbId: String): String? = null
+            override suspend fun tmdbToTvdb(tmdbId: String): String? =
+                "tvdb:${tmdbId.hashCode().absoluteValue}"
             override suspend fun tvdbToTmdb(tvdbId: String): String? = null
             // Provide a synthetic TVDB id for any IMDB id so that IMDB-id series can
             // route through the TVDB plan executor without requiring a real identity lookup.
