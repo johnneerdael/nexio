@@ -501,7 +501,8 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
                     overlayApplied = applyHydratedHomeOverlayFromCoordinator(
                         overlay = appliedOverlay,
                         expectedGeneration = expectedGeneration,
-                        expectedLanguageTag = expectedLanguageTag
+                        expectedLanguageTag = expectedLanguageTag,
+                        trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                     )
                     if (overlayApplied) {
                         focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
@@ -556,14 +557,27 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
 
         try {
             if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
-                val enrichment = withContext(Dispatchers.IO) {
-                    runCatching { fetchProviderEnrichmentForPreview(item) }.getOrNull()
-                }
-                if (enrichment != null) {
-                    prefetchedTmdbIds.add(item.id)
-                    prefetchedExternalMetaIds.add(item.id)
-                    updateCatalogItemWithProvider(item.id, enrichment)
-                }
+                val expectedGeneration = homeProfileGeneration
+                val expectedLanguageTag = profileBoundary.currentLanguageTag()
+                homeHydrationCoordinator.hydrate(
+                    item = item,
+                    trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                    priority = HomeHydrationPriority.ADJACENT,
+                    languageTag = expectedLanguageTag,
+                    expectedGeneration = expectedGeneration,
+                    currentGeneration = { homeProfileGeneration },
+                    onOverlayApplied = { appliedOverlay ->
+                        val overlayApplied = applyHydratedHomeOverlayFromCoordinator(
+                            overlay = appliedOverlay,
+                            expectedGeneration = expectedGeneration,
+                            expectedLanguageTag = expectedLanguageTag,
+                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
+                        )
+                        if (overlayApplied) {
+                            prefetchedExternalMetaIds.add(item.id)
+                        }
+                    }
+                )
             }
 
         } finally {
@@ -794,7 +808,8 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                         applyHydratedHomeOverlayFromCoordinator(
                             overlay = appliedOverlay,
                             expectedGeneration = expectedGeneration,
-                            expectedLanguageTag = languageTag
+                            expectedLanguageTag = languageTag,
+                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                     }
                 )
