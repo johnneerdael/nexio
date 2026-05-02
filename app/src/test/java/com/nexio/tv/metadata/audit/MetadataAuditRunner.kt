@@ -332,7 +332,7 @@ class MetadataAuditRunner private constructor(
             }
             facade.resolveRequest(
                 MetadataRequest(
-                    contentId = spec.itemId,
+                    contentId = metaPreview.id,
                     contentType = ContentType.fromString(metaPreview.apiType),
                     sourceContext = MetadataSourceContext(
                         catalogId = spec.name,
@@ -354,7 +354,6 @@ class MetadataAuditRunner private constructor(
 
         val route = result?.route
             ?.toAuditEvent(itemId = metaPreview.id, itemType = metaPreview.apiType)
-            ?.withKnownRailTargets(spec)
             ?.withoutCanonicalTargetWhenSuppressed(spec)
         if (route != null) trace.onRoute(route)
         val stableIdBundle = route?.let { resolvedRoute ->
@@ -553,11 +552,6 @@ class MetadataAuditRunner private constructor(
     private fun RouteEvent.withoutCanonicalTargetWhenSuppressed(spec: RailScenarioSpec): RouteEvent {
         if (!spec.suppressRouteCanonicalTarget) return this
         return copy(targetIds = targetIds - provider)
-    }
-
-    private fun RouteEvent.withKnownRailTargets(spec: RailScenarioSpec): RouteEvent {
-        if (spec.targetIds.isEmpty()) return this
-        return copy(targetIds = targetIds + spec.targetIds)
     }
 
     private fun stableIdBundleStatus(canonicalId: String?, imdbId: String?): String {
