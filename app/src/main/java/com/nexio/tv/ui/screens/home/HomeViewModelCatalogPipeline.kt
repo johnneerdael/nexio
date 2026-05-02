@@ -1225,16 +1225,6 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
             telemetryEnabled = startupPerfTelemetryEnabled,
             onLog = { event, details -> logStartupPerf(event, details) }
         )
-    } else if (refreshedCatalogCount.get() == 0 && activeCatalogItemKeys.isNotEmpty()) {
-        val fallbackVisibleItems = _fullCatalogRows.value
-            .asSequence()
-            .flatMap { row -> row.items.asSequence() }
-            .toList()
-        homeCatalogRefreshCoordinator.hydrateAndPrefetchVisibleItems(
-            items = fallbackVisibleItems,
-            telemetryEnabled = startupPerfTelemetryEnabled,
-            onLog = { event, details -> logStartupPerf(event, details) }
-        )
     }
     val activeContinueWatchingItemKeys = _uiState.value.continueWatchingItems
         .map { item -> "${item.contentType()}:${item.contentId()}" }
