@@ -19,6 +19,8 @@ import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
+import com.nexio.tv.data.local.KitsuCatalogIds
+import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
@@ -26,6 +28,7 @@ import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -361,6 +364,23 @@ class HomeViewModelFocusHydrationTest {
         assertNull(viewModel.lastCatalogComputationSignature)
         assertNotNull(viewModel.catalogUpdateJob)
         viewModel.catalogUpdateJob?.cancel()
+    }
+
+    @Test
+    fun `catalog configuration invalidation clears stale row computation caches`() = runTest(testDispatcher) {
+        val viewModel = buildTestHomeViewModel(metadataRouterFacade = mockk(relaxed = true))
+        viewModel.lastCatalogComputationSignature = "previous"
+        viewModel.lastCatalogOrderDiagnosticsSignature = "previous-order"
+        viewModel.truncatedRowCache["row"] = HomeViewModel.TruncatedRowCacheEntry(
+            sourceRow = mockk(relaxed = true),
+            truncatedRow = mockk(relaxed = true)
+        )
+
+        viewModel.invalidateHomeCatalogConfigurationPipeline("test")
+
+        assertNull(viewModel.lastCatalogComputationSignature)
+        assertNull(viewModel.lastCatalogOrderDiagnosticsSignature)
+        assertTrue(viewModel.truncatedRowCache.isEmpty())
     }
 
     @Test
@@ -727,6 +747,45 @@ class HomeViewModelFocusHydrationTest {
         assertEquals(6.5f, enriched.single().imdbRating ?: 0f, 0f)
         assertEquals(TitleRatingSource.IMDB, enriched.single().ratingSource)
         assertEquals("preview-language", enriched.single().language)
+    }
+
+    @Test
+    fun `disabled kitsu catalog preference removes restored kitsu row from modern home`() = runTest(testDispatcher) {
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            nonPlaybackHomeWorkAllowed = true
+        )
+        viewModel.kitsuCatalogPreferences = KitsuCatalogPreferences(enabledCatalogs = emptySet())
+        val kitsuRow = CatalogRow(
+            addonId = KITSU_HOME_ADDON_ID,
+            addonName = "Kitsu",
+            addonBaseUrl = "https://kitsu.io/api/edge",
+            catalogId = KitsuCatalogIds.TRENDING_ANIME,
+            catalogName = "Kitsu Trending Anime",
+            type = ContentType.SERIES,
+            rawType = "series",
+            items = listOf(
+                railPreviewMetaPreview().copy(
+                    id = "kitsu:12",
+                    firstPaintStableIds = ProviderIds(kitsu = "12")
+                )
+            ),
+            isLoading = false,
+            hasMore = false,
+            supportsSkip = false
+        )
+
+        viewModel.applyHomeSnapshotToUiPipeline(
+            HomeCatalogSnapshotStore.Snapshot(
+                catalogRows = listOf(kitsuRow),
+                fullCatalogRows = listOf(kitsuRow),
+                heroItems = emptyList(),
+                orderedGroupKeys = listOf(KitsuCatalogIds.TRENDING_ANIME)
+            )
+        )
+
+        assertTrue(viewModel.uiState.value.catalogRows.isEmpty())
+        assertTrue(viewModel._fullCatalogRows.value.isEmpty())
     }
 
     // -------------------------------------------------------------------------

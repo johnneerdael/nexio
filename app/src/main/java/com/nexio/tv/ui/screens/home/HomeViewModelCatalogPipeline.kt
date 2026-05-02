@@ -102,6 +102,13 @@ private const val SIMKL_ROW_NAME_DVD_RELEASES = "SIMKL Popular DVD Releases"
 private const val TMDB_RAIL_ADDON_ID = "tmdb"
 private const val HOME_HYDRATED_OVERLAY_POLICY_VERSION = 1
 
+internal fun HomeViewModel.invalidateHomeCatalogConfigurationPipeline(reason: String) {
+    lastCatalogComputationSignature = null
+    lastCatalogOrderDiagnosticsSignature = null
+    truncatedRowCache.clear()
+    Log.d(HomeViewModel.TAG, "Home catalog configuration invalidated reason=$reason")
+}
+
 internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
         val profileId = profileManager.activeProfileId.value
@@ -127,11 +134,16 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
                 return@withContext
             }
 
-            val restoredSnapshot = filterRestoredHomeSnapshotTmdbRows(
-                snapshot = snapshot,
-                tmdbPrefs = tmdbCatalogPreferences,
-                tmdbSnapshot = tmdbDiscoverySnapshot,
-                currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+            val restoredSnapshot = filterRestoredHomeSnapshotKitsuRows(
+                snapshot = filterRestoredHomeSnapshotTmdbRows(
+                    snapshot = snapshot,
+                    tmdbPrefs = tmdbCatalogPreferences,
+                    tmdbSnapshot = tmdbDiscoverySnapshot,
+                    currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+                ),
+                kitsuPrefs = kitsuCatalogPreferences,
+                kitsuSnapshot = kitsuDiscoverySnapshot,
+                currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
             )
             if (
                 restoredSnapshot.catalogRows.isEmpty() &&
@@ -700,6 +712,7 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
     viewModelScope.launch {
         traktSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             if (prefs == traktCatalogPreferences) return@collectLatest
+            invalidateHomeCatalogConfigurationPipeline("trakt_pref_change")
             traktCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_prefs")
             if (activeProfileTraktAuthenticated &&
@@ -750,6 +763,7 @@ internal fun HomeViewModel.observeSimklCatalogPreferencesPipeline() {
     viewModelScope.launch {
         simklSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             if (prefs == simklCatalogPreferences) return@collectLatest
+            invalidateHomeCatalogConfigurationPipeline("simkl_pref_change")
             simklCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_prefs")
             if (shouldRefreshSimklDiscoveryForState(prefs, simklDiscoverySnapshot) &&
@@ -833,6 +847,7 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
     viewModelScope.launch {
         mdbListSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             if (prefs == mdbListCatalogPreferences) return@collectLatest
+            invalidateHomeCatalogConfigurationPipeline("mdblist_pref_change")
             mdbListCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_mdblist_prefs")
             if (shouldRefreshMDBListDiscoveryForState(prefs, mdbListDiscoverySnapshot) &&
@@ -874,6 +889,7 @@ internal fun HomeViewModel.observeKitsuCatalogPreferencesPipeline() {
         kitsuCatalogSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             val firstObservation = !kitsuCatalogPreferencesObserved
             if (!firstObservation && prefs == kitsuCatalogPreferences) return@collectLatest
+            invalidateHomeCatalogConfigurationPipeline("kitsu_pref_change")
             kitsuCatalogPreferencesObserved = true
             kitsuCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_kitsu_prefs")
@@ -923,6 +939,7 @@ internal fun HomeViewModel.observeTmdbCatalogPreferencesPipeline() {
         tmdbCatalogSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             val firstObservation = !tmdbCatalogPreferencesObserved
             if (!firstObservation && prefs == tmdbCatalogPreferences) return@collectLatest
+            invalidateHomeCatalogConfigurationPipeline("tmdb_pref_change")
             tmdbCatalogPreferencesObserved = true
             tmdbCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_tmdb_prefs")
@@ -972,6 +989,7 @@ internal fun HomeViewModel.loadDisabledHomeCatalogPreferencePipeline() {
         layoutPreferenceDataStore.disabledHomeCatalogKeys.collectLatest { keys ->
             val newKeys = keys.toSet()
             if (newKeys == disabledHomeCatalogKeys) return@collectLatest
+            invalidateHomeCatalogConfigurationPipeline("disabled_home_catalogs")
             disabledHomeCatalogKeys = newKeys
             rebuildCatalogOrder(addonsCache)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_disabled_home_catalogs")
@@ -1546,6 +1564,13 @@ private fun HomeViewModel.persistedTmdbSyntheticGroupsMatchingPreferences(
         prefs = prefs,
         preferencesObserved = tmdbCatalogPreferencesObserved
     )
+}
+
+private fun HomeViewModel.persistedKitsuSyntheticGroupsMatchingPreferences(
+    prefs: KitsuCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    if (!kitsuCatalogPreferencesObserved) return emptyList()
+    return persistedKitsuSyntheticGroups.filterKitsuGroupsEnabledUnder(prefs)
 }
 
 private fun HomeViewModel.syntheticHomeSnapshotFallback(
@@ -2310,6 +2335,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         applyPersistedHomeSnapshotIfEligiblePipeline(snapshot, requireSourceCachesReady = false)
     }
     val currentPreferencePersistedTmdbSyntheticGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbPrefs)
+    val currentPreferencePersistedKitsuSyntheticGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
     val computationSignature = withContext(Dispatchers.Default) {
         buildCatalogComputationSignature(
             orderedKeys = orderedKeys,
@@ -2330,6 +2356,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             tmdbSnapshot = effectiveTmdbSnapshot,
             tmdbPrefs = tmdbPrefs,
             persistedTmdbSyntheticGroups = currentPreferencePersistedTmdbSyntheticGroups,
+            kitsuSnapshot = effectiveKitsuSnapshot,
+            kitsuPrefs = kitsuCatalogPreferences,
+            persistedKitsuSyntheticGroups = currentPreferencePersistedKitsuSyntheticGroups,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
             hydratedHomeOverlaysByItemKey = currentHydratedHomeOverlays,
             startupHydrationPending = startupHydrationPending,
@@ -2364,7 +2393,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
             .toMap(linkedMapOf())
 
-        val syntheticKitsuGroups = persistedKitsuSyntheticGroups.toSyntheticCatalogOrderGroups()
+        val syntheticKitsuGroups = currentPreferencePersistedKitsuSyntheticGroups.toSyntheticCatalogOrderGroups()
         val persistedSyntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups + syntheticKitsuGroups + syntheticTmdbGroups
         val persistedSyntheticOrderKeys = persistedSyntheticGroups.mapTo(mutableSetOf()) { it.orderKey }
         val syntheticGroups = persistedSyntheticGroups + liveSyntheticGroups.filterNot { it.orderKey in persistedSyntheticOrderKeys }
@@ -2441,6 +2470,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             tmdbSnapshot = effectiveTmdbSnapshot,
             currentSyntheticTmdbGroups = currentPreferencePersistedTmdbSyntheticGroups
         )
+        val currentCachedKitsuCatalogIds = currentKitsuCatalogIds(
+            kitsuPrefs = kitsuCatalogPreferences,
+            kitsuSnapshot = effectiveKitsuSnapshot,
+            currentSyntheticKitsuGroups = currentPreferencePersistedKitsuSyntheticGroups
+        )
         val preservationState = CachedHomePreservationState(
             preserveAddonRows = hasPersistedCatalogSnapshot &&
                 (restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending || catalogsLoadInProgress),
@@ -2460,6 +2494,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 snapshot = effectiveTmdbSnapshot,
                 refreshInProgress = startupHydrationPending || startupRefreshPending || tmdbDiscoveryRefreshInProgress
             ),
+            preserveKitsuRows = shouldPreserveKitsuCachedRows(
+                snapshot = effectiveKitsuSnapshot,
+                refreshInProgress = startupHydrationPending || startupRefreshPending || kitsuDiscoveryRefreshInProgress
+            ),
             retainUnorderedRows = restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending
         )
         val effectiveOrderedRows = mergeCachedRowsWithLiveRows(
@@ -2468,7 +2506,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             preservationState = preservationState,
             orderedGroupKeys = effectiveOrderKeys,
             rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey,
-            currentTmdbCatalogIds = currentCachedTmdbCatalogIds
+            currentTmdbCatalogIds = currentCachedTmdbCatalogIds,
+            currentKitsuCatalogIds = currentCachedKitsuCatalogIds
         )
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
@@ -2675,13 +2714,18 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ) {
-    val tmdbSafeSnapshot = filterRestoredHomeSnapshotTmdbRows(
-        snapshot = snapshot,
-        tmdbPrefs = tmdbCatalogPreferences,
-        tmdbSnapshot = tmdbDiscoverySnapshot,
-        currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+    val builtInSafeSnapshot = filterRestoredHomeSnapshotKitsuRows(
+        snapshot = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = snapshot,
+            tmdbPrefs = tmdbCatalogPreferences,
+            tmdbSnapshot = tmdbDiscoverySnapshot,
+            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+        ),
+        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuSnapshot = kitsuDiscoverySnapshot,
+        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
     )
-    val filteredSnapshot = tmdbSafeSnapshot.filterDisabledHomeCatalogRows(
+    val filteredSnapshot = builtInSafeSnapshot.filterDisabledHomeCatalogRows(
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         isAddonRowDisabled = { row ->
             isCatalogDisabled(
@@ -2785,6 +2829,67 @@ internal fun filterRestoredHomeSnapshotTmdbRows(
     )
 }
 
+internal fun filterRestoredHomeSnapshotKitsuRows(
+    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot,
+    kitsuPrefs: KitsuCatalogPreferences,
+    kitsuSnapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot,
+    currentSyntheticKitsuGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+): com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot {
+    val currentKitsuCatalogIds = currentKitsuCatalogIds(
+        kitsuPrefs = kitsuPrefs,
+        kitsuSnapshot = kitsuSnapshot,
+        currentSyntheticKitsuGroups = currentSyntheticKitsuGroups
+    )
+
+    fun isRetained(row: CatalogRow): Boolean {
+        return row.addonId != KITSU_HOME_ADDON_ID || row.catalogId in currentKitsuCatalogIds
+    }
+
+    val filteredFullRows = snapshot.fullCatalogRows.filter(::isRetained)
+    val filteredDisplayRows = snapshot.catalogRows.filter(::isRetained)
+    if (
+        filteredFullRows.size == snapshot.fullCatalogRows.size &&
+        filteredDisplayRows.size == snapshot.catalogRows.size
+    ) {
+        return snapshot
+    }
+
+    val removedKitsuRows = (snapshot.fullCatalogRows.asSequence() + snapshot.catalogRows.asSequence())
+        .filterNot(::isRetained)
+        .filter { row -> row.addonId == KITSU_HOME_ADDON_ID }
+        .toList()
+    val removedKitsuKeys = removedKitsuRows
+        .asSequence()
+        .flatMap { row -> sequenceOf(row.catalogId, homeCatalogGlobalKey(row)) }
+        .toSet()
+    val removedKitsuItemKeys = removedKitsuRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
+    val retainedItemKeys = filteredFullRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
+    val retainedCurrentKitsuItemKeys = filteredFullRows
+        .asSequence()
+        .filter { row -> row.addonId == KITSU_HOME_ADDON_ID }
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
+    return snapshot.copy(
+        catalogRows = filteredDisplayRows,
+        fullCatalogRows = filteredFullRows,
+        heroItems = snapshot.heroItems.filter { item ->
+            val key = "${item.apiType}:${item.id}"
+            key in retainedItemKeys &&
+                (key !in removedKitsuItemKeys || key in retainedCurrentKitsuItemKeys)
+        },
+        orderedGroupKeys = snapshot.orderedGroupKeys.filterNot { key -> key in removedKitsuKeys }
+    )
+}
+
 private fun currentTmdbCatalogIds(
     tmdbPrefs: TmdbCatalogPreferences,
     tmdbSnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot,
@@ -2798,6 +2903,22 @@ private fun currentTmdbCatalogIds(
                     add(group.orderKey)
                     group.rows.forEach { row -> add(row.catalogId) }
                 }
+            }
+        }
+    }
+}
+
+private fun currentKitsuCatalogIds(
+    kitsuPrefs: KitsuCatalogPreferences,
+    kitsuSnapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot,
+    currentSyntheticKitsuGroups: List<PersistedSyntheticCatalogGroup>
+): Set<String> {
+    return buildSet {
+        addAll(kitsuSnapshot.currentRowsFor(kitsuPrefs).filterValues { row -> row.items.isNotEmpty() }.keys)
+        currentSyntheticKitsuGroups.filterKitsuGroupsEnabledUnder(kitsuPrefs).forEach { group ->
+            if (group.rows.any { row -> row.items.isNotEmpty() }) {
+                add(group.orderKey)
+                group.rows.forEach { row -> add(row.catalogId) }
             }
         }
     }
@@ -2891,11 +3012,16 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     )
     val tmdbExpectedOrderKeys = buildExpectedConfiguredTmdbOrderKeys(tmdbCatalogPreferences)
     val kitsuExpectedOrderKeys = buildExpectedConfiguredKitsuOrderKeys(kitsuCatalogPreferences)
-    val restoredSnapshot = filterRestoredHomeSnapshotTmdbRows(
-        snapshot = snapshot,
-        tmdbPrefs = tmdbCatalogPreferences,
-        tmdbSnapshot = tmdbDiscoverySnapshot,
-        currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+    val restoredSnapshot = filterRestoredHomeSnapshotKitsuRows(
+        snapshot = filterRestoredHomeSnapshotTmdbRows(
+            snapshot = snapshot,
+            tmdbPrefs = tmdbCatalogPreferences,
+            tmdbSnapshot = tmdbDiscoverySnapshot,
+            currentSyntheticTmdbGroups = persistedTmdbSyntheticGroupsMatchingPreferences(tmdbCatalogPreferences)
+        ),
+        kitsuPrefs = kitsuCatalogPreferences,
+        kitsuSnapshot = kitsuDiscoverySnapshot,
+        currentSyntheticKitsuGroups = persistedKitsuSyntheticGroupsMatchingPreferences(kitsuCatalogPreferences)
     )
     val catalogPlan = buildConfiguredCatalogPlan(
         addons = addonsCache,
@@ -3054,6 +3180,9 @@ private fun buildCatalogComputationSignature(
     tmdbSnapshot: com.nexio.tv.data.repository.TmdbDiscoverySnapshot,
     tmdbPrefs: TmdbCatalogPreferences,
     persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
+    kitsuSnapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot,
+    kitsuPrefs: KitsuCatalogPreferences,
+    persistedKitsuSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
     disabledHomeCatalogKeys: Set<String>,
     hydratedHomeOverlaysByItemKey: Map<String, HydratedHomeOverlay>,
     startupHydrationPending: Boolean,
@@ -3082,6 +3211,9 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + tmdbSnapshot.hashCode()
     signature = (signature * 31) + tmdbPrefs.hashCode()
     signature = (signature * 31) + persistedTmdbSyntheticGroups.hashCode()
+    signature = (signature * 31) + kitsuSnapshot.hashCode()
+    signature = (signature * 31) + kitsuPrefs.hashCode()
+    signature = (signature * 31) + persistedKitsuSyntheticGroups.hashCode()
     signature = (signature * 31) + disabledHomeCatalogKeys.hashCode()
     signature = (signature * 31) + hydratedHomeOverlaysByItemKey.hashCode()
     signature = (signature * 31) + startupHydrationPending.hashCode()
@@ -3097,6 +3229,7 @@ private data class CachedHomePreservationState(
     val preserveSimklRows: Boolean,
     val preserveMDBListRows: Boolean,
     val preserveTmdbRows: Boolean,
+    val preserveKitsuRows: Boolean,
     val retainUnorderedRows: Boolean
 )
 
@@ -3138,17 +3271,28 @@ private fun shouldPreserveTmdbCachedRows(
     return false
 }
 
+private fun shouldPreserveKitsuCachedRows(
+    snapshot: com.nexio.tv.data.repository.KitsuDiscoverySnapshot,
+    refreshInProgress: Boolean
+): Boolean {
+    if (refreshInProgress) return true
+    if (snapshot.updatedAtMs <= 0L) return true
+    return false
+}
+
 private fun mergeCachedRowsWithLiveRows(
     cachedRows: List<CatalogRow>,
     liveRows: List<CatalogRow>,
     preservationState: CachedHomePreservationState,
     orderedGroupKeys: List<String>,
     rowOrderKeyByGlobalKey: Map<String, String>,
-    currentTmdbCatalogIds: Set<String> = emptySet()
+    currentTmdbCatalogIds: Set<String> = emptySet(),
+    currentKitsuCatalogIds: Set<String> = emptySet()
 ): List<CatalogRow> {
     fun canRetainCachedRow(row: CatalogRow): Boolean {
         if (!shouldPreserveCachedRow(row, preservationState)) return false
         if (row.addonId == TMDB_RAIL_ADDON_ID && row.catalogId !in currentTmdbCatalogIds) return false
+        if (row.addonId == KITSU_HOME_ADDON_ID && row.catalogId !in currentKitsuCatalogIds) return false
         return resolveMergedRowOrderKey(
             row = row,
             orderedGroupKeys = orderedGroupKeys,
@@ -3260,6 +3404,14 @@ private fun resolveMergedRowOrderKey(
                 else -> null
             }
         }
+        KITSU_HOME_ADDON_ID -> {
+            val prefixedCatalogId = "kitsu_${row.catalogId}"
+            when {
+                row.catalogId in orderedGroupKeys -> row.catalogId
+                prefixedCatalogId in orderedGroupKeys -> prefixedCatalogId
+                else -> null
+            }
+        }
         else -> null
     }
 }
@@ -3273,6 +3425,7 @@ private fun shouldPreserveCachedRow(
         SIMKL_RAIL_ADDON_ID -> preservationState.preserveSimklRows
         MDBLIST_RAIL_ADDON_ID -> preservationState.preserveMDBListRows
         TMDB_RAIL_ADDON_ID -> preservationState.preserveTmdbRows
+        KITSU_HOME_ADDON_ID -> preservationState.preserveKitsuRows
         else -> preservationState.preserveAddonRows
     }
 }

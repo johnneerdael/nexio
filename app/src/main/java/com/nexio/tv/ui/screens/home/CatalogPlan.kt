@@ -112,6 +112,17 @@ internal fun List<PersistedSyntheticCatalogGroup>.filterTmdbGroupsEnabledUnder(
     }
 }
 
+internal fun List<PersistedSyntheticCatalogGroup>.filterKitsuGroupsEnabledUnder(
+    prefs: KitsuCatalogPreferences
+): List<PersistedSyntheticCatalogGroup> {
+    val enabledCatalogIds = prefs.enabledCatalogIds()
+    return mapNotNull { group ->
+        if (group.orderKey !in enabledCatalogIds) return@mapNotNull null
+        val enabledRows = group.rows.filter { row -> row.catalogId in enabledCatalogIds }
+        if (enabledRows.isEmpty()) null else group.copy(rows = enabledRows)
+    }
+}
+
 internal fun shouldPreserveExistingTmdbGroupsDuringRefresh(
     prefs: TmdbCatalogPreferences,
     snapshot: TmdbDiscoverySnapshot
