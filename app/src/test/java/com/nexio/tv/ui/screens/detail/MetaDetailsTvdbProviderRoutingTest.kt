@@ -122,6 +122,29 @@ class MetaDetailsTvdbProviderRoutingTest {
     }
 
     @Test
+    fun `tmdb series detail enters router with tmdb id instead of rewriting to imdb first`() = runTest(dispatcher) {
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        coEvery { tmdbService.tmdbToImdb(any(), any()) } returns "tt0944947"
+        coEvery { tmdbService.ensureTmdbId(any(), any()) } returns null
+
+        buildMetaDetailsViewModel(
+            meta = buildSeriesMeta().copy(id = "tmdb:1399"),
+            itemId = "tmdb:1399",
+            itemType = "series",
+            tmdbService = tmdbService,
+            tmdbSettings = TmdbSettings(
+                enabled = false,
+                useMoreLikeThis = false,
+                useReviews = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { tmdbService.tmdbToImdb(1399, "series") }
+    }
+
+    @Test
     fun `movie detail enrichment stays backed by tmdb`() = runTest(dispatcher) {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)

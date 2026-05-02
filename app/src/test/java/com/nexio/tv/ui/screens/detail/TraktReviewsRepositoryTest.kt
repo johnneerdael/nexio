@@ -67,4 +67,53 @@ class TraktReviewsRepositoryTest {
         assertTrue(page?.hasMore == true)
         assertEquals("Cine Phile", page?.reviews?.firstOrNull()?.author)
     }
+
+    @Test
+    fun `trakt reviews repository normalizes cached raw comment objects`() = runTest {
+        @Suppress("UNCHECKED_CAST")
+        val cachedItems = listOf(
+            mapOf(
+                "id" to 88.0,
+                "comment" to "Cached review body.",
+                "review" to true,
+                "spoiler" to false,
+                "user" to mapOf(
+                    "username" to "cached-user",
+                    "name" to "Cached User"
+                ),
+                "user_stats" to mapOf("rating" to 8.0)
+            )
+        ) as List<TraktCommentItemDto>
+        val runtime = RecordingIntegrationRuntime(
+            successValue = TraktCommentsPage(
+                items = cachedItems,
+                hasMore = false
+            )
+        )
+        val provider = TraktIntegrationProvider(
+            runtime = runtime,
+            traktApi = mockk<TraktApi>(),
+            traktAuthService = mockk<TraktAuthService> {
+                val session = TrackingAuthSession(
+                    provider = TrackingProvider.TRAKT,
+                    profileId = 1,
+                    credentialHash = "trakt-test-1"
+                )
+                every { currentAuthSession() } returns session
+                coEvery { accountScopedSession() } returns session
+            }
+        )
+        val repository = TraktReviewsRepository(provider)
+
+        val page = repository.fetchPage(
+            pathId = "fight-club-1999",
+            isShow = false,
+            page = 1,
+            limit = 8
+        )
+
+        assertEquals(1, page?.reviews?.size)
+        assertEquals("Cached User", page?.reviews?.firstOrNull()?.author)
+        assertEquals(8.0, page?.reviews?.firstOrNull()?.rating)
+    }
 }

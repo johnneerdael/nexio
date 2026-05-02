@@ -38,6 +38,8 @@ class RuntimeMetadataIdentityLookup @Inject constructor(
             ?.takeIf { it.isNotBlank() }
 
     override suspend fun tmdbToTvdb(tmdbId: String): String? {
+        tmdbProvider.findTvdbIdByTmdbTvId(MetadataProviderTargetIds.tmdbInt(tmdbId) ?: return null)
+            ?.let { tvdbId -> return tvdbId.toString() }
         val imdbId = tmdbTvToImdb(tmdbId)?.takeIf { it.isNotBlank() } ?: return null
         return imdbToTvdbSeries(imdbId)
     }
