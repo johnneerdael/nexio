@@ -4,22 +4,8 @@ import android.content.Context
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
-import com.nexio.tv.core.metadata.router.CanonicalStableIds
-import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
-import com.nexio.tv.core.metadata.router.MetadataMediaKind
-import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
-import com.nexio.tv.core.metadata.router.MetadataRequest
-import com.nexio.tv.core.metadata.router.MetadataResolutionResult
-import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
-import com.nexio.tv.core.metadata.router.MetadataSourceContext
-import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
-import com.nexio.tv.core.metadata.router.ResolverSchedule
-import com.nexio.tv.core.metadata.router.SourceRole
-import com.nexio.tv.core.metadata.router.SidecarStableIds
-import com.nexio.tv.core.metadata.router.SourceStableIds
-import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
@@ -36,11 +22,12 @@ import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.TrailerService
-import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.HomeItemHydrationState
 import com.nexio.tv.domain.model.HydratedHomeOverlay
+import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
@@ -48,6 +35,7 @@ import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -56,9 +44,9 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
@@ -105,28 +93,105 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
-    fun `onItemFocus for rail-preview tvdb item triggers canonical MetadataRouter hydration`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        // Capture all calls into a list so we can filter by depth.
-        val allCaptured = mutableListOf<MetadataRequest>()
-        coEvery { facade.resolveRequest(capture(allCaptured)) } returns successResult()
+    fun `onItemFocus for rail-preview item delegates focused hydration to coordinator`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val item = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val overlay = overlay(
+            itemKey = "movie:${item.id}",
+            fields = HomeDisplayMetadata(title = "Canonical Focused")
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = capture(overlayCallback)
+            )
+        } coAnswers {
+            overlayCallback.captured(overlay)
+            overlay
+        }
 
-        val viewModel = buildTestHomeViewModel(metadataRouterFacade = facade)
-        val railPreviewItem = railPreviewMetaPreview()
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
 
-        viewModel.onItemFocus(railPreviewItem)
+        viewModel.onItemFocus(item)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) {
-            facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[item.id])
+        assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
+        assertNotNull(viewModel.catalogUpdateJob)
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
         }
-        val canonicalCall = allCaptured.firstOrNull()
-            ?: error("No canonical hydration call was captured")
-        assertEquals(MetadataDepth.DETAIL_CORE, canonicalCall.depth)
-        assertEquals("tvdb:355567", canonicalCall.contentId)
-        assertEquals(ContentType.SERIES, canonicalCall.contentType)
-        assertEquals(SourceRole.RAIL_PREVIEW, canonicalCall.sourceContext.previewSourceRole)
-        coVerify(exactly = 1) { facade.resolveRequest(match { it.depth == MetadataDepth.DETAIL_CORE }) }
+    }
+
+    @Test
+    fun `visible home hydration delegates to coordinator and publishes overlay`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Unit>()
+        val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val duplicate = visible.copy(name = "Duplicate copy")
+        val overlay = overlay(
+            itemKey = "movie:${visible.id}",
+            fields = HomeDisplayMetadata(title = "Canonical Visible")
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = capture(callbacks)
+            )
+        } coAnswers {
+            callbacks.last().invoke(overlay)
+            overlay
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+        viewModel.homeProfileGeneration = 7L
+
+        viewModel.hydrateVisibleHomeItemsWithCoordinator(
+            items = listOf(visible, duplicate),
+            expectedGeneration = 7L
+        )
+        advanceUntilIdle()
+
+        assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${visible.id}"))
+        assertNotNull(viewModel.catalogUpdateJob)
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = visible,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
     }
 
     @Test
@@ -186,128 +251,62 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
-    fun `onItemFocus for the same rail-preview item twice only triggers canonical hydration once`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        coEvery { facade.resolveRequest(any<MetadataRequest>()) } returns successResult()
-
-        val viewModel = buildTestHomeViewModel(metadataRouterFacade = facade)
-        val railPreviewItem = railPreviewMetaPreview()
+    fun `onItemFocus for the same rail-preview item twice only delegates focused hydration once`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        coEvery {
+            homeHydrationCoordinator.hydrate(any(), any(), any(), any(), any(), any(), any())
+        } returns null
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+        val railPreviewItem = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
 
         viewModel.onItemFocus(railPreviewItem)
         viewModel.onItemFocus(railPreviewItem)  // second focus — idempotent
         advanceUntilIdle()
 
-        // focusedItemHydrationStates transitions PREVIEW_ONLY -> HYDRATING on first call,
-        // so the second call sees a non-PREVIEW_ONLY state and skips our RAIL_PREVIEW hydration.
-        coVerify(exactly = 0) { facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW }) }
-        coVerify(exactly = 1) { facade.resolveRequest(match { it.depth == MetadataDepth.DETAIL_CORE }) }
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = railPreviewItem,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
     }
 
     @Test
-    fun `hero enrichment resolves focused stable bundle and passes it to title rating enrichment`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        val providerRequests = mutableListOf<MetadataRequest>()
-        val bundleRequests = mutableListOf<MetadataRequest>()
-        val stableIdBundle = stableIdBundle()
+    fun `hero enrichment delegates to coordinator and applies overlay fields`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
         val item = railPreviewMetaPreview()
-
-        coEvery { facade.resolveRequest(capture(providerRequests)) } returns successResult()
+            .copy(type = ContentType.MOVIE, rawType = "movie")
+        val overlay = overlay(
+            itemKey = "movie:${item.id}",
+            fields = HomeDisplayMetadata(title = "Canonical Hero", poster = "hero-poster")
+        )
         coEvery {
-            facade.resolveStableIdBundle(
-                request = capture(bundleRequests),
+            homeHydrationCoordinator.hydrate(
+                item = item,
                 trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${item.id}"
+                priority = HomeHydrationPriority.HERO,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = capture(overlayCallback)
             )
-        } returns stableIdBundle
-        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers { firstArg() }
-
-        val viewModel = buildTestHomeViewModel(
-            metadataRouterFacade = facade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository
-        )
-
-        val enriched = viewModel.enrichHeroItemsPipeline(
-            items = listOf(item.copy(type = ContentType.MOVIE, rawType = "movie")),
-            settings = TmdbSettings()
-        )
-
-        assertEquals("Canonical Title", enriched.single().name)
-        assertEquals(MetadataDepth.DETAIL_CORE, providerRequests.single().depth)
-        assertEquals(MetadataDepth.DETAIL_CORE, bundleRequests.single().depth)
-        assertEquals(SourceRole.RAIL_PREVIEW, bundleRequests.single().sourceContext.previewSourceRole)
-        coVerifyOrder {
-            facade.resolveRequest(any())
-            facade.resolveStableIdBundle(
-                request = any(),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${item.id}"
-            )
-            titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
+        } coAnswers {
+            overlayCallback.captured.invoke(overlay)
+            overlay
         }
-    }
-
-    @Test
-    fun `hero enrichment falls back to legacy rating enrichment when focused stable bundle resolution fails`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        val item = railPreviewMetaPreview().copy(
-            type = ContentType.MOVIE,
-            rawType = "movie"
-        )
-
-        coEvery { facade.resolveRequest(any()) } returns successResult()
-        coEvery {
-            facade.resolveStableIdBundle(
-                request = any(),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${item.id}"
-            )
-        } throws IllegalStateException("identity backend unavailable")
-        coEvery { titleRatingOverrideRepository.enrichPreview(any(), null) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 7.7f)
-        }
-
         val viewModel = buildTestHomeViewModel(
-            metadataRouterFacade = facade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository
-        )
-
-        val enriched = viewModel.enrichHeroItemsPipeline(
-            items = listOf(item),
-            settings = TmdbSettings()
-        )
-
-        assertEquals("Canonical Title", enriched.single().name)
-        assertEquals(7.7f, enriched.single().imdbRating)
-        coVerify(exactly = 1) { titleRatingOverrideRepository.enrichPreview(any(), null) }
-    }
-
-    @Test
-    fun `hero enrichment resolves stable bundle once for duplicate item keys in batch`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        val stableIdBundle = stableIdBundle()
-        val item = railPreviewMetaPreview().copy(
-            type = ContentType.MOVIE,
-            rawType = "movie"
-        )
-
-        coEvery { facade.resolveRequest(any()) } returns successResult()
-        coEvery {
-            facade.resolveStableIdBundle(
-                request = any(),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${item.id}"
-            )
-        } returns stableIdBundle
-        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 9.6f)
-        }
-
-        val viewModel = buildTestHomeViewModel(
-            metadataRouterFacade = facade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator
         )
 
         val enriched = viewModel.enrichHeroItemsPipeline(
@@ -316,131 +315,21 @@ class HomeViewModelFocusHydrationTest {
         )
 
         assertEquals(2, enriched.size)
-        assertEquals(9.6f, enriched[0].imdbRating)
-        assertEquals(9.6f, enriched[1].imdbRating)
+        assertEquals("Canonical Hero", enriched[0].name)
+        assertEquals("Canonical Hero", enriched[1].name)
+        assertEquals("hero-poster", enriched[0].poster)
+        assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
         coVerify(exactly = 1) {
-            facade.resolveStableIdBundle(
-                request = any(),
+            homeHydrationCoordinator.hydrate(
+                item = item,
                 trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${item.id}"
+                priority = HomeHydrationPriority.HERO,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
             )
         }
-        coVerify(exactly = 2) { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) }
-    }
-
-    @Test
-    fun `focused enrichment flush resolves focused stable bundle and passes it to title rating enrichment`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        val providerRequests = mutableListOf<MetadataRequest>()
-        val bundleRequests = mutableListOf<MetadataRequest>()
-        val stableIdBundle = stableIdBundle()
-        val focusedItem = railPreviewMetaPreview().copy(
-            type = ContentType.MOVIE,
-            rawType = "movie"
-        )
-
-        coEvery { facade.resolveRequest(capture(providerRequests)) } returns successResult()
-        coEvery {
-            facade.resolveStableIdBundle(
-                request = capture(bundleRequests),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${focusedItem.id}"
-            )
-        } returns stableIdBundle
-        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 9.9f)
-        }
-
-        val viewModel = buildTestHomeViewModel(
-            metadataRouterFacade = facade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
-            nonPlaybackHomeWorkAllowed = true
-        )
-        viewModel.catalogsMap["addon_movie_popular"] = CatalogRow(
-            addonId = "addon",
-            addonName = "Addon",
-            addonBaseUrl = "https://addon.example",
-            catalogId = "popular",
-            catalogName = "Popular",
-            type = ContentType.MOVIE,
-            items = listOf(focusedItem),
-            hasMore = false
-        )
-
-        viewModel.onItemFocus(focusedItem)
-        advanceUntilIdle()
-
-        val updatedItem = viewModel.catalogsMap.getValue("addon_movie_popular").items.single()
-        assertEquals("Canonical Title", updatedItem.name)
-        assertEquals(9.9f, updatedItem.imdbRating)
-        assertEquals(MetadataDepth.DETAIL_CORE, providerRequests.single().depth)
-        assertEquals(MetadataDepth.DETAIL_CORE, bundleRequests.single().depth)
-        assertEquals(SourceRole.RAIL_PREVIEW, bundleRequests.single().sourceContext.previewSourceRole)
-        coVerifyOrder {
-            facade.resolveRequest(any())
-            facade.resolveStableIdBundle(
-                request = any(),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${focusedItem.id}"
-            )
-            titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
-        }
-    }
-
-    @Test
-    fun `focused enrichment flush resolves stable bundle once for duplicate item across rows`() = runTest(testDispatcher) {
-        val facade = mockk<MetadataRouterFacade>(relaxed = true)
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        val stableIdBundle = stableIdBundle()
-        val focusedItem = railPreviewMetaPreview().copy(
-            type = ContentType.MOVIE,
-            rawType = "movie"
-        )
-
-        coEvery { facade.resolveRequest(any()) } returns successResult()
-        coEvery {
-            facade.resolveStableIdBundle(
-                request = any(),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${focusedItem.id}"
-            )
-        } returns stableIdBundle
-        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
-            firstArg<MetaPreview>().copy(imdbRating = 9.9f)
-        }
-
-        val viewModel = buildTestHomeViewModel(
-            metadataRouterFacade = facade,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
-            nonPlaybackHomeWorkAllowed = true
-        )
-        val row = CatalogRow(
-            addonId = "addon",
-            addonName = "Addon",
-            addonBaseUrl = "https://addon.example",
-            catalogId = "popular",
-            catalogName = "Popular",
-            type = ContentType.MOVIE,
-            items = listOf(focusedItem),
-            hasMore = false
-        )
-        viewModel.catalogsMap["addon_movie_popular"] = row
-        viewModel.catalogsMap["addon_movie_featured"] = row.copy(catalogId = "featured", catalogName = "Featured")
-
-        viewModel.onItemFocus(focusedItem)
-        advanceUntilIdle()
-
-        assertEquals(9.9f, viewModel.catalogsMap.getValue("addon_movie_popular").items.single().imdbRating)
-        assertEquals(9.9f, viewModel.catalogsMap.getValue("addon_movie_featured").items.single().imdbRating)
-        coVerify(exactly = 1) {
-            facade.resolveStableIdBundle(
-                request = any(),
-                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                itemKey = "movie:${focusedItem.id}"
-            )
-        }
-        coVerify(exactly = 2) { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) }
     }
 
     // -------------------------------------------------------------------------
@@ -466,52 +355,24 @@ class HomeViewModelFocusHydrationTest {
         firstPaintSourceItemId = "trakt:show:1"
     )
 
-    private fun successResult() = MetadataResolutionResult(
-        route = MetadataRoute(
-            provider = MetadataPrimaryProvider.TVDB,
-            parentId = "tvdb:355567",
-            mediaKind = MetadataMediaKind.SERIES,
-            reason = MetadataDecisionReason.ITEM_TYPE_SERIES,
-            sourceContext = MetadataSourceContext(),
-            targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:355567"),
-            trace = emptyList()
-        ),
-        plan = null,
-        resolverSchedule = ResolverSchedule(MetadataDepth.DETAIL_CORE, emptyList(), emptyList()),
-        resolvedDocument = ResolvedMetadataDocument(
-            canonicalId = "tvdb:355567",
-            title = "Canonical Title",
-            overview = null,
-            poster = "tvdb-poster",
-            backdrop = "tvdb-backdrop",
-            logo = null,
-            rating = 8.4,
-            runtimeMinutes = 55,
-            fieldOwners = emptyMap(),
-            ignoredOverwrites = emptyList()
-        ),
-        displayMetadata = HomeDisplayMetadata(
-            title = "Canonical Title",
-            genres = listOf("Drama"),
-            poster = "tvdb-poster",
-            backdrop = "tvdb-backdrop"
-        ),
-        trace = emptyList()
-    )
-
-    private fun stableIdBundle() = StableIdBundle(
-        itemKey = "movie:tvdb:355567",
-        itemType = ContentType.MOVIE,
-        canonical = CanonicalStableIds(tmdbMovieId = "550"),
-        sidecars = SidecarStableIds(imdbId = "tt0137523"),
-        source = SourceStableIds(
-            sourceProvider = ProviderId.TRAKT,
-            sourceItemId = "trakt:show:1",
-            railId = RailSource.BUILT_IN_TRAKT.name,
-            observedIds = ProviderIds(tvdb = "355567", trakt = "1")
-        ),
-        evidence = emptyList(),
-        resolvedAtMs = 1L
+    private fun overlay(
+        itemKey: String,
+        fields: HomeDisplayMetadata
+    ) = HydratedHomeOverlay(
+        overlayKey = "canonical:TMDB:550:type:MOVIE:lang:en:policy:1",
+        itemKey = itemKey,
+        canonicalProvider = ProviderId.TMDB,
+        canonicalId = "550",
+        imdbId = "tt0137523",
+        contentType = ContentType.MOVIE,
+        languageTag = "en",
+        fields = fields,
+        fieldTrace = listOf(HydratedHomeFieldTrace("TITLE", "TMDB", "PRIMARY")),
+        displayHash = fields.hydratedHomeDisplayHash(),
+        updatedAtMs = 1L,
+        staleAtMs = 2L,
+        expiresAtMs = 3L,
+        state = HomeItemHydrationState.CANONICAL_READY
     )
 
     /**
@@ -531,7 +392,8 @@ class HomeViewModelFocusHydrationTest {
     private fun buildTestHomeViewModel(
         metadataRouterFacade: MetadataRouterFacade,
         titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true),
-        nonPlaybackHomeWorkAllowed: Boolean = false
+        nonPlaybackHomeWorkAllowed: Boolean = false,
+        homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true)
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -581,6 +443,10 @@ class HomeViewModelFocusHydrationTest {
             }
         }
 
+        val profileBoundary = mockk<com.nexio.tv.core.profile.ProfileBoundary>(relaxed = true) {
+            every { currentLanguageTag() } returns "en"
+        }
+
         return HomeViewModel(
             addonRepository = mockk(relaxed = true),
             catalogRepository = mockk(relaxed = true),
@@ -621,12 +487,12 @@ class HomeViewModelFocusHydrationTest {
             syntheticHomeCatalogStore = mockk(relaxed = true),
             profileManager = profileManagerWithSwitch,
             profileModeRouter = profileModeRouter,
-            profileBoundary = mockk(relaxed = true),
+            profileBoundary = profileBoundary,
             trackingProviderStateService = mockk(relaxed = true),
             playbackIdleGateState = playbackIdleGateState,
             integrationOwnershipService = mockk(relaxed = true),
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
-            homeHydrationCoordinator = mockk<HomeHydrationCoordinator>(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
             appContext = mockk<Context>(relaxed = true)
         ).also(createdViewModels::add)
     }
