@@ -115,6 +115,7 @@ object SkipApiShapes {
 object SubtitleApiShapes {
     const val SOURCE_DOWNLOAD = "subtitle.source_download"
     const val TRANSLATION = "subtitle.translation"
+    const val WYZIE_SEARCH = "wyzie.search"
 }
 
 object TmdbApiShapes {
