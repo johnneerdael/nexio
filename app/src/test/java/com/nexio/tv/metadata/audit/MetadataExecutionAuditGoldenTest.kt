@@ -409,6 +409,55 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
+    fun `reactive home update scenarios are present in aggregate report`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
+
+        assertTrue(scenarioNames.contains("addon_first_paint_then_hydrated_home_update"))
+        assertTrue(scenarioNames.contains("trakt_rail_first_paint_then_tvdb_update"))
+        assertTrue(scenarioNames.contains("tmdb_movie_rail_first_paint_then_tmdb_update"))
+        assertTrue(scenarioNames.contains("tmdb_tv_rail_first_paint_then_tvdb_update"))
+        assertTrue(scenarioNames.contains("kitsu_rail_first_paint_then_kitsu_update"))
+        assertTrue(scenarioNames.contains("simkl_rail_first_paint_then_tmdb_update"))
+        assertTrue(scenarioNames.contains("hydration_failure_keeps_preview"))
+        assertTrue(scenarioNames.contains("cache_hit_updates_home_without_network"))
+        assertTrue(scenarioNames.contains("focused_item_hydrates_before_offscreen_items"))
+        assertTrue(scenarioNames.contains("hydration_result_ignored_after_profile_switch"))
+    }
+
+    @Test
+    fun `tmdb movie home update proves imdb ratings enrichment refreshes card without first paint work`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val item = bundle.reports
+            .single { it.scenario.name == "tmdb_movie_rail_first_paint_then_tmdb_update" }
+            .items
+            .single()
+
+        assertEquals("RAIL_PREVIEW", item.firstPaint.source)
+        assertFalse(item.firstPaint.routerExecuted)
+        assertFalse(item.firstPaint.networkExecuted)
+        assertFalse(item.homeUpdate?.rowOrderChanged ?: true)
+        assertFalse(item.homeUpdate?.focusChanged ?: true)
+        assertTrue(item.homeUpdate?.changedFields?.contains("rating") == true)
+        assertEquals("tt0137523", item.stableIdBundle?.imdbId)
+        assertTrue(item.runtimeCalls.any { it.apiShapeId == "custom_imdb.ratings" })
+    }
+
+    @Test
+    fun `reactive home update scenarios keep row order and focus stable`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val updateReports = bundle.reports.filter { it.fixtureName.startsWith("synthetic/metadata/home-updates/") }
+
+        assertEquals(10, updateReports.size)
+        updateReports.flatMap { it.items }.forEach { item ->
+            assertFalse(item.firstPaint.routerExecuted)
+            assertFalse(item.firstPaint.networkExecuted)
+            assertFalse(item.homeUpdate?.rowOrderChanged ?: true)
+            assertFalse(item.homeUpdate?.focusChanged ?: true)
+        }
+    }
+
+    @Test
     fun `rail audit scenarios use shared first paint provenance shape`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
         val railReport = bundle.reports.first { it.scenario.name == "trakt-rail-first-paint-title-year" }
@@ -498,7 +547,10 @@ class MetadataExecutionAuditGoldenTest {
     @Test
     fun `fresh cache hit suppresses provider network for primary metadata`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
-        val warmReports = bundle.reports.filter { it.scenario.cacheMode == AuditCacheMode.WARM_FRESH }
+        val warmReports = bundle.reports.filter {
+            it.scenario.cacheMode == AuditCacheMode.WARM_FRESH &&
+                !it.fixtureName.startsWith("synthetic/metadata/home-updates/")
+        }
         val warmDecisions = warmReports.flatMap { it.items }.flatMap { it.cacheDecisions }
         val warmCalls = warmReports.flatMap { it.items }.flatMap { it.runtimeCalls }
 
@@ -636,6 +688,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(json.contains("\"localization\""))
         assertTrue(json.contains("\"providerFallbackUsed\""))
         assertTrue(json.contains("productionCallerOwnership"))
+        assertTrue(json.contains("\"homeUpdate\""))
 
         val tmdbTvRailReport = root
             .getJSONArray("reports")
@@ -671,6 +724,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(markdown.contains("Localization"))
         assertTrue(markdown.contains("Production caller ownership"))
         assertTrue(markdown.contains("Stable ID Bundle"))
+        assertTrue(markdown.contains("Home Update"))
         assertTrue(markdown.contains("tt0944947"))
     }
 
@@ -692,6 +746,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(json.contains("selectedFieldsBeforeHydration"))
         assertTrue(json.contains("selectedFieldsAfterHydration"))
         assertTrue(json.contains("identityMappingsHarvested"))
+        assertTrue(json.contains("homeUpdate"))
         assertTrue(File(outputDir, "metadata-execution-single-report.md").readText().contains("Smoke/debug artifact only"))
     }
 

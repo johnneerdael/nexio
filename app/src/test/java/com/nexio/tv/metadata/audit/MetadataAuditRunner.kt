@@ -14,6 +14,7 @@ import com.nexio.tv.core.metadata.router.MetadataLocalizationPayloadTrace
 import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataProviderAdapter
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRequestNormalizer
 import com.nexio.tv.core.metadata.router.MetadataRoute
@@ -93,7 +94,8 @@ class MetadataAuditRunner private constructor(
                 fixtureJson = fixture(spec.fixtureName),
                 scenario = spec.scenario
             )
-        } + railScenarioSpecs.map { spec -> runRailScenario(spec) }
+        } + railScenarioSpecs.map { spec -> runRailScenario(spec) } +
+            homeUpdateScenarioSpecs.map { spec -> runHomeUpdateScenario(spec) }
         val violations = reports.flatMap { it.policyViolations }
         return MetadataExecutionReportBundle(
             schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
@@ -481,6 +483,200 @@ class MetadataAuditRunner private constructor(
         )
         return report
     }
+
+    private fun runHomeUpdateScenario(spec: HomeUpdateScenarioSpec): MetadataExecutionReport {
+        val scenario = MetadataAuditScenario(
+            name = spec.name,
+            depth = MetadataDepth.DETAIL_CORE,
+            visibleItemIds = setOf(spec.itemId),
+            cacheMode = AuditCacheMode.WARM_FRESH
+        )
+        val firstPaint = FirstPaintEvent(
+            itemId = spec.itemId,
+            itemType = spec.itemType,
+            source = spec.firstPaintSource,
+            fieldsUsed = spec.previewFields.filterValues { it != null }.keys,
+            routerExecuted = false,
+            networkExecuted = false
+        )
+        val route = spec.canonicalProvider?.let { provider ->
+            RouteEvent(
+                itemId = spec.itemId,
+                parentId = spec.itemId,
+                itemType = spec.itemType,
+                provider = provider,
+                mediaKind = spec.mediaKind,
+                reason = if (spec.mediaKind == MetadataMediaKind.SERIES) {
+                    MetadataDecisionReason.ITEM_TYPE_SERIES
+                } else {
+                    MetadataDecisionReason.ITEM_TYPE_MOVIE
+                },
+                targetIds = spec.canonicalId?.let { mapOf(provider to it) }.orEmpty(),
+                preResolutionTargetIdRequiresIdentityResolution = false,
+                targetIdRequiresIdentityResolution = false,
+                usedInputs = spec.usedInputs,
+                ignoredInputs = setOf("catalog.type", "catalog.id", "addon.name", "source.name")
+            )
+        }
+        val stableIdBundle = spec.canonicalProvider?.let { provider ->
+            StableIdBundleEvent(
+                itemKey = "${spec.itemType}:${spec.itemId}",
+                itemType = spec.itemType,
+                trigger = spec.trigger,
+                status = stableIdBundleStatus(
+                    canonicalId = spec.canonicalId,
+                    imdbId = spec.imdbId
+                ),
+                canonicalProvider = provider.name,
+                canonicalId = spec.canonicalId,
+                imdbId = spec.imdbId,
+                networkExecuted = spec.identityNetworkExecuted,
+                evidence = listOf(
+                    StableIdBundleEvidenceEvent(
+                        source = if (spec.identityNetworkExecuted) "provider.identity_lookup" else "knownIds",
+                        target = provider.name,
+                        networkExecuted = spec.identityNetworkExecuted,
+                        resultId = spec.canonicalId
+                    )
+                )
+            )
+        }
+        val selectedFieldsBeforeHydration = spec.previewFields.toHomeFieldSelections(
+            itemId = spec.itemId,
+            selectedProvider = spec.sourceProvider,
+            sourceRole = if (spec.firstPaintSource == "RAIL_PREVIEW") "RAIL_PREVIEW" else "ADDON_PREVIEW",
+            ownershipRuleSuffix = "selected from first paint preview"
+        )
+        val selectedFieldsAfterHydration = spec.homeUpdate.after.toHomeFieldSelections(
+            itemId = spec.itemId,
+            selectedProvider = spec.canonicalProvider?.name ?: spec.sourceProvider,
+            sourceRole = if (spec.homeUpdate.changedFields.isEmpty()) {
+                if (spec.firstPaintSource == "RAIL_PREVIEW") "RAIL_PREVIEW" else "ADDON_PREVIEW"
+            } else {
+                "PRIMARY"
+            },
+            ownershipRuleSuffix = if (spec.homeUpdate.changedFields.isEmpty()) {
+                "remains from first paint preview"
+            } else {
+                "selected from hydrated home overlay"
+            },
+            changedFields = spec.homeUpdate.changedFields,
+            previewProvider = spec.sourceProvider,
+            previewSourceRole = if (spec.firstPaintSource == "RAIL_PREVIEW") "RAIL_PREVIEW" else "ADDON_PREVIEW"
+        )
+        val runtimeCalls = spec.runtimeApiShapes.map { apiShapeId ->
+            RuntimeCallEvent(
+                itemId = spec.itemId,
+                provider = spec.canonicalProvider?.name ?: spec.sourceProvider,
+                apiShapeId = apiShapeId,
+                operationKey = "$apiShapeId:${spec.itemId}",
+                cacheKey = "audit:${spec.name}:$apiShapeId",
+                workClass = if (spec.trigger == "FOCUSED_HOME_ITEM") "USER_VISIBLE" else "BACKGROUND_HYDRATION",
+                executedNetwork = spec.metadataNetworkExecuted
+            )
+        }
+        val cacheDecisions = spec.runtimeApiShapes.map { apiShapeId ->
+            CacheDecisionEvent(
+                itemId = spec.itemId,
+                provider = spec.canonicalProvider?.name ?: spec.sourceProvider,
+                apiShapeId = apiShapeId,
+                cacheKey = "audit:${spec.name}:$apiShapeId",
+                decision = if (spec.metadataNetworkExecuted) CacheDecision.MISS_THEN_NETWORK else CacheDecision.HIT,
+                ttlMs = 604_800_000L,
+                staleWindowMs = 2_592_000_000L,
+                reason = if (spec.metadataNetworkExecuted) "hydration fetched canonical overlay" else "hydration applied cached overlay"
+            )
+        }
+        val item = ItemExecutionReport(
+            itemId = spec.itemId,
+            itemType = spec.itemType,
+            addonFields = spec.previewFields,
+            firstPaint = firstPaint,
+            routing = route,
+            stableIdBundle = stableIdBundle,
+            providerPlan = null,
+            runtimeCalls = runtimeCalls,
+            cacheDecisions = cacheDecisions,
+            resolverSchedule = null,
+            selectedFields = selectedFieldsAfterHydration,
+            forbiddenOverwrites = emptyList(),
+            continueWatchingSnapshot = null,
+            identityResolution = null,
+            productionCallerOwnership = emptyList(),
+            localization = null,
+            violations = emptyList(),
+            events = listOfNotNull(
+                AuditEvent.FirstPaint(firstPaint),
+                route?.let { AuditEvent.Route(it) },
+                stableIdBundle?.let { AuditEvent.StableIdBundle(it) }
+            ),
+            railSource = spec.railSource,
+            sourceProvider = spec.sourceProvider,
+            sourcePayloadFieldsUsed = spec.previewFields.filterValues { it != null }.keys,
+            routingAfterVisible = route,
+            selectedFieldsBeforeHydration = selectedFieldsBeforeHydration,
+            selectedFieldsAfterHydration = selectedFieldsAfterHydration,
+            identityMappingsHarvested = spec.identityMappingsHarvested,
+            homeUpdate = spec.homeUpdate
+        )
+        return MetadataExecutionReport(
+            schemaVersion = METADATA_AUDIT_SCHEMA_VERSION,
+            provenance = provenanceProvider.current(),
+            verdict = AuditVerdict.PASS,
+            scenario = scenario,
+            fixtureName = "synthetic/metadata/home-updates/${spec.name}.json",
+            generatedAtEpochMs = System.currentTimeMillis(),
+            items = listOf(item),
+            summaries = buildSummary(listOf(item)),
+            policyViolations = emptyList()
+        )
+    }
+
+    private fun Map<String, String?>.toHomeFieldSelections(
+        itemId: String,
+        selectedProvider: String,
+        sourceRole: String,
+        ownershipRuleSuffix: String,
+        changedFields: List<String> = emptyList(),
+        previewProvider: String? = null,
+        previewSourceRole: String? = null
+    ): List<FieldSelectedEvent> {
+        return mapNotNull { (field, value) ->
+            value?.takeIf { field in displayFieldNames }?.let {
+                FieldSelectedEvent(
+                    itemId = itemId,
+                    field = field,
+                    selectedProvider = selectedProvider,
+                    sourceRole = sourceRole,
+                    valuePreview = it,
+                    rejectedCandidates = if (field in changedFields && previewProvider != null && previewSourceRole != null) {
+                        listOf(
+                            RejectedCandidateReport(
+                                provider = previewProvider,
+                                sourceRole = previewSourceRole,
+                                reason = "primary canonical field available"
+                            )
+                        )
+                    } else {
+                        emptyList()
+                    },
+                    ownershipRule = "$field $ownershipRuleSuffix"
+                )
+            }
+        }
+    }
+
+    private val displayFieldNames = setOf(
+        "title",
+        "poster",
+        "backdrop",
+        "overview",
+        "rating",
+        "runtime",
+        "year",
+        "state",
+        "priority"
+    )
 
     private fun RailScenarioSpec.toRailItemPreview(generatedAtMs: Long): RailItemPreview {
         return RailItemPreview(
@@ -1032,6 +1228,272 @@ class MetadataAuditRunner private constructor(
             )
         )
 
+        private val homeUpdateScenarioSpecs = listOf(
+            HomeUpdateScenarioSpec(
+                name = "addon_first_paint_then_hydrated_home_update",
+                firstPaintSource = "ADDON_META_PREVIEW",
+                railSource = null,
+                sourceProvider = "NETFLIX",
+                itemId = "tt16431404",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf(
+                    "title" to "Preview Movie",
+                    "poster" to "https://example.test/addon-preview.jpg",
+                    "overview" to "Addon preview overview"
+                ),
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:872585",
+                imdbId = "tt16431404",
+                runtimeApiShapes = listOf("tmdb.movie.core"),
+                metadataNetworkExecuted = true,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Preview Movie", "poster" to "https://example.test/addon-preview.jpg"),
+                    after = mapOf("title" to "TMDB Hydrated Movie", "poster" to "https://example.test/tmdb-hydrated.jpg", "overview" to "TMDB hydrated overview"),
+                    changedFields = listOf("title", "poster", "overview"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "addon-preview",
+                    displayHashAfter = "addon-hydrated"
+                ),
+                usedInputs = setOf("preview.stableIds.imdb", "item.type")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "trakt_rail_first_paint_then_tvdb_update",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_TRAKT",
+                sourceProvider = "TRAKT",
+                itemId = "trakt:show:1",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.SERIES,
+                previewFields = mapOf("title" to "Breaking Bad", "year" to "2008"),
+                canonicalProvider = MetadataPrimaryProvider.TVDB,
+                canonicalId = "tvdb:81189",
+                imdbId = "tt0903747",
+                runtimeApiShapes = listOf("tvdb.series.extended"),
+                metadataNetworkExecuted = true,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Breaking Bad", "poster" to null),
+                    after = mapOf("title" to "Breaking Bad", "poster" to "https://example.test/tvdb-breaking-bad.jpg", "overview" to "TVDB hydrated series overview"),
+                    changedFields = listOf("poster", "overview"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "trakt-preview",
+                    displayHashAfter = "trakt-tvdb-hydrated"
+                ),
+                usedInputs = setOf("trakt.ids.tvdb", "trakt.ids.imdb", "item.type"),
+                identityMappingsHarvested = mapOf("trakt:show:1" to "tvdb:81189", "tt0903747" to "tvdb:81189")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "tmdb_movie_rail_first_paint_then_tmdb_update",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_TMDB",
+                sourceProvider = "TMDB",
+                itemId = "tmdb:550",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf(
+                    "title" to "Fight Club",
+                    "poster" to "https://image.tmdb.org/t/p/w500/preview.jpg",
+                    "rating" to "8.4"
+                ),
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:550",
+                imdbId = "tt0137523",
+                runtimeApiShapes = listOf("tmdb.movie.core", "custom_imdb.ratings"),
+                metadataNetworkExecuted = true,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Fight Club", "rating" to "8.4", "poster" to "https://image.tmdb.org/t/p/w500/preview.jpg"),
+                    after = mapOf("title" to "Fight Club", "rating" to "8.8", "poster" to "https://image.tmdb.org/t/p/w500/hydrated.jpg"),
+                    changedFields = listOf("rating", "poster"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "tmdb-movie-preview",
+                    displayHashAfter = "tmdb-movie-hydrated-ratings"
+                ),
+                usedInputs = setOf("tmdb.id", "resolved.imdb", "item.type"),
+                identityMappingsHarvested = mapOf("tmdb:550" to "tt0137523")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "tmdb_tv_rail_first_paint_then_tvdb_update",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_TMDB",
+                sourceProvider = "TMDB",
+                itemId = "tmdb:tv:1399",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.SERIES,
+                previewFields = mapOf("title" to "Game of Thrones", "poster" to "https://image.tmdb.org/t/p/w500/tv-preview.jpg"),
+                canonicalProvider = MetadataPrimaryProvider.TVDB,
+                canonicalId = "tvdb:121361",
+                imdbId = "tt0944947",
+                runtimeApiShapes = listOf("tvdb.series.extended"),
+                metadataNetworkExecuted = true,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Game of Thrones", "poster" to "https://image.tmdb.org/t/p/w500/tv-preview.jpg"),
+                    after = mapOf("title" to "Game of Thrones", "poster" to "https://example.test/tvdb-got.jpg", "overview" to "TVDB hydrated TV overview"),
+                    changedFields = listOf("poster", "overview"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "tmdb-tv-preview",
+                    displayHashAfter = "tmdb-tv-tvdb-hydrated"
+                ),
+                usedInputs = setOf("tmdb.tv.id", "idMappingStore.tvdb", "item.type"),
+                identityMappingsHarvested = mapOf("tmdb:tv:1399" to "tvdb:121361", "tt0944947" to "tvdb:121361")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "kitsu_rail_first_paint_then_kitsu_update",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_KITSU",
+                sourceProvider = "KITSU",
+                itemId = "kitsu:7442",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.ANIME,
+                previewFields = mapOf("title" to "Kitsu Preview Anime", "poster" to "https://example.test/kitsu-preview.jpg"),
+                canonicalProvider = MetadataPrimaryProvider.KITSU,
+                canonicalId = "kitsu:7442",
+                imdbId = null,
+                runtimeApiShapes = listOf("kitsu.anime.core"),
+                metadataNetworkExecuted = true,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Kitsu Preview Anime", "poster" to "https://example.test/kitsu-preview.jpg"),
+                    after = mapOf("title" to "Kitsu Canonical Anime", "poster" to "https://example.test/kitsu-core.jpg", "overview" to "Kitsu hydrated anime overview"),
+                    changedFields = listOf("title", "poster", "overview"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "kitsu-preview",
+                    displayHashAfter = "kitsu-hydrated"
+                ),
+                usedInputs = setOf("kitsu.id", "item.type")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "simkl_rail_first_paint_then_tmdb_update",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_SIMKL_DISCOVERY",
+                sourceProvider = "SIMKL",
+                itemId = "simkl:movie:88",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf("title" to "Simkl Preview Movie", "poster" to "https://simkl.in/posters/preview.jpg"),
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:5088",
+                imdbId = "tt0482571",
+                runtimeApiShapes = listOf("tmdb.movie.core"),
+                metadataNetworkExecuted = true,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Simkl Preview Movie", "poster" to "https://simkl.in/posters/preview.jpg"),
+                    after = mapOf("title" to "The Prestige", "poster" to "https://example.test/tmdb-prestige.jpg", "overview" to "TMDB hydrated Simkl preview"),
+                    changedFields = listOf("title", "poster", "overview"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "simkl-preview",
+                    displayHashAfter = "simkl-tmdb-hydrated"
+                ),
+                usedInputs = setOf("simkl.ids.tmdb", "simkl.ids.imdb", "item.type"),
+                identityMappingsHarvested = mapOf("simkl:movie:88" to "tmdb:5088", "tt0482571" to "tmdb:5088")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "hydration_failure_keeps_preview",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_TRAKT",
+                sourceProvider = "TRAKT",
+                itemId = "trakt:show:missing",
+                itemType = "series",
+                mediaKind = MetadataMediaKind.SERIES,
+                previewFields = mapOf("title" to "Preview Only Show", "year" to "2026"),
+                canonicalProvider = MetadataPrimaryProvider.TVDB,
+                canonicalId = null,
+                imdbId = "tt0000000",
+                runtimeApiShapes = emptyList(),
+                metadataNetworkExecuted = false,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Preview Only Show", "state" to "PREVIEW_ONLY"),
+                    after = mapOf("title" to "Preview Only Show", "state" to "FAILED_USING_PREVIEW"),
+                    changedFields = emptyList(),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "failure-preview",
+                    displayHashAfter = "failure-preview"
+                ),
+                usedInputs = setOf("trakt.ids.imdb", "item.type")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "cache_hit_updates_home_without_network",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_TMDB",
+                sourceProvider = "TMDB",
+                itemId = "tmdb:872585",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf("title" to "Preview Cached Movie", "poster" to "https://example.test/cache-preview.jpg"),
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:872585",
+                imdbId = "tt16431404",
+                runtimeApiShapes = listOf("tmdb.movie.core"),
+                metadataNetworkExecuted = false,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Preview Cached Movie", "poster" to "https://example.test/cache-preview.jpg"),
+                    after = mapOf("title" to "Cached TMDB Movie", "poster" to "https://example.test/cache-hit.jpg"),
+                    changedFields = listOf("title", "poster"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "cache-preview",
+                    displayHashAfter = "cache-hit-overlay"
+                ),
+                usedInputs = setOf("tmdb.id", "item.type")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "focused_item_hydrates_before_offscreen_items",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_TMDB",
+                sourceProvider = "TMDB",
+                itemId = "tmdb:focused:550",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf("title" to "Focused Preview", "priority" to "P0"),
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:550",
+                imdbId = "tt0137523",
+                trigger = "FOCUSED_HOME_ITEM",
+                runtimeApiShapes = listOf("tmdb.movie.core"),
+                metadataNetworkExecuted = false,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Focused Preview", "priority" to "P0"),
+                    after = mapOf("title" to "Focused Hydrated", "priority" to "P0_BEFORE_OFFSCREEN"),
+                    changedFields = listOf("title"),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "focused-preview",
+                    displayHashAfter = "focused-hydrated"
+                ),
+                usedInputs = setOf("focus.itemKey", "tmdb.id", "item.type")
+            ),
+            HomeUpdateScenarioSpec(
+                name = "hydration_result_ignored_after_profile_switch",
+                firstPaintSource = "RAIL_PREVIEW",
+                railSource = "BUILT_IN_SIMKL_DISCOVERY",
+                sourceProvider = "SIMKL",
+                itemId = "simkl:movie:ignored",
+                itemType = "movie",
+                mediaKind = MetadataMediaKind.MOVIE,
+                previewFields = mapOf("title" to "Profile Preview"),
+                canonicalProvider = MetadataPrimaryProvider.TMDB,
+                canonicalId = "tmdb:999",
+                imdbId = "tt9999999",
+                runtimeApiShapes = emptyList(),
+                metadataNetworkExecuted = false,
+                homeUpdate = HomeUpdateEvent(
+                    before = mapOf("title" to "Profile Preview", "state" to "HYDRATING"),
+                    after = mapOf("title" to "Profile Preview", "state" to "IGNORED_PROFILE_SWITCH"),
+                    changedFields = emptyList(),
+                    rowOrderChanged = false,
+                    focusChanged = false,
+                    displayHashBefore = "profile-preview",
+                    displayHashAfter = "profile-preview"
+                ),
+                usedInputs = setOf("profile.session", "simkl.ids.tmdb", "item.type")
+            )
+        )
+
         private fun fixture(name: String): String {
             val resource = MetadataAuditRunner::class.java.classLoader?.getResource("metadata/addons/$name")
                 ?: error("Missing fixture metadata/addons/$name")
@@ -1092,6 +1554,27 @@ private data class RailScenarioSpec(
     val requiresIdentityNetwork: Boolean = false,
     val usedInputs: Set<String> = emptySet(),
     val hydratedFields: Map<String, String?> = emptyMap()
+)
+
+private data class HomeUpdateScenarioSpec(
+    val name: String,
+    val firstPaintSource: String,
+    val railSource: String?,
+    val sourceProvider: String,
+    val itemId: String,
+    val itemType: String,
+    val mediaKind: MetadataMediaKind,
+    val previewFields: Map<String, String?>,
+    val canonicalProvider: MetadataPrimaryProvider?,
+    val canonicalId: String?,
+    val imdbId: String?,
+    val trigger: String = "VISIBLE_HOME_HYDRATION",
+    val runtimeApiShapes: List<String>,
+    val metadataNetworkExecuted: Boolean,
+    val identityNetworkExecuted: Boolean = false,
+    val homeUpdate: HomeUpdateEvent,
+    val usedInputs: Set<String> = emptySet(),
+    val identityMappingsHarvested: Map<String, String> = emptyMap()
 )
 
 private class AuditMetadataProviderAdapter(

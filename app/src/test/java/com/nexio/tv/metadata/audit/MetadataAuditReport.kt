@@ -88,6 +88,16 @@ data class StableIdBundleEvidenceEvent(
     val resultId: String?
 )
 
+data class HomeUpdateEvent(
+    val before: Map<String, String?>,
+    val after: Map<String, String?>,
+    val changedFields: List<String>,
+    val rowOrderChanged: Boolean,
+    val focusChanged: Boolean,
+    val displayHashBefore: String,
+    val displayHashAfter: String
+)
+
 data class ProviderPlanEvent(
     val itemId: String,
     val provider: MetadataPrimaryProvider,
@@ -264,7 +274,8 @@ data class ItemExecutionReport(
     val routingAfterVisible: RouteEvent? = null,
     val selectedFieldsBeforeHydration: List<FieldSelectedEvent> = emptyList(),
     val selectedFieldsAfterHydration: List<FieldSelectedEvent> = emptyList(),
-    val identityMappingsHarvested: Map<String, String> = emptyMap()
+    val identityMappingsHarvested: Map<String, String> = emptyMap(),
+    val homeUpdate: HomeUpdateEvent? = null
 )
 
 data class AuditSummaries(
