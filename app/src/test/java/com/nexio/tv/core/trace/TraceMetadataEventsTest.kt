@@ -148,6 +148,29 @@ class TraceMetadataEventsTest {
     }
 
     @Test
+    fun `home hydration started accepts and emits null rail id`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
+
+        events.emitHomeHydrationStarted(
+            railId = null,
+            itemKey = "home:tmdb:series:1399",
+            firstPaintSource = "ADDON_META_PREVIEW",
+            trigger = "HERO",
+            priority = "LOW",
+            workClass = "CACHE"
+        )
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertEquals(
+            setOf("railId", "itemKey", "firstPaintSource", "trigger", "priority", "workClass"),
+            payload.keys
+        )
+        assertTrue(payload.containsKey("railId"))
+        assertEquals(null, payload["railId"])
+    }
+
+    @Test
     fun `home hydration overlay written includes planned canonical identity fields only`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
@@ -238,6 +261,58 @@ class TraceMetadataEventsTest {
         assertEquals(true, payload["focusChanged"])
         assertEquals(false, payload["networkExecuted"])
         assertEquals("CACHE_HIT", payload["cacheDecision"])
+    }
+
+    @Test
+    fun `home hydration applied accepts and emits null rail id and cache decision`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "s-home" })
+
+        events.emitHomeHydrationApplied(
+            railId = null,
+            itemKey = "home:tmdb:series:1399",
+            firstPaintSource = "RAIL_PREVIEW",
+            canonicalProvider = "tvdb",
+            canonicalId = "121361",
+            imdbId = null,
+            trigger = "VISIBLE",
+            priority = "LOW",
+            workClass = "NETWORK",
+            changedFields = emptyList(),
+            displayHashBefore = "before-123",
+            displayHashAfter = "after-456",
+            rowOrderChanged = false,
+            focusChanged = false,
+            networkExecuted = false,
+            cacheDecision = null
+        )
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertEquals(
+            setOf(
+                "railId",
+                "itemKey",
+                "firstPaintSource",
+                "canonicalProvider",
+                "canonicalId",
+                "imdbId",
+                "trigger",
+                "priority",
+                "workClass",
+                "changedFields",
+                "displayHashBefore",
+                "displayHashAfter",
+                "rowOrderChanged",
+                "focusChanged",
+                "networkExecuted",
+                "cacheDecision"
+            ),
+            payload.keys
+        )
+        assertTrue(payload.containsKey("railId"))
+        assertTrue(payload.containsKey("cacheDecision"))
+        assertEquals(null, payload["railId"])
+        assertEquals(null, payload["cacheDecision"])
     }
 
     @Test
