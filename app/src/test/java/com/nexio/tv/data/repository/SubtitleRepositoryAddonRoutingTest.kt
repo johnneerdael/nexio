@@ -101,7 +101,8 @@ class SubtitleRepositoryAddonRoutingTest {
 
         val repository = SubtitleRepositoryImpl(
             addonSubtitleIntegrationProvider = provider,
-            addonRepository = addonRepository
+            addonRepository = addonRepository,
+            wyzieSubtitleIntegrationProvider = mockk(relaxed = true),
         )
 
         val result = repository.getSubtitles(
