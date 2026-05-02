@@ -40,6 +40,7 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderId
@@ -58,6 +59,7 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -70,6 +72,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -94,6 +99,7 @@ class HomeViewModelFocusHydrationTest {
     @After
     fun tearDown() {
         createdViewModels.forEach { it.viewModelScope.cancel() }
+        testDispatcher.scheduler.advanceUntilIdle()
         createdViewModels.clear()
         Dispatchers.resetMain()
     }
@@ -121,6 +127,28 @@ class HomeViewModelFocusHydrationTest {
         assertEquals(ContentType.SERIES, canonicalCall.contentType)
         assertEquals(SourceRole.RAIL_PREVIEW, canonicalCall.sourceContext.previewSourceRole)
         coVerify(exactly = 1) { facade.resolveRequest(match { it.depth == MetadataDepth.DETAIL_CORE }) }
+    }
+
+    @Test
+    fun `overlay scope invalidation clears observer state and schedules catalog recompute`() = runTest(testDispatcher) {
+        val viewModel = buildTestHomeViewModel(metadataRouterFacade = mockk(relaxed = true))
+        val observerJob = Job()
+        viewModel.hydratedHomeOverlayObserverJob = observerJob
+        viewModel.hydratedHomeOverlayObserverSignature = "en|movie:tmdb:550"
+        viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(
+            "movie:tmdb:550" to mockk<HydratedHomeOverlay>(relaxed = true)
+        )
+        viewModel.lastCatalogComputationSignature = "previous"
+
+        viewModel.invalidateHydratedHomeOverlayScope()
+
+        assertTrue(observerJob.isCancelled)
+        assertNull(viewModel.hydratedHomeOverlayObserverJob)
+        assertNull(viewModel.hydratedHomeOverlayObserverSignature)
+        assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
+        assertNull(viewModel.lastCatalogComputationSignature)
+        assertNotNull(viewModel.catalogUpdateJob)
+        viewModel.catalogUpdateJob?.cancel()
     }
 
     @Test
