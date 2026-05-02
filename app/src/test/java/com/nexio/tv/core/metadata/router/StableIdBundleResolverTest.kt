@@ -75,8 +75,37 @@ class StableIdBundleResolverTest {
     }
 
     @Test
-    fun `tmdb tv rail resolves imdb then tvdb through provider lookups`() = runTest {
+    fun `tmdb tv rail resolves direct tvdb before imdb sidecar lookup`() = runTest {
         val lookup = RecordingLookup(
+            tmdbTvToTvdbResult = "121361",
+            tmdbTvToImdbResult = "tt0944947"
+        )
+        val resolver = resolver(lookup = lookup)
+
+        val bundle = resolver.resolve(
+            request(
+                itemType = ContentType.SERIES,
+                routeProvider = MetadataPrimaryProvider.TVDB,
+                knownIds = ProviderIds(tmdb = "1399")
+            )
+        )
+
+        assertEquals("121361", bundle.canonical.tvdbSeriesId)
+        assertEquals("tt0944947", bundle.sidecars.imdbId)
+        assertEquals(listOf("tmdbTvToTvdb:1399", "tmdbTvToImdb:1399"), lookup.calls)
+        assertEquals(
+            listOf(
+                StableIdEvidence("providerLookup.tmdbTvToTvdb", "TVDB", true, "121361"),
+                StableIdEvidence("providerLookup.tmdbTvToImdb", "IMDB", true, "tt0944947")
+            ),
+            bundle.evidence
+        )
+    }
+
+    @Test
+    fun `tmdb tv rail falls back through imdb when direct tvdb lookup misses`() = runTest {
+        val lookup = RecordingLookup(
+            tmdbTvToTvdbResult = null,
             tmdbTvToImdbResult = "tt0903747",
             imdbToTvdbSeriesResult = "81189"
         )
@@ -92,9 +121,10 @@ class StableIdBundleResolverTest {
 
         assertEquals("81189", bundle.canonical.tvdbSeriesId)
         assertEquals("tt0903747", bundle.sidecars.imdbId)
-        assertEquals(listOf("tmdbTvToImdb:1396", "imdbToTvdbSeries:tt0903747"), lookup.calls)
+        assertEquals(listOf("tmdbTvToTvdb:1396", "tmdbTvToImdb:1396", "imdbToTvdbSeries:tt0903747"), lookup.calls)
         assertEquals(
             listOf(
+                StableIdEvidence("providerLookup.tmdbTvToTvdb", "TVDB", true, null),
                 StableIdEvidence("providerLookup.tmdbTvToImdb", "IMDB", true, "tt0903747"),
                 StableIdEvidence("providerLookup.imdbToTvdbSeries", "TVDB", true, "81189")
             ),
@@ -126,6 +156,7 @@ class StableIdBundleResolverTest {
         assertEquals(
             listOf(
                 "imdbToTvdbSeries:tt_bad",
+                "tmdbTvToTvdb:1399",
                 "tmdbTvToImdb:1399",
                 "imdbToTvdbSeries:tt0944947"
             ),
@@ -158,7 +189,7 @@ class StableIdBundleResolverTest {
         )
 
         assertEquals("tt0137523", movieBundle.sidecars.imdbId)
-        assertEquals(listOf("tmdbTvToImdb:550", "tmdbMovieToImdb:550"), lookup.calls)
+        assertEquals(listOf("tmdbTvToTvdb:550", "tmdbTvToImdb:550", "tmdbMovieToImdb:550"), lookup.calls)
     }
 
     @Test
@@ -297,6 +328,7 @@ class StableIdBundleResolverTest {
     private class RecordingLookup(
         private val tmdbMovieToImdbResult: String? = null,
         private val imdbToTmdbMovieResult: String? = null,
+        private val tmdbTvToTvdbResult: String? = null,
         private val tmdbTvToImdbResult: String? = null,
         private val imdbToTvdbSeriesResult: String? = null,
         private val imdbToTvdbSeriesResults: Map<String, String?> = emptyMap(),
@@ -313,6 +345,11 @@ class StableIdBundleResolverTest {
         override suspend fun imdbToTmdbMovie(imdbId: String): String? {
             calls += "imdbToTmdbMovie:$imdbId"
             return imdbToTmdbMovieResult
+        }
+
+        override suspend fun tmdbTvToTvdb(tmdbId: String): String? {
+            calls += "tmdbTvToTvdb:$tmdbId"
+            return tmdbTvToTvdbResult
         }
 
         override suspend fun tmdbTvToImdb(tmdbId: String): String? {

@@ -49,6 +49,24 @@ class RuntimeMetadataIdentityLookupTest {
     }
 
     @Test
+    fun `tmdbTvToTvdb calls TMDB provider tv external ids`() = runTest {
+        val tmdbProvider = mockk<TmdbIntegrationProvider>()
+        val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)
+        coEvery { tmdbProvider.findTvdbIdByTmdbTvId(1399) } returns 121361
+        val lookup = RuntimeMetadataIdentityLookup(
+            tmdbProvider = tmdbProvider,
+            tvdbProvider = tvdbProvider
+        )
+
+        val result = lookup.tmdbTvToTvdb("1399")
+
+        assertEquals("121361", result)
+        coVerify(exactly = 1) { tmdbProvider.findTvdbIdByTmdbTvId(1399) }
+        coVerify(exactly = 0) { tmdbProvider.findImdbIdByTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tvdbProvider.searchByRemoteId(any()) }
+    }
+
+    @Test
     fun `tmdbToTvdb uses direct TMDB tv external tvdb id before imdb bridge`() = runTest {
         val tmdbProvider = mockk<TmdbIntegrationProvider>()
         val tvdbProvider = mockk<TvdbIntegrationProvider>(relaxed = true)

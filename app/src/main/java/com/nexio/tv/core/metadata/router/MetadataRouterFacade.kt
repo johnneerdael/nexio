@@ -45,6 +45,7 @@ class MetadataRouterFacade(
         lookup = object : StableIdBundleResolver.Lookup {
             override suspend fun tmdbMovieToImdb(tmdbId: String): String? = null
             override suspend fun imdbToTmdbMovie(imdbId: String): String? = null
+            override suspend fun tmdbTvToTvdb(tmdbId: String): String? = null
             override suspend fun tmdbTvToImdb(tmdbId: String): String? = null
             override suspend fun imdbToTvdbSeries(imdbId: String): String? = null
             override suspend fun tvdbSeriesToImdb(tvdbId: String): String? = null

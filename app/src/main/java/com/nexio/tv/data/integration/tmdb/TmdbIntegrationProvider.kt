@@ -64,6 +64,8 @@ import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 
 private const val TAG = "TmdbIntegrationProvider"
+private const val TMDB_MOVIE_ENRICHMENT_APPEND = "credits,images,release_dates,external_ids"
+private const val TMDB_TV_ENRICHMENT_APPEND = "credits,images,content_ratings,external_ids"
 
 @Singleton
 class TmdbIntegrationProvider private constructor(
@@ -901,7 +903,7 @@ class TmdbIntegrationProvider private constructor(
                     tvId = numericId,
                     apiKey = apiKey,
                     language = normalizedLanguage,
-                    appendToResponse = "credits,images,content_ratings",
+                    appendToResponse = TMDB_TV_ENRICHMENT_APPEND,
                     includeImageLanguage = includeImageLanguage
                 )
 
@@ -909,7 +911,7 @@ class TmdbIntegrationProvider private constructor(
                     movieId = numericId,
                     apiKey = apiKey,
                     language = normalizedLanguage,
-                    appendToResponse = "credits,images,release_dates",
+                    appendToResponse = TMDB_MOVIE_ENRICHMENT_APPEND,
                     includeImageLanguage = includeImageLanguage
                 )
             }
