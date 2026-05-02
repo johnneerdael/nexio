@@ -129,6 +129,8 @@ private const val TRANSLATION_SECRET_TYPE = "translation_api_key"
 private const val TRANSLATION_SECRET_REF = "integration:subtitle-translation"
 private const val WYZIE_SECRET_TYPE = "wyzie_api_key"
 private const val WYZIE_SECRET_REF = "integration:wyzie"
+private const val ANIMESKIP_SECRET_TYPE = "animeskip_api_key"
+private const val ANIMESKIP_SECRET_REF = "integration:animeSkip"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
 private const val GEMINI_SECRET_REF = "integration:gemini"
 private const val RPDB_SECRET_TYPE = "rpdb_api_key"
@@ -277,7 +279,6 @@ class AccountSettingsSyncService @Inject constructor(
                     .drop(1)
                     .map { Unit },
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
-                animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
                 subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.drop(1).map { Unit },
                 wyzieSettings = wyzieSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
@@ -424,6 +425,11 @@ class AccountSettingsSyncService @Inject constructor(
                 WYZIE_SECRET_REF,
                 wyzieSettingsDataStore.settings.first().apiKey.orEmpty()
             )
+            syncApiKeySecretToRemote(
+                ANIMESKIP_SECRET_TYPE,
+                ANIMESKIP_SECRET_REF,
+                animeSkipSettingsDataStore.clientId.first()
+            )
             legacyGeminiApiKeySecretForPush(
                 providerName = subtitleTranslationSettings.provider.name,
                 translationApiKey = subtitleTranslationSettings.apiKey
@@ -506,7 +512,6 @@ class AccountSettingsSyncService @Inject constructor(
         val playerSettings = if (isPrimaryProfile) playerSettingsDataStore.playerSettings.first() else null
         val theIntroDb = theIntroDbSettingsDataStore.settings.first()
         val animeSkipEnabled = animeSkipSettingsDataStore.enabled.first()
-        val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
         val subtitleTranslation = subtitleTranslationSettingsDataStore.settings.first()
         val posterRatings = posterRatingsSettingsDataStore.settings.first()
         val premiumize = premiumizeSettingsDataStore.settings.first()
@@ -588,7 +593,6 @@ class AccountSettingsSyncService @Inject constructor(
                 ),
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
-                    clientId = animeSkipClientId
                 ),
                 subtitleTranslation = SubtitleTranslationSyncSettings(
                     enabled = subtitleTranslation.enabled,
@@ -736,7 +740,9 @@ class AccountSettingsSyncService @Inject constructor(
         theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
 
         animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
-        animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
+        resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)?.let {
+            animeSkipSettingsDataStore.setClientId(it)
+        }
 
         val remoteTranslation = settings.integrations.subtitleTranslation
         subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
@@ -840,7 +846,9 @@ class AccountSettingsSyncService @Inject constructor(
         theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
 
         animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
-        animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
+        resolveApiKeySecretOrNull(ANIMESKIP_SECRET_TYPE, ANIMESKIP_SECRET_REF)?.let {
+            animeSkipSettingsDataStore.setClientId(it)
+        }
 
         val remoteTranslation = settings.integrations.subtitleTranslation
         subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(

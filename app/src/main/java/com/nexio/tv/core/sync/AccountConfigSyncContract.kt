@@ -56,7 +56,6 @@ internal fun observeAccountConfigSyncChanges(
     omdbSettings: Flow<Unit>,
     theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
-    animeSkipClientId: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
     wyzieSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
@@ -85,7 +84,6 @@ internal fun observeAccountConfigSyncChanges(
         omdbSettings,
         theIntroDbSettings,
         animeSkipEnabled,
-        animeSkipClientId,
         subtitleTranslationSettings,
         wyzieSettings,
         posterRatingsSettings,
@@ -116,7 +114,6 @@ internal fun observeAccountConfigSyncChangedPaths(
     omdbSettings: Flow<Unit>,
     theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
-    animeSkipClientId: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
     wyzieSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
@@ -145,7 +142,6 @@ internal fun observeAccountConfigSyncChangedPaths(
         omdbSettings.map { "integrations.omdb.enabled" },
         theIntroDbSettings.map { "integrations.theIntroDb" },
         animeSkipEnabled.map { "integrations.animeSkip.enabled" },
-        animeSkipClientId.map { "integrations.animeSkip.clientId" },
         subtitleTranslationSettings.map { "integrations.subtitleTranslation" },
         wyzieSettings.map { "integrations.wyzie" },
         posterRatingsSettings.map { "integrations.posterRatings" },
@@ -374,7 +370,6 @@ internal suspend fun applyAccountConfigSyncSettings(
     theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
 
     animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
-    animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
 
     val remoteTranslation = settings.integrations.subtitleTranslation
     subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
