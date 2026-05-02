@@ -148,6 +148,42 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `generation change during store write is ignored and does not apply overlay`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>()
+        val ratings = mockk<TitleRatingOverrideRepository>()
+        val sink = RecordingTraceSink()
+        var generation = 7L
+        var applied = false
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult()
+        coEvery { facade.resolveStableIdBundle(any(), any(), any()) } returns stableBundle("movie:550")
+        coEvery { ratings.enrichPreview(any(), any()) } answers { firstArg() }
+        coEvery { store.upsert(any(), any()) } answers {
+            generation = 8L
+            Unit
+        }
+
+        val result = coordinator(facade, store, ratings, sink).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { generation },
+            onOverlayApplied = { applied = true }
+        )
+
+        assertNull(result)
+        assertFalse(applied)
+        coVerify(exactly = 1) { store.upsert(any(), any()) }
+        assertEquals(
+            listOf("home.hydration_started", "home.hydration_ignored"),
+            sink.events.map { it.eventType }
+        )
+    }
+
+    @Test
     fun `hydration failure keeps preview path and does not write`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
