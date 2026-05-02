@@ -7,11 +7,14 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
-import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -307,6 +310,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
         var metadataCachedCount = 0
         var metadataFetchCount = 0
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val catalogKey = "visible_home"
         val runtimeHydrationKeys = AndroidTvSearchRuntimeReadiness
@@ -340,8 +344,17 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
             runCatching {
                 val hydrated = overlayProviderLocalizedMetadata(item, onLog)
+                val stableIdBundle = runCatching {
+                    metadataRouterFacade.resolveStableIdBundle(
+                        request = hydrated.toStableIdMetadataRequest(languageTag = languageTag),
+                        trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                        itemKey = itemKey
+                    )
+                }.getOrNull()
+                val enriched = titleRatingOverrideRepository.enrichPreview(hydrated, stableIdBundle)
+                val displayReady = posterRatingsUrlResolver.apply(enriched, activePosterProvider)
                 val originalDisplay = item.toHomeDisplayMetadata().withoutProviderArtwork()
-                val hydratedDisplay = hydrated.toHomeDisplayMetadata().withoutProviderArtwork()
+                val hydratedDisplay = displayReady.toHomeDisplayMetadata().withoutProviderArtwork()
                 if (hydratedDisplay != originalDisplay) {
                     metadataDiskCacheStore.writeHomeDisplayMetadata(
                         itemKey = itemKey,
@@ -508,6 +521,15 @@ private fun HomeDisplayMetadata.withoutProviderArtwork(): HomeDisplayMetadata {
         posterProviderTag = null
     )
 }
+
+private fun MetaPreview.toStableIdMetadataRequest(languageTag: String): MetadataRequest =
+    MetadataRequest(
+        contentId = id,
+        contentType = type,
+        sourceContext = toHomeMetadataSourceContext(),
+        language = languageTag,
+        depth = MetadataDepth.DETAIL_CORE
+    )
 
 internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadataEnrichment): MetaPreview {
     return copy(

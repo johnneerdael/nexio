@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.content.Context
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
+import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -15,6 +16,10 @@ import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.core.metadata.router.SourceRole
+import com.nexio.tv.core.metadata.router.SidecarStableIds
+import com.nexio.tv.core.metadata.router.SourceStableIds
+import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -38,6 +43,7 @@ import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailSource
+import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -46,6 +52,7 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -65,10 +72,9 @@ import org.junit.Test
 /**
  * Regression guard for Task 2 of the rail-preview-first hydration plan.
  *
- * Verifies that [HomeViewModel.onItemFocusPipeline] fires
- * [MetadataRouterFacade.resolveRequest] exactly once for RAIL_PREVIEW items,
- * skips it for ADDON_META_PREVIEW items, and is idempotent for repeated focus
- * of the same item (via [HomeViewModel.focusedItemHydrationStates]).
+ * Verifies that [HomeViewModel.onItemFocusPipeline] sends RAIL_PREVIEW items into the
+ * canonical detail-core hydration path, skips the no-route PREVIEW boundary, and is
+ * idempotent for repeated focus of the same item (via [HomeViewModel.focusedItemHydrationStates]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelFocusHydrationTest {
@@ -86,7 +92,7 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
-    fun `onItemFocus for rail-preview tvdb item triggers MetadataRouter resolveRequest`() = runTest(testDispatcher) {
+    fun `onItemFocus for rail-preview tvdb item triggers canonical MetadataRouter hydration`() = runTest(testDispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         // Capture all calls into a list so we can filter by depth.
         val allCaptured = mutableListOf<MetadataRequest>()
@@ -98,17 +104,16 @@ class HomeViewModelFocusHydrationTest {
         viewModel.onItemFocus(railPreviewItem)
         advanceUntilIdle()
 
-        // Exactly one PREVIEW-depth call must come from our new RAIL_PREVIEW hydration code.
-        // (The existing enrichment pipeline may also call at DETAIL_CORE depth — that's fine.)
-        coVerify(exactly = 1) {
+        coVerify(exactly = 0) {
             facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
         }
-        // The PREVIEW call should target the item's id and type with RAIL_PREVIEW source role.
-        val previewCall = allCaptured.firstOrNull { it.depth == MetadataDepth.PREVIEW }
-            ?: error("No PREVIEW-depth call was captured — our hydration code did not run")
-        assertEquals("tvdb:355567", previewCall.contentId)
-        assertEquals(ContentType.SERIES, previewCall.contentType)
-        assertEquals(SourceRole.RAIL_PREVIEW, previewCall.sourceContext.previewSourceRole)
+        val canonicalCall = allCaptured.firstOrNull()
+            ?: error("No canonical hydration call was captured")
+        assertEquals(MetadataDepth.DETAIL_CORE, canonicalCall.depth)
+        assertEquals("tvdb:355567", canonicalCall.contentId)
+        assertEquals(ContentType.SERIES, canonicalCall.contentType)
+        assertEquals(SourceRole.RAIL_PREVIEW, canonicalCall.sourceContext.previewSourceRole)
+        coVerify(exactly = 1) { facade.resolveRequest(match { it.depth == MetadataDepth.DETAIL_CORE }) }
     }
 
     @Test
@@ -142,15 +147,11 @@ class HomeViewModelFocusHydrationTest {
         viewModel.onItemFocus(addonMetaItem)  // second focus — still no-op for our hydration
         advanceUntilIdle()
 
-        // Our new RAIL_PREVIEW hydration must NOT fire for ADDON_META_PREVIEW items.
-        // The existing enrichment pipeline may call resolveRequest at DETAIL_CORE depth — that's OK.
-        coVerify(exactly = 0) {
-            facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
-        }
+        coVerify(exactly = 0) { facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW }) }
     }
 
     @Test
-    fun `onItemFocus for the same rail-preview item twice only triggers MetadataRouter once at PREVIEW depth`() = runTest(testDispatcher) {
+    fun `onItemFocus for the same rail-preview item twice only triggers canonical hydration once`() = runTest(testDispatcher) {
         val facade = mockk<MetadataRouterFacade>(relaxed = true)
         coEvery { facade.resolveRequest(any<MetadataRequest>()) } returns successResult()
 
@@ -161,11 +162,53 @@ class HomeViewModelFocusHydrationTest {
         viewModel.onItemFocus(railPreviewItem)  // second focus — idempotent
         advanceUntilIdle()
 
-        // focusedItemHydrationStates transitions PREVIEW_ONLY → HYDRATING on first call,
+        // focusedItemHydrationStates transitions PREVIEW_ONLY -> HYDRATING on first call,
         // so the second call sees a non-PREVIEW_ONLY state and skips our RAIL_PREVIEW hydration.
-        // The existing enrichment pipeline is separate and may call at DETAIL_CORE depth.
-        coVerify(exactly = 1) {
-            facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW })
+        coVerify(exactly = 0) { facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW }) }
+        coVerify(exactly = 1) { facade.resolveRequest(match { it.depth == MetadataDepth.DETAIL_CORE }) }
+    }
+
+    @Test
+    fun `hero enrichment resolves focused stable bundle and passes it to title rating enrichment`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val providerRequests = mutableListOf<MetadataRequest>()
+        val bundleRequests = mutableListOf<MetadataRequest>()
+        val stableIdBundle = stableIdBundle()
+        val item = railPreviewMetaPreview()
+
+        coEvery { facade.resolveRequest(capture(providerRequests)) } returns successResult()
+        coEvery {
+            facade.resolveStableIdBundle(
+                request = capture(bundleRequests),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${item.id}"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers { firstArg() }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = facade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository
+        )
+
+        val enriched = viewModel.enrichHeroItemsPipeline(
+            items = listOf(item.copy(type = ContentType.MOVIE, rawType = "movie")),
+            settings = TmdbSettings()
+        )
+
+        assertEquals("Canonical Title", enriched.single().name)
+        assertEquals(MetadataDepth.DETAIL_CORE, providerRequests.single().depth)
+        assertEquals(MetadataDepth.DETAIL_CORE, bundleRequests.single().depth)
+        assertEquals(SourceRole.RAIL_PREVIEW, bundleRequests.single().sourceContext.previewSourceRole)
+        coVerifyOrder {
+            facade.resolveRequest(any())
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${item.id}"
+            )
+            titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
         }
     }
 
@@ -203,7 +246,7 @@ class HomeViewModelFocusHydrationTest {
             trace = emptyList()
         ),
         plan = null,
-        resolverSchedule = ResolverSchedule(MetadataDepth.PREVIEW, emptyList(), emptyList()),
+        resolverSchedule = ResolverSchedule(MetadataDepth.DETAIL_CORE, emptyList(), emptyList()),
         resolvedDocument = ResolvedMetadataDocument(
             canonicalId = "tvdb:355567",
             title = "Canonical Title",
@@ -225,6 +268,21 @@ class HomeViewModelFocusHydrationTest {
         trace = emptyList()
     )
 
+    private fun stableIdBundle() = StableIdBundle(
+        itemKey = "movie:tvdb:355567",
+        itemType = ContentType.MOVIE,
+        canonical = CanonicalStableIds(tmdbMovieId = "550"),
+        sidecars = SidecarStableIds(imdbId = "tt0137523"),
+        source = SourceStableIds(
+            sourceProvider = ProviderId.TRAKT,
+            sourceItemId = "trakt:show:1",
+            railId = RailSource.BUILT_IN_TRAKT.name,
+            observedIds = ProviderIds(tvdb = "355567", trakt = "1")
+        ),
+        evidence = emptyList(),
+        resolvedAtMs = 1L
+    )
+
     /**
      * Constructs a real [HomeViewModel] wired for focus-hydration tests.
      *
@@ -240,7 +298,8 @@ class HomeViewModelFocusHydrationTest {
      * that [viewModelScope] uses the test scheduler and [advanceUntilIdle] drains coroutines.
      */
     private fun buildTestHomeViewModel(
-        metadataRouterFacade: MetadataRouterFacade
+        metadataRouterFacade: MetadataRouterFacade,
+        titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true)
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -310,7 +369,7 @@ class HomeViewModelFocusHydrationTest {
             tmdbDiscoveryService = mockk(relaxed = true),
             kitsuDiscoveryService = mockk(relaxed = true),
             mdbListRepository = mockk(relaxed = true),
-            titleRatingOverrideRepository = mockk(relaxed = true),
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
             tmdbService = mockk(relaxed = true),
             metadataRouterFacade = metadataRouterFacade,
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(metadataRouterFacade),

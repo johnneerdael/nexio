@@ -4,6 +4,9 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.CatalogRow
@@ -573,11 +576,20 @@ private suspend fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     catalogsMap.forEach { (key, row) ->
         var mutableItems: MutableList<MetaPreview>? = null
         row.items.forEachIndexed { index, currentItem ->
-            val mergedItem = titleRatingOverrideRepository.enrichPreview(mergeFocusedItemEnrichment(
+            val providerEnrichment = providerByItemId[currentItem.id]
+            val hydratedItem = mergeFocusedItemEnrichment(
                 currentItem = currentItem,
-                providerEnrichment = providerByItemId[currentItem.id],
+                providerEnrichment = providerEnrichment,
                 externalMeta = null
-            ))
+            )
+            val stableIdBundle = if (providerEnrichment == null) null else runCatching {
+                metadataRouterFacade.resolveStableIdBundle(
+                    request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
+                    trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                    itemKey = "${currentItem.apiType}:${currentItem.id}"
+                )
+            }.getOrNull()
+            val mergedItem = titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
             if (mergedItem != currentItem) {
                 val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
                 updatedItems[index] = mergedItem
@@ -695,6 +707,15 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
     ).value
 }
 
+private fun MetaPreview.toStableIdMetadataRequest(languageTag: String): MetadataRequest =
+    MetadataRequest(
+        contentId = id,
+        contentType = type,
+        sourceContext = toHomeMetadataSourceContext(),
+        language = languageTag,
+        depth = MetadataDepth.DETAIL_CORE
+    )
+
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     items: List<MetaPreview>,
     settings: TmdbSettings
@@ -706,12 +727,20 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
             async(Dispatchers.IO) {
                 try {
                     val enrichment = fetchProviderEnrichmentForPreview(item) ?: return@async item
-                    titleRatingOverrideRepository.enrichPreview(mergeFocusedItemEnrichment(
+                    val hydratedItem = mergeFocusedItemEnrichment(
                         currentItem = item,
                         providerEnrichment = enrichment,
                         externalMeta = null,
                         tmdbSettings = settings
-                    ))
+                    )
+                    val stableIdBundle = runCatching {
+                        metadataRouterFacade.resolveStableIdBundle(
+                            request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
+                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                            itemKey = "${item.apiType}:${item.id}"
+                        )
+                    }.getOrNull()
+                    titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
                 } catch (e: Exception) {
                     Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
                     item

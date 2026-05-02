@@ -2,6 +2,23 @@ package com.nexio.tv.ui.screens.home
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.nexio.tv.core.metadata.router.CanonicalStableIds
+import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.metadata.router.MetadataDepth
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
+import com.nexio.tv.core.metadata.router.MetadataRequest
+import com.nexio.tv.core.metadata.router.MetadataResolutionResult
+import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouterFacade
+import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.ResolverSchedule
+import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
+import com.nexio.tv.core.metadata.router.SidecarStableIds
+import com.nexio.tv.core.metadata.router.SourceRole
+import com.nexio.tv.core.metadata.router.SourceStableIds
+import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
@@ -27,14 +44,21 @@ import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.Runs
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -552,6 +576,83 @@ class HomeCatalogRefreshCoordinatorTest {
         assertEquals(false, hydratedRepublish.hasMore)
     }
 
+    @Test
+    fun `visible hydration resolves stable bundle after provider overlay and passes it to rating enrichment`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val providerRequests = mutableListOf<MetadataRequest>()
+        val bundleRequests = mutableListOf<MetadataRequest>()
+        val cachedMetadata = slot<HomeDisplayMetadata>()
+        val stableIdBundle = stableIdBundle(
+            itemKey = "movie:1007757",
+            tmdbMovieId = "1007757",
+            imdbId = "tt1007757"
+        )
+        val firstPaintItem = preview(id = "1007757", poster = null).copy(
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Swapped",
+            imdbRating = 0.0f,
+            ratingSource = TitleRatingSource.TMDB
+        )
+
+        every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(any(), any()) } returns false
+        every {
+            metadataDiskCacheStore.writeHomeDisplayMetadata(
+                itemKey = "movie:1007757",
+                languageTag = "en",
+                metadata = capture(cachedMetadata)
+            )
+        } just Runs
+        coEvery { metadataRouterFacade.resolveRequest(capture(providerRequests)) } returns successResult()
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = capture(bundleRequests),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
+            firstArg<MetaPreview>().copy(
+                imdbRating = 9.7f,
+                ratingSource = TitleRatingSource.IMDB
+            )
+        }
+        every { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+
+        coordinator(
+            catalogRepository = catalogRepository,
+            metadataRouterFacade = metadataRouterFacade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchVisibleItems(
+            items = listOf(firstPaintItem),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(SourceRole.ADDON_PREVIEW, providerRequests.single().sourceContext.previewSourceRole)
+        assertEquals(MetadataDepth.DETAIL_CORE, bundleRequests.single().depth)
+        assertEquals("1007757", bundleRequests.single().contentId)
+        assertEquals(ContentType.MOVIE, bundleRequests.single().contentType)
+        assertEquals(9.7f, cachedMetadata.captured.imdbRating)
+        assertEquals(TitleRatingSource.IMDB, cachedMetadata.captured.ratingSource)
+        coVerifyOrder {
+            metadataRouterFacade.resolveRequest(any())
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+            titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle)
+        }
+    }
+
     private fun preview(id: String, poster: String?): MetaPreview {
         return MetaPreview(
             id = id,
@@ -593,16 +694,48 @@ class HomeCatalogRefreshCoordinatorTest {
 
     private fun coordinator(
         catalogRepository: CatalogRepository,
-        tvMetadataRouter: TvMetadataRouter
+        tvMetadataRouter: TvMetadataRouter,
+        titleRatingOverrideRepository: TitleRatingOverrideRepository? = null,
+        metadataDiskCacheStore: MetadataDiskCacheStore = mockk(relaxed = true),
+        posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
     ): HomeCatalogRefreshCoordinator {
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
-        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val ratingOverrides = titleRatingOverrideRepository ?: mockk<TitleRatingOverrideRepository>().also {
+            coEvery { it.enrichPreview(any()) } answers { firstArg() }
+        }
+        val posterResolver = posterRatingsUrlResolver ?: mockk<PosterRatingsUrlResolver>(relaxed = true).also {
+            every { it.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+        }
         val profileBoundary = mockk<ProfileBoundary>()
         val playbackActivityTracker = mockk<PlaybackActivityTracker>()
         val context = mockLocaleContext()
-        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
-        every { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+        every { profileBoundary.currentLanguageTag() } returns "en"
+        every { playbackActivityTracker.isActive } returns MutableStateFlow(true)
+
+        return HomeCatalogRefreshCoordinator(
+            catalogRepository = catalogRepository,
+            titleRatingOverrideRepository = ratingOverrides,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
+                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
+            ),
+            posterRatingsUrlResolver = posterResolver,
+            profileBoundary = profileBoundary,
+            playbackActivityTracker = playbackActivityTracker,
+            appContext = context
+        )
+    }
+
+    private fun coordinator(
+        catalogRepository: CatalogRepository,
+        metadataRouterFacade: MetadataRouterFacade,
+        titleRatingOverrideRepository: TitleRatingOverrideRepository,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        posterRatingsUrlResolver: PosterRatingsUrlResolver
+    ): HomeCatalogRefreshCoordinator {
+        val profileBoundary = mockk<ProfileBoundary>()
+        val playbackActivityTracker = mockk<PlaybackActivityTracker>()
+        val context = mockLocaleContext()
         every { profileBoundary.currentLanguageTag() } returns "en"
         every { playbackActivityTracker.isActive } returns MutableStateFlow(true)
 
@@ -610,9 +743,9 @@ class HomeCatalogRefreshCoordinatorTest {
             catalogRepository = catalogRepository,
             titleRatingOverrideRepository = titleRatingOverrideRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
-            metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter),
+            metadataRouterFacade = metadataRouterFacade,
             providerLocalizedMetadataResolver = ProviderLocalizedMetadataResolver(
-                metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
+                metadataRouterFacade = metadataRouterFacade
             ),
             posterRatingsUrlResolver = posterRatingsUrlResolver,
             profileBoundary = profileBoundary,
@@ -620,6 +753,54 @@ class HomeCatalogRefreshCoordinatorTest {
             appContext = context
         )
     }
+
+    private fun successResult() = MetadataResolutionResult(
+        route = MetadataRoute(
+            provider = MetadataPrimaryProvider.TMDB,
+            parentId = "tmdb:1007757",
+            mediaKind = MetadataMediaKind.MOVIE,
+            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            sourceContext = MetadataSourceContext(),
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:1007757"),
+            trace = emptyList()
+        ),
+        plan = null,
+        resolverSchedule = ResolverSchedule(MetadataDepth.DETAIL_CORE, emptyList(), emptyList()),
+        resolvedDocument = ResolvedMetadataDocument(
+            canonicalId = "tmdb:1007757",
+            title = "Provider title",
+            overview = "Provider description",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            rating = 7.1,
+            runtimeMinutes = null,
+            fieldOwners = emptyMap(),
+            ignoredOverwrites = emptyList()
+        ),
+        displayMetadata = HomeDisplayMetadata(title = "Provider title"),
+        trace = emptyList()
+    )
+
+    private fun stableIdBundle(
+        itemKey: String,
+        tmdbMovieId: String,
+        imdbId: String
+    ): StableIdBundle =
+        StableIdBundle(
+            itemKey = itemKey,
+            itemType = ContentType.MOVIE,
+            canonical = CanonicalStableIds(tmdbMovieId = tmdbMovieId),
+            sidecars = SidecarStableIds(imdbId = imdbId),
+            source = SourceStableIds(
+                sourceProvider = null,
+                sourceItemId = null,
+                railId = null,
+                observedIds = ProviderIds()
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 1L
+        )
 
     private fun mockLocaleContext(): Context {
         val context = mockk<Context>(relaxed = true)
