@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
@@ -266,8 +267,7 @@ internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List
             try {
                 trailerMetadataAvailabilitySemaphore.withPermit {
                     if (!isNonPlaybackHomeWorkAllowed()) return@withPermit
-                    val isTvContent = item.apiType.trim().lowercase() in setOf("tv", "series", "show", "tvshow")
-                    val tmdbId = if (isTvContent) null else withContext(Dispatchers.IO) {
+                    val tmdbId = if (shouldSkipTmdbTrailerIdLookup(item.id, item.apiType)) null else withContext(Dispatchers.IO) {
                         runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }
                             .getOrNull()
                     }
@@ -332,8 +332,11 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
     trailerPreviewJob = viewModelScope.launch {
         try {
             if (!isNonPlaybackHomeWorkAllowed()) return@launch
-            val isTvContent = apiType.trim().lowercase() in setOf("tv", "series", "show", "tvshow")
-            val tmdbId = if (isTvContent) null else runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
+            val tmdbId = if (shouldSkipTmdbTrailerIdLookup(itemId, apiType)) {
+                null
+            } else {
+                runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
+            }
             if (!isNonPlaybackHomeWorkAllowed()) return@launch
             if (forceRefresh) {
                 trailerService.invalidateLookupCache(
@@ -799,6 +802,14 @@ internal fun isFocusEnrichmentBlocked(
         catalogsLoadInProgress ||
         traktDiscoveryRefreshInProgress ||
         mdbListDiscoveryRefreshInProgress
+}
+
+internal fun shouldSkipTmdbTrailerIdLookup(
+    itemId: String?,
+    apiType: String?
+): Boolean {
+    if (apiType?.trim()?.lowercase() in setOf("tv", "series", "show", "tvshow")) return true
+    return AnimeStremioId.isExplicitAnimeOnlyId(itemId)
 }
 
 internal fun consumeDeferredFocusedItemEnrichment(

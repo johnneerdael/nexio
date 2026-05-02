@@ -1,6 +1,7 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
@@ -154,6 +155,7 @@ class TvdbTrailerResolver @Inject constructor(
     private suspend fun resolveIdentity(contentId: String): TvdbSeriesIdentity? {
         val normalized = contentId.lowercase()
         return when {
+            AnimeStremioId.isExplicitAnimeOnlyId(contentId) -> null
             normalized.startsWith("tvdb:") -> {
                 contentId.substringAfter(':').toIntOrNull()?.let {
                     tvdbIdentityService.resolveSeriesByTvdbId(it)

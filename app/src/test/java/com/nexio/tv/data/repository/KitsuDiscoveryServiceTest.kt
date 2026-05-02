@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,7 +47,7 @@ class KitsuDiscoveryServiceTest {
         assertEquals(ContentType.SERIES, row.items.single().type)
         assertEquals(PosterShape.POSTER, row.items.single().posterShape)
         assertEquals("1998", row.items.single().releaseInfo)
-        assertNull(row.items.single().imdbRating)
+        assertEquals(8.5f, row.items.single().imdbRating)
         assertEquals(1, snapshot.rowRecordsByCatalog.getValue(KitsuCatalogIds.TRENDING_ANIME).previews.size)
     }
 
@@ -71,7 +70,11 @@ class KitsuDiscoveryServiceTest {
             force = true
         )
 
-        assertEquals(ContentType.MOVIE, snapshot.rowsByCatalog.getValue(KitsuCatalogIds.POPULAR_ANIME).items.single().type)
+        val item = snapshot.rowsByCatalog.getValue(KitsuCatalogIds.POPULAR_ANIME).items.single()
+        val preview = snapshot.rowRecordsByCatalog.getValue(KitsuCatalogIds.POPULAR_ANIME).previews.single()
+        assertEquals(ContentType.MOVIE, preview.itemType)
+        assertEquals(ContentType.MOVIE, item.type)
+        assertEquals("movie", item.apiType)
     }
 
     @Test

@@ -1390,7 +1390,6 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
         .take(20)
         .map(::nextUpToMetaPreview)
     val traktPrefsSnapshot = traktCatalogPreferences
-    val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedTraktGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -1415,24 +1414,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
                     val rows = rail.toPopulatedRows()
                     if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
                 }
-            val existingRowsByKey = (
-                existingSnapshot.traktGroups +
-                    existingSnapshot.simklGroups +
-                    existingSnapshot.mdbListGroups +
-                    existingSnapshot.kitsuGroups +
-                    existingSnapshot.tmdbGroups
-                )
-                .flatMap { it.rows }
-                .associateBy(::homeCatalogGlobalKey)
-            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
-                rows = liveGroups.flatMap { it.rows },
-                existingRowsByKey = existingRowsByKey,
-                telemetryEnabled = telemetryEnabled,
-                onLog = { event, details -> logStartupPerf(event, details) }
-            )
-            val renewedTraktGroups = liveGroups
-                .replaceRows(hydratedRows)
-                .toPersistedSyntheticCatalogGroups()
+            val renewedTraktGroups = liveGroups.toPersistedSyntheticCatalogGroups()
             val effectiveTraktGroups = if (
                 renewedTraktGroups.isEmpty() &&
                 existingSnapshot.traktGroups.isNotEmpty() &&
@@ -1462,7 +1444,6 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
 ) {
     val profileId = profileManager.activeProfileId.value
     val simklPrefsSnapshot = simklCatalogPreferences
-    val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedSimklGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -1486,24 +1467,7 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
                     val rows = rail.toPopulatedRows()
                     if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
                 }
-            val existingRowsByKey = (
-                existingSnapshot.traktGroups +
-                    existingSnapshot.simklGroups +
-                    existingSnapshot.mdbListGroups +
-                    existingSnapshot.kitsuGroups +
-                    existingSnapshot.tmdbGroups
-                )
-                .flatMap { it.rows }
-                .associateBy(::homeCatalogGlobalKey)
-            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
-                rows = liveGroups.flatMap { it.rows },
-                existingRowsByKey = existingRowsByKey,
-                telemetryEnabled = telemetryEnabled,
-                onLog = { event, details -> logStartupPerf(event, details) }
-            )
-            val renewedSimklGroups = liveGroups
-                .replaceRows(hydratedRows)
-                .toPersistedSyntheticCatalogGroups()
+            val renewedSimklGroups = liveGroups.toPersistedSyntheticCatalogGroups()
             val effectiveSimklGroups = if (
                 renewedSimklGroups.isEmpty() &&
                 existingSnapshot.simklGroups.isNotEmpty() &&
@@ -1533,7 +1497,6 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
 ) {
     val profileId = profileManager.activeProfileId.value
     val mdbPrefsSnapshot = mdbListCatalogPreferences
-    val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedMDBListGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -1544,24 +1507,7 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
                 prefs = mdbPrefsSnapshot,
                 snapshot = snapshot
             )
-            val existingRowsByKey = (
-                existingSnapshot.traktGroups +
-                    existingSnapshot.simklGroups +
-                    existingSnapshot.mdbListGroups +
-                    existingSnapshot.kitsuGroups +
-                    existingSnapshot.tmdbGroups
-                )
-                .flatMap { it.rows }
-                .associateBy(::homeCatalogGlobalKey)
-            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
-                rows = liveGroups.flatMap { it.rows },
-                existingRowsByKey = existingRowsByKey,
-                telemetryEnabled = telemetryEnabled,
-                onLog = { event, details -> logStartupPerf(event, details) }
-            )
-            val renewedMDBListGroups = liveGroups
-                .replaceRows(hydratedRows)
-                .toPersistedSyntheticCatalogGroups()
+            val renewedMDBListGroups = liveGroups.toPersistedSyntheticCatalogGroups()
             val effectiveMDBListGroups = if (
                 renewedMDBListGroups.isEmpty() &&
                 existingSnapshot.mdbListGroups.isNotEmpty() &&
@@ -1591,7 +1537,6 @@ internal suspend fun HomeViewModel.renewKitsuSyntheticSnapshotPipeline(
 ) {
     val profileId = profileManager.activeProfileId.value
     val kitsuPrefsSnapshot = kitsuCatalogPreferences
-    val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedKitsuGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -1617,24 +1562,7 @@ internal suspend fun HomeViewModel.renewKitsuSyntheticSnapshotPipeline(
                     val rows = rail.toPopulatedRows()
                     if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
                 }
-            val existingRowsByKey = (
-                existingSnapshot.traktGroups +
-                    existingSnapshot.simklGroups +
-                    existingSnapshot.mdbListGroups +
-                    existingSnapshot.kitsuGroups +
-                    existingSnapshot.tmdbGroups
-                )
-                .flatMap { it.rows }
-                .associateBy(::homeCatalogGlobalKey)
-            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
-                rows = liveGroups.flatMap { it.rows },
-                existingRowsByKey = existingRowsByKey,
-                telemetryEnabled = telemetryEnabled,
-                onLog = { event, details -> logStartupPerf(event, details) }
-            )
-            val renewedKitsuGroups = liveGroups
-                .replaceRows(hydratedRows)
-                .toPersistedSyntheticCatalogGroups()
+            val renewedKitsuGroups = liveGroups.toPersistedSyntheticCatalogGroups()
             val effectiveKitsuGroups = if (
                 renewedKitsuGroups.isEmpty() &&
                 existingSnapshot.kitsuGroups.isNotEmpty() &&
@@ -1664,7 +1592,6 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
 ) {
     val profileId = profileManager.activeProfileId.value
     val tmdbPrefsSnapshot = tmdbCatalogPreferences
-    val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedTmdbSnapshot: SyntheticHomeCatalogStore.Snapshot? = null
 
     syntheticCatalogStoreMutex.withLock {
@@ -1690,23 +1617,7 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
                     val rows = rail.toPopulatedRows()
                     if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
                 }
-            val existingRowsByKey = (
-                existingSnapshot.traktGroups +
-                    existingSnapshot.simklGroups +
-                    existingSnapshot.mdbListGroups +
-                    existingSnapshot.tmdbGroups
-                )
-                .flatMap { it.rows }
-                .associateBy(::homeCatalogGlobalKey)
-            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
-                rows = liveGroups.flatMap { it.rows },
-                existingRowsByKey = existingRowsByKey,
-                telemetryEnabled = telemetryEnabled,
-                onLog = { event, details -> logStartupPerf(event, details) }
-            )
-            val renewedTmdbGroups = liveGroups
-                .replaceRows(hydratedRows)
-                .toPersistedSyntheticCatalogGroups()
+            val renewedTmdbGroups = liveGroups.toPersistedSyntheticCatalogGroups()
             val effectiveTmdbGroups = resolveEffectiveTmdbSyntheticGroups(
                 renewedTmdbGroups = renewedTmdbGroups,
                 existingSnapshot = existingSnapshot,
@@ -1735,19 +1646,6 @@ internal suspend fun HomeViewModel.renewTmdbSyntheticSnapshotPipeline(
         withContext(Dispatchers.Main.immediate) {
             applyPersistedTmdbSyntheticSnapshot(renewedSnapshot)
         }
-    }
-}
-
-private fun List<SyntheticCatalogOrderGroup>.replaceRows(
-    hydratedRows: List<CatalogRow>
-): List<SyntheticCatalogOrderGroup> {
-    val hydratedByKey = hydratedRows.associateBy(::homeCatalogGlobalKey)
-    return map { group ->
-        group.copy(
-            rows = group.rows.map { row ->
-                hydratedByKey[homeCatalogGlobalKey(row)] ?: row
-            }
-        )
     }
 }
 

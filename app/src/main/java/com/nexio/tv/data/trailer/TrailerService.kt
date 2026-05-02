@@ -2,6 +2,7 @@ package com.nexio.tv.data.trailer
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
@@ -119,6 +120,7 @@ class TrailerService(
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
         val tmdbApiKey = trailerTmdbProvider.getTmdbApiKey().orEmpty()
+        val explicitAnimeOnlyContentId = isExplicitAnimeOnlyContentId(contentId)
 
         // For TV shows with no explicit season, auto-detect the latest aired season before building
         // the cache key so the key encodes the actual season. When a new season airs the detected
@@ -126,7 +128,8 @@ class TrailerService(
         val effectiveSeasonNumber: Int? = if (
                 seasonNumber == null &&
                 !tmdbId.isNullOrBlank() &&
-                normalizeTmdbMediaType(type) == "tv"
+                normalizeTmdbMediaType(type) == "tv" &&
+                !explicitAnimeOnlyContentId
             ) {
                 val numericId = tmdbId.toIntOrNull()
                 if (numericId != null && tmdbApiKey.isNotBlank()) {
@@ -237,8 +240,9 @@ class TrailerService(
         val mediaType = normalizeTmdbMediaType(type)
         val apiKey = trailerTmdbProvider.getTmdbApiKey()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+        val explicitAnimeOnlyContentId = isExplicitAnimeOnlyContentId(contentId)
 
-        val seasonTmdbVideos = if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
+        val seasonTmdbVideos = if (numericTmdbId != null && mediaType == "tv" && apiKey != null && !explicitAnimeOnlyContentId) {
             trailerTmdbProvider.fetchSeasonVideos(
                 tmdbId = numericTmdbId,
                 seasonNumber = normalizedSeason,
@@ -270,6 +274,7 @@ class TrailerService(
         trailerDebugLog("getTitleMediaAvailability start tmdbId=$tmdbId type=$type contentId=$contentId fallbackYtIds=$fallbackYtCount")
 
         val mediaType = normalizeTmdbMediaType(type)
+        val explicitAnimeOnlyContentId = isExplicitAnimeOnlyContentId(contentId)
 
         // For TV: check TVDB first before TMDB per D-05
         if (mediaType == "tv") {
@@ -294,6 +299,11 @@ class TrailerService(
             if (fallbackYtCount > 0) {
                 trailerDebugLog("getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
                 return@withContext true
+            }
+
+            if (explicitAnimeOnlyContentId) {
+                trailerDebugLog("getTitleMediaAvailability skipping tmdb tv fallback for explicit anime id contentId=$contentId")
+                return@withContext false
             }
 
             // TMDB TV videos as last resort
@@ -322,7 +332,7 @@ class TrailerService(
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
 
         val tmdbTitleVideos = when {
-            numericTmdbId == null || apiKey == null -> emptyList()
+            explicitAnimeOnlyContentId || numericTmdbId == null || apiKey == null -> emptyList()
             mediaType == "movie" -> trailerTmdbProvider.fetchMovieVideos(
                 tmdbId = numericTmdbId,
                 preferredLanguage = tmdbLanguage,
@@ -472,6 +482,7 @@ class TrailerService(
         fallbackYtIds: List<String>
     ): TrailerResolutionResult? {
         val isTv = normalizeTmdbMediaType(type) == "tv"
+        val explicitAnimeOnlyContentId = isExplicitAnimeOnlyContentId(contentId)
 
         if (isTv) {
             // TV fallback order per D-07: TVDB -> Streailer -> fallback YT IDs -> explicit TMDB
@@ -487,13 +498,15 @@ class TrailerService(
         }
 
         // Movie ordering unchanged: TMDB -> fallback YT IDs -> Streailer
-        resolveTrailerPlaybackFromTmdbId(
-            tmdbId = tmdbId,
-            type = type,
-            seasonNumber = seasonNumber,
-            title = title,
-            year = year
-        )?.let { return it }
+        if (!explicitAnimeOnlyContentId) {
+            resolveTrailerPlaybackFromTmdbId(
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = seasonNumber,
+                title = title,
+                year = year
+            )?.let { return it }
+        }
 
         fallbackYtIds.asSequence()
             .map { it.trim() }
@@ -563,6 +576,10 @@ class TrailerService(
             }
 
         // 4. Explicit TMDB fallback (last resort for TV)
+        if (isExplicitAnimeOnlyContentId(contentId)) {
+            trailerDebugLog("tmdb_trailer_fallback_skipped_for_explicit_anime_id contentId=$contentId tmdbId=$tmdbId")
+            return null
+        }
         trailerDebugLog("tmdb_trailer_fallback contentId=$contentId tmdbId=$tmdbId")
         return resolveTrailerPlaybackFromTmdbId(
             tmdbId = tmdbId,
@@ -586,8 +603,9 @@ class TrailerService(
         val mediaType = normalizeTmdbMediaType(type)
         val apiKey = trailerTmdbProvider.getTmdbApiKey()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+        val explicitAnimeOnlyContentId = isExplicitAnimeOnlyContentId(contentId)
 
-        if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
+        if (numericTmdbId != null && mediaType == "tv" && apiKey != null && !explicitAnimeOnlyContentId) {
             val seasonResults = trailerTmdbProvider.fetchSeasonVideos(
                 tmdbId = numericTmdbId,
                 seasonNumber = normalizedSeason,
@@ -744,8 +762,9 @@ class TrailerService(
         val mediaType = normalizeTmdbMediaType(type)
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
         val apiKey = trailerTmdbProvider.getTmdbApiKey()
+        val explicitAnimeOnlyContentId = isExplicitAnimeOnlyContentId(contentId)
 
-        val tmdbRecapResults = if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
+        val tmdbRecapResults = if (numericTmdbId != null && mediaType == "tv" && apiKey != null && !explicitAnimeOnlyContentId) {
             trailerTmdbProvider.fetchSeasonVideos(
                 tmdbId = numericTmdbId,
                 seasonNumber = normalizedSeason,
@@ -901,6 +920,10 @@ class TrailerService(
         return normalizeTmdbTrailerLanguage(
             runCatching { tmdbMetadataService.currentTmdbLanguageTag() }.getOrNull()
         )
+    }
+
+    private fun isExplicitAnimeOnlyContentId(contentId: String?): Boolean {
+        return AnimeStremioId.isExplicitAnimeOnlyId(contentId)
     }
 
     private fun getValidCachedYoutubeSource(youtubeKey: String): CachedTrailerPlaybackSource? {

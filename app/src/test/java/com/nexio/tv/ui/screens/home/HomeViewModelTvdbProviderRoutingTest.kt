@@ -270,7 +270,7 @@ class HomeViewModelTvdbProviderRoutingTest {
 
     private fun passthroughTitleRatingOverrideRepository(): com.nexio.tv.data.repository.TitleRatingOverrideRepository {
         return mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>().also { repository ->
-            coEvery { repository.enrichPreview(any()) } answers { firstArg() }
+            coEvery { repository.enrichPreview(any(), any()) } answers { firstArg() }
         }
     }
 }

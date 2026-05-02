@@ -54,7 +54,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
-import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -642,48 +641,46 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
-            if (BuildConfig.IS_DEBUG_BUILD) {
-                item(key = "troubleshooting_runtime_trace") {
-                    SettingsActionRow(
-                        title = "Runtime & Metadata Trace",
-                        subtitle = "Capture runtime + HTTP events for support diagnostics",
-                        value = "Open",
-                        onClick = onOpenRuntimeTrace
-                    )
-                }
+            item(key = "troubleshooting_runtime_trace") {
+                SettingsActionRow(
+                    title = "Runtime & Metadata Trace",
+                    subtitle = "Capture runtime + HTTP events for support diagnostics",
+                    value = "Open",
+                    onClick = onOpenRuntimeTrace
+                )
+            }
 
-                item(key = "troubleshooting_logcat_first_paint") {
-                    ToggleSettingsItem(
-                        icon = Icons.Default.Visibility,
-                        title = stringResource(R.string.troubleshooting_logcat_first_paint_title),
-                        subtitle = stringResource(R.string.troubleshooting_logcat_first_paint_subtitle),
-                        isChecked = firstPaintLogcatEnabled,
-                        onCheckedChange = onSetFirstPaintLogcatEnabled,
-                        onFocused = { focusedSection = PlaybackSection.LOGGING }
-                    )
-                }
+            item(key = "troubleshooting_logcat_first_paint") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Visibility,
+                    title = stringResource(R.string.troubleshooting_logcat_first_paint_title),
+                    subtitle = stringResource(R.string.troubleshooting_logcat_first_paint_subtitle),
+                    isChecked = firstPaintLogcatEnabled,
+                    onCheckedChange = onSetFirstPaintLogcatEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
 
-                item(key = "troubleshooting_logcat_meta_route") {
-                    ToggleSettingsItem(
-                        icon = Icons.AutoMirrored.Filled.AltRoute,
-                        title = stringResource(R.string.troubleshooting_logcat_meta_route_title),
-                        subtitle = stringResource(R.string.troubleshooting_logcat_meta_route_subtitle),
-                        isChecked = metaRouteLogcatEnabled,
-                        onCheckedChange = onSetMetaRouteLogcatEnabled,
-                        onFocused = { focusedSection = PlaybackSection.LOGGING }
-                    )
-                }
+            item(key = "troubleshooting_logcat_meta_route") {
+                ToggleSettingsItem(
+                    icon = Icons.AutoMirrored.Filled.AltRoute,
+                    title = stringResource(R.string.troubleshooting_logcat_meta_route_title),
+                    subtitle = stringResource(R.string.troubleshooting_logcat_meta_route_subtitle),
+                    isChecked = metaRouteLogcatEnabled,
+                    onCheckedChange = onSetMetaRouteLogcatEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
 
-                item(key = "troubleshooting_logcat_int_runtime") {
-                    ToggleSettingsItem(
-                        icon = Icons.Default.Sync,
-                        title = stringResource(R.string.troubleshooting_logcat_int_runtime_title),
-                        subtitle = stringResource(R.string.troubleshooting_logcat_int_runtime_subtitle),
-                        isChecked = intRuntimeLogcatEnabled,
-                        onCheckedChange = onSetIntRuntimeLogcatEnabled,
-                        onFocused = { focusedSection = PlaybackSection.LOGGING }
-                    )
-                }
+            item(key = "troubleshooting_logcat_int_runtime") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Sync,
+                    title = stringResource(R.string.troubleshooting_logcat_int_runtime_title),
+                    subtitle = stringResource(R.string.troubleshooting_logcat_int_runtime_subtitle),
+                    isChecked = intRuntimeLogcatEnabled,
+                    onCheckedChange = onSetIntRuntimeLogcatEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
             }
         }
     }
