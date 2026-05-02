@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
@@ -56,6 +57,7 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -81,6 +83,7 @@ import org.junit.Test
 class HomeViewModelFocusHydrationTest {
 
     private val testDispatcher = StandardTestDispatcher()
+    private val createdViewModels = mutableListOf<HomeViewModel>()
 
     @Before
     fun setUp() {
@@ -89,6 +92,8 @@ class HomeViewModelFocusHydrationTest {
 
     @After
     fun tearDown() {
+        createdViewModels.forEach { it.viewModelScope.cancel() }
+        createdViewModels.clear()
         Dispatchers.resetMain()
     }
 
@@ -247,6 +252,51 @@ class HomeViewModelFocusHydrationTest {
         assertEquals("Canonical Title", enriched.single().name)
         assertEquals(7.7f, enriched.single().imdbRating)
         coVerify(exactly = 1) { titleRatingOverrideRepository.enrichPreview(any(), null) }
+    }
+
+    @Test
+    fun `hero enrichment resolves stable bundle once for duplicate item keys in batch`() = runTest(testDispatcher) {
+        val facade = mockk<MetadataRouterFacade>(relaxed = true)
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val stableIdBundle = stableIdBundle()
+        val item = railPreviewMetaPreview().copy(
+            type = ContentType.MOVIE,
+            rawType = "movie"
+        )
+
+        coEvery { facade.resolveRequest(any()) } returns successResult()
+        coEvery {
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${item.id}"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
+            firstArg<MetaPreview>().copy(imdbRating = 9.6f)
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = facade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository
+        )
+
+        val enriched = viewModel.enrichHeroItemsPipeline(
+            items = listOf(item, item.copy(name = "Duplicate rail copy")),
+            settings = TmdbSettings()
+        )
+
+        assertEquals(2, enriched.size)
+        assertEquals(9.6f, enriched[0].imdbRating)
+        assertEquals(9.6f, enriched[1].imdbRating)
+        coVerify(exactly = 1) {
+            facade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                itemKey = "movie:${item.id}"
+            )
+        }
+        coVerify(exactly = 2) { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) }
     }
 
     @Test
@@ -547,6 +597,6 @@ class HomeViewModelFocusHydrationTest {
             playbackIdleGateState = playbackIdleGateState,
             integrationOwnershipService = mockk(relaxed = true),
             appContext = mockk<Context>(relaxed = true)
-        )
+        ).also(createdViewModels::add)
     }
 }
