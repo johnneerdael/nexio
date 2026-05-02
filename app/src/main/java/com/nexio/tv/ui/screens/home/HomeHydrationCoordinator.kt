@@ -154,7 +154,7 @@ class HomeHydrationCoordinator @Inject constructor(
         languageTag: String
     ): HydratedHomeOverlay? {
         val routeProvider = route?.provider
-        val canonicalIdentity = canonicalIdentity(routeProvider, resolvedDocument, bundle) ?: return null
+        val canonicalIdentity = canonicalIdentity(route, resolvedDocument, bundle) ?: return null
         val enrichedPreview = titleRatingOverrideRepository.enrichPreview(
             displayMetadata.applyTo(item),
             bundle
@@ -245,21 +245,31 @@ class HomeHydrationCoordinator @Inject constructor(
         }
 
     private fun canonicalIdentity(
-        routeProvider: MetadataPrimaryProvider?,
+        route: MetadataRoute?,
         document: ResolvedMetadataDocument,
         bundle: StableIdBundle?
     ): CanonicalIdentity? {
-        val routedIdentity = routeProvider
-            ?.toProviderId()
-            ?.let { provider ->
-                routeProvider
-                    .let { bundle?.canonical?.providerNativeIdFor(it) }
-                    ?.let { id -> CanonicalIdentity(provider, id) }
-            }
+        val routedIdentity = route?.canonicalIdentity(bundle)
         return routedIdentity
             ?: document.canonicalIdentity()
             ?: bundle?.canonicalIdentity()
     }
+
+    private fun MetadataRoute.canonicalIdentity(bundle: StableIdBundle?): CanonicalIdentity? {
+        val canonicalProvider = provider.toProviderId() ?: return null
+        val providerNativeId = bundle?.canonical?.providerNativeIdFor(provider)
+            ?: targetIds[provider].providerNativeId()
+            ?: parentId.providerNativeId()
+            ?: return null
+        return CanonicalIdentity(canonicalProvider, providerNativeId)
+    }
+
+    private fun String?.providerNativeId(): String? =
+        this
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.substringAfter(':')
+            ?.takeIf { it.isNotBlank() }
 
     private fun ResolvedMetadataDocument.homeFieldTrace(
         fallbackProvider: MetadataPrimaryProvider?

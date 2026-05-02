@@ -302,6 +302,45 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `stable bundle failure uses route target id when document canonical id is missing`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val ratings = mockk<TitleRatingOverrideRepository>()
+        val sink = RecordingTraceSink()
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        var applied: com.nexio.tv.domain.model.HydratedHomeOverlay? = null
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(canonicalId = null)
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } throws IllegalStateException("stable ids failed")
+        coEvery { ratings.enrichPreview(any(), null) } answers { firstArg() }
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+
+        val result = coordinator(facade, store, ratings, sink).hydrate(
+            item = preview(
+                id = "550",
+                title = "Preview title",
+                stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
+            ),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { applied = it }
+        )
+
+        assertSame(overlaySlot.captured, result)
+        assertSame(overlaySlot.captured, applied)
+        assertEquals(ProviderId.TMDB, overlaySlot.captured.canonicalProvider)
+        assertEquals("550", overlaySlot.captured.canonicalId)
+        assertEquals("tt0137523", overlaySlot.captured.imdbId)
+        assertEquals(
+            listOf("home.hydration_started", "home.hydration_overlay_written", "home.hydration_applied"),
+            sink.events.map { it.eventType }
+        )
+    }
+
+    @Test
     fun `hydration failure keeps preview path and does not write`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
@@ -369,7 +408,9 @@ class HomeHydrationCoordinatorTest {
         firstPaintSourceItemId = id
     )
 
-    private fun resolutionResult() = MetadataResolutionResult(
+    private fun resolutionResult(
+        canonicalId: String? = "tmdb:550"
+    ) = MetadataResolutionResult(
         route = MetadataRoute(
             provider = MetadataPrimaryProvider.TMDB,
             parentId = "tmdb:550",
@@ -387,7 +428,7 @@ class HomeHydrationCoordinatorTest {
             networkResolvers = emptyList()
         ),
         resolvedDocument = ResolvedMetadataDocument(
-            canonicalId = "tmdb:550",
+            canonicalId = canonicalId,
             title = "Canonical title",
             overview = "Canonical overview",
             poster = "poster.jpg",
