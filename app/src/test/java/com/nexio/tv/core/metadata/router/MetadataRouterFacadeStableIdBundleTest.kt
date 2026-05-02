@@ -140,6 +140,79 @@ class MetadataRouterFacadeStableIdBundleTest {
         )
     }
 
+    @Test
+    fun `resolveStableIdBundle with resolved route reuses route without routing request again`() = runTest {
+        val request = MetadataRequest(
+            contentId = "tt0137523",
+            contentType = ContentType.MOVIE,
+            sourceContext = MetadataSourceContext(
+                previewSourceProvider = ProviderId.TRAKT.name,
+                previewStableIds = ProviderIds(
+                    imdb = "tt0137523",
+                    tmdb = "550",
+                    trakt = "movie-42"
+                ),
+                previewSourceItemId = "trakt-item-42",
+                previewRailSource = "popular-movies"
+            ),
+            depth = MetadataDepth.DETAIL_CORE
+        )
+        val route = MetadataRoute(
+            provider = MetadataPrimaryProvider.TMDB,
+            parentId = "tmdb:550",
+            mediaKind = MetadataMediaKind.MOVIE,
+            reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
+            sourceContext = request.sourceContext,
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550"),
+            trace = emptyList()
+        )
+        val router = mockk<MetadataRouter>(relaxed = true)
+        val expectedBundle = StableIdBundle(
+            itemKey = "movie:imdb:tt0137523",
+            itemType = ContentType.MOVIE,
+            canonical = CanonicalStableIds(tmdbMovieId = "550"),
+            sidecars = SidecarStableIds(imdbId = "tt0137523"),
+            source = request.sourceContext.previewStableIds.toSourceStableIds(
+                sourceProvider = ProviderId.TRAKT,
+                sourceItemId = "trakt-item-42",
+                railId = "popular-movies"
+            ),
+            evidence = emptyList(),
+            resolvedAtMs = 123L
+        )
+        val capturedRequest = mutableListOf<StableIdBundleRequest>()
+        val stableIdBundleResolver = mockk<StableIdBundleResolver>()
+        coEvery { stableIdBundleResolver.resolve(capture(capturedRequest)) } returns expectedBundle
+        val facade = facade(
+            router = router,
+            stableIdBundleResolver = stableIdBundleResolver
+        )
+
+        val bundle = facade.resolveStableIdBundle(
+            route = route,
+            request = request,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            itemKey = "movie:imdb:tt0137523"
+        )
+
+        assertSame(expectedBundle, bundle)
+        assertEquals(
+            StableIdBundleRequest(
+                itemKey = "movie:imdb:tt0137523",
+                itemType = ContentType.MOVIE,
+                routeProvider = MetadataPrimaryProvider.TMDB,
+                knownIds = request.sourceContext.previewStableIds,
+                sourceProvider = ProviderId.TRAKT,
+                sourceItemId = "trakt-item-42",
+                railId = "popular-movies",
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
+            ),
+            capturedRequest.single()
+        )
+        coVerify(exactly = 0) { router.route(any()) }
+        coVerify(exactly = 1) { stableIdBundleResolver.resolve(any()) }
+    }
+
     private fun facade(
         router: MetadataRouter = mockk(relaxed = true),
         stableIdBundleResolver: StableIdBundleResolver = mockk(relaxed = true),
