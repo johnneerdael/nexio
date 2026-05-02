@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import com.nexio.tv.core.integration.RailKeyFactory
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
@@ -401,6 +402,48 @@ internal fun HomeViewModel.invalidateHydratedHomeOverlayScope(scheduleRows: Bool
     lastCatalogComputationSignature = null
     if (scheduleRows) {
         scheduleUpdateCatalogRows()
+    }
+}
+
+internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(overlay: HydratedHomeOverlay) {
+    var changed = false
+    hydratedHomeOverlaysByItemKey.update { current ->
+        if (current[overlay.itemKey] == overlay) {
+            current
+        } else {
+            changed = true
+            current + (overlay.itemKey to overlay)
+        }
+    }
+    if (changed) {
+        lastCatalogComputationSignature = null
+        scheduleUpdateCatalogRows()
+    }
+}
+
+internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
+    items: List<MetaPreview>,
+    expectedGeneration: Long
+) {
+    if (!isNonPlaybackHomeWorkAllowed()) return
+
+    val uniqueItems = items.distinctBy { it.homeOverlayItemKey() }
+    if (uniqueItems.isEmpty()) return
+
+    val languageTag = profileBoundary.currentLanguageTag()
+    uniqueItems.forEach { item ->
+        if (!isNonPlaybackHomeWorkAllowed()) return
+        homeHydrationCoordinator.hydrate(
+            item = item,
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = languageTag,
+            expectedGeneration = expectedGeneration,
+            currentGeneration = { homeProfileGeneration },
+            onOverlayApplied = { overlay ->
+                applyHydratedHomeOverlayFromCoordinator(overlay)
+            }
+        )
     }
 }
 
@@ -1333,7 +1376,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
         .toList()
         .ifEmpty { visibleItemsBeforeSettle }
     if (visibleItems.isNotEmpty()) {
-        homeCatalogRefreshCoordinator.hydrateAndPrefetchVisibleItems(
+        hydrateVisibleHomeItemsWithCoordinator(
+            items = visibleItems,
+            expectedGeneration = expectedGeneration
+        )
+        homeCatalogRefreshCoordinator.prefetchVisibleImagesOnly(
             items = visibleItems,
             telemetryEnabled = startupPerfTelemetryEnabled,
             onLog = { event, details -> logStartupPerf(event, details) }

@@ -7,15 +7,10 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.metadata.router.MetadataDepth
-import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
-import com.nexio.tv.core.metadata.router.StableIdBundle
-import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
-import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -304,83 +299,15 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         evictImageUrls(urls)
     }
 
-    internal suspend fun hydrateAndPrefetchVisibleItems(
+    internal suspend fun prefetchVisibleImagesOnly(
         items: List<MetaPreview>,
         telemetryEnabled: Boolean,
         onLog: (String, String?) -> Unit
     ) {
-        val uniqueItems = items.distinctBy { "${it.apiType}:${it.id}" }
+        val uniqueItems = items.distinctBy { it.homeOverlayItemKey() }
         if (uniqueItems.isEmpty()) return
 
-        var metadataCachedCount = 0
-        var metadataFetchCount = 0
-        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
-        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val catalogKey = "visible_home"
-        val runtimeHydrationKeys = AndroidTvSearchRuntimeReadiness
-            .prioritizeMissingRuntimeCandidates(uniqueItems)
-            .map { "${it.apiType}:${it.id}" }
-            .toSet()
-
-        onLog("metadata_hydrate_start", "catalogKey=$catalogKey items=${uniqueItems.size}")
-        uniqueItems.forEach { item ->
-            val itemKey = "${item.apiType}:${item.id}"
-            val cachedHomeDisplayMetadata = metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(
-                itemKey = itemKey,
-                languageTag = languageTag
-            )
-            val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
-                itemKey = itemKey,
-                languageTag = languageTag
-            ) || cachedHomeDisplayMetadata != null
-            if (hasCachedMetadata) {
-                metadataCachedCount += 1
-                if (telemetryEnabled) {
-                    onLog("item_metadata_cached", "catalogKey=$catalogKey itemKey=$itemKey")
-                }
-            }
-            try {
-                val shouldHydrateProviderMetadata = !hasCachedMetadata && itemKey in runtimeHydrationKeys
-                val stableRatingSeed = if (shouldHydrateProviderMetadata) {
-                    metadataFetchCount += 1
-                    if (telemetryEnabled) {
-                        onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
-                    }
-                    overlayProviderLocalizedMetadata(item, onLog)
-                } else {
-                    cachedHomeDisplayMetadata?.applyTo(item) ?: item
-                }
-                val stableIdBundle = metadataRouterFacade.resolveStableIdBundleOrNull(
-                    request = stableRatingSeed.toStableIdMetadataRequest(languageTag = languageTag),
-                    trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
-                    itemKey = itemKey,
-                    onLog = onLog
-                )
-                val enriched = titleRatingOverrideRepository.enrichPreview(stableRatingSeed, stableIdBundle)
-                val displayReady = posterRatingsUrlResolver.apply(enriched, activePosterProvider)
-                val originalDisplay = stableRatingSeed.toHomeDisplayMetadata().withoutProviderArtwork()
-                val hydratedDisplay = displayReady.toHomeDisplayMetadata().withoutProviderArtwork()
-                if (hydratedDisplay != originalDisplay) {
-                    metadataDiskCacheStore.writeHomeDisplayMetadata(
-                        itemKey = itemKey,
-                        languageTag = languageTag,
-                        metadata = hydratedDisplay
-                    )
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                onLog(
-                    "visible_metadata_hydration_failed",
-                    "catalogKey=$catalogKey itemKey=$itemKey error=${e::class.java.simpleName}"
-                )
-                // Preserve legacy best-effort visible hydration behavior.
-            }
-        }
-        onLog(
-            "metadata_hydrate_end",
-            "catalogKey=$catalogKey total=${uniqueItems.size} cached=$metadataCachedCount fetched=$metadataFetchCount retained_missing=0"
-        )
 
         val imageTelemetry = buildImagePrefetchTelemetry(uniqueItems)
         onLog(
@@ -526,45 +453,6 @@ internal fun shouldReusePersistedHomeItem(
     persistedFallback: MetaPreview?
 ): Boolean {
     return !itemChanged && persistedFallback?.tomatoesRating != null
-}
-
-private fun HomeDisplayMetadata.withoutProviderArtwork(): HomeDisplayMetadata {
-    return copy(
-        poster = null,
-        posterProviderTag = null
-    )
-}
-
-private fun MetaPreview.toStableIdMetadataRequest(languageTag: String): MetadataRequest =
-    MetadataRequest(
-        contentId = id,
-        contentType = type,
-        sourceContext = toHomeMetadataSourceContext(),
-        language = languageTag,
-        depth = MetadataDepth.DETAIL_CORE
-    )
-
-private suspend fun MetadataRouterFacade.resolveStableIdBundleOrNull(
-    request: MetadataRequest,
-    trigger: StableIdResolutionTrigger,
-    itemKey: String,
-    onLog: (String, String?) -> Unit
-): StableIdBundle? {
-    return try {
-        resolveStableIdBundle(
-            request = request,
-            trigger = trigger,
-            itemKey = itemKey
-        )
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        onLog(
-            "stable_id_bundle_failed",
-            "trigger=${trigger.name} itemKey=$itemKey error=${e::class.java.simpleName}"
-        )
-        null
-    }
 }
 
 internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadataEnrichment): MetaPreview {

@@ -20,17 +20,13 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.data.trailer.TrailerResolutionResult
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -404,33 +400,10 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     // Rail-preview-first hydration: RAIL_PREVIEW items are routed through the same
-    // provider-localized canonical overlay path used by focused preview enrichment. PREVIEW
-    // depth is reserved for no-route first-paint ownership, so focused hydration must request
-    // DETAIL_CORE and then merge the canonical fields back into the existing catalog item.
+    // canonical overlay path used by visible and hero hydration.
     if (item.firstPaintSource == FirstPaintSource.RAIL_PREVIEW) {
-        val itemKey = item.id
-        val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
-        if (currentHydrationState == RailHydrationState.PREVIEW_ONLY) {
-            focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
-            viewModelScope.launch {
-                val enrichment = try {
-                    fetchProviderEnrichmentForPreview(item)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(HomeViewModel.TAG, "onItemFocus hydration failed for ${item.id}: ${e.message}", e)
-                    focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
-                    return@launch
-                }
-                if (enrichment == null) {
-                    focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
-                } else {
-                    focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
-                    prefetchedExternalMetaIds.add(item.id)
-                    updateCatalogItemWithProvider(item.id, enrichment)
-                }
-            }
-        }
+        hydrateFocusedRailPreviewWithCoordinator(item)
+        return
     }
 
     if (!isNonPlaybackHomeWorkAllowed()) return
@@ -500,6 +473,42 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             if (_enrichingItemId.value == item.id) {
                 setEnrichingItemId(null)
             }
+        }
+    }
+}
+
+private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPreview) {
+    if (!isNonPlaybackHomeWorkAllowed()) return
+
+    val itemKey = item.id
+    val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
+    if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return
+
+    focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
+    val expectedGeneration = homeProfileGeneration
+    viewModelScope.launch {
+        val overlay = try {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = profileBoundary.currentLanguageTag(),
+                expectedGeneration = expectedGeneration,
+                currentGeneration = { homeProfileGeneration },
+                onOverlayApplied = { appliedOverlay ->
+                    applyHydratedHomeOverlayFromCoordinator(appliedOverlay)
+                    focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
+                    prefetchedExternalMetaIds.add(item.id)
+                }
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(HomeViewModel.TAG, "onItemFocus hydration failed for ${item.id}: ${e.message}", e)
+            null
+        }
+        if (overlay == null && focusedItemHydrationStates[itemKey] == RailHydrationState.HYDRATING) {
+            focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
         }
     }
 }
@@ -757,39 +766,35 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
 
-    return coroutineScope {
-        val stableIdBundlesByItemKey = ConcurrentHashMap<String, Deferred<StableIdBundle?>>()
-        val batchScope = this
-        items.map { item ->
-            async(Dispatchers.IO) {
-                try {
-                    val enrichment = fetchProviderEnrichmentForPreview(item) ?: return@async item
-                    val hydratedItem = mergeFocusedItemEnrichment(
-                        currentItem = item,
-                        providerEnrichment = enrichment,
-                        externalMeta = null,
-                        tmdbSettings = settings
-                    )
-                    val itemKey = "${item.apiType}:${item.id}"
-                    val stableIdBundle = stableIdBundlesByItemKey.computeIfAbsent(itemKey) {
-                        batchScope.async(Dispatchers.IO) {
-                            resolveStableIdBundleOrNull(
-                                request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
-                                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                                itemKey = itemKey
-                            )
-                        }
-                    }.await()
-                    titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
-                    item
-                }
+    val expectedGeneration = homeProfileGeneration
+    val languageTag = profileBoundary.currentLanguageTag()
+    return items
+        .distinctBy { it.homeOverlayItemKey() }
+        .associate { item ->
+            val hydrated = try {
+                val overlay = homeHydrationCoordinator.hydrate(
+                    item = item,
+                    trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                    priority = HomeHydrationPriority.HERO,
+                    languageTag = languageTag,
+                    expectedGeneration = expectedGeneration,
+                    currentGeneration = { homeProfileGeneration },
+                    onOverlayApplied = { appliedOverlay ->
+                        applyHydratedHomeOverlayFromCoordinator(appliedOverlay)
+                    }
+                )
+                overlay?.fields?.applyTo(item) ?: item
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
+                item
             }
-        }.awaitAll()
-    }
+            item.homeOverlayItemKey() to hydrated
+        }
+        .let { hydratedByItemKey ->
+            items.map { item -> hydratedByItemKey[item.homeOverlayItemKey()] ?: item }
+        }
 }
 
 internal fun isFocusEnrichmentBlocked(
