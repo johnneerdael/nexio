@@ -1209,6 +1209,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
         lastCatalogComputationSignature = null
         updateCatalogRowsPipeline()
     }
+    if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
+        Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh visible hydration generation=$expectedGeneration")
+        return
+    }
 
     val activeCatalogItemKeys = (_fullCatalogRows.value.asSequence() + catalogsMap.values.asSequence())
         .flatMap { row -> row.items.asSequence() }
