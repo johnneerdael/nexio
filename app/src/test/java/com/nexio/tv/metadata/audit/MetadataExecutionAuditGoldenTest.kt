@@ -547,10 +547,7 @@ class MetadataExecutionAuditGoldenTest {
     @Test
     fun `fresh cache hit suppresses provider network for primary metadata`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
-        val warmReports = bundle.reports.filter {
-            it.scenario.cacheMode == AuditCacheMode.WARM_FRESH &&
-                !it.fixtureName.startsWith("synthetic/metadata/home-updates/")
-        }
+        val warmReports = bundle.reports.filter { it.scenario.cacheMode == AuditCacheMode.WARM_FRESH }
         val warmDecisions = warmReports.flatMap { it.items }.flatMap { it.cacheDecisions }
         val warmCalls = warmReports.flatMap { it.items }.flatMap { it.runtimeCalls }
 
