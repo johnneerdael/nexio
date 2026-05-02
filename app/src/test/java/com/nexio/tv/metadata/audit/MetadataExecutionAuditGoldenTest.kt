@@ -535,6 +535,16 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(json.contains("\"localization\""))
         assertTrue(json.contains("\"providerFallbackUsed\""))
         assertTrue(json.contains("productionCallerOwnership"))
+        assertTrue(json.contains("\"eventType\":\"metadata.stable_id_bundle\""))
+        assertTrue(json.contains("\"metadata.stable_id_bundle\""))
+        assertTrue(json.contains("\"scenario\":\"tmdb-tv-rail-preview-then-tvdb-hydration\""))
+        assertTrue(json.contains("\"canonicalProvider\":\"TVDB\""))
+        assertTrue(json.contains("\"imdbId\":\"tt0944947\""))
+        assertTrue(json.contains("\"firstPaint\":{\"source\":\"RAIL_PREVIEW\""))
+        assertTrue(json.contains("\"routerExecuted\":false"))
+        assertTrue(json.contains("\"networkExecuted\":false"))
+        assertFalse(json.contains("\"targetProvider\":\"TRAKT\""))
+        assertFalse(json.contains("\"targetProvider\":\"SIMKL\""))
         assertTrue(markdown.contains("Metadata Execution Audit Bundle"))
         assertTrue(markdown.contains("Git SHA"))
         assertTrue(markdown.contains("Artifact role"))
@@ -544,6 +554,8 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(markdown.contains("Identity resolution"))
         assertTrue(markdown.contains("Localization"))
         assertTrue(markdown.contains("Production caller ownership"))
+        assertTrue(markdown.contains("Stable ID Bundle"))
+        assertTrue(markdown.contains("tt0944947"))
     }
 
     @Test
