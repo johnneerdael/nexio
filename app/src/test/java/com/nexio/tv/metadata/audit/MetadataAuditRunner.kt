@@ -489,7 +489,11 @@ class MetadataAuditRunner private constructor(
             name = spec.name,
             depth = MetadataDepth.DETAIL_CORE,
             visibleItemIds = setOf(spec.itemId),
-            cacheMode = AuditCacheMode.WARM_FRESH
+            cacheMode = if (spec.metadataNetworkExecuted || spec.identityNetworkExecuted) {
+                AuditCacheMode.COLD
+            } else {
+                AuditCacheMode.WARM_FRESH
+            }
         )
         val firstPaint = FirstPaintEvent(
             itemId = spec.itemId,
@@ -605,11 +609,16 @@ class MetadataAuditRunner private constructor(
             productionCallerOwnership = emptyList(),
             localization = null,
             violations = emptyList(),
-            events = listOfNotNull(
-                AuditEvent.FirstPaint(firstPaint),
-                route?.let { AuditEvent.Route(it) },
-                stableIdBundle?.let { AuditEvent.StableIdBundle(it) }
-            ),
+            events = buildList {
+                add(AuditEvent.FirstPaint(firstPaint))
+                route?.let { add(AuditEvent.Route(it)) }
+                stableIdBundle?.let { add(AuditEvent.StableIdBundle(it)) }
+                add(AuditEvent.HomeUpdate(spec.homeUpdate))
+                runtimeCalls.forEach { add(AuditEvent.RuntimeCall(it)) }
+                cacheDecisions.forEach { add(AuditEvent.CacheDecisionEventRecord(it)) }
+                selectedFieldsBeforeHydration.forEach { add(AuditEvent.FieldSelected(it)) }
+                selectedFieldsAfterHydration.forEach { add(AuditEvent.FieldSelected(it)) }
+            },
             railSource = spec.railSource,
             sourceProvider = spec.sourceProvider,
             sourcePayloadFieldsUsed = spec.previewFields.filterValues { it != null }.keys,
@@ -643,13 +652,14 @@ class MetadataAuditRunner private constructor(
     ): List<FieldSelectedEvent> {
         return mapNotNull { (field, value) ->
             value?.takeIf { field in displayFieldNames }?.let {
+                val changed = field in changedFields
                 FieldSelectedEvent(
                     itemId = itemId,
                     field = field,
-                    selectedProvider = selectedProvider,
-                    sourceRole = sourceRole,
+                    selectedProvider = if (changed) selectedProvider else previewProvider ?: selectedProvider,
+                    sourceRole = if (changed) sourceRole else previewSourceRole ?: sourceRole,
                     valuePreview = it,
-                    rejectedCandidates = if (field in changedFields && previewProvider != null && previewSourceRole != null) {
+                    rejectedCandidates = if (changed && previewProvider != null && previewSourceRole != null) {
                         listOf(
                             RejectedCandidateReport(
                                 provider = previewProvider,
@@ -660,7 +670,11 @@ class MetadataAuditRunner private constructor(
                     } else {
                         emptyList()
                     },
-                    ownershipRule = "$field $ownershipRuleSuffix"
+                    ownershipRule = if (changed) {
+                        "$field $ownershipRuleSuffix"
+                    } else {
+                        "$field remains from first paint preview"
+                    }
                 )
             }
         }
@@ -673,9 +687,7 @@ class MetadataAuditRunner private constructor(
         "overview",
         "rating",
         "runtime",
-        "year",
-        "state",
-        "priority"
+        "year"
     )
 
     private fun RailScenarioSpec.toRailItemPreview(generatedAtMs: Long): RailItemPreview {
@@ -1408,11 +1420,11 @@ class MetadataAuditRunner private constructor(
                 homeUpdate = HomeUpdateEvent(
                     before = mapOf("title" to "Preview Only Show", "state" to "PREVIEW_ONLY"),
                     after = mapOf("title" to "Preview Only Show", "state" to "FAILED_USING_PREVIEW"),
-                    changedFields = emptyList(),
+                    changedFields = listOf("state"),
                     rowOrderChanged = false,
                     focusChanged = false,
                     displayHashBefore = "failure-preview",
-                    displayHashAfter = "failure-preview"
+                    displayHashAfter = "failure-state-updated"
                 ),
                 usedInputs = setOf("trakt.ids.imdb", "item.type")
             ),
@@ -1458,7 +1470,7 @@ class MetadataAuditRunner private constructor(
                 metadataNetworkExecuted = false,
                 homeUpdate = HomeUpdateEvent(
                     before = mapOf("title" to "Focused Preview", "priority" to "P0"),
-                    after = mapOf("title" to "Focused Hydrated", "priority" to "P0_BEFORE_OFFSCREEN"),
+                    after = mapOf("title" to "Focused Hydrated", "priority" to "P0"),
                     changedFields = listOf("title"),
                     rowOrderChanged = false,
                     focusChanged = false,
@@ -1484,11 +1496,11 @@ class MetadataAuditRunner private constructor(
                 homeUpdate = HomeUpdateEvent(
                     before = mapOf("title" to "Profile Preview", "state" to "HYDRATING"),
                     after = mapOf("title" to "Profile Preview", "state" to "IGNORED_PROFILE_SWITCH"),
-                    changedFields = emptyList(),
+                    changedFields = listOf("state"),
                     rowOrderChanged = false,
                     focusChanged = false,
                     displayHashBefore = "profile-preview",
-                    displayHashAfter = "profile-preview"
+                    displayHashAfter = "profile-state-ignored"
                 ),
                 usedInputs = setOf("profile.session", "simkl.ids.tmdb", "item.type")
             )

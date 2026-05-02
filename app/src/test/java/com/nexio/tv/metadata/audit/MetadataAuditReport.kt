@@ -33,6 +33,7 @@ sealed interface AuditEvent {
     data class FirstPaint(val event: FirstPaintEvent) : AuditEvent
     data class Route(val event: RouteEvent) : AuditEvent
     data class StableIdBundle(val event: StableIdBundleEvent) : AuditEvent
+    data class HomeUpdate(val event: HomeUpdateEvent) : AuditEvent
     data class ProviderPlan(val event: ProviderPlanEvent) : AuditEvent
     data class RuntimeCall(val event: RuntimeCallEvent) : AuditEvent
     data class CacheDecisionEventRecord(val event: CacheDecisionEvent) : AuditEvent
