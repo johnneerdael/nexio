@@ -294,7 +294,7 @@ class TraceMetadataEvents(
     }
 
     fun emitHomeHydrationStarted(
-        railId: String,
+        railId: String?,
         itemKey: String,
         firstPaintSource: String,
         trigger: String,
@@ -334,7 +334,7 @@ class TraceMetadataEvents(
     }
 
     fun emitHomeHydrationApplied(
-        railId: String,
+        railId: String?,
         itemKey: String,
         firstPaintSource: String,
         canonicalProvider: String,
@@ -349,7 +349,7 @@ class TraceMetadataEvents(
         rowOrderChanged: Boolean,
         focusChanged: Boolean,
         networkExecuted: Boolean,
-        cacheDecision: String
+        cacheDecision: String?
     ) {
         emitHomeHydrationEvent(
             eventType = "home.hydration_applied",
