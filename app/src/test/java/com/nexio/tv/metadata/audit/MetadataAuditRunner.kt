@@ -354,7 +354,6 @@ class MetadataAuditRunner private constructor(
 
         val route = result?.route
             ?.toAuditEvent(itemId = metaPreview.id, itemType = metaPreview.apiType)
-            ?.withoutCanonicalTargetWhenSuppressed(spec)
         if (route != null) trace.onRoute(route)
         val stableIdBundle = route?.let { resolvedRoute ->
             spec.toStableIdBundleEvent(resolvedRoute)
@@ -524,7 +523,7 @@ class MetadataAuditRunner private constructor(
     }
 
     private fun RailScenarioSpec.toStableIdBundleEvent(route: RouteEvent): StableIdBundleEvent {
-        val canonicalId = route.targetIds[route.provider] ?: targetIds[route.provider]
+        val canonicalId = route.targetIds[route.provider]
         val stableIds = stableIds()
         return StableIdBundleEvent(
             itemKey = "$itemType:$itemId",
@@ -547,11 +546,6 @@ class MetadataAuditRunner private constructor(
                 )
             )
         )
-    }
-
-    private fun RouteEvent.withoutCanonicalTargetWhenSuppressed(spec: RailScenarioSpec): RouteEvent {
-        if (!spec.suppressRouteCanonicalTarget) return this
-        return copy(targetIds = targetIds - provider)
     }
 
     private fun stableIdBundleStatus(canonicalId: String?, imdbId: String?): String {
@@ -983,31 +977,6 @@ class MetadataAuditRunner private constructor(
                 )
             ),
             RailScenarioSpec(
-                name = "tmdb-tv-rail-imdb-sidecar-without-canonical-route",
-                railSource = "BUILT_IN_TMDB",
-                sourceProvider = "TMDB",
-                itemId = "tmdb:tv:1399",
-                itemType = "series",
-                mediaKind = MetadataMediaKind.SERIES,
-                previewFields = mapOf(
-                    "title" to "TMDB TV Preview Missing Canonical",
-                    "poster" to "https://example.test/tmdb-tv-missing-canonical.jpg"
-                ),
-                routeProvider = com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TVDB,
-                apiShapeId = "tvdb.series.extended",
-                targetIds = mapOf(
-                    com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB to "tmdb:1399"
-                ),
-                imdbId = "tt0944947",
-                suppressRouteCanonicalTarget = true,
-                usedInputs = setOf("railSource", "sourceProvider", "tmdb.ids.imdb"),
-                hydratedFields = mapOf(
-                    "title" to "TVDB Hydration Without Canonical",
-                    "poster" to "https://example.test/tvdb-tv-missing-canonical.jpg",
-                    "overview" to "TVDB hydrated fields without a canonical route target"
-                )
-            ),
-            RailScenarioSpec(
                 name = "kitsu-rail-first-paint-rich-preview",
                 railSource = "BUILT_IN_KITSU",
                 sourceProvider = "KITSU",
@@ -1112,7 +1081,6 @@ private data class RailScenarioSpec(
     val targetIds: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String> = emptyMap(),
     val imdbId: String? = null,
     val requiresIdentityNetwork: Boolean = false,
-    val suppressRouteCanonicalTarget: Boolean = false,
     val usedInputs: Set<String> = emptySet(),
     val hydratedFields: Map<String, String?> = emptyMap()
 )
