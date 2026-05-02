@@ -542,6 +542,7 @@ class MetadataExecutionAuditGoldenTest {
             .single { it.getString("scenario") == "tmdb-tv-rail-preview-then-tvdb-hydration" }
         val tmdbTvRailItem = tmdbTvRailReport.getJSONArray("items").getJSONObject(0)
         val firstPaint = tmdbTvRailItem.getJSONObject("firstPaint")
+        val routing = tmdbTvRailItem.getJSONObject("routing")
         val stableIdBundle = tmdbTvRailItem.getJSONObject("metadata.stable_id_bundle")
 
         assertEquals("RAIL_PREVIEW", firstPaint.getString("source"))
@@ -549,10 +550,23 @@ class MetadataExecutionAuditGoldenTest {
         assertFalse(firstPaint.getBoolean("networkExecuted"))
         assertEquals("metadata.stable_id_bundle", stableIdBundle.getString("eventType"))
         assertEquals("TVDB", stableIdBundle.getString("canonicalProvider"))
-        assertEquals("tvdb:121361", stableIdBundle.getString("canonicalId"))
+        assertEquals(routing.getJSONObject("targetIds").getString("TVDB"), stableIdBundle.getString("canonicalId"))
         assertEquals("tt0944947", stableIdBundle.getString("imdbId"))
         assertFalse(stableIdBundle.getBoolean("networkExecuted"))
         assertEquals("VISIBLE_HOME_HYDRATION", stableIdBundle.getString("trigger"))
+
+        val missingCanonicalReport = root
+            .getJSONArray("reports")
+            .objects()
+            .single { it.getString("scenario") == "tmdb-tv-rail-imdb-sidecar-without-canonical-route" }
+        val missingCanonicalBundle = missingCanonicalReport
+            .getJSONArray("items")
+            .getJSONObject(0)
+            .getJSONObject("metadata.stable_id_bundle")
+
+        assertEquals("tt0944947", missingCanonicalBundle.getString("imdbId"))
+        assertTrue(missingCanonicalBundle.isNull("canonicalId"))
+        assertEquals("PREVIEW_IDS_ONLY", missingCanonicalBundle.getString("status"))
 
         assertFalse(json.contains("\"targetProvider\":\"TRAKT\""))
         assertFalse(json.contains("\"targetProvider\":\"SIMKL\""))
