@@ -74,13 +74,17 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
         }
     }
 
+    val hints = com.nexio.tv.data.integration.subtitles.wyzie.WyzieIdHintsParser.parse(request.id)
     val fetched = subtitleRepository.getSubtitles(
         type = request.type,
         id = request.id,
         videoId = request.videoId,
         videoHash = currentVideoHash,
         videoSize = currentVideoSize,
-        filename = currentFilename
+        filename = currentFilename,
+        wyzieHints = hints,
+        season = currentSeason,
+        episode = currentEpisode,
     )
     val preferredLanguage = preferredLanguageOverride ?: _uiState.value.subtitleStyle.preferredLanguage
     val secondaryLanguage = secondaryLanguageOverride ?: _uiState.value.subtitleStyle.secondaryPreferredLanguage
