@@ -26,6 +26,7 @@ import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
+import com.nexio.tv.data.local.WyzieSettingsDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
@@ -82,6 +83,7 @@ import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
+import com.nexio.tv.data.remote.supabase.WyzieSyncSettings
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.repository.EasyDebridService
@@ -181,6 +183,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
+    private val wyzieSettingsDataStore: WyzieSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val premiumizeService: PremiumizeService,
@@ -274,6 +277,7 @@ class AccountSettingsSyncService @Inject constructor(
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
                 subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.drop(1).map { Unit },
+                wyzieSettings = wyzieSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeAccountState = premiumizeService.observeAccountState().drop(1).map { Unit },
@@ -588,6 +592,10 @@ class AccountSettingsSyncService @Inject constructor(
                 gemini = GeminiSyncSettings(
                     enabled = subtitleTranslation.enabled
                 ),
+                wyzie = run {
+                    val s = wyzieSettingsDataStore.settings.first()
+                    WyzieSyncSettings(enabled = s.enabled, apiKey = s.apiKey)
+                },
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.rpdbEnabled,
                     topPostersEnabled = posterRatings.topPostersEnabled
@@ -731,6 +739,11 @@ class AccountSettingsSyncService @Inject constructor(
             model = remoteTranslation.model,
             baseUrl = remoteTranslation.baseUrl
         )
+        val remoteWyzie = settings.integrations.wyzie
+        wyzieSettingsDataStore.setEnabled(remoteWyzie.enabled)
+        if (remoteWyzie.apiKey != null) {
+            wyzieSettingsDataStore.setApiKey(remoteWyzie.apiKey)
+        }
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
@@ -830,6 +843,11 @@ class AccountSettingsSyncService @Inject constructor(
             model = remoteTranslation.model,
             baseUrl = remoteTranslation.baseUrl
         )
+        val remoteWyzie = settings.integrations.wyzie
+        wyzieSettingsDataStore.setEnabled(remoteWyzie.enabled)
+        if (remoteWyzie.apiKey != null) {
+            wyzieSettingsDataStore.setApiKey(remoteWyzie.apiKey)
+        }
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)

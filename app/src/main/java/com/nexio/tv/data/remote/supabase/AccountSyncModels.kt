@@ -225,6 +225,8 @@ data class IntegrationSettings(
     val subtitleTranslation: SubtitleTranslationSyncSettings = SubtitleTranslationSyncSettings(),
     @EncodeDefault
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
+    @EncodeDefault
+    val wyzie: WyzieSyncSettings = WyzieSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
     val kitsuAuth: KitsuAuthSyncSettings = KitsuAuthSyncSettings(),
     val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings(),
@@ -355,6 +357,12 @@ data class SubtitleTranslationSyncSettings(
     val model: String = "openrouter/free",
     @EncodeDefault
     val baseUrl: String = "https://openrouter.ai/api/v1"
+)
+
+@Serializable
+data class WyzieSyncSettings(
+    val enabled: Boolean = true,
+    val apiKey: String? = null
 )
 
 @Serializable

@@ -43,7 +43,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 7
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 8
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -58,6 +58,7 @@ internal fun observeAccountConfigSyncChanges(
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
+    wyzieSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -86,6 +87,7 @@ internal fun observeAccountConfigSyncChanges(
         animeSkipEnabled,
         animeSkipClientId,
         subtitleTranslationSettings,
+        wyzieSettings,
         posterRatingsSettings,
         premiumizeSettings,
         premiumizeAccountState,
@@ -116,6 +118,7 @@ internal fun observeAccountConfigSyncChangedPaths(
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     subtitleTranslationSettings: Flow<Unit>,
+    wyzieSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -144,6 +147,7 @@ internal fun observeAccountConfigSyncChangedPaths(
         animeSkipEnabled.map { "integrations.animeSkip.enabled" },
         animeSkipClientId.map { "integrations.animeSkip.clientId" },
         subtitleTranslationSettings.map { "integrations.subtitleTranslation" },
+        wyzieSettings.map { "integrations.wyzie" },
         posterRatingsSettings.map { "integrations.posterRatings" },
         premiumizeSettings.map { "integrations.debrid.premiumize" },
         premiumizeAccountState.map { "integrations.debrid.premiumize" },
