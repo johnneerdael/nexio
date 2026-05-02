@@ -90,6 +90,14 @@ class HomeHydrationCoordinator @Inject constructor(
                 overlay = overlay,
                 aliases = overlayAliases(item = item, bundle = bundle, itemKey = itemKey)
             )
+            if (currentGeneration() != expectedGeneration) {
+                traceEvents.emitHomeHydrationIgnored(
+                    itemKey = itemKey,
+                    reason = "generation_mismatch",
+                    trigger = trigger.name
+                )
+                return null
+            }
             traceEvents.emitHomeHydrationOverlayWritten(
                 itemKey = itemKey,
                 canonicalProvider = overlay.canonicalProvider.name,
