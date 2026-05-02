@@ -792,7 +792,7 @@ class HomeCatalogRefreshCoordinatorTest {
         )
 
         every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
-        every { metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(any(), any()) } returns null
         every {
             metadataDiskCacheStore.writeHomeDisplayMetadata(
                 itemKey = "movie:1007757",
@@ -863,7 +863,7 @@ class HomeCatalogRefreshCoordinatorTest {
         )
 
         every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
-        every { metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(any(), any()) } returns null
         every {
             metadataDiskCacheStore.writeHomeDisplayMetadata(
                 itemKey = "movie:1007757",
@@ -912,6 +912,149 @@ class HomeCatalogRefreshCoordinatorTest {
     }
 
     @Test
+    fun `visible hydration applies stable bundle rating pass when display metadata is cached`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val cachedMetadata = slot<HomeDisplayMetadata>()
+        val stableIdBundle = stableIdBundle(
+            itemKey = "movie:1007757",
+            tmdbMovieId = "1007757",
+            imdbId = "tt1007757"
+        )
+        val visibleItem = preview(id = "1007757", poster = null).copy(
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Cached title",
+            imdbRating = 0.0f,
+            ratingSource = TitleRatingSource.TMDB
+        )
+
+        every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
+        every {
+            metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem("movie:1007757", "en")
+        } returns HomeDisplayMetadata(title = "Cached title", imdbRating = 5.5f, ratingSource = TitleRatingSource.TMDB)
+        every {
+            metadataDiskCacheStore.writeHomeDisplayMetadata(
+                itemKey = "movie:1007757",
+                languageTag = "en",
+                metadata = capture(cachedMetadata)
+            )
+        } just Runs
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
+            firstArg<MetaPreview>().copy(
+                imdbRating = 9.4f,
+                ratingSource = TitleRatingSource.IMDB
+            )
+        }
+        every { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+
+        coordinator(
+            catalogRepository = catalogRepository,
+            metadataRouterFacade = metadataRouterFacade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchVisibleItems(
+            items = listOf(visibleItem),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(9.4f, cachedMetadata.captured.imdbRating)
+        assertEquals(TitleRatingSource.IMDB, cachedMetadata.captured.ratingSource)
+        coVerify(exactly = 0) { metadataRouterFacade.resolveRequest(any()) }
+        coVerify(exactly = 1) {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        }
+        coVerify(exactly = 1) { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) }
+    }
+
+    @Test
+    fun `visible hydration applies stable bundle rating pass when runtime hydration is not needed`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val cachedMetadata = slot<HomeDisplayMetadata>()
+        val stableIdBundle = stableIdBundle(
+            itemKey = "movie:1007757",
+            tmdbMovieId = "1007757",
+            imdbId = "tt1007757"
+        )
+        val visibleItem = preview(id = "1007757", poster = null).copy(
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Runtime ready",
+            runtime = "102 min",
+            imdbRating = 0.0f,
+            ratingSource = TitleRatingSource.TMDB
+        )
+
+        every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(any(), any()) } returns null
+        every {
+            metadataDiskCacheStore.writeHomeDisplayMetadata(
+                itemKey = "movie:1007757",
+                languageTag = "en",
+                metadata = capture(cachedMetadata)
+            )
+        } just Runs
+        coEvery {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        } returns stableIdBundle
+        coEvery { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) } answers {
+            firstArg<MetaPreview>().copy(
+                imdbRating = 9.1f,
+                ratingSource = TitleRatingSource.IMDB
+            )
+        }
+        every { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+
+        coordinator(
+            catalogRepository = catalogRepository,
+            metadataRouterFacade = metadataRouterFacade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchVisibleItems(
+            items = listOf(visibleItem),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals(9.1f, cachedMetadata.captured.imdbRating)
+        assertEquals(TitleRatingSource.IMDB, cachedMetadata.captured.ratingSource)
+        coVerify(exactly = 0) { metadataRouterFacade.resolveRequest(any()) }
+        coVerify(exactly = 1) {
+            metadataRouterFacade.resolveStableIdBundle(
+                request = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                itemKey = "movie:1007757"
+            )
+        }
+        coVerify(exactly = 1) { titleRatingOverrideRepository.enrichPreview(any(), stableIdBundle) }
+    }
+
+    @Test
     fun `visible hydration rethrows cancellation from stable bundle resolution`() = runTest {
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metadataRouterFacade = mockk<MetadataRouterFacade>()
@@ -925,7 +1068,7 @@ class HomeCatalogRefreshCoordinatorTest {
         val cancellation = CancellationException("cancelled")
 
         every { metadataDiskCacheStore.hasCurrentMetaForItem(any(), any()) } returns false
-        every { metadataDiskCacheStore.hasCurrentHomeDisplayMetadataForItem(any(), any()) } returns false
+        every { metadataDiskCacheStore.readCurrentHomeDisplayMetadataForItem(any(), any()) } returns null
         coEvery { metadataRouterFacade.resolveRequest(any()) } returns successResult()
         coEvery {
             metadataRouterFacade.resolveStableIdBundle(
