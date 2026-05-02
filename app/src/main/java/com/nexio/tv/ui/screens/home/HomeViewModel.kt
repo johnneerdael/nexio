@@ -23,6 +23,7 @@ import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
@@ -57,6 +58,7 @@ import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RailHydrationState
@@ -138,6 +140,8 @@ class HomeViewModel @Inject constructor(
     internal val integrationHydrationCoordinator: IntegrationHydrationCoordinator = NoOpIntegrationHydrationCoordinator,
     internal val integrationOwnershipService: IntegrationOwnershipService,
     internal val homeRailHydrationExecutor: HomeRailHydrationExecutor = NoOpHomeRailHydrationExecutor,
+    internal val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
+    internal val homeHydrationCoordinator: HomeHydrationCoordinator,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -181,6 +185,7 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     internal val _fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
     val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
+    internal val hydratedHomeOverlaysByItemKey = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
     val focusState: StateFlow<HomeScreenFocusState> = _focusState.asStateFlow()
@@ -201,6 +206,8 @@ class HomeViewModel @Inject constructor(
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null
+    internal var hydratedHomeOverlayObserverJob: Job? = null
+    internal var hydratedHomeOverlayObserverSignature: String? = null
     internal var hasRenderedFirstCatalog = false
     internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
     internal var pendingCatalogLoads = 0
@@ -926,6 +933,7 @@ class HomeViewModel @Inject constructor(
         }
         trailerAvailabilityJobs.forEach { it.cancel() }
         homeSnapshotPersistJob?.cancel()
+        hydratedHomeOverlayObserverJob?.cancel()
         pendingProviderEnrichmentByItemId.clear()
         pendingHomeSnapshotPersist = null
         cancelInFlightCatalogLoads()

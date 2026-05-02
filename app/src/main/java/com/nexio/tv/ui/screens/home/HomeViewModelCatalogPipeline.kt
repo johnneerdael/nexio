@@ -20,8 +20,10 @@ import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeLayout
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +59,12 @@ private data class SyntheticCatalogOrderGroup(
     val rows: List<CatalogRow>
 )
 
+internal data class HydratedHomeOverlaySnapshotComponents(
+    val displayRows: List<CatalogRow>,
+    val fullRows: List<CatalogRow>,
+    val heroItems: List<MetaPreview>
+)
+
 private const val TRAKT_RAIL_ADDON_ID = "trakt"
 private const val TRAKT_RAIL_ADDON_NAME = "Trakt"
 private const val TRAKT_RAIL_ADDON_BASE_URL = "https://api.trakt.tv"
@@ -90,6 +98,7 @@ private const val SIMKL_ROW_NAME_MOVIE_TRENDING_MONTH = "SIMKL Trending Movies (
 private const val SIMKL_ROW_NAME_DVD_RELEASES = "SIMKL Popular DVD Releases"
 
 private const val TMDB_RAIL_ADDON_ID = "tmdb"
+private const val HOME_HYDRATED_OVERLAY_POLICY_VERSION = 1
 
 internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
@@ -203,6 +212,10 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     pendingRestoredCatalogSnapshot = null
     pendingHomeSnapshotPersist = null
     homeSnapshotPersistJob?.cancel()
+    hydratedHomeOverlayObserverJob?.cancel()
+    hydratedHomeOverlayObserverJob = null
+    hydratedHomeOverlayObserverSignature = null
+    hydratedHomeOverlaysByItemKey.value = emptyMap()
     modernCarouselRowBuildCache.continueWatchingItems = emptyList()
     modernCarouselRowBuildCache.continueWatchingRow = null
     modernCarouselRowBuildCache.catalogRows.clear()
@@ -368,6 +381,94 @@ private fun com.nexio.tv.data.repository.TraktDiscoverySnapshot.hasRenderableCon
         popularShowItems.isNotEmpty() ||
         customListCatalogs.isNotEmpty() ||
         popularLists.isNotEmpty()
+}
+
+internal fun hydratedHomeOverlayItemKeysForRows(rows: List<CatalogRow>): Set<String> {
+    return rows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> item.homeOverlayItemKey() }
+        .toSet()
+}
+
+internal fun shouldPublishHydratedHomeOverlays(
+    current: Map<String, HydratedHomeOverlay>,
+    next: Map<String, HydratedHomeOverlay>
+): Boolean = current != next
+
+internal fun composeHydratedHomeOverlaySnapshot(
+    displayRows: List<CatalogRow>,
+    fullRows: List<CatalogRow>,
+    heroItems: List<MetaPreview>,
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+): HydratedHomeOverlaySnapshotComponents {
+    if (overlaysByItemKey.isEmpty()) {
+        return HydratedHomeOverlaySnapshotComponents(
+            displayRows = displayRows,
+            fullRows = fullRows,
+            heroItems = heroItems
+        )
+    }
+
+    return HydratedHomeOverlaySnapshotComponents(
+        displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey),
+        fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey),
+        heroItems = heroItems.applyHydratedHomeOverlaysToHeroItems(overlaysByItemKey)
+    )
+}
+
+private fun List<MetaPreview>.applyHydratedHomeOverlaysToHeroItems(
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+): List<MetaPreview> {
+    if (overlaysByItemKey.isEmpty()) return this
+
+    var changed = false
+    val updatedItems = map { item ->
+        val overlay = overlaysByItemKey[item.homeOverlayItemKey()] ?: return@map item
+        val updated = overlay.fields.applyTo(item)
+        if (updated != item) {
+            changed = true
+            updated
+        } else {
+            item
+        }
+    }
+
+    return if (changed) updatedItems else this
+}
+
+internal fun HomeViewModel.observeHydratedHomeOverlaysForRows(rows: List<CatalogRow>) {
+    val itemKeys = hydratedHomeOverlayItemKeysForRows(rows)
+    if (itemKeys.isEmpty()) {
+        hydratedHomeOverlayObserverJob?.cancel()
+        hydratedHomeOverlayObserverJob = null
+        hydratedHomeOverlayObserverSignature = null
+        if (hydratedHomeOverlaysByItemKey.value.isNotEmpty()) {
+            hydratedHomeOverlaysByItemKey.value = emptyMap()
+            scheduleUpdateCatalogRows()
+        }
+        return
+    }
+
+    val languageTag = profileBoundary.currentLanguageTag()
+    val observerSignature = "$languageTag|${itemKeys.sorted().joinToString("|")}"
+    if (hydratedHomeOverlayObserverSignature == observerSignature) return
+
+    hydratedHomeOverlayObserverSignature = observerSignature
+    hydratedHomeOverlayObserverJob?.cancel()
+    hydratedHomeOverlayObserverJob = viewModelScope.launch {
+        hydratedHomeOverlayStore.observeForItemKeys(
+            itemKeys = itemKeys,
+            languageTag = languageTag,
+            policyVersion = HOME_HYDRATED_OVERLAY_POLICY_VERSION
+        ).collectLatest { overlays ->
+            if (!shouldPublishHydratedHomeOverlays(hydratedHomeOverlaysByItemKey.value, overlays)) {
+                return@collectLatest
+            }
+            hydratedHomeOverlaysByItemKey.value = overlays
+            scheduleUpdateCatalogRows()
+        }
+    }
 }
 
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
@@ -2021,6 +2122,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val tmdbSnapshot = tmdbDiscoverySnapshot
     val tmdbPrefs = tmdbCatalogPreferences
     val currentVisibleFullRows = _fullCatalogRows.value
+    val currentHydratedHomeOverlays = hydratedHomeOverlaysByItemKey.value
     val previousTruncatedRowCache = truncatedRowCache.toMap()
     val startupHydrationPending = !installedAddonsObserved ||
         !traktDiscoveryObserved ||
@@ -2119,6 +2221,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             tmdbPrefs = tmdbPrefs,
             persistedTmdbSyntheticGroups = currentPreferencePersistedTmdbSyntheticGroups,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+            hydratedHomeOverlaysByItemKey = currentHydratedHomeOverlays,
             startupHydrationPending = startupHydrationPending,
             refreshInProgress = refreshInProgress,
             hasPersistedCatalogSnapshot = hasPersistedCatalogSnapshot,
@@ -2345,9 +2448,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         Log.d(HomeViewModel.TAG, updateResult.orderDiagnosticsMessage)
     }
 
-    val displayRows = updateResult.displayRows
-    val baseHeroItems = updateResult.heroItems
-    val fullRowsFiltered = updateResult.fullRows
+    val composedOverlaySnapshot = composeHydratedHomeOverlaySnapshot(
+        displayRows = updateResult.displayRows,
+        fullRows = updateResult.fullRows,
+        heroItems = updateResult.heroItems,
+        overlaysByItemKey = currentHydratedHomeOverlays
+    )
+    val displayRows = composedOverlaySnapshot.displayRows
+    val baseHeroItems = composedOverlaySnapshot.heroItems
+    val fullRowsFiltered = composedOverlaySnapshot.fullRows
     val orderedGroupKeys = updateResult.orderedGroupKeys
     val nextTruncatedRowCache = updateResult.truncatedCache
     val persistableDisplayRows = persistableHomeCatalogRows(displayRows)
@@ -2401,6 +2510,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         }
         pendingRestoredCatalogSnapshot = null
     }
+
+    observeHydratedHomeOverlaysForRows(displayRows + fullRowsFiltered)
 
     _uiState.update { state ->
         state.copy(
@@ -2471,12 +2582,18 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
             )
         }
     )
-    _fullCatalogRows.value = filteredSnapshot.fullCatalogRows
+    val composedSnapshot = composeHydratedHomeOverlaySnapshot(
+        displayRows = filteredSnapshot.catalogRows,
+        fullRows = filteredSnapshot.fullCatalogRows,
+        heroItems = filteredSnapshot.heroItems,
+        overlaysByItemKey = hydratedHomeOverlaysByItemKey.value
+    )
+    _fullCatalogRows.value = composedSnapshot.fullRows
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
             buildGridItemsFromRowsPipeline(
-                rows = filteredSnapshot.catalogRows,
-                heroItems = filteredSnapshot.heroItems,
+                rows = composedSnapshot.displayRows,
+                heroItems = composedSnapshot.heroItems,
                 heroSectionEnabled = state.heroSectionEnabled
             )
         } else {
@@ -2484,14 +2601,15 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         }
 
         state.copy(
-            catalogRows = filteredSnapshot.catalogRows,
-            heroItems = filteredSnapshot.heroItems,
+            catalogRows = composedSnapshot.displayRows,
+            heroItems = composedSnapshot.heroItems,
             gridItems = if (state.gridItems == snapshotGridItems) state.gridItems else snapshotGridItems,
             isLoading = false,
             error = null
         )
     }
-    refreshTrailerMetadataAvailabilityPipeline(filteredSnapshot.catalogRows)
+    observeHydratedHomeOverlaysForRows(composedSnapshot.displayRows + composedSnapshot.fullRows)
+    refreshTrailerMetadataAvailabilityPipeline(composedSnapshot.displayRows)
 }
 
 internal fun filterRestoredHomeSnapshotTmdbRows(
@@ -2825,6 +2943,7 @@ private fun buildCatalogComputationSignature(
     tmdbPrefs: TmdbCatalogPreferences,
     persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
     disabledHomeCatalogKeys: Set<String>,
+    hydratedHomeOverlaysByItemKey: Map<String, HydratedHomeOverlay>,
     startupHydrationPending: Boolean,
     refreshInProgress: Boolean,
     hasPersistedCatalogSnapshot: Boolean,
@@ -2852,6 +2971,7 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + tmdbPrefs.hashCode()
     signature = (signature * 31) + persistedTmdbSyntheticGroups.hashCode()
     signature = (signature * 31) + disabledHomeCatalogKeys.hashCode()
+    signature = (signature * 31) + hydratedHomeOverlaysByItemKey.hashCode()
     signature = (signature * 31) + startupHydrationPending.hashCode()
     signature = (signature * 31) + refreshInProgress.hashCode()
     signature = (signature * 31) + hasPersistedCatalogSnapshot.hashCode()
