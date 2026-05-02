@@ -17,6 +17,8 @@ import com.nexio.tv.data.remote.api.TmdbImagesResponse
 import com.nexio.tv.data.remote.api.TmdbMovieReleaseDateCountry
 import com.nexio.tv.data.remote.api.TmdbMovieReleaseDateItem
 import com.nexio.tv.data.remote.api.TmdbMovieReleaseDatesResponse
+import com.nexio.tv.data.remote.api.TmdbTvContentRatingItem
+import com.nexio.tv.data.remote.api.TmdbTvContentRatingsResponse
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbSeasonResponse
 import com.nexio.tv.domain.model.ContentType
@@ -52,7 +54,7 @@ class TmdbMetadataPerformanceTest {
                 movieId = 550,
                 apiKey = "tmdb-key",
                 language = "en-US",
-                appendToResponse = "credits,images,release_dates",
+                appendToResponse = "credits,images,release_dates,external_ids",
                 includeImageLanguage = "en,en-US,en,null"
             )
         } returns Response.success(
@@ -93,13 +95,65 @@ class TmdbMetadataPerformanceTest {
                 movieId = 550,
                 apiKey = "tmdb-key",
                 language = "en-US",
-                appendToResponse = "credits,images,release_dates",
+                appendToResponse = "credits,images,release_dates,external_ids",
                 includeImageLanguage = "en,en-US,en,null"
             )
         }
         coVerify(exactly = 0) { tmdbApi.getMovieCredits(any(), any(), any()) }
         coVerify(exactly = 0) { tmdbApi.getMovieImages(any(), any(), any()) }
         coVerify(exactly = 0) { tmdbApi.getMovieReleaseDates(any(), any()) }
+    }
+
+    @Test
+    fun `fetchEnrichment appends tv external ids with detail metadata`() = runTest {
+        val tmdbApi = mockk<TmdbApi>()
+        val service = buildMetadataService(tmdbApi)
+
+        coEvery {
+            tmdbApi.getTvDetails(
+                tvId = 1399,
+                apiKey = "tmdb-key",
+                language = "en-US",
+                appendToResponse = "credits,images,content_ratings,external_ids",
+                includeImageLanguage = "en,en-US,en,null"
+            )
+        } returns Response.success(
+            TmdbDetailsResponse(
+                id = 1399,
+                name = "Game of Thrones",
+                overview = "Seven noble families fight for control.",
+                genres = listOf(TmdbGenre(id = 18, name = "Drama")),
+                voteAverage = 8.4,
+                firstAirDate = "2011-04-17",
+                credits = TmdbCreditsResponse(cast = emptyList(), crew = emptyList()),
+                images = TmdbImagesResponse(logos = emptyList(), backdrops = emptyList()),
+                contentRatings = TmdbTvContentRatingsResponse(
+                    results = listOf(TmdbTvContentRatingItem(iso31661 = "US", rating = "TV-MA"))
+                )
+            )
+        )
+
+        val enrichment = service.fetchEnrichment(
+            tmdbId = "1399",
+            contentType = ContentType.SERIES,
+            language = "en-US"
+        )
+
+        assertNotNull(enrichment)
+        assertEquals("Game of Thrones", enrichment?.localizedTitle)
+        assertEquals("TV-MA", enrichment?.ageRating)
+        coVerify(exactly = 1) {
+            tmdbApi.getTvDetails(
+                tvId = 1399,
+                apiKey = "tmdb-key",
+                language = "en-US",
+                appendToResponse = "credits,images,content_ratings,external_ids",
+                includeImageLanguage = "en,en-US,en,null"
+            )
+        }
+        coVerify(exactly = 0) { tmdbApi.getTvCredits(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbApi.getTvImages(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbApi.getTvContentRatings(any(), any()) }
     }
 
     @Test
@@ -116,7 +170,7 @@ class TmdbMetadataPerformanceTest {
                 movieId = 550,
                 apiKey = "tmdb-key",
                 language = "en-US",
-                appendToResponse = "credits,images,release_dates",
+                appendToResponse = "credits,images,release_dates,external_ids",
                 includeImageLanguage = "en,en-US,en,null"
             )
         } returns Response.success(

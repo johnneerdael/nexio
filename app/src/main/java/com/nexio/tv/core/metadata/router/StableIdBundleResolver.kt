@@ -24,6 +24,7 @@ class StableIdBundleResolver @Inject constructor(
     interface Lookup {
         suspend fun tmdbMovieToImdb(tmdbId: String): String?
         suspend fun imdbToTmdbMovie(imdbId: String): String?
+        suspend fun tmdbTvToTvdb(tmdbId: String): String?
         suspend fun tmdbTvToImdb(tmdbId: String): String?
         suspend fun imdbToTvdbSeries(imdbId: String): String?
         suspend fun tvdbSeriesToImdb(tvdbId: String): String?
@@ -76,15 +77,22 @@ class StableIdBundleResolver @Inject constructor(
                 if (tvdbSeriesId == null) {
                     val tmdbTvId = known.tmdb.presentStableId()
                     if (tmdbTvId != null) {
-                        val bridgeImdb = resolveViaStoreOrProvider(
+                        tvdbSeriesId = resolveViaStoreOrProvider(
+                            sourceId = tmdbTvSourceId(tmdbTvId),
+                            provider = MetadataPrimaryProvider.TVDB,
+                            operation = "tmdbTvToTvdb",
+                            target = "TVDB",
+                            evidence = evidence
+                        ) { lookup.tmdbTvToTvdb(tmdbTvId) }
+                        val bridgeImdb = if (imdbId == null || tvdbSeriesId == null) resolveViaStoreOrProvider(
                             sourceId = tmdbTvSourceId(tmdbTvId),
                             provider = MetadataPrimaryProvider.IMDB,
                             operation = "tmdbTvToImdb",
                             target = "IMDB",
                             evidence = evidence
-                        ) { lookup.tmdbTvToImdb(tmdbTvId) }
+                        ) { lookup.tmdbTvToImdb(tmdbTvId) } else null
                         imdbId = imdbId ?: bridgeImdb
-                        tvdbSeriesId = bridgeImdb?.let { imdb ->
+                        tvdbSeriesId = tvdbSeriesId ?: bridgeImdb?.let { imdb ->
                             resolveViaStoreOrProvider(
                                 sourceId = parsed(AnimeIdScheme.IMDB, imdb),
                                 provider = MetadataPrimaryProvider.TVDB,
