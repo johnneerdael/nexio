@@ -405,7 +405,23 @@ internal fun HomeViewModel.invalidateHydratedHomeOverlayScope(scheduleRows: Bool
     }
 }
 
-internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(overlay: HydratedHomeOverlay) {
+internal fun HomeViewModel.isCurrentHomeHydrationScope(
+    expectedGeneration: Long,
+    expectedLanguageTag: String
+): Boolean {
+    return isCurrentHomeProfileGeneration(expectedGeneration) &&
+        profileBoundary.currentLanguageTag() == expectedLanguageTag
+}
+
+internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(
+    overlay: HydratedHomeOverlay,
+    expectedGeneration: Long,
+    expectedLanguageTag: String
+): Boolean {
+    if (!isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag)) {
+        return false
+    }
+
     var changed = false
     hydratedHomeOverlaysByItemKey.update { current ->
         if (current[overlay.itemKey] == overlay) {
@@ -419,6 +435,7 @@ internal fun HomeViewModel.applyHydratedHomeOverlayFromCoordinator(overlay: Hydr
         lastCatalogComputationSignature = null
         scheduleUpdateCatalogRows()
     }
+    return true
 }
 
 internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
@@ -441,7 +458,11 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
             expectedGeneration = expectedGeneration,
             currentGeneration = { homeProfileGeneration },
             onOverlayApplied = { overlay ->
-                applyHydratedHomeOverlayFromCoordinator(overlay)
+                applyHydratedHomeOverlayFromCoordinator(
+                    overlay = overlay,
+                    expectedGeneration = expectedGeneration,
+                    expectedLanguageTag = languageTag
+                )
             }
         )
     }

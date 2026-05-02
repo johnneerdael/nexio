@@ -125,7 +125,7 @@ class HomeViewModelFocusHydrationTest {
         viewModel.onItemFocus(item)
         advanceUntilIdle()
 
-        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[item.id])
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[item.homeOverlayItemKey()])
         assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
         assertNotNull(viewModel.catalogUpdateJob)
         coVerify(exactly = 1) {
@@ -139,6 +139,50 @@ class HomeViewModelFocusHydrationTest {
                 onOverlayApplied = any()
             )
         }
+    }
+
+    @Test
+    fun `visible home hydration ignores overlay applied after language changes`() = runTest(testDispatcher) {
+        var currentLanguage = "en"
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val overlay = overlay(
+            itemKey = "movie:${visible.id}",
+            fields = HomeDisplayMetadata(title = "Stale English")
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = visible,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = capture(overlayCallback)
+            )
+        } coAnswers {
+            currentLanguage = "nl"
+            overlayCallback.captured.invoke(overlay)
+            overlay
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true,
+            currentLanguageTagProvider = { currentLanguage }
+        )
+        viewModel.homeProfileGeneration = 7L
+
+        viewModel.hydrateVisibleHomeItemsWithCoordinator(
+            items = listOf(visible),
+            expectedGeneration = 7L
+        )
+        advanceUntilIdle()
+
+        assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
+        assertNull(viewModel.catalogUpdateJob)
     }
 
     @Test
@@ -248,6 +292,58 @@ class HomeViewModelFocusHydrationTest {
         advanceUntilIdle()
 
         coVerify(exactly = 0) { facade.resolveRequest(match { it.depth == MetadataDepth.PREVIEW }) }
+    }
+
+    @Test
+    fun `focused rail hydration state is scoped by home overlay item key`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        coEvery {
+            homeHydrationCoordinator.hydrate(any(), any(), any(), any(), any(), any(), any())
+        } returns null
+        val movieItem = railPreviewMetaPreview().copy(
+            id = "shared-id",
+            type = ContentType.MOVIE,
+            rawType = "movie"
+        )
+        val seriesItem = railPreviewMetaPreview().copy(
+            id = "shared-id",
+            type = ContentType.SERIES,
+            rawType = "series"
+        )
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+
+        viewModel.onItemFocus(movieItem)
+        viewModel.onItemFocus(seriesItem)
+        advanceUntilIdle()
+
+        assertEquals(RailHydrationState.HYDRATION_FAILED_USING_PREVIEW, viewModel.focusedItemHydrationStates["movie:shared-id"])
+        assertEquals(RailHydrationState.HYDRATION_FAILED_USING_PREVIEW, viewModel.focusedItemHydrationStates["series:shared-id"])
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = movieItem,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = seriesItem,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
     }
 
     @Test
@@ -393,7 +489,8 @@ class HomeViewModelFocusHydrationTest {
         metadataRouterFacade: MetadataRouterFacade,
         titleRatingOverrideRepository: TitleRatingOverrideRepository = mockk(relaxed = true),
         nonPlaybackHomeWorkAllowed: Boolean = false,
-        homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true)
+        homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true),
+        currentLanguageTagProvider: () -> String = { "en" }
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -444,7 +541,7 @@ class HomeViewModelFocusHydrationTest {
         }
 
         val profileBoundary = mockk<com.nexio.tv.core.profile.ProfileBoundary>(relaxed = true) {
-            every { currentLanguageTag() } returns "en"
+            every { currentLanguageTag() } answers { currentLanguageTagProvider() }
         }
 
         return HomeViewModel(

@@ -480,25 +480,33 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPreview) {
     if (!isNonPlaybackHomeWorkAllowed()) return
 
-    val itemKey = item.id
+    val itemKey = item.homeOverlayItemKey()
     val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
     if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return
 
     focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
     val expectedGeneration = homeProfileGeneration
+    val expectedLanguageTag = profileBoundary.currentLanguageTag()
     viewModelScope.launch {
+        var overlayApplied = false
         val overlay = try {
             homeHydrationCoordinator.hydrate(
                 item = item,
                 trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
                 priority = HomeHydrationPriority.FOCUSED,
-                languageTag = profileBoundary.currentLanguageTag(),
+                languageTag = expectedLanguageTag,
                 expectedGeneration = expectedGeneration,
                 currentGeneration = { homeProfileGeneration },
                 onOverlayApplied = { appliedOverlay ->
-                    applyHydratedHomeOverlayFromCoordinator(appliedOverlay)
-                    focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
-                    prefetchedExternalMetaIds.add(item.id)
+                    overlayApplied = applyHydratedHomeOverlayFromCoordinator(
+                        overlay = appliedOverlay,
+                        expectedGeneration = expectedGeneration,
+                        expectedLanguageTag = expectedLanguageTag
+                    )
+                    if (overlayApplied) {
+                        focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
+                        prefetchedExternalMetaIds.add(item.id)
+                    }
                 }
             )
         } catch (e: CancellationException) {
@@ -509,6 +517,9 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
         }
         if (overlay == null && focusedItemHydrationStates[itemKey] == RailHydrationState.HYDRATING) {
             focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
+        }
+        if (overlay != null && !overlayApplied && focusedItemHydrationStates[itemKey] == RailHydrationState.HYDRATING) {
+            focusedItemHydrationStates[itemKey] = RailHydrationState.PREVIEW_ONLY
         }
     }
 }
@@ -780,10 +791,18 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                     expectedGeneration = expectedGeneration,
                     currentGeneration = { homeProfileGeneration },
                     onOverlayApplied = { appliedOverlay ->
-                        applyHydratedHomeOverlayFromCoordinator(appliedOverlay)
+                        applyHydratedHomeOverlayFromCoordinator(
+                            overlay = appliedOverlay,
+                            expectedGeneration = expectedGeneration,
+                            expectedLanguageTag = languageTag
+                        )
                     }
                 )
-                overlay?.fields?.applyTo(item) ?: item
+                if (isCurrentHomeHydrationScope(expectedGeneration, languageTag)) {
+                    overlay?.fields?.applyTo(item) ?: item
+                } else {
+                    item
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
