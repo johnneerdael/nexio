@@ -880,10 +880,12 @@ private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(item: MetaPreview):
         itemKey in prefetchedExternalMetaIds
 }
 
-private fun HomeDisplayMetadata.applyToHeroItem(
+internal fun HomeDisplayMetadata.applyToHeroItem(
     base: MetaPreview,
     settings: TmdbSettings
 ): MetaPreview {
+    if (!settings.isActive) return base
+
     var merged = base
     if (settings.useArtwork) {
         merged = merged.copy(

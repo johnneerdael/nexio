@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
@@ -500,7 +501,8 @@ internal fun composeHydratedHomeOverlaySnapshot(
     displayRows: List<CatalogRow>,
     fullRows: List<CatalogRow>,
     heroItems: List<MetaPreview>,
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    heroTmdbSettings: TmdbSettings = TmdbSettings()
 ): HydratedHomeOverlaySnapshotComponents {
     if (overlaysByItemKey.isEmpty()) {
         return HydratedHomeOverlaySnapshotComponents(
@@ -513,19 +515,23 @@ internal fun composeHydratedHomeOverlaySnapshot(
     return HydratedHomeOverlaySnapshotComponents(
         displayRows = displayRows.applyHydratedHomeOverlays(overlaysByItemKey),
         fullRows = fullRows.applyHydratedHomeOverlays(overlaysByItemKey),
-        heroItems = heroItems.applyHydratedHomeOverlaysToHeroItems(overlaysByItemKey)
+        heroItems = heroItems.applyHydratedHomeOverlaysToHeroItems(
+            overlaysByItemKey = overlaysByItemKey,
+            tmdbSettings = heroTmdbSettings
+        )
     )
 }
 
 private fun List<MetaPreview>.applyHydratedHomeOverlaysToHeroItems(
-    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>,
+    tmdbSettings: TmdbSettings
 ): List<MetaPreview> {
     if (overlaysByItemKey.isEmpty()) return this
 
     var changed = false
     val updatedItems = map { item ->
         val overlay = overlaysByItemKey[item.homeOverlayItemKey()] ?: return@map item
-        val updated = overlay.fields.applyTo(item)
+        val updated = overlay.fields.applyToHeroItem(item, tmdbSettings)
         if (updated != item) {
             changed = true
             updated
@@ -2556,7 +2562,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         displayRows = updateResult.displayRows,
         fullRows = updateResult.fullRows,
         heroItems = updateResult.heroItems,
-        overlaysByItemKey = currentHydratedHomeOverlays
+        overlaysByItemKey = currentHydratedHomeOverlays,
+        heroTmdbSettings = currentTmdbSettings
     )
     val displayRows = composedOverlaySnapshot.displayRows
     val baseHeroItems = composedOverlaySnapshot.heroItems
@@ -2690,7 +2697,8 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         displayRows = filteredSnapshot.catalogRows,
         fullRows = filteredSnapshot.fullCatalogRows,
         heroItems = filteredSnapshot.heroItems,
-        overlaysByItemKey = hydratedHomeOverlaysByItemKey.value
+        overlaysByItemKey = hydratedHomeOverlaysByItemKey.value,
+        heroTmdbSettings = currentTmdbSettings
     )
     _fullCatalogRows.value = composedSnapshot.fullRows
     _uiState.update { state ->
