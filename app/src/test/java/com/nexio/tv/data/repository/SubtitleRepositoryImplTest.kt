@@ -58,7 +58,11 @@ class SubtitleRepositoryImplTest {
             )
         )
 
-        val repository = SubtitleRepositoryImpl(provider, addonRepository)
+        val repository = SubtitleRepositoryImpl(
+            provider,
+            addonRepository,
+            mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+        )
         val subtitles = repository.getSubtitles(
             type = "tv",
             id = "tt123",
@@ -113,7 +117,11 @@ class SubtitleRepositoryImplTest {
             )
         )
 
-        val repository = SubtitleRepositoryImpl(provider, addonRepository)
+        val repository = SubtitleRepositoryImpl(
+            provider,
+            addonRepository,
+            mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+        )
         val subtitles = repository.getSubtitles(
             type = "movie",
             id = "tt123",
@@ -161,7 +169,11 @@ class SubtitleRepositoryImplTest {
             provider.getSubtitles(addon, "https://addon.test/subtitles/movie/tt123.json")
         } throws CancellationException("cancelled")
 
-        val repository = SubtitleRepositoryImpl(provider, addonRepository)
+        val repository = SubtitleRepositoryImpl(
+            provider,
+            addonRepository,
+            mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+        )
 
         try {
             repository.getSubtitles(
@@ -187,7 +199,11 @@ class SubtitleRepositoryImplTest {
             throw CancellationException("addon lookup cancelled")
         }
 
-        val repository = SubtitleRepositoryImpl(provider, addonRepository)
+        val repository = SubtitleRepositoryImpl(
+            provider,
+            addonRepository,
+            mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+        )
 
         try {
             repository.getSubtitles(
@@ -202,5 +218,147 @@ class SubtitleRepositoryImplTest {
         } catch (exception: CancellationException) {
             assertEquals("addon lookup cancelled", exception.message)
         }
+    }
+
+    @Test
+    fun `wyzie lane results merge after addon results`() = runTest {
+        val addonProvider = mockk<AddonSubtitleIntegrationProvider>()
+        val addonRepo = mockk<AddonRepositoryImpl>()
+        val wyzieProvider = mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>()
+
+        val addon = com.nexio.tv.domain.model.Addon(
+            id = "addon.id", name = "Addon", displayName = "Addon",
+            version = "1.0.0", description = null, logo = null,
+            baseUrl = "https://addon.test", catalogs = emptyList(),
+            types = listOf(com.nexio.tv.domain.model.ContentType.MOVIE),
+            resources = listOf(
+                com.nexio.tv.domain.model.AddonResource(
+                    name = "subtitles", types = listOf("movie"), idPrefixes = null,
+                ),
+            ),
+        )
+        every { addonRepo.getInstalledAddons() } returns flowOf(listOf(addon))
+        coEvery { addonProvider.getSubtitles(addon, "https://addon.test/subtitles/movie/tt1.json") } returns
+            IntegrationCallResult.Success(
+                SubtitleResponseDto(
+                    subtitles = listOf(SubtitleItemDto(id = "addon-1", url = "https://a/1.srt", lang = "en")),
+                ),
+            )
+        coEvery {
+            wyzieProvider.search(
+                type = com.nexio.tv.domain.model.ContentType.MOVIE,
+                hints = any(),
+                sources = any(),
+                season = null,
+                episode = null,
+            )
+        } returns listOf(
+            com.nexio.tv.data.remote.dto.WyzieSubtitleDto(
+                id = "w1", url = "https://w/1.srt", format = "srt", encoding = "UTF-8",
+                display = "English", language = "en", media = "X", isHearingImpaired = false,
+                source = "opensubtitles",
+            ),
+        )
+
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val subs = repository.getSubtitles(
+            type = "movie", id = "tt1", videoId = null,
+            videoHash = null, videoSize = null, filename = null,
+            wyzieHints = com.nexio.tv.domain.model.WyzieIdHints(imdb = "tt1"),
+            season = null, episode = null,
+        )
+
+        assertEquals(2, subs.size)
+        assertEquals("addon-1", subs[0].id)
+        assertEquals("wyzie:w1", subs[1].id)
+        assertEquals("Wyzie · OpenSubtitles", subs[1].addonName)
+    }
+
+    @Test
+    fun `wyzie lane failure does not affect addon results`() = runTest {
+        val addonProvider = mockk<AddonSubtitleIntegrationProvider>()
+        val addonRepo = mockk<AddonRepositoryImpl>()
+        val wyzieProvider = mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>()
+
+        val addon = com.nexio.tv.domain.model.Addon(
+            id = "addon.id", name = "Addon", displayName = "Addon",
+            version = "1.0.0", description = null, logo = null,
+            baseUrl = "https://addon.test", catalogs = emptyList(),
+            types = listOf(com.nexio.tv.domain.model.ContentType.MOVIE),
+            resources = listOf(
+                com.nexio.tv.domain.model.AddonResource(
+                    name = "subtitles", types = listOf("movie"), idPrefixes = null,
+                ),
+            ),
+        )
+        every { addonRepo.getInstalledAddons() } returns flowOf(listOf(addon))
+        coEvery { addonProvider.getSubtitles(addon, any()) } returns
+            IntegrationCallResult.Success(
+                SubtitleResponseDto(
+                    subtitles = listOf(SubtitleItemDto(id = "addon-1", url = "https://a/1.srt", lang = "en")),
+                ),
+            )
+        coEvery {
+            wyzieProvider.search(any(), any(), any(), any(), any())
+        } throws RuntimeException("wyzie boom")
+
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val subs = repository.getSubtitles(
+            type = "movie", id = "tt1", videoId = null,
+            videoHash = null, videoSize = null, filename = null,
+            wyzieHints = com.nexio.tv.domain.model.WyzieIdHints(imdb = "tt1"),
+            season = null, episode = null,
+        )
+
+        assertEquals(1, subs.size)
+        assertEquals("addon-1", subs.single().id)
+    }
+
+    @Test
+    fun `addon lane failure does not affect wyzie results`() = runTest {
+        val addonProvider = mockk<AddonSubtitleIntegrationProvider>()
+        val addonRepo = mockk<AddonRepositoryImpl>()
+        val wyzieProvider = mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>()
+
+        every { addonRepo.getInstalledAddons() } returns flow { throw RuntimeException("addon boom") }
+        coEvery {
+            wyzieProvider.search(any(), any(), any(), any(), any())
+        } returns listOf(
+            com.nexio.tv.data.remote.dto.WyzieSubtitleDto(
+                id = "w1", url = "https://w/1.srt", format = "srt", encoding = "UTF-8",
+                display = "English", language = "en", media = "X", isHearingImpaired = false,
+                source = "subdl",
+            ),
+        )
+
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val subs = repository.getSubtitles(
+            type = "movie", id = "tt1", videoId = null,
+            videoHash = null, videoSize = null, filename = null,
+            wyzieHints = com.nexio.tv.domain.model.WyzieIdHints(imdb = "tt1"),
+            season = null, episode = null,
+        )
+
+        assertEquals(1, subs.size)
+        assertEquals("Wyzie · SubDL", subs.single().addonName)
+    }
+
+    @Test
+    fun `wyzie hints empty skips wyzie call entirely`() = runTest {
+        val addonProvider = mockk<AddonSubtitleIntegrationProvider>()
+        val addonRepo = mockk<AddonRepositoryImpl>()
+        val wyzieProvider = mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>()
+
+        every { addonRepo.getInstalledAddons() } returns flowOf(emptyList())
+
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val subs = repository.getSubtitles(
+            type = "movie", id = "tt1", videoId = null,
+            videoHash = null, videoSize = null, filename = null,
+            wyzieHints = com.nexio.tv.domain.model.WyzieIdHints.EMPTY,
+            season = null, episode = null,
+        )
+        assertTrue(subs.isEmpty())
+        coVerify(exactly = 0) { wyzieProvider.search(any(), any(), any(), any(), any()) }
     }
 }
