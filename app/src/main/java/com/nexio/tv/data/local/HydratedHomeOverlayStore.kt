@@ -7,13 +7,16 @@ import com.google.gson.JsonObject
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.model.hydratedHomeOverlayKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 @Singleton
 class HydratedHomeOverlayStore @Inject constructor(
@@ -29,11 +32,13 @@ class HydratedHomeOverlayStore @Inject constructor(
     ): Flow<Map<String, HydratedHomeOverlay>> {
         val normalizedKeys = itemKeys.normalizedItemKeys()
         return version.map {
-            readForItemKeys(
-                itemKeys = normalizedKeys,
-                languageTag = languageTag,
-                policyVersion = policyVersion
-            )
+            withContext(Dispatchers.IO) {
+                readForItemKeys(
+                    itemKeys = normalizedKeys,
+                    languageTag = languageTag,
+                    policyVersion = policyVersion
+                )
+            }
         }
     }
 
@@ -99,7 +104,12 @@ class HydratedHomeOverlayStore @Inject constructor(
                 ),
                 null
             ) ?: return@mapNotNull null
-            val overlay = readOverlayByKey(overlayKey = overlayKey, nowMs = nowMs) ?: return@mapNotNull null
+            val overlay = readOverlayByKey(
+                overlayKey = overlayKey,
+                expectedLanguageTag = languageTag,
+                expectedPolicyVersion = policyVersion,
+                nowMs = nowMs
+            ) ?: return@mapNotNull null
 
             itemKey to overlay
         }.toMap()
@@ -120,11 +130,24 @@ class HydratedHomeOverlayStore @Inject constructor(
             languageTag = languageTag,
             policyVersion = policyVersion
         )
-        return readOverlayByKey(overlayKey = overlayKey, nowMs = nowMs)
+        return readOverlayByKey(
+            overlayKey = overlayKey,
+            expectedCanonicalProvider = canonicalProvider,
+            expectedCanonicalId = canonicalId,
+            expectedContentType = contentType,
+            expectedLanguageTag = languageTag,
+            expectedPolicyVersion = policyVersion,
+            nowMs = nowMs
+        )
     }
 
     private fun readOverlayByKey(
         overlayKey: String,
+        expectedCanonicalProvider: ProviderId? = null,
+        expectedCanonicalId: String? = null,
+        expectedContentType: ContentType? = null,
+        expectedLanguageTag: String? = null,
+        expectedPolicyVersion: Int? = null,
         nowMs: Long
     ): HydratedHomeOverlay? {
         return runCatching {
@@ -135,6 +158,17 @@ class HydratedHomeOverlayStore @Inject constructor(
             val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
             if (schemaVersion != OVERLAY_SCHEMA_VERSION) return null
             val overlay = gson.fromJson(root.get("value"), HydratedHomeOverlay::class.java) ?: return null
+            if (!overlay.isValidFor(
+                    overlayKey = overlayKey,
+                    expectedCanonicalProvider = expectedCanonicalProvider,
+                    expectedCanonicalId = expectedCanonicalId,
+                    expectedContentType = expectedContentType,
+                    expectedLanguageTag = expectedLanguageTag,
+                    expectedPolicyVersion = expectedPolicyVersion
+                )
+            ) {
+                return null
+            }
 
             overlay.takeUnless { it.isExpired(nowMs) }
         }.onFailure { error ->
@@ -158,6 +192,25 @@ class HydratedHomeOverlayStore @Inject constructor(
 
     private fun Set<String>.normalizedItemKeys(): Set<String> =
         mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+
+    private fun HydratedHomeOverlay.isValidFor(
+        overlayKey: String,
+        expectedCanonicalProvider: ProviderId?,
+        expectedCanonicalId: String?,
+        expectedContentType: ContentType?,
+        expectedLanguageTag: String?,
+        expectedPolicyVersion: Int?
+    ): Boolean {
+        if (this.overlayKey != overlayKey) return false
+        if (displayHash != fields.hydratedHomeDisplayHash()) return false
+        if (expectedCanonicalProvider != null && canonicalProvider != expectedCanonicalProvider) return false
+        if (expectedCanonicalId != null && canonicalId.trim() != expectedCanonicalId.trim()) return false
+        if (expectedContentType != null && contentType != expectedContentType) return false
+        if (expectedLanguageTag != null && languageTag.trim() != expectedLanguageTag.trim()) return false
+        if (expectedPolicyVersion != null && policyVersion != expectedPolicyVersion) return false
+
+        return true
+    }
 
     private companion object {
         const val TAG = "HydratedHomeOverlayStore"

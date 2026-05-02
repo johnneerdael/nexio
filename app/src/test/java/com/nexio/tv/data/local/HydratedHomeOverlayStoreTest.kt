@@ -160,6 +160,91 @@ class HydratedHomeOverlayStoreTest {
         )
     }
 
+    @Test
+    fun `corrupted persisted display hash is ignored`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val overlay = overlay(itemKey = "movie:tmdb:550")
+        store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
+
+        prefs.edit()
+            .putString(
+                "overlay::${overlay.overlayKey}",
+                prefs.getString("overlay::${overlay.overlayKey}", null)!!
+                    .replace(overlay.displayHash, "corrupted-display-hash")
+            )
+            .apply()
+
+        assertNull(
+            store.readByCanonicalIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "550",
+                contentType = ContentType.MOVIE,
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+        assertEquals(
+            emptyMap<String, HydratedHomeOverlay>(),
+            store.readForItemKeys(
+                itemKeys = setOf("movie:tmdb:550"),
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+    }
+
+    @Test
+    fun `persisted overlay with mismatched canonical identity is ignored`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val overlay = overlay(itemKey = "movie:tmdb:550")
+        store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
+
+        prefs.edit()
+            .putString(
+                "overlay::${overlay.overlayKey}",
+                prefs.getString("overlay::${overlay.overlayKey}", null)!!
+                    .replace("\"canonicalId\":\"550\"", "\"canonicalId\":\"551\"")
+            )
+            .apply()
+
+        assertNull(
+            store.readByCanonicalIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "550",
+                contentType = ContentType.MOVIE,
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+    }
+
+    @Test
+    fun `persisted overlay with mismatched language scope is ignored for aliases`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val store = HydratedHomeOverlayStore(mockContext(prefs))
+        val overlay = overlay(itemKey = "movie:tmdb:550")
+        store.upsert(overlay, aliases = setOf("movie:tmdb:550"))
+
+        prefs.edit()
+            .putString(
+                "overlay::${overlay.overlayKey}",
+                prefs.getString("overlay::${overlay.overlayKey}", null)!!
+                    .replace("\"languageTag\":\"en\"", "\"languageTag\":\"nl\"")
+            )
+            .apply()
+
+        assertEquals(
+            emptyMap<String, HydratedHomeOverlay>(),
+            store.readForItemKeys(
+                itemKeys = setOf("movie:tmdb:550"),
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+    }
+
     private fun overlay(
         itemKey: String,
         languageTag: String = "en",
