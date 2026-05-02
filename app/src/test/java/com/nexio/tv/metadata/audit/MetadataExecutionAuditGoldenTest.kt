@@ -258,6 +258,107 @@ class MetadataExecutionAuditGoldenTest {
     }
 
     @Test
+    fun `stable id bundle report preserves missing canonical with imdb sidecar`() {
+        val stableIdBundle = StableIdBundleEvent(
+            itemKey = "series:tmdb:tv:1399",
+            itemType = "series",
+            trigger = "VISIBLE_HOME_HYDRATION",
+            status = "PREVIEW_IDS_ONLY",
+            canonicalProvider = "TVDB",
+            canonicalId = null,
+            imdbId = "tt0944947",
+            networkExecuted = false,
+            evidence = listOf(
+                StableIdBundleEvidenceEvent(
+                    source = "knownIds",
+                    target = "TVDB",
+                    networkExecuted = false,
+                    resultId = null
+                )
+            )
+        )
+        val report = MetadataExecutionReport(
+            schemaVersion = 1,
+            provenance = MetadataAuditProvenance(
+                gitSha = "test-sha",
+                gitWorktree = GitWorktreeState(
+                    state = "CLEAN",
+                    dirtyFileCount = 0,
+                    untrackedFileCount = 0
+                )
+            ),
+            verdict = AuditVerdict.PASS,
+            scenario = MetadataAuditScenario(
+                name = "stable-id-bundle-missing-canonical",
+                depth = MetadataDepth.DETAIL_CORE
+            ),
+            fixtureName = "synthetic/metadata/rails/stable-id-bundle-missing-canonical.json",
+            generatedAtEpochMs = 0,
+            items = listOf(
+                ItemExecutionReport(
+                    itemId = "tvdb:121361",
+                    itemType = "series",
+                    addonFields = emptyMap(),
+                    firstPaint = FirstPaintEvent(
+                        itemId = "tvdb:121361",
+                        itemType = "series",
+                        source = "RAIL_PREVIEW",
+                        fieldsUsed = emptySet(),
+                        routerExecuted = false,
+                        networkExecuted = false
+                    ),
+                    routing = null,
+                    stableIdBundle = stableIdBundle,
+                    providerPlan = null,
+                    runtimeCalls = emptyList(),
+                    cacheDecisions = emptyList(),
+                    resolverSchedule = null,
+                    selectedFields = emptyList(),
+                    forbiddenOverwrites = emptyList(),
+                    continueWatchingSnapshot = null,
+                    identityResolution = null,
+                    productionCallerOwnership = emptyList(),
+                    localization = null,
+                    violations = emptyList(),
+                    events = listOf(AuditEvent.StableIdBundle(stableIdBundle))
+                )
+            ),
+            summaries = AuditSummaries(
+                totalItems = 1,
+                routedItems = 0,
+                networkCalls = 0,
+                cacheHits = 0,
+                cacheMisses = 0,
+                staleHits = 0,
+                forbiddenOverwrites = 0,
+                policyViolations = 0,
+                providersUsed = emptyMap(),
+                apiShapesUsed = emptyMap()
+            ),
+            policyViolations = emptyList()
+        )
+        val outputDir = File("build/reports/metadata-audit/stable-id-bundle-missing-canonical")
+        val jsonFile = File(outputDir, "metadata-execution-single-report.json")
+        val markdownFile = File(outputDir, "metadata-execution-single-report.md")
+
+        MetadataAuditReportWriter().writeJson(report, jsonFile)
+        MetadataAuditReportWriter().writeMarkdown(report, markdownFile)
+
+        val bundleJson = JSONObject(jsonFile.readText())
+            .getJSONArray("items")
+            .getJSONObject(0)
+            .getJSONObject("metadata.stable_id_bundle")
+        val markdown = markdownFile.readText()
+
+        assertTrue(bundleJson.isNull("canonicalId"))
+        assertEquals("tt0944947", bundleJson.getString("imdbId"))
+        assertEquals("PREVIEW_IDS_ONLY", bundleJson.getString("status"))
+        assertFalse(bundleJson.getBoolean("networkExecuted"))
+        assertTrue(markdown.contains("Stable ID Bundle"))
+        assertTrue(markdown.contains("PREVIEW_IDS_ONLY"))
+    }
+
+    @Test
     fun `metadata audit bundle exports full production readiness scenario matrix`() = runTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
         val scenarioNames = bundle.reports.map { it.scenario.name }.toSet()
@@ -557,19 +658,6 @@ class MetadataExecutionAuditGoldenTest {
         assertFalse(stableIdBundle.getBoolean("networkExecuted"))
         assertEquals("VISIBLE_HOME_HYDRATION", stableIdBundle.getString("trigger"))
         assertTrue(runtimeCalls.none { it.getBoolean("executedNetwork") })
-
-        val missingCanonicalReport = root
-            .getJSONArray("reports")
-            .objects()
-            .single { it.getString("scenario") == "tmdb-tv-rail-imdb-sidecar-without-canonical-route" }
-        val missingCanonicalBundle = missingCanonicalReport
-            .getJSONArray("items")
-            .getJSONObject(0)
-            .getJSONObject("metadata.stable_id_bundle")
-
-        assertEquals("tt0944947", missingCanonicalBundle.getString("imdbId"))
-        assertTrue(missingCanonicalBundle.isNull("canonicalId"))
-        assertEquals("PREVIEW_IDS_ONLY", missingCanonicalBundle.getString("status"))
 
         assertFalse(json.contains("\"targetProvider\":\"TRAKT\""))
         assertFalse(json.contains("\"targetProvider\":\"SIMKL\""))
