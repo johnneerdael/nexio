@@ -293,7 +293,8 @@ class MetadataAuditRunner private constructor(
         val scenario = MetadataAuditScenario(
             name = spec.name,
             depth = if (spec.routeProvider == null) MetadataDepth.PREVIEW else MetadataDepth.DETAIL_CORE,
-            visibleItemIds = setOf(spec.itemId)
+            visibleItemIds = setOf(spec.itemId),
+            cacheMode = AuditCacheMode.WARM_FRESH
         )
         val trace = RecordingMetadataAuditTraceCollector()
         val railPreview = spec.toRailItemPreview(generatedAtMs = System.currentTimeMillis())
@@ -353,6 +354,7 @@ class MetadataAuditRunner private constructor(
 
         val route = result?.route
             ?.toAuditEvent(itemId = metaPreview.id, itemType = metaPreview.apiType)
+            ?.withKnownRailTargets(spec)
             ?.withoutCanonicalTargetWhenSuppressed(spec)
         if (route != null) trace.onRoute(route)
         val stableIdBundle = route?.let { resolvedRoute ->
@@ -473,7 +475,7 @@ class MetadataAuditRunner private constructor(
             provenance = provenanceProvider.current(),
             verdict = AuditVerdict.PASS,
             scenario = scenario,
-            fixtureName = "metadata/rails/${spec.name}.json",
+            fixtureName = "synthetic/metadata/rails/${spec.name}.json",
             generatedAtEpochMs = System.currentTimeMillis(),
             items = listOf(item),
             summaries = buildSummary(listOf(item)),
@@ -551,6 +553,11 @@ class MetadataAuditRunner private constructor(
     private fun RouteEvent.withoutCanonicalTargetWhenSuppressed(spec: RailScenarioSpec): RouteEvent {
         if (!spec.suppressRouteCanonicalTarget) return this
         return copy(targetIds = targetIds - provider)
+    }
+
+    private fun RouteEvent.withKnownRailTargets(spec: RailScenarioSpec): RouteEvent {
+        if (spec.targetIds.isEmpty()) return this
+        return copy(targetIds = targetIds + spec.targetIds)
     }
 
     private fun stableIdBundleStatus(canonicalId: String?, imdbId: String?): String {

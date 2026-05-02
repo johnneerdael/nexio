@@ -14,6 +14,7 @@ class StableIdBundleArchitectureTest {
             "ClassicHomeContent.kt",
             "GridHomeContent.kt",
             "HomeScreen.kt",
+            "HomeViewModelPresentationPipeline.kt",
             "ModernHomeContent.kt",
             "ModernHomeHero.kt",
             "ModernHomePresentation.kt",
@@ -64,7 +65,7 @@ class StableIdBundleArchitectureTest {
             .filter { it.isFile && it.extension == "kt" }
             .filterNot { file ->
                 file.name in allowedInfrastructure ||
-                    file.name.startsWith("HomeViewModel")
+                    (file.name.startsWith("HomeViewModel") && file.name != "HomeViewModelPresentationPipeline.kt")
             }
             .toList()
     }
