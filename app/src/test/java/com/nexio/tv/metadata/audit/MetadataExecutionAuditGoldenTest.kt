@@ -544,6 +544,7 @@ class MetadataExecutionAuditGoldenTest {
         val firstPaint = tmdbTvRailItem.getJSONObject("firstPaint")
         val routing = tmdbTvRailItem.getJSONObject("routing")
         val stableIdBundle = tmdbTvRailItem.getJSONObject("metadata.stable_id_bundle")
+        val runtimeCalls = tmdbTvRailItem.getJSONArray("runtimeCalls").objects()
 
         assertEquals("RAIL_PREVIEW", firstPaint.getString("source"))
         assertFalse(firstPaint.getBoolean("routerExecuted"))
@@ -551,9 +552,11 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals("metadata.stable_id_bundle", stableIdBundle.getString("eventType"))
         assertEquals("TVDB", stableIdBundle.getString("canonicalProvider"))
         assertEquals(routing.getJSONObject("targetIds").getString("TVDB"), stableIdBundle.getString("canonicalId"))
+        assertEquals("tvdb:121361", stableIdBundle.getString("canonicalId"))
         assertEquals("tt0944947", stableIdBundle.getString("imdbId"))
         assertFalse(stableIdBundle.getBoolean("networkExecuted"))
         assertEquals("VISIBLE_HOME_HYDRATION", stableIdBundle.getString("trigger"))
+        assertTrue(runtimeCalls.none { it.getBoolean("executedNetwork") })
 
         val missingCanonicalReport = root
             .getJSONArray("reports")
