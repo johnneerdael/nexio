@@ -47,6 +47,7 @@ class MetadataAuditReportWriter {
                 appendLine("      \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
                 appendLine("      \"routingAfterVisible\": ${routeJson(item.routingAfterVisible, indent = "      ")},")
                 appendLine("      \"metadata.stable_id_bundle\": ${stableIdBundleJson(item.stableIdBundle)},")
+                appendLine("      \"homeUpdate\": ${homeUpdateJson(item.homeUpdate)},")
                 appendLine("      \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
@@ -87,6 +88,7 @@ class MetadataAuditReportWriter {
                     appendLine("          \"sourcePayloadFieldsUsed\": ${stringArrayJson(item.sourcePayloadFieldsUsed)},")
                     appendLine("          \"routingAfterVisible\": ${routeJson(item.routingAfterVisible, indent = "          ")},")
                     appendLine("          \"metadata.stable_id_bundle\": ${stableIdBundleJson(item.stableIdBundle)},")
+                    appendLine("          \"homeUpdate\": ${homeUpdateJson(item.homeUpdate)},")
                     appendLine("          \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
                     appendLine("          \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
                     appendLine("          \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
@@ -148,6 +150,7 @@ class MetadataAuditReportWriter {
                 appendLine()
                 appendRailPreview(item)
                 appendStableIdBundle(item.stableIdBundle)
+                appendHomeUpdate(item.homeUpdate)
 
                 item.routing?.let { route ->
                     appendLine("### Routing")
@@ -223,6 +226,7 @@ class MetadataAuditReportWriter {
                     appendLine()
                     appendRailPreview(item)
                     appendStableIdBundle(item.stableIdBundle)
+                    appendHomeUpdate(item.homeUpdate)
                     item.routing?.let { route ->
                         appendLine("#### Routing")
                         appendLine("| Provider | Media kind | Reason | Used inputs | Ignored inputs | Pre-resolution identity required | Execution identity resolved |")
@@ -338,6 +342,30 @@ class MetadataAuditReportWriter {
         appendLine()
     }
 
+    private fun StringBuilder.appendHomeUpdate(event: HomeUpdateEvent?) {
+        event ?: return
+        appendLine("#### Home Update")
+        appendLine()
+        appendLine("| Changed fields | Row order changed | Focus changed | Display hash before | Display hash after |")
+        appendLine("|---|---:|---:|---|---|")
+        appendLine("| `${event.changedFields.joinToString()}` | `${event.rowOrderChanged}` | `${event.focusChanged}` | `${event.displayHashBefore}` | `${event.displayHashAfter}` |")
+        appendLine()
+        appendLine("##### Home fields before")
+        appendLine("| Field | Value |")
+        appendLine("|---|---|")
+        event.before.forEach { (field, value) ->
+            appendLine("| `${field}` | `${value.orEmpty()}` |")
+        }
+        appendLine()
+        appendLine("##### Home fields after")
+        appendLine("| Field | Value |")
+        appendLine("|---|---|")
+        event.after.forEach { (field, value) ->
+            appendLine("| `${field}` | `${value.orEmpty()}` |")
+        }
+        appendLine()
+    }
+
     private fun StringBuilder.appendIdentityResolution(event: IdentityResolutionEvent?) {
         event ?: return
         appendLine("#### Identity resolution")
@@ -387,6 +415,11 @@ class MetadataAuditReportWriter {
     private fun stableIdBundleJson(event: StableIdBundleEvent?): String =
         event?.let {
             """{"eventType":"metadata.stable_id_bundle","itemKey":${jsonString(it.itemKey)},"itemType":${jsonString(it.itemType)},"trigger":${jsonString(it.trigger)},"status":${jsonString(it.status)},"canonicalProvider":${nullableStringJson(it.canonicalProvider)},"canonicalId":${nullableStringJson(it.canonicalId)},"imdbId":${nullableStringJson(it.imdbId)},"networkExecuted":${it.networkExecuted},"evidence":[${it.evidence.joinToString { evidence -> stableIdBundleEvidenceJson(evidence) }}]}"""
+        } ?: "null"
+
+    private fun homeUpdateJson(event: HomeUpdateEvent?): String =
+        event?.let {
+            """{"before":${nullableStringMapJson(it.before)},"after":${nullableStringMapJson(it.after)},"changedFields":${stringArrayJson(it.changedFields)},"rowOrderChanged":${it.rowOrderChanged},"focusChanged":${it.focusChanged},"displayHashBefore":${jsonString(it.displayHashBefore)},"displayHashAfter":${jsonString(it.displayHashAfter)}}"""
         } ?: "null"
 
     private fun stableIdBundleEvidenceJson(event: StableIdBundleEvidenceEvent): String =
@@ -460,6 +493,9 @@ class MetadataAuditReportWriter {
 
     private fun stringMapJson(values: Map<String, String>): String =
         "{${values.entries.joinToString { "${jsonString(it.key)}:${jsonString(it.value)}" }}}"
+
+    private fun nullableStringMapJson(values: Map<String, String?>): String =
+        "{${values.entries.joinToString { "${jsonString(it.key)}:${nullableStringJson(it.value)}" }}}"
 
     private fun providerTargetMapJson(values: Map<com.nexio.tv.core.metadata.router.MetadataPrimaryProvider, String>): String =
         "{${values.entries.joinToString { "${jsonString(it.key.name)}:${jsonString(it.value)}" }}}"
