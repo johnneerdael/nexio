@@ -338,8 +338,7 @@ data class MDBListSyncSettings(
 
 @Serializable
 data class AnimeSkipSyncSettings(
-    val enabled: Boolean = false,
-    val clientId: String = ""
+    val enabled: Boolean = false
 )
 
 @Serializable

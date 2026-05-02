@@ -131,7 +131,6 @@ class AccountConfigSyncContractTest {
                 mdblist = MDBListSyncSettings(enabled = true, showImdb = false),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(
                     enabled = true,
-                    clientId = "anime-client"
                 ),
                 subtitleTranslation = SubtitleTranslationSyncSettings(
                     enabled = true,
@@ -421,7 +420,6 @@ class AccountConfigSyncContractTest {
                 omdbSettings = MutableSharedFlow<Unit>(),
                 theIntroDbSettings = MutableSharedFlow<Unit>(),
                 animeSkipEnabled = MutableSharedFlow<Unit>(),
-                animeSkipClientId = MutableSharedFlow<Unit>(),
                 subtitleTranslationSettings = MutableSharedFlow<Unit>(),
                 wyzieSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
@@ -463,7 +461,6 @@ class AccountConfigSyncContractTest {
                 omdbSettings = MutableSharedFlow<Unit>(),
                 theIntroDbSettings = MutableSharedFlow<Unit>(),
                 animeSkipEnabled = MutableSharedFlow<Unit>(),
-                animeSkipClientId = MutableSharedFlow<Unit>(),
                 subtitleTranslationSettings = MutableSharedFlow<Unit>(),
                 wyzieSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
@@ -623,7 +620,6 @@ class AccountConfigSyncContractTest {
         val omdbSettings = MutableSharedFlow<Unit>(replay = 1)
         val theIntroDbSettings = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipEnabled = MutableSharedFlow<Unit>(replay = 1)
-        val animeSkipClientId = MutableSharedFlow<Unit>(replay = 1)
         val subtitleTranslationSettings = MutableSharedFlow<Unit>(replay = 1)
         val posterRatingsSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeSettings = MutableSharedFlow<Unit>(replay = 1)
@@ -649,7 +645,6 @@ class AccountConfigSyncContractTest {
                 omdbSettings = omdbSettings,
                 theIntroDbSettings = theIntroDbSettings,
                 animeSkipEnabled = animeSkipEnabled,
-                animeSkipClientId = animeSkipClientId,
                 subtitleTranslationSettings = subtitleTranslationSettings,
                 wyzieSettings = MutableSharedFlow<Unit>(),
                 posterRatingsSettings = posterRatingsSettings,
@@ -751,7 +746,7 @@ class AccountConfigSyncContractTest {
                     showMetacritic = true
                 ),
                 omdb = OmdbSyncSettings(enabled = true),
-                animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(enabled = true, clientId = "anime-client"),
+                animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(enabled = true),
                 subtitleTranslation = SubtitleTranslationSyncSettings(
                     enabled = true,
                     provider = "OPENAI",
