@@ -5,9 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.metadata.router.MetadataDepth
-import com.nexio.tv.core.metadata.router.MetadataRequest
-import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -426,10 +423,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         setEnrichingItemId(null)
     }
 
-    val willEnrich = currentTmdbSettings.isActive || item.type.isHomeTvContent()
-    if (willEnrich) {
-        setEnrichingItemId(item.id)
-    }
+    setEnrichingItemId(item.id)
 
     pendingTmdbEnrichItemId = item.id
     tmdbEnrichFocusJob?.cancel()
@@ -455,15 +449,46 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         }
 
         try {
-            if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
-                val enrichment = withContext(Dispatchers.IO) {
-                    runCatching { fetchProviderEnrichmentForPreview(item) }.getOrNull()
-                }
-                if (enrichment != null && pendingTmdbEnrichItemId == item.id) {
-                    prefetchedTmdbIds.add(item.id)
-                    prefetchedExternalMetaIds.add(item.id)
-                    updateCatalogItemWithProvider(item.id, enrichment)
-                }
+            val itemKey = item.homeOverlayItemKey()
+            val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
+            if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return@launch
+
+            focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATING
+            val expectedGeneration = homeProfileGeneration
+            val expectedLanguageTag = profileBoundary.currentLanguageTag()
+            var overlayApplied = false
+            val overlay = try {
+                homeHydrationCoordinator.hydrate(
+                    item = item,
+                    trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                    priority = HomeHydrationPriority.FOCUSED,
+                    languageTag = expectedLanguageTag,
+                    expectedGeneration = expectedGeneration,
+                    currentGeneration = { homeProfileGeneration },
+                    onOverlayApplied = { appliedOverlay ->
+                        overlayApplied = applyHydratedHomeOverlayFromCoordinator(
+                            overlay = appliedOverlay,
+                            expectedGeneration = expectedGeneration,
+                            expectedLanguageTag = expectedLanguageTag,
+                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
+                        )
+                        if (overlayApplied) {
+                            focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
+                            prefetchedExternalMetaIds.add(item.id)
+                        }
+                    }
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(HomeViewModel.TAG, "onItemFocus hydration failed for ${item.id}: ${e.message}", e)
+                null
+            }
+            if (overlay == null && focusedItemHydrationStates[itemKey] == RailHydrationState.HYDRATING) {
+                focusedItemHydrationStates[itemKey] = RailHydrationState.HYDRATION_FAILED_USING_PREVIEW
+            }
+            if (overlay != null && !overlayApplied && focusedItemHydrationStates[itemKey] == RailHydrationState.HYDRATING) {
+                focusedItemHydrationStates[itemKey] = RailHydrationState.PREVIEW_ONLY
             }
 
         } finally {
@@ -588,74 +613,6 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     }
 }
 
-private fun HomeViewModel.updateCatalogItemWithProvider(itemId: String, enrichment: TvMetadataEnrichment) {
-    pendingProviderEnrichmentByItemId[itemId] = enrichment
-    scheduleMetadataEnrichmentFlushPipeline()
-}
-
-private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
-    if (!isNonPlaybackHomeWorkAllowed()) return
-
-    metadataEnrichmentFlushJob?.cancel()
-    metadataEnrichmentFlushJob = viewModelScope.launch {
-        delay(HomeViewModel.FOCUS_ENRICHMENT_BATCH_WINDOW_MS)
-        if (!isNonPlaybackHomeWorkAllowed()) return@launch
-        flushMetadataEnrichmentPipeline()
-    }
-}
-
-private suspend fun HomeViewModel.flushMetadataEnrichmentPipeline() {
-    if (pendingProviderEnrichmentByItemId.isEmpty()) {
-        return
-    }
-    val providerByItemId = pendingProviderEnrichmentByItemId.toMap()
-    pendingProviderEnrichmentByItemId.clear()
-
-    var changed = false
-    val changedCatalogKeys = mutableSetOf<String>()
-    val stableIdBundlesByItemKey = mutableMapOf<String, StableIdBundle?>()
-    catalogsMap.forEach { (key, row) ->
-        var mutableItems: MutableList<MetaPreview>? = null
-        row.items.forEachIndexed { index, currentItem ->
-            val itemKey = "${currentItem.apiType}:${currentItem.id}"
-            val providerEnrichment = providerByItemId[currentItem.id]
-            val hydratedItem = mergeFocusedItemEnrichment(
-                currentItem = currentItem,
-                providerEnrichment = providerEnrichment,
-                externalMeta = null
-            )
-            val stableIdBundle = if (providerEnrichment == null) {
-                null
-            } else if (stableIdBundlesByItemKey.containsKey(itemKey)) {
-                stableIdBundlesByItemKey[itemKey]
-            } else {
-                resolveStableIdBundleOrNull(
-                    request = hydratedItem.toStableIdMetadataRequest(languageTag = profileBoundary.currentLanguageTag()),
-                    trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
-                    itemKey = itemKey
-                ).also { stableIdBundlesByItemKey[itemKey] = it }
-            }
-            val mergedItem = titleRatingOverrideRepository.enrichPreview(hydratedItem, stableIdBundle)
-            if (mergedItem != currentItem) {
-                val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
-                updatedItems[index] = mergedItem
-            }
-        }
-
-        val updatedItems = mutableItems
-        if (updatedItems != null) {
-            catalogsMap[key] = row.copy(items = updatedItems)
-            changedCatalogKeys += key
-            changed = true
-        }
-    }
-
-    if (!changed) return
-
-    changedCatalogKeys.forEach(truncatedRowCache::remove)
-    scheduleUpdateCatalogRows()
-}
-
 internal fun mergeFocusedItemEnrichment(
     currentItem: MetaPreview,
     tmdbEnrichment: TmdbEnrichment?,
@@ -751,38 +708,6 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
         providerLocalizedMetadataResolver = providerLocalizedMetadataResolver,
         profileBoundary = profileBoundary
     ).value
-}
-
-private fun MetaPreview.toStableIdMetadataRequest(languageTag: String): MetadataRequest =
-    MetadataRequest(
-        contentId = id,
-        contentType = type,
-        sourceContext = toHomeMetadataSourceContext(),
-        language = languageTag,
-        depth = MetadataDepth.DETAIL_CORE
-    )
-
-private suspend fun HomeViewModel.resolveStableIdBundleOrNull(
-    request: MetadataRequest,
-    trigger: StableIdResolutionTrigger,
-    itemKey: String
-): StableIdBundle? {
-    return try {
-        metadataRouterFacade.resolveStableIdBundle(
-            request = request,
-            trigger = trigger,
-            itemKey = itemKey
-        )
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Log.w(
-            HomeViewModel.TAG,
-            "Stable ID bundle resolution failed trigger=${trigger.name} itemKey=$itemKey: ${e.message}",
-            e
-        )
-        null
-    }
 }
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(

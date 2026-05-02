@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
+import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
@@ -15,10 +16,16 @@ import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.ProviderLocalizedMetadataResolver
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.HomeItemHydrationState
+import com.nexio.tv.domain.model.HydratedHomeFieldTrace
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -40,6 +47,8 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val profileBoundary = mockk<ProfileBoundary>()
         val titleRatingOverrideRepository = passthroughTitleRatingOverrideRepository()
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val preview = seriesPreview()
         every { viewModel.metadataRouterFacade } returns testMetadataRouterFacade(tvMetadataRouter)
         every { viewModel.providerLocalizedMetadataResolver } returns ProviderLocalizedMetadataResolver(
             metadataRouterFacade = testMetadataRouterFacade(tvMetadataRouter)
@@ -47,20 +56,54 @@ class HomeViewModelTvdbProviderRoutingTest {
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.profileBoundary } returns profileBoundary
         every { viewModel.titleRatingOverrideRepository } returns titleRatingOverrideRepository
+        every { viewModel.homeHydrationCoordinator } returns homeHydrationCoordinator
+        every { viewModel.homeProfileGeneration } returns 7L
+        every { viewModel.isCurrentHomeProfileGeneration(7L) } returns true
         every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
             value = tvdbEnrichment()
         )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        } coAnswers {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = preview.id,
+                    contentType = preview.type,
+                    language = "en"
+                )
+            )
+            tvdbHeroOverlay(preview)
+        }
 
         val result = viewModel.enrichHeroItemsPipeline(
-            items = listOf(seriesPreview()),
+            items = listOf(preview),
             settings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
         )
 
         assertEquals("TVDB title", result.single().name)
         assertEquals("TVDB description", result.single().description)
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = preview,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.HERO,
+                languageTag = "en",
+                expectedGeneration = 7L,
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
     }
@@ -176,6 +219,29 @@ class HomeViewModelTvdbProviderRoutingTest {
             rating = 8.9,
             runtimeMinutes = 52,
             language = "en"
+        )
+    }
+
+    private fun tvdbHeroOverlay(item: MetaPreview): HydratedHomeOverlay {
+        val fields = HomeDisplayMetadata(
+            title = "TVDB title",
+            description = "TVDB description"
+        )
+        return HydratedHomeOverlay(
+            overlayKey = "canonical:TVDB:121361:type:SERIES:lang:en:policy:1",
+            itemKey = item.homeOverlayItemKey(),
+            canonicalProvider = ProviderId.TVDB,
+            canonicalId = "121361",
+            imdbId = item.id,
+            contentType = ContentType.SERIES,
+            languageTag = "en",
+            fields = fields,
+            fieldTrace = listOf(HydratedHomeFieldTrace("TITLE", "TVDB", "PRIMARY")),
+            displayHash = fields.hydratedHomeDisplayHash(),
+            updatedAtMs = 1L,
+            staleAtMs = 2L,
+            expiresAtMs = 3L,
+            state = HomeItemHydrationState.CANONICAL_READY
         )
     }
 

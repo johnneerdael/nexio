@@ -146,6 +146,59 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `onItemFocus for non-rail item delegates focused hydration to coordinator`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val item = railPreviewMetaPreview().copy(
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
+        )
+        val overlay = overlay(
+            itemKey = "movie:${item.id}",
+            fields = HomeDisplayMetadata(title = "Canonical Non-Rail Focused")
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = capture(overlayCallback)
+            )
+        } coAnswers {
+            overlayCallback.captured(overlay)
+            overlay
+        }
+
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+
+        viewModel.onItemFocus(item)
+        advanceUntilIdle()
+
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates[item.homeOverlayItemKey()])
+        assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
+        assertNotNull(viewModel.catalogUpdateJob)
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+    }
+
+    @Test
     fun `visible home hydration ignores overlay applied after language changes`() = runTest(testDispatcher) {
         var currentLanguage = "en"
         val traceSink = RecordingTraceSink()
