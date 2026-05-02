@@ -12,12 +12,12 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.TmdbSettings
-import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.orDefault
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.data.trailer.TrailerResolutionResult
@@ -416,8 +416,9 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         return
     }
     pendingFocusedItemForEnrichment = null
+    val itemKey = item.homeOverlayItemKey()
     if (isFocusedPreviewEnrichmentComplete(item)) return
-    if (pendingTmdbEnrichItemId == item.id) return
+    if (pendingTmdbEnrichItemId == itemKey) return
 
     if (_enrichingItemId.value != null && _enrichingItemId.value != item.id) {
         setEnrichingItemId(null)
@@ -425,7 +426,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 
     setEnrichingItemId(item.id)
 
-    pendingTmdbEnrichItemId = item.id
+    pendingTmdbEnrichItemId = itemKey
     tmdbEnrichFocusJob?.cancel()
     tmdbEnrichFocusJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
@@ -435,7 +436,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             }
             return@launch
         }
-        if (pendingTmdbEnrichItemId != item.id) {
+        if (pendingTmdbEnrichItemId != itemKey) {
             if (_enrichingItemId.value == item.id) {
                 setEnrichingItemId(null)
             }
@@ -449,7 +450,6 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         }
 
         try {
-            val itemKey = item.homeOverlayItemKey()
             val currentHydrationState = focusedItemHydrationStates.getValue(itemKey)
             if (currentHydrationState != RailHydrationState.PREVIEW_ONLY) return@launch
 
@@ -474,7 +474,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                         )
                         if (overlayApplied) {
                             focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
-                            prefetchedExternalMetaIds.add(item.id)
+                            prefetchedExternalMetaIds.add(itemKey)
                         }
                     }
                 )
@@ -492,7 +492,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             }
 
         } finally {
-            if (pendingTmdbEnrichItemId == item.id) {
+            if (pendingTmdbEnrichItemId == itemKey) {
                 pendingTmdbEnrichItemId = null
             }
             if (_enrichingItemId.value == item.id) {
@@ -531,7 +531,7 @@ private fun HomeViewModel.hydrateFocusedRailPreviewWithCoordinator(item: MetaPre
                     )
                     if (overlayApplied) {
                         focusedItemHydrationStates[itemKey] = RailHydrationState.CANONICAL_READY
-                        prefetchedExternalMetaIds.add(item.id)
+                        prefetchedExternalMetaIds.add(itemKey)
                     }
                 }
             )
@@ -569,15 +569,16 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
         return
     }
+    val itemKey = item.homeOverlayItemKey()
     if (isFocusedPreviewEnrichmentComplete(item)) return
-    if (pendingTmdbEnrichItemId == item.id || pendingAdjacentPrefetchItemId == item.id) return
+    if (pendingTmdbEnrichItemId == itemKey || pendingAdjacentPrefetchItemId == itemKey) return
 
-    pendingAdjacentPrefetchItemId = item.id
+    pendingAdjacentPrefetchItemId = itemKey
     adjacentItemPrefetchJob?.cancel()
     adjacentItemPrefetchJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
         if (!isNonPlaybackHomeWorkAllowed()) return@launch
-        if (pendingAdjacentPrefetchItemId != item.id) return@launch
+        if (pendingAdjacentPrefetchItemId != itemKey) return@launch
         if (isFocusedPreviewEnrichmentComplete(item)) return@launch
 
         try {
@@ -599,14 +600,14 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                             trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
                         )
                         if (overlayApplied) {
-                            prefetchedExternalMetaIds.add(item.id)
+                            prefetchedExternalMetaIds.add(itemKey)
                         }
                     }
                 )
             }
 
         } finally {
-            if (pendingAdjacentPrefetchItemId == item.id) {
+            if (pendingAdjacentPrefetchItemId == itemKey) {
                 pendingAdjacentPrefetchItemId = null
             }
         }
@@ -739,7 +740,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                     }
                 )
                 if (isCurrentHomeHydrationScope(expectedGeneration, languageTag)) {
-                    overlay?.fields?.applyTo(item) ?: item
+                    overlay?.fields?.applyToHeroItem(item, settings) ?: item
                 } else {
                     item
                 }
@@ -873,9 +874,40 @@ internal fun applyTomatoesOverridesToMDBListSnapshot(
 }
 
 private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(item: MetaPreview): Boolean {
+    val itemKey = item.homeOverlayItemKey()
     return (!item.type.isHomeTvContent() && !currentTmdbSettings.isActive) ||
-        item.id in prefetchedTmdbIds ||
-        item.id in prefetchedExternalMetaIds
+        itemKey in prefetchedTmdbIds ||
+        itemKey in prefetchedExternalMetaIds
+}
+
+private fun HomeDisplayMetadata.applyToHeroItem(
+    base: MetaPreview,
+    settings: TmdbSettings
+): MetaPreview {
+    var merged = base
+    if (settings.useArtwork) {
+        merged = merged.copy(
+            background = backdrop ?: merged.background,
+            logo = logo ?: merged.logo
+        )
+    }
+    if (settings.useBasicInfo) {
+        merged = merged.copy(
+            name = title ?: merged.name,
+            description = description ?: merged.description,
+            imdbRating = imdbRating ?: merged.imdbRating,
+            ratingSource = if (imdbRating != null) ratingSource.orDefault() else merged.ratingSource.orDefault(),
+            tomatoesRating = tomatoesRating ?: merged.tomatoesRating,
+            genres = if (genres.isNotEmpty()) genres else merged.genres
+        )
+    }
+    if (settings.useDetails) {
+        merged = merged.copy(
+            releaseInfo = releaseInfo ?: merged.releaseInfo,
+            runtime = runtime ?: merged.runtime
+        )
+    }
+    return merged
 }
 
 private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {

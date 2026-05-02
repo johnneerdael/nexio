@@ -29,6 +29,7 @@ import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -485,6 +486,7 @@ class HomeCatalogRefreshCoordinatorTest {
         val catalogsMap = linkedMapOf<String, CatalogRow>()
         val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
         val uiState = MutableStateFlow(HomeUiState())
+        val hydratedOverlays = MutableStateFlow<Map<String, HydratedHomeOverlay>>(emptyMap())
         val visiblePreview = preview(id = "tt-visible-refresh", poster = "poster").copy(
             description = "Visible catalog payload",
             releaseInfo = "2026"
@@ -515,6 +517,8 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.catalogsMap } returns catalogsMap
         every { viewModel._uiState } returns uiState
         every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.hydratedHomeOverlaysByItemKey } returns hydratedOverlays
+        every { viewModel.visibleHomeHydrationInFlightItemKeys } returns mutableSetOf()
         every { viewModel.homeProfileGeneration } returns 1L
         every { viewModel.profileBoundary.currentLanguageTag() } returns "en"
         every { viewModel.activeProfileTraktAuthenticated } returns false

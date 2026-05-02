@@ -469,22 +469,30 @@ internal suspend fun HomeViewModel.hydrateVisibleHomeItemsWithCoordinator(
     val languageTag = profileBoundary.currentLanguageTag()
     uniqueItems.forEach { item ->
         if (!isNonPlaybackHomeWorkAllowed()) return
-        homeHydrationCoordinator.hydrate(
-            item = item,
-            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
-            priority = HomeHydrationPriority.VISIBLE,
-            languageTag = languageTag,
-            expectedGeneration = expectedGeneration,
-            currentGeneration = { homeProfileGeneration },
-            onOverlayApplied = { overlay ->
-                applyHydratedHomeOverlayFromCoordinator(
-                    overlay = overlay,
-                    expectedGeneration = expectedGeneration,
-                    expectedLanguageTag = languageTag,
-                    trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
-                )
-            }
-        )
+        val itemKey = item.homeOverlayItemKey()
+        if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) return@forEach
+        if (!visibleHomeHydrationInFlightItemKeys.add(itemKey)) return@forEach
+        try {
+            if (hydratedHomeOverlaysByItemKey.value[itemKey]?.languageTag == languageTag) return@forEach
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = languageTag,
+                expectedGeneration = expectedGeneration,
+                currentGeneration = { homeProfileGeneration },
+                onOverlayApplied = { overlay ->
+                    applyHydratedHomeOverlayFromCoordinator(
+                        overlay = overlay,
+                        expectedGeneration = expectedGeneration,
+                        expectedLanguageTag = languageTag,
+                        trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION
+                    )
+                }
+            )
+        } finally {
+            visibleHomeHydrationInFlightItemKeys.remove(itemKey)
+        }
     }
 }
 

@@ -39,6 +39,7 @@ import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.RailHydrationState
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.hydratedHomeDisplayHash
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -305,6 +306,42 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `visible home hydration skips item with current same-language overlay`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val visible = railPreviewMetaPreview().copy(type = ContentType.MOVIE, rawType = "movie")
+        val currentOverlay = overlay(
+            itemKey = "movie:${visible.id}",
+            fields = HomeDisplayMetadata(title = "Current Visible")
+        )
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+        viewModel.homeProfileGeneration = 7L
+        viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(visible.homeOverlayItemKey() to currentOverlay)
+
+        viewModel.hydrateVisibleHomeItemsWithCoordinator(
+            items = listOf(visible),
+            expectedGeneration = 7L
+        )
+        advanceUntilIdle()
+
+        assertEquals(currentOverlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue(visible.homeOverlayItemKey()))
+        coVerify(exactly = 0) {
+            homeHydrationCoordinator.hydrate(
+                item = any(),
+                trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+                priority = HomeHydrationPriority.VISIBLE,
+                languageTag = any(),
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+    }
+
+    @Test
     fun `overlay scope invalidation clears observer state and schedules catalog recompute`() = runTest(testDispatcher) {
         val viewModel = buildTestHomeViewModel(metadataRouterFacade = mockk(relaxed = true))
         val observerJob = Job()
@@ -413,6 +450,78 @@ class HomeViewModelFocusHydrationTest {
     }
 
     @Test
+    fun `focused completion guard is scoped by home overlay item key`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val callbacks = mutableListOf<(HydratedHomeOverlay) -> Unit>()
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = any(),
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = capture(callbacks)
+            )
+        } coAnswers {
+            val item = firstArg<MetaPreview>()
+            val itemOverlay = overlay(
+                itemKey = item.homeOverlayItemKey(),
+                fields = HomeDisplayMetadata(title = "Canonical ${item.apiType}")
+            )
+            callbacks.last().invoke(itemOverlay)
+            itemOverlay
+        }
+        val movieItem = railPreviewMetaPreview().copy(
+            id = "shared-id",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
+        )
+        val seriesItem = railPreviewMetaPreview().copy(
+            id = "shared-id",
+            type = ContentType.SERIES,
+            rawType = "series",
+            firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
+        )
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator,
+            nonPlaybackHomeWorkAllowed = true
+        )
+
+        viewModel.onItemFocus(movieItem)
+        advanceUntilIdle()
+        viewModel.onItemFocus(seriesItem)
+        advanceUntilIdle()
+
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates["movie:shared-id"])
+        assertEquals(RailHydrationState.CANONICAL_READY, viewModel.focusedItemHydrationStates["series:shared-id"])
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = movieItem,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            homeHydrationCoordinator.hydrate(
+                item = seriesItem,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.FOCUSED,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = any()
+            )
+        }
+    }
+
+    @Test
     fun `adjacent item preload delegates hydration to coordinator and publishes overlay`() = runTest(testDispatcher) {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
@@ -494,10 +603,15 @@ class HomeViewModelFocusHydrationTest {
         val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
         val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
         val item = railPreviewMetaPreview()
-            .copy(type = ContentType.MOVIE, rawType = "movie")
+            .copy(type = ContentType.MOVIE, rawType = "movie", poster = "preview-poster")
         val overlay = overlay(
             itemKey = "movie:${item.id}",
-            fields = HomeDisplayMetadata(title = "Canonical Hero", poster = "hero-poster")
+            fields = HomeDisplayMetadata(
+                title = "Canonical Hero",
+                logo = "hero-logo",
+                poster = "hero-poster",
+                backdrop = "hero-backdrop"
+            )
         )
         coEvery {
             homeHydrationCoordinator.hydrate(
@@ -526,7 +640,9 @@ class HomeViewModelFocusHydrationTest {
         assertEquals(2, enriched.size)
         assertEquals("Canonical Hero", enriched[0].name)
         assertEquals("Canonical Hero", enriched[1].name)
-        assertEquals("hero-poster", enriched[0].poster)
+        assertEquals("preview-poster", enriched[0].poster)
+        assertEquals("hero-logo", enriched[0].logo)
+        assertEquals("hero-backdrop", enriched[0].background)
         assertEquals(overlay, viewModel.hydratedHomeOverlaysByItemKey.value.getValue("movie:${item.id}"))
         coVerify(exactly = 1) {
             homeHydrationCoordinator.hydrate(
@@ -539,6 +655,78 @@ class HomeViewModelFocusHydrationTest {
                 onOverlayApplied = any()
             )
         }
+    }
+
+    @Test
+    fun `hero enrichment respects disabled overlay field groups`() = runTest(testDispatcher) {
+        val homeHydrationCoordinator = mockk<HomeHydrationCoordinator>()
+        val overlayCallback = slot<(HydratedHomeOverlay) -> Unit>()
+        val item = railPreviewMetaPreview().copy(
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Preview Title",
+            logo = "preview-logo",
+            background = "preview-backdrop",
+            description = "Preview description",
+            genres = listOf("Preview"),
+            releaseInfo = "2024",
+            runtime = "90m",
+            imdbRating = 6.5f,
+            ratingSource = TitleRatingSource.IMDB,
+            language = "preview-language"
+        )
+        val overlay = overlay(
+            itemKey = "movie:${item.id}",
+            fields = HomeDisplayMetadata(
+                title = "Canonical Hero",
+                logo = "hero-logo",
+                description = "Canonical description",
+                genres = listOf("Canonical"),
+                releaseInfo = "2025",
+                runtime = "110m",
+                imdbRating = 8.4f,
+                ratingSource = TitleRatingSource.TMDB,
+                backdrop = "hero-backdrop"
+            )
+        )
+        coEvery {
+            homeHydrationCoordinator.hydrate(
+                item = item,
+                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+                priority = HomeHydrationPriority.HERO,
+                languageTag = "en",
+                expectedGeneration = any(),
+                currentGeneration = any(),
+                onOverlayApplied = capture(overlayCallback)
+            )
+        } coAnswers {
+            overlayCallback.captured.invoke(overlay)
+            overlay
+        }
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            homeHydrationCoordinator = homeHydrationCoordinator
+        )
+
+        val enriched = viewModel.enrichHeroItemsPipeline(
+            items = listOf(item),
+            settings = TmdbSettings(
+                useArtwork = false,
+                useBasicInfo = false,
+                useDetails = false
+            )
+        )
+
+        assertEquals("Preview Title", enriched.single().name)
+        assertEquals("preview-logo", enriched.single().logo)
+        assertEquals("preview-backdrop", enriched.single().background)
+        assertEquals("Preview description", enriched.single().description)
+        assertEquals(listOf("Preview"), enriched.single().genres)
+        assertEquals("2024", enriched.single().releaseInfo)
+        assertEquals("90m", enriched.single().runtime)
+        assertEquals(6.5f, enriched.single().imdbRating ?: 0f, 0f)
+        assertEquals(TitleRatingSource.IMDB, enriched.single().ratingSource)
+        assertEquals("preview-language", enriched.single().language)
     }
 
     // -------------------------------------------------------------------------

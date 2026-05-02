@@ -285,6 +285,7 @@ class HomeViewModel @Inject constructor(
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val prefetchedTomatoesIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val tomatoesEnrichmentInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal val visibleHomeHydrationInFlightItemKeys = Collections.synchronizedSet(mutableSetOf<String>())
     internal var pendingFocusedItemForEnrichment: MetaPreview? = null
     internal var adjacentItemPrefetchJob: Job? = null
     internal var pendingAdjacentPrefetchItemId: String? = null
