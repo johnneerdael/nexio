@@ -316,6 +316,25 @@ class CometProxyUrlResolverTest {
     }
 
     @Test
+    fun `reverse cache drops evicted forward cache entries`() = runBlocking {
+        CometProxyUrlResolver.setTransportForTesting { url, _ ->
+            val tag = url.substringAfter("cfg").substringBefore("/playback")
+            ProxyResolution.Redirected("https://cdn.example.test/$tag/movie.mp4")
+        }
+
+        val resolvedByProxy = (0..64).associate { index ->
+            val proxy = "https://comet.feels.legal/cfg$index/playback/hash/0/0/n/n?torrent_name=x&name=y"
+            val resolved = (CometProxyUrlResolver.resolve(proxy, null) as ProxyResolution.Redirected).url
+            proxy to resolved
+        }
+
+        val oldest = resolvedByProxy.entries.first()
+        val newest = resolvedByProxy.entries.last()
+        assertNull(CometProxyUrlResolver.proxyUrlFor(oldest.value))
+        assertEquals(newest.key, CometProxyUrlResolver.proxyUrlFor(newest.value))
+    }
+
+    @Test
     fun `lastResolutionFor returns placeholder within short verdict ttl`() = runBlocking {
         var now = 1_000L
         CometProxyUrlResolver.setClockForTesting { now }
