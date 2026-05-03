@@ -22,7 +22,11 @@ Do not cherry-pick code when the main implementation uses a path that this branc
 - No direct provider bypasses.
 - No parallel metadata lifecycle.
 - No provider-specific renderer or hydrator.
-- Provider behavior lands in IntegrationRuntime, router, stable ID, shared home, and playback components.
+- Provider HTTP/data loading -> IntegrationRuntime-backed provider/adapters.
+- Provider identity -> StableIdBundleResolver/IdMappingStore.
+- Detail hydration -> MetadataRouterFacade/ProviderPlanExecutor/ProviderPlanRunner/FieldResolver.
+- Home rail/display updates -> CatalogRailRepository/FirstPaintPreview/HydratedHomeOverlayStore/HomeHydrationCoordinator.
+- Playback/autoplay -> StreamPresentationEngine/autoplay selector/player proxy recovery components.
 
 ## First Milestone
 
