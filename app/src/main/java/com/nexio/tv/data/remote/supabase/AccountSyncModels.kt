@@ -69,6 +69,41 @@ data class AccountAddonSecretPayload(
     val suffix: String? = null
 )
 
+internal fun AccountAddonSecretPayload?.requireValidV2Transport(
+    secretRef: String,
+    addonUrl: String
+): AccountAddonSecretPayload {
+    val payload = this
+        ?: error(
+            "transport-secret invariant violated for $addonUrl (ref=$secretRef): " +
+                "vault returned an empty payload"
+        )
+    check(payload.kind == "manifest_suffix_v1") {
+        "transport-secret invariant violated for $addonUrl (ref=$secretRef): " +
+            "kind=${payload.kind}, expected manifest_suffix_v1"
+    }
+    check(!payload.suffix.isNullOrBlank()) {
+        "transport-secret invariant violated for $addonUrl (ref=$secretRef): blank suffix"
+    }
+    return payload
+}
+
+internal fun AccountAddonSecretPayload?.requireValidV1Secret(
+    secretRef: String,
+    addonUrl: String
+): AccountAddonSecretPayload {
+    val payload = this
+        ?: error(
+            "legacy-secret invariant violated for $addonUrl (ref=$secretRef): " +
+                "vault returned an empty payload"
+        )
+    check(payload.params.isNotEmpty() || !payload.pathSegment.isNullOrBlank()) {
+        "legacy-secret invariant violated for $addonUrl (ref=$secretRef): " +
+            "empty params and pathSegment"
+    }
+    return payload
+}
+
 @Serializable
 data class AccountTvdbCredentialSecretPayload(
     val apiKey: String = "",

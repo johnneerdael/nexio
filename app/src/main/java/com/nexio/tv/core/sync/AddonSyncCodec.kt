@@ -35,12 +35,16 @@ data class ParsedAddonSyncEntry(
 )
 
 fun normalizePublicAddonBaseUrl(rawUrl: String): String {
-    val parsed = parseAddonInstallUrl(rawUrl)
-    return parsed.publicBaseUrl
+    val candidate = rawUrl.trim()
+        .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
+    require(candidate.isNotBlank()) { "Addon URL is required." }
+    val parsed = URL(candidate)
+    return "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}"
 }
 
 fun normalizeAddonInstallUrl(rawUrl: String): String {
     val candidate = rawUrl.trim()
+        .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
     require(candidate.isNotBlank()) { "Addon URL is required." }
 
     val parsed = URL(candidate)
@@ -100,23 +104,37 @@ fun isAddonCatalogDisabled(
     return disabledKeys.any { key -> key.startsWith(disableKeyPrefix) }
 }
 
+fun parseStoredAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
+    val candidate = rawUrl.trim()
+        .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
+    require(candidate.isNotBlank()) { "Addon URL is required." }
+    val parsed = URL(candidate)
+    val path = parsed.path?.takeIf { it.isNotBlank() && it != "/" }.orEmpty()
+    val needsManifest = !path.endsWith("/manifest.json", ignoreCase = true)
+    val restored = if (!needsManifest) {
+        candidate
+    } else {
+        val restoredPath = if (path.isBlank()) {
+            "/manifest.json"
+        } else {
+            path.trimEnd('/') + "/manifest.json"
+        }
+        val querySuffix = parsed.query?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+        "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}$restoredPath$querySuffix"
+    }
+    return parseAddonInstallUrl(restored)
+}
+
 fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
     val candidate = rawUrl.trim()
+        .replaceFirst(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
     require(candidate.isNotBlank()) { "Addon URL is required." }
 
     val parsed = URL(candidate)
     val transport = splitAddonTransportUrl(candidate)
-    val suffixPath = URL("https://suffix.invalid${transport.suffix}").path
-    val pathSecretSegment = suffixPath
-        .takeUnless { it.equals("/manifest.json", ignoreCase = true) }
-        ?.replace(Regex("/manifest\\.json$", RegexOption.IGNORE_CASE), "")
-        ?.removePrefix("/")
-        ?.takeIf { it.isNotBlank() }
-    val hasPathSecret = pathSecretSegment != null
     val publicBaseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}"
 
     val publicQueryParams = linkedMapOf<String, String>()
-    val secretParams = linkedMapOf<String, String>()
     parsed.query
         ?.split('&')
         ?.mapNotNull { part ->
@@ -127,40 +145,25 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
             key to value
         }
         ?.forEach { (key, value) ->
-            if (key.trim().lowercase() in sensitiveQueryKeys) {
-                secretParams[key] = value
-            } else {
+            if (key.trim().lowercase() !in sensitiveQueryKeys) {
                 publicQueryParams[key] = value
             }
         }
 
-    val secretRef = if (hasPathSecret || secretParams.isNotEmpty()) addonSecretRef(publicBaseUrl) else null
     val transportSecretRef = addonTransportSecretRef(transport.baseUrl, transport.suffix)
     val transportSecretPayload = AccountAddonSecretPayload(
         kind = "manifest_suffix_v1",
         suffix = transport.suffix
     )
-    val secretPayload = if (secretRef != null) {
-        AccountAddonSecretPayload(
-            kind = when {
-                hasPathSecret && secretParams.isNotEmpty() -> "composite"
-                hasPathSecret -> "path_segment"
-                else -> "query_params"
-            },
-            params = secretParams.ifEmpty { emptyMap() },
-            pathSegment = pathSecretSegment?.takeIf { hasPathSecret }
-        )
-    } else {
-        null
-    }
+    val installKind = if (transport.suffix == "/manifest.json") "manifest" else "configured"
 
     return ParsedAddonSyncEntry(
         publicBaseUrl = publicBaseUrl,
         manifestUrl = "$publicBaseUrl/manifest.json",
         publicQueryParams = publicQueryParams,
-        installKind = if (secretRef == null) "manifest" else "configured",
-        secretRef = secretRef,
-        secretPayload = secretPayload,
+        installKind = installKind,
+        secretRef = null,
+        secretPayload = null,
         transportBaseUrl = transport.baseUrl,
         transportSecretRef = transportSecretRef,
         transportSecretPayload = transportSecretPayload
@@ -231,15 +234,13 @@ private fun shortStableHash(value: String): String {
 private fun splitAddonTransportUrl(rawUrl: String): TransportParts {
     val parsed = URL(rawUrl.trim())
     val path = parsed.path?.takeIf { it.isNotBlank() && it != "/" }.orEmpty()
-    val suffixPath = when {
-        path.isBlank() -> "/manifest.json"
-        path.endsWith("/manifest.json", ignoreCase = true) -> path
-        else -> path.trimEnd('/') + "/manifest.json"
+    require(path.endsWith("/manifest.json", ignoreCase = true)) {
+        "Addon install URL must end with /manifest.json"
     }
     val querySuffix = parsed.query?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
     return TransportParts(
         baseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}",
-        suffix = suffixPath + querySuffix
+        suffix = path + querySuffix
     )
 }
 
