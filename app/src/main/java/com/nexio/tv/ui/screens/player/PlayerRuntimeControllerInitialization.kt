@@ -85,7 +85,6 @@ import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
-import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrLoggingEffect
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
@@ -757,10 +756,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 .hyperHdrConfigDataStore()
             scope.launch {
                 hyperHdrStore.config.collect { cfg ->
-                    _exoPlayer?.setVideoEffects(
-                        if (cfg.isUsable) listOf(HyperHdrLoggingEffect())
-                        else emptyList()
-                    )
+                    // Production wiring lands in Task 10; spike removed in Task 9.
+                    _exoPlayer?.setVideoEffects(emptyList())
                 }
             }
 
