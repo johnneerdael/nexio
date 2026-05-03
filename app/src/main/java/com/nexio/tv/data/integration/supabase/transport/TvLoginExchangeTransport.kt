@@ -1,7 +1,7 @@
 package com.nexio.tv.data.integration.supabase.transport
 
 import com.nexio.tv.BuildConfig
-import com.nexio.tv.data.remote.supabase.TvLoginExchangeResult
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +33,7 @@ class TvLoginExchangeTransport private constructor(
         token: String,
         code: String,
         deviceNonce: String
-    ): TvLoginExchangeResult = withContext(Dispatchers.IO) {
+    ): DurableDeviceCredentialIssueResult = withContext(Dispatchers.IO) {
         val payload = buildJsonObject {
             put("code", code)
             put("device_nonce", deviceNonce)
@@ -51,7 +51,7 @@ class TvLoginExchangeTransport private constructor(
             if (!response.isSuccessful) {
                 throw IllegalStateException("TV login exchange failed (${response.code}): $responseBody")
             }
-            json.decodeFromString<TvLoginExchangeResult>(responseBody)
+            json.decodeFromString<DurableDeviceCredentialIssueResult>(responseBody)
         }
     }
 
@@ -74,7 +74,7 @@ internal suspend fun TvLoginExchangeTransport.exchange(
     code: String,
     deviceNonce: String,
     currentAccessToken: String
-): TvLoginExchangeResult = exchange(
+): DurableDeviceCredentialIssueResult = exchange(
     token = currentAccessToken,
     code = code,
     deviceNonce = deviceNonce
