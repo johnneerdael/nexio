@@ -58,7 +58,6 @@ internal fun SyntheticHomeCatalogStore.Snapshot.tmdbGroupsMatchingPreferences(
     return tmdbGroupsMatchPreferences(
         groups = tmdbGroups,
         includeAdult = tmdbIncludeAdult,
-        hideUnreleasedDigital = tmdbHideUnreleasedDigital,
         prefs = prefs,
         preferencesObserved = preferencesObserved
     )
@@ -67,16 +66,12 @@ internal fun SyntheticHomeCatalogStore.Snapshot.tmdbGroupsMatchingPreferences(
 internal fun tmdbGroupsMatchPreferences(
     groups: List<PersistedSyntheticCatalogGroup>,
     includeAdult: Boolean?,
-    hideUnreleasedDigital: Boolean?,
     prefs: TmdbCatalogPreferences,
     preferencesObserved: Boolean = true
 ): List<PersistedSyntheticCatalogGroup> {
     if (!preferencesObserved) return emptyList()
     val sanitized = prefs.sanitized()
-    return if (
-        includeAdult == sanitized.includeAdult &&
-        hideUnreleasedDigital == sanitized.hideUnreleasedDigital
-    ) {
+    return if (includeAdult == sanitized.includeAdult) {
         groups.filterTmdbGroupsEnabledUnder(sanitized)
     } else {
         emptyList()

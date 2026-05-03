@@ -833,12 +833,10 @@ private fun simklCatalogContentTypeForDescriptor(key: String): ContentType {
 private fun tmdbCatalogContentType(key: String): ContentType {
     return when (key) {
         TmdbCatalogIds.TRENDING_MOVIES,
-        TmdbCatalogIds.LATEST_RELEASES_MOVIES,
         TmdbCatalogIds.POPULAR_MOVIES,
         TmdbCatalogIds.YEAR_MOVIES,
         TmdbCatalogIds.LANGUAGE_MOVIES -> ContentType.MOVIE
         TmdbCatalogIds.TRENDING_SERIES,
-        TmdbCatalogIds.LATEST_RELEASES_SERIES,
         TmdbCatalogIds.POPULAR_SERIES,
         TmdbCatalogIds.YEAR_SERIES,
         TmdbCatalogIds.LANGUAGE_SERIES -> ContentType.SERIES

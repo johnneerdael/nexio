@@ -1364,13 +1364,11 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
 internal fun HomeViewModel.applyPersistedTmdbSyntheticSnapshot(snapshot: SyntheticHomeCatalogStore.Snapshot) {
     persistedTmdbSyntheticGroups = snapshot.tmdbGroups
     persistedTmdbSyntheticIncludeAdult = snapshot.tmdbIncludeAdult
-    persistedTmdbSyntheticHideUnreleasedDigital = snapshot.tmdbHideUnreleasedDigital
 }
 
 internal fun HomeViewModel.clearPersistedTmdbSyntheticGroups() {
     persistedTmdbSyntheticGroups = emptyList()
     persistedTmdbSyntheticIncludeAdult = null
-    persistedTmdbSyntheticHideUnreleasedDigital = null
 }
 
 private fun HomeViewModel.persistedTmdbSyntheticGroupsMatchingPreferences(
@@ -1379,7 +1377,6 @@ private fun HomeViewModel.persistedTmdbSyntheticGroupsMatchingPreferences(
     return tmdbGroupsMatchPreferences(
         groups = persistedTmdbSyntheticGroups,
         includeAdult = persistedTmdbSyntheticIncludeAdult,
-        hideUnreleasedDigital = persistedTmdbSyntheticHideUnreleasedDigital,
         prefs = prefs,
         preferencesObserved = tmdbCatalogPreferencesObserved
     )
@@ -1398,8 +1395,7 @@ private fun HomeViewModel.syntheticHomeSnapshotFallback(
         mdbListGroups = mdbListGroups,
         kitsuGroups = kitsuGroups,
         tmdbGroups = tmdbGroups,
-        tmdbIncludeAdult = persistedTmdbSyntheticIncludeAdult,
-        tmdbHideUnreleasedDigital = persistedTmdbSyntheticHideUnreleasedDigital
+        tmdbIncludeAdult = persistedTmdbSyntheticIncludeAdult
     )
 }
 
@@ -1410,8 +1406,7 @@ private fun SyntheticHomeCatalogStore.Snapshot.withCurrentTmdbPreferenceProvenan
     val sanitized = prefs.sanitized()
     return copy(
         tmdbGroups = groups,
-        tmdbIncludeAdult = sanitized.includeAdult,
-        tmdbHideUnreleasedDigital = sanitized.hideUnreleasedDigital
+        tmdbIncludeAdult = sanitized.includeAdult
     )
 }
 

@@ -246,7 +246,6 @@ class HomeViewModel @Inject constructor(
     internal var persistedKitsuSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedTmdbSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedTmdbSyntheticIncludeAdult: Boolean? = null
-    internal var persistedTmdbSyntheticHideUnreleasedDigital: Boolean? = null
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null

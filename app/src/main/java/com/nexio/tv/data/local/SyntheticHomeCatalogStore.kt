@@ -59,8 +59,7 @@ class SyntheticHomeCatalogStore private constructor(
         val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val kitsuGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val tmdbGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
-        val tmdbIncludeAdult: Boolean? = null,
-        val tmdbHideUnreleasedDigital: Boolean? = null
+        val tmdbIncludeAdult: Boolean? = null
     )
 
     fun read(profileId: Int = activeProfileId()): Snapshot? {
@@ -90,7 +89,6 @@ class SyntheticHomeCatalogStore private constructor(
                 add("kitsuGroups", encodeGroups(snapshot.kitsuGroups))
                 add("tmdbGroups", encodeGroups(snapshot.tmdbGroups))
                 snapshot.tmdbIncludeAdult?.let { addProperty("tmdbIncludeAdult", it) }
-                snapshot.tmdbHideUnreleasedDigital?.let { addProperty("tmdbHideUnreleasedDigital", it) }
             }
             prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
@@ -123,8 +121,7 @@ class SyntheticHomeCatalogStore private constructor(
             mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups")),
             kitsuGroups = decodeGroups(root.getAsJsonArray("kitsuGroups")),
             tmdbGroups = decodeGroups(root.getAsJsonArray("tmdbGroups")),
-            tmdbIncludeAdult = decodeBoolean(root, "tmdbIncludeAdult"),
-            tmdbHideUnreleasedDigital = decodeBoolean(root, "tmdbHideUnreleasedDigital")
+            tmdbIncludeAdult = decodeBoolean(root, "tmdbIncludeAdult")
         )
     }
 
