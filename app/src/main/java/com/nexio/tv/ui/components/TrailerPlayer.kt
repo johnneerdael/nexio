@@ -150,6 +150,24 @@ fun TrailerPlayer(
             null
         }
     }
+    var isBuffering by remember(trailerPlayer) { mutableStateOf(false) }
+    DisposableEffect(trailerPlayer) {
+        val player = trailerPlayer ?: return@DisposableEffect onDispose {}
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                isBuffering = playbackState == Player.STATE_BUFFERING
+            }
+        }
+        isBuffering = player.playbackState == Player.STATE_BUFFERING
+        player.addListener(listener)
+        onDispose {
+            runCatching { player.removeListener(listener) }
+        }
+    }
+    val shouldKeepScreenOn = shouldKeepScreenOnForTrailer(
+        isPlaying = isPlaying,
+        isBuffering = isBuffering
+    )
     val releaseCalled = remember(trailerPlayer) { AtomicBoolean(false) }
 
     fun buildTrailerMediaSourceFactory(
@@ -321,9 +339,10 @@ fun TrailerPlayer(
                             isFocusable = true
                             isFocusableInTouchMode = true
                             setOnKeyListener { _, keyCode, event ->
+                                if (shouldConsumeTrailerKey(keyCode)) return@setOnKeyListener true
                                 currentOnRemoteKey(keyCode, event.action, event.repeatCount)
                             }
-                            keepScreenOn = true
+                            keepScreenOn = shouldKeepScreenOn
                             setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                             setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                             resizeMode = if (cropToFill) {
@@ -335,6 +354,7 @@ fun TrailerPlayer(
                 },
                 update = { view ->
                     bindTrailerPlayerView(view, trailerPlayer)
+                    view.keepScreenOn = shouldKeepScreenOn
                     view.resizeMode = if (cropToFill) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     } else {
