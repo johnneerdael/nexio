@@ -541,6 +541,44 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `fetch episode enrichment uses shared series episodes endpoint for episode thumbnails`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 355567)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 7140390,
+                            seasonNumber = 1,
+                            number = 1,
+                            image = "https://artworks.thetvdb.com/banners/episodes/355567/7140390.jpg",
+                            imageType = 11
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/episodes/355567/7140390.jpg",
+            episodes[1 to 1]?.thumbnail
+        )
+        coVerify(exactly = 1) {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+        }
+        coVerify(exactly = 0) {
+            tvdbApi.getSeriesExtended(any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun `fetch episode enrichment normalizes relative TVDB image path`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
