@@ -800,6 +800,7 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.container)
     implementation(libs.media3.extractor)
+    implementation(libs.media3.effect)
 
     // Local AAR libraries from forked ExoPlayer.
     if (useMedia3Source) {

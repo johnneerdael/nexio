@@ -60,6 +60,7 @@ if (readUseMedia3SourceFlag()) {
                 .using(project(":lib-decoder-ffmpeg"))
             substitute(module("androidx.media3:media3-extractor")).using(project(":lib-extractor"))
             substitute(module("androidx.media3:media3-ui")).using(project(":lib-ui"))
+            substitute(module("androidx.media3:media3-effect")).using(project(":lib-effect"))
         }
     }
 }

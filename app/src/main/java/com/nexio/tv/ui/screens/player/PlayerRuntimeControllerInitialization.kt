@@ -71,8 +71,13 @@ import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import com.nexio.tv.ui.screens.player.ass.AssSsaTimeRenderer
 import com.nexio.tv.ui.screens.player.ass.AssSsaTranslatingSampleSink
+import dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoints
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -80,9 +85,21 @@ import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
+import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrLoggingEffect
+import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
 private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
+
+/**
+ * Hilt EntryPoint that lets non-@AndroidEntryPoint / non-@HiltViewModel code access
+ * [HyperHdrConfigDataStore] from the singleton component.
+ */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+internal interface HyperHdrEntryPoint {
+    fun hyperHdrConfigDataStore(): HyperHdrConfigDataStore
+}
 
 internal data class StartupSubtitlePreparation(
     val fetchedSubtitles: List<Subtitle>,
@@ -732,6 +749,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             activePlayerUsesAssSsaRenderer = useAssSsaPipeline
             assSsaPipelineSwitchInFlight = false
             _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
+
+            // Inject HyperHDR ambilight capture via setVideoEffects when enabled.
+            // Observes the DataStore so toggling the setting at runtime re-applies/clears effects.
+            val hyperHdrStore = EntryPoints
+                .get(context.applicationContext, HyperHdrEntryPoint::class.java)
+                .hyperHdrConfigDataStore()
+            scope.launch {
+                hyperHdrStore.config.collect { cfg ->
+                    _exoPlayer?.setVideoEffects(
+                        if (cfg.isUsable) listOf(HyperHdrLoggingEffect())
+                        else emptyList()
+                    )
+                }
+            }
 
             scope.launch {
                 if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
