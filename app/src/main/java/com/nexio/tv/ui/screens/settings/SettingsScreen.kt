@@ -916,7 +916,9 @@ private fun IntegrationSettingsContent(
         }
 
         IntegrationSettingsSection.HyperHdr -> {
-            com.nexio.tv.integrations.hyperhdr.ui.HyperHdrSettingsContent()
+            com.nexio.tv.integrations.hyperhdr.ui.HyperHdrSettingsContent(
+                initialFocusRequester = hyperHdrFocusRequester
+            )
         }
     }
 }

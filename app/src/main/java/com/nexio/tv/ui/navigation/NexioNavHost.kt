@@ -1042,7 +1042,9 @@ fun NexioNavHost(
         }
 
         composable(Screen.HyperHdrSettings.route) {
-            HyperHdrSettingsScreen()
+            HyperHdrSettingsScreen(
+                onBackPress = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.TmdbSettings.route) {
