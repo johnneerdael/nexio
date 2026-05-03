@@ -80,8 +80,7 @@ class HomeViewModelTmdbCatalogPlanTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = true,
-            hideUnreleasedDigital = false
+            includeAdult = true
         )
 
         val plan = planFor(
@@ -90,7 +89,6 @@ class HomeViewModelTmdbCatalogPlanTest {
                 rowsByCatalog = mapOf(TmdbCatalogIds.TRENDING_MOVIES to tmdbRow),
                 updatedAtMs = 123L,
                 includeAdult = false,
-                hideUnreleasedDigital = false,
                 catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
             )
         )
@@ -158,7 +156,6 @@ class HomeViewModelTmdbCatalogPlanTest {
             rowsByCatalog = rows.toMap(),
             updatedAtMs = 123L,
             includeAdult = sanitized.includeAdult,
-            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
             catalogIdsWithCurrentPreferences = rows.map { it.first }.toSet()
         )
     }

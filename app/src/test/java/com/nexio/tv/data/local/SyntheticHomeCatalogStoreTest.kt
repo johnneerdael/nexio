@@ -174,15 +174,13 @@ class SyntheticHomeCatalogStoreTest {
                     rows = listOf(sampleRow("tmdb", TmdbCatalogIds.TRENDING_MOVIES))
                 )
             ),
-            tmdbIncludeAdult = true,
-            tmdbHideUnreleasedDigital = false
+            tmdbIncludeAdult = true
         )
 
         store.write(snapshot)
 
         val raw = prefs.all.values.singleOrNull()?.toString().orEmpty()
         assertTrue(raw.contains("\"tmdbIncludeAdult\":true"))
-        assertTrue(raw.contains("\"tmdbHideUnreleasedDigital\":false"))
         assertEquals(snapshot, store.read())
     }
 
@@ -214,7 +212,6 @@ class SyntheticHomeCatalogStoreTest {
 
         assertEquals(SyntheticHomeCatalogStore.Snapshot(), restored)
         assertNull(restored?.tmdbIncludeAdult)
-        assertNull(restored?.tmdbHideUnreleasedDigital)
     }
 
     @Test

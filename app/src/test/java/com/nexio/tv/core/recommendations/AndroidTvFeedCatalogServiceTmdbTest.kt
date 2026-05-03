@@ -88,8 +88,7 @@ class AndroidTvFeedCatalogServiceTmdbTest {
         val tmdbPrefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = true,
-            hideUnreleasedDigital = false
+            includeAdult = true
         )
         val service = service(
             tmdbSnapshot = TmdbDiscoverySnapshot(
@@ -105,7 +104,6 @@ class AndroidTvFeedCatalogServiceTmdbTest {
                 ),
                 updatedAtMs = 123L,
                 includeAdult = false,
-                hideUnreleasedDigital = false,
                 catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
             ),
             tmdbPrefs = tmdbPrefs
@@ -152,12 +150,12 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             enabledCatalogs = setOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.POPULAR_MOVIES,
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES
+                TmdbCatalogIds.YEAR_MOVIES
             ),
             catalogOrder = listOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.POPULAR_MOVIES,
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES
+                TmdbCatalogIds.YEAR_MOVIES
             )
         )
         val fixture = fixture(
@@ -310,7 +308,6 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             rowsByCatalog = rows.toMap(),
             updatedAtMs = 123L,
             includeAdult = sanitized.includeAdult,
-            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
             catalogIdsWithCurrentPreferences = rows.map { it.first }.toSet()
         )
     }

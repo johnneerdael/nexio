@@ -192,8 +192,7 @@ class TmdbDiscoveryServiceTest {
         val preferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = true,
-            hideUnreleasedDigital = false
+            includeAdult = true
         )
         val service = FakeTmdbDiscoveryClient(
             credential = MetadataProviderCredential("", source = MetadataCredentialSource.MISSING),
@@ -213,7 +212,6 @@ class TmdbDiscoveryServiceTest {
         assertTrue(snapshot.rowsByCatalog.isEmpty())
         assertTrue(snapshot.updatedAtMs > 0L)
         assertEquals(true, snapshot.includeAdult)
-        assertEquals(false, snapshot.hideUnreleasedDigital)
         assertEquals(
             setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             snapshot.catalogIdsWithCurrentPreferences
@@ -231,8 +229,7 @@ class TmdbDiscoveryServiceTest {
         val preferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         service.refreshCatalogs(preferences, force = true)
         client.credential = MetadataProviderCredential("", source = MetadataCredentialSource.MISSING)
@@ -241,7 +238,6 @@ class TmdbDiscoveryServiceTest {
 
         assertTrue(snapshot.rowsByCatalog.isEmpty())
         assertEquals(false, snapshot.includeAdult)
-        assertEquals(true, snapshot.hideUnreleasedDigital)
         assertEquals(setOf(TmdbCatalogIds.TRENDING_MOVIES), snapshot.catalogIdsWithCurrentPreferences)
         assertEquals(snapshot, service.observeSnapshot().first())
     }
@@ -291,7 +287,6 @@ class TmdbDiscoveryServiceTest {
             ),
             updatedAtMs = 123L,
             includeAdult = sanitized.includeAdult,
-            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
             catalogIdsWithCurrentPreferences = setOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.POPULAR_MOVIES
@@ -378,8 +373,7 @@ class TmdbDiscoveryServiceTest {
         val previousPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = false
+            includeAdult = false
         )
         service.refreshCatalogs(previousPreferences, force = true)
         client.requestedCatalogIds.clear()

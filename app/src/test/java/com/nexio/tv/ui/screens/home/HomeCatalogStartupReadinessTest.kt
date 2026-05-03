@@ -909,8 +909,7 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = false
+            includeAdult = false
         )
         val snapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -930,8 +929,7 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = true,
-            hideUnreleasedDigital = false
+            includeAdult = true
         )
         val snapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -941,31 +939,7 @@ class HomeCatalogStartupReadinessTest {
                 )
             ),
             updatedAtMs = 123L,
-            includeAdult = false,
-            hideUnreleasedDigital = false
-        )
-
-        assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
-    }
-
-    @Test
-    fun `tmdb refresh invalidates populated rows when digital release preference changes`() {
-        val prefs = TmdbCatalogPreferences(
-            enabledCatalogs = setOf(TmdbCatalogIds.LATEST_RELEASES_MOVIES),
-            catalogOrder = listOf(TmdbCatalogIds.LATEST_RELEASES_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
-        )
-        val snapshot = TmdbDiscoverySnapshot(
-            rowsByCatalog = mapOf(
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES to tmdbRow(
-                    catalogId = TmdbCatalogIds.LATEST_RELEASES_MOVIES,
-                    items = listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Latest Movie"))
-                )
-            ),
-            updatedAtMs = 123L,
-            includeAdult = false,
-            hideUnreleasedDigital = false
+            includeAdult = false
         )
 
         assertTrue(shouldRefreshTmdbDiscoveryForState(prefs, snapshot))
@@ -976,13 +950,11 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val snapshot = TmdbDiscoverySnapshot(
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES)
         )
 
@@ -994,13 +966,11 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val snapshot = TmdbDiscoverySnapshot(
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
@@ -1050,8 +1020,7 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val snapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -1066,7 +1035,6 @@ class HomeCatalogStartupReadinessTest {
             ),
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
@@ -1085,16 +1053,14 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
             tmdbGroups = listOf(
                 tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES),
                 tmdbGroup(TmdbCatalogIds.POPULAR_MOVIES)
             ),
-            tmdbIncludeAdult = false,
-            tmdbHideUnreleasedDigital = true
+            tmdbIncludeAdult = false
         )
 
         val currentGroups = persistedSnapshot.tmdbGroupsMatchingPreferences(prefs)
@@ -1121,8 +1087,7 @@ class HomeCatalogStartupReadinessTest {
         val currentPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val currentTmdbSnapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -1131,7 +1096,6 @@ class HomeCatalogStartupReadinessTest {
             ),
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.POPULAR_MOVIES
@@ -1169,8 +1133,7 @@ class HomeCatalogStartupReadinessTest {
         val currentPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = true,
-            hideUnreleasedDigital = false
+            includeAdult = true
         )
         val mismatchedSnapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -1181,7 +1144,6 @@ class HomeCatalogStartupReadinessTest {
             ),
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = false,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
@@ -1217,8 +1179,7 @@ class HomeCatalogStartupReadinessTest {
         val currentPreferences = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES, TmdbCatalogIds.POPULAR_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val currentTmdbSnapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -1229,7 +1190,6 @@ class HomeCatalogStartupReadinessTest {
             ),
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
@@ -1250,8 +1210,7 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
             tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES))
@@ -1265,13 +1224,11 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val existingSnapshot = SyntheticHomeCatalogStore.Snapshot(
             tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES)),
-            tmdbIncludeAdult = false,
-            tmdbHideUnreleasedDigital = true
+            tmdbIncludeAdult = false
         )
         val currentEmptySnapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
@@ -1282,7 +1239,6 @@ class HomeCatalogStartupReadinessTest {
             ),
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
@@ -1308,13 +1264,11 @@ class HomeCatalogStartupReadinessTest {
         val prefs = TmdbCatalogPreferences(
             enabledCatalogs = setOf(TmdbCatalogIds.TRENDING_MOVIES),
             catalogOrder = listOf(TmdbCatalogIds.TRENDING_MOVIES),
-            includeAdult = false,
-            hideUnreleasedDigital = true
+            includeAdult = false
         )
         val currentEmptySnapshot = TmdbDiscoverySnapshot(
             updatedAtMs = 123L,
             includeAdult = false,
-            hideUnreleasedDigital = true,
             catalogIdsWithCurrentPreferences = setOf(TmdbCatalogIds.TRENDING_MOVIES)
         )
 
@@ -1335,8 +1289,7 @@ class HomeCatalogStartupReadinessTest {
     fun `persisted tmdb rows are not current before catalog preferences are observed`() {
         val persistedSnapshot = SyntheticHomeCatalogStore.Snapshot(
             tmdbGroups = listOf(tmdbGroup(TmdbCatalogIds.TRENDING_MOVIES)),
-            tmdbIncludeAdult = false,
-            tmdbHideUnreleasedDigital = true
+            tmdbIncludeAdult = false
         )
         val defaultEnabledPrefs = TmdbCatalogPreferences()
         val disabledPrefs = defaultEnabledPrefs.copy(enabledCatalogs = emptySet())

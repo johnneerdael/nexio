@@ -46,10 +46,9 @@ class TmdbSettingsViewModelTest {
 
         val state = viewModel.uiState.value
         assertTrue(TmdbCatalogIds.TRENDING_MOVIES in state.enabledCatalogKeys)
-        assertTrue(TmdbCatalogIds.LATEST_RELEASES_SERIES in state.enabledCatalogKeys)
-        assertFalse(TmdbCatalogIds.POPULAR_MOVIES in state.enabledCatalogKeys)
+        assertTrue(TmdbCatalogIds.POPULAR_SERIES in state.enabledCatalogKeys)
+        assertFalse(TmdbCatalogIds.YEAR_MOVIES in state.enabledCatalogKeys)
         assertFalse(state.includeAdult)
-        assertTrue(state.hideUnreleasedDigital)
     }
 
     @Test
@@ -64,17 +63,15 @@ class TmdbSettingsViewModelTest {
     }
 
     @Test
-    fun `toggling adult content and digital release filter updates ui state`() = runTest(dispatcher) {
+    fun `toggling adult content updates ui state`() = runTest(dispatcher) {
         val viewModel = createViewModel()
 
         advanceUntilIdle()
         viewModel.onEvent(TmdbSettingsEvent.ToggleAdultContent(enabled = true))
-        viewModel.onEvent(TmdbSettingsEvent.ToggleDigitalReleaseFilter(enabled = false))
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertTrue(state.includeAdult)
-        assertFalse(state.hideUnreleasedDigital)
     }
 
     @Test
@@ -86,16 +83,16 @@ class TmdbSettingsViewModelTest {
         assertFalse(inactiveState.isActive)
         assertTrue(inactiveState.catalogControlsEditable)
         assertTrue(TmdbCatalogIds.TRENDING_MOVIES in inactiveState.enabledCatalogKeys)
-        assertTrue(TmdbCatalogIds.LATEST_RELEASES_SERIES in inactiveState.enabledCatalogKeys)
-        assertFalse(TmdbCatalogIds.POPULAR_MOVIES in inactiveState.enabledCatalogKeys)
+        assertTrue(TmdbCatalogIds.POPULAR_SERIES in inactiveState.enabledCatalogKeys)
+        assertFalse(TmdbCatalogIds.YEAR_MOVIES in inactiveState.enabledCatalogKeys)
 
-        viewModel.onEvent(TmdbSettingsEvent.ToggleCatalog(TmdbCatalogIds.POPULAR_MOVIES, enabled = true))
+        viewModel.onEvent(TmdbSettingsEvent.ToggleCatalog(TmdbCatalogIds.YEAR_MOVIES, enabled = true))
         viewModel.onEvent(TmdbSettingsEvent.ToggleAdultContent(enabled = true))
         advanceUntilIdle()
 
         val updatedState = viewModel.uiState.value
         assertFalse(updatedState.isActive)
-        assertTrue(TmdbCatalogIds.POPULAR_MOVIES in updatedState.enabledCatalogKeys)
+        assertTrue(TmdbCatalogIds.YEAR_MOVIES in updatedState.enabledCatalogKeys)
         assertTrue(updatedState.includeAdult)
     }
 
