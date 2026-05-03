@@ -27,6 +27,7 @@ import androidx.tv.material3.FilterChipDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 
 enum class SourceChipStatus {
     LOADING,
@@ -56,6 +57,7 @@ fun SourceStatusFilterChip(
     val shouldUseNormalColors = !isError
     val shakeOffsetPx = remember { Animatable(0f) }
     val alphaPulse = remember { Animatable(1f) }
+    val breathingFocusRing = rememberBreathingFocusRing()
 
     LaunchedEffect(isError) {
         shakeOffsetPx.snapTo(0f)
@@ -116,7 +118,7 @@ fun SourceStatusFilterChip(
                 shape = RoundedCornerShape(20.dp)
             ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, if (isError) NexioColors.Error.copy(alpha = 0.8f) else NexioColors.FocusRing),
+                border = BorderStroke(2.dp, if (isError) NexioColors.Error.copy(alpha = 0.8f) else breathingFocusRing),
                 shape = RoundedCornerShape(20.dp)
             ),
             selectedBorder = Border(
@@ -124,7 +126,7 @@ fun SourceStatusFilterChip(
                 shape = RoundedCornerShape(20.dp)
             ),
             focusedSelectedBorder = Border(
-                border = BorderStroke(2.dp, if (isError) NexioColors.Error.copy(alpha = 0.8f) else NexioColors.FocusRing),
+                border = BorderStroke(2.dp, if (isError) NexioColors.Error.copy(alpha = 0.8f) else breathingFocusRing),
                 shape = RoundedCornerShape(20.dp)
             )
         ),

@@ -6,6 +6,5 @@ enum class AppTheme(val displayName: String) {
     VIOLET("Violet"),
     EMERALD("Emerald"),
     AMBER("Amber"),
-    ROSE("Rose"),
-    WHITE("White")
+    ROSE("Rose")
 }

@@ -63,6 +63,7 @@ import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscre
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
@@ -390,7 +391,7 @@ fun ContinueWatchingCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NexioColors.FocusRing),
+                border = BorderStroke(2.dp, rememberBreathingFocusRing()),
                 shape = CwCardShape
             )
         ),
