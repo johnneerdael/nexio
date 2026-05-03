@@ -11,6 +11,8 @@ class FileRuntimeTraceSink(
     private val ringLock = Any()
     private val ringCapacity = 100
 
+    override fun activeTraceSessionId(): String = sessionId
+
     override fun emit(event: TraceEventEnvelope<*>) {
         require(event.traceSessionId == sessionId) {
             "FileRuntimeTraceSink session mismatch: expected=$sessionId got=${event.traceSessionId}"

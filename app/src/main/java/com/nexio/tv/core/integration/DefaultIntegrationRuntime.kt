@@ -1,6 +1,5 @@
 package com.nexio.tv.core.integration
 
-import com.nexio.tv.core.trace.FileRuntimeTraceSink
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.RuntimeTraceContext
 import com.nexio.tv.core.trace.RuntimeTraceContextElement
@@ -41,7 +40,7 @@ class DefaultIntegrationRuntime @Inject constructor(
         scope: IntegrationScope,
         profileId: Int?
     ): RuntimeTraceContext {
-        val sessionId = (traceSink as? FileRuntimeTraceSink)?.sessionId ?: "noop"
+        val sessionId = traceSink.activeTraceSessionId() ?: "noop"
         val profileHash = profileId?.let { TraceHash.of(sessionId, it.toString()) }
         return RuntimeTraceContext(
             traceSessionId = sessionId,
