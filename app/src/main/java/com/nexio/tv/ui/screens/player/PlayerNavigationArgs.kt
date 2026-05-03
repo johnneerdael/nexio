@@ -36,7 +36,8 @@ internal data class PlayerNavigationArgs(
     val resumeDurationMs: Long?,
     val resumeProgressPercent: Float?,
     val resumeLastWatchedMs: Long?,
-    val resumeSource: String?
+    val resumeSource: String?,
+    val addonBaseUrl: String?
 ) {
     companion object {
         private const val URL_SAFE_BASE64_PREFIX = "u64_"
@@ -91,7 +92,8 @@ internal data class PlayerNavigationArgs(
                 resumeDurationMs = savedStateHandle.get<String>("resumeDurationMs")?.toLongOrNull(),
                 resumeProgressPercent = savedStateHandle.get<String>("resumeProgressPercent")?.toFloatOrNull(),
                 resumeLastWatchedMs = savedStateHandle.get<String>("resumeLastWatchedMs")?.toLongOrNull(),
-                resumeSource = decodedOrNull("resumeSource")
+                resumeSource = decodedOrNull("resumeSource"),
+                addonBaseUrl = decodedOrNull("addonBaseUrl")
             )
         }
     }

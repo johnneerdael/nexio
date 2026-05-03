@@ -47,6 +47,41 @@ class PlayerNavigationArgsTest {
     }
 
     @Test
+    fun `reads addon source context from navigation state`() {
+        val args = PlayerNavigationArgs.from(
+            SavedStateHandle(
+                mapOf(
+                    "streamUrl" to "https%3A%2F%2Fexample.com%2Fvideo.mkv",
+                    "title" to "Episode",
+                    "addonBaseUrl" to "https%3A%2F%2Faddon.example.com%2Fmanifest.json"
+                )
+            )
+        )
+
+        assertEquals("https://addon.example.com/manifest.json", args.addonBaseUrl)
+    }
+
+    @Test
+    fun `route resume progress preserves addon source context`() {
+        val args = PlayerNavigationArgs.from(
+            SavedStateHandle(
+                mapOf(
+                    "streamUrl" to "https%3A%2F%2Fexample.com%2Fvideo.mkv",
+                    "title" to "Episode",
+                    "contentId" to "tt0239195",
+                    "contentType" to "series",
+                    "contentName" to "Survivor",
+                    "videoId" to "tt0239195:5:10",
+                    "resumePositionMs" to "123000",
+                    "addonBaseUrl" to "https%3A%2F%2Faddon.example.com%2Fmanifest.json"
+                )
+            )
+        )
+
+        assertEquals("https://addon.example.com/manifest.json", args.toRouteResumeProgress()?.addonBaseUrl)
+    }
+
+    @Test
     fun `player route carries direct addon urls without percent encoded path separators`() {
         val streamUrl = "https://45-4.download.real-debrid.com/d/RCFFKFRWG3THS/Avatar.Fire.and.Ash.2025.MULTi.VF2.2160p.HDR.DV.WEB-DL.Dolby.Atmos.7.1.H265-Slay3R.mkv?token=a%2Fb%3D"
         val route = Screen.Player.createRoute(

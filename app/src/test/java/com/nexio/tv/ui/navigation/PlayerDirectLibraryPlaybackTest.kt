@@ -103,6 +103,18 @@ class PlayerDirectLibraryPlaybackTest {
     }
 
     @Test
+    fun `direct library navigation passes addon context to player route`() {
+        val source = sourceFile("com/nexio/tv/ui/navigation/NexioNavHost.kt").toFile().readText()
+        val directPlaybackBlock = source.substringAfter("val directPlaybackUrl = entry.directPlaybackUrl")
+            .substringBefore("} else {")
+
+        assertTrue(
+            "Library direct playback must pass entry.addonBaseUrl into Screen.Player.createRoute",
+            directPlaybackBlock.contains("addonBaseUrl = entry.addonBaseUrl")
+        )
+    }
+
+    @Test
     fun `debrid library content id still returns to library when launch source is missing`() {
         assertTrue(
             shouldReturnDirectLibraryPlaybackToLibrary(
