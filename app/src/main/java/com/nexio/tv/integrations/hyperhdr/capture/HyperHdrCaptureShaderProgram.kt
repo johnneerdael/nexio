@@ -42,6 +42,7 @@ class HyperHdrCaptureShaderProgram(
     @Suppress("UNUSED_PARAMETER") context: Context,
     private val useHdr: Boolean,
     private val sink: FrameSink,
+    private val mode: CaptureMode,
     private val outputWidth: Int = 192,
     private val outputHeight: Int = 108,
 ) : BaseGlShaderProgram(/* useHighPrecisionColorComponents= */ useHdr, /* texturePoolCapacity= */ 1) {
@@ -63,11 +64,11 @@ class HyperHdrCaptureShaderProgram(
     private var pboNext = 0
     private var framesCapturing = 0  // counts frames in the capture path; skip map until >= NUM_PBOS
 
-    private val ySize = outputWidth * outputHeight * 2          // 16-bit per Y sample
-    private val uvSize = (outputWidth / 2) * (outputHeight / 2) * 4   // 16-bit per Cb + Cr
-    // Reusable destination byte arrays (callers of FrameSink.sendP010 must copy before retaining)
-    private val yBytes = ByteArray(ySize)
-    private val uvBytes = ByteArray(uvSize)
+    private var ySize: Int = 0
+    private var uvSize: Int = 0
+    // Reusable destination byte arrays (callers of FrameSink must copy before retaining)
+    private lateinit var yBytes: ByteArray
+    private lateinit var uvBytes: ByteArray
 
     private var initialized = false
     private var lastDispatchTimeNanos = 0L
@@ -138,17 +139,30 @@ class HyperHdrCaptureShaderProgram(
             val writeY = pboYIds[pboNext]
             val writeUv = pboUvIds[pboNext]
 
+            val yReadPair: Pair<Int, Int> = when (mode) {
+                CaptureMode.HDR_P010 -> GLES30.GL_RED_INTEGER to GLES30.GL_UNSIGNED_SHORT
+                CaptureMode.SDR_NV12 -> GLES30.GL_RED to GLES20.GL_UNSIGNED_BYTE
+            }
+            val yReadFormat = yReadPair.first
+            val yReadType = yReadPair.second
+            val uvReadPair: Pair<Int, Int> = when (mode) {
+                CaptureMode.HDR_P010 -> GLES30.GL_RG_INTEGER to GLES30.GL_UNSIGNED_SHORT
+                CaptureMode.SDR_NV12 -> GLES30.GL_RG to GLES20.GL_UNSIGNED_BYTE
+            }
+            val uvReadFormat = uvReadPair.first
+            val uvReadType = uvReadPair.second
+
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, yFbo)
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, writeY)
             GLES30.glReadPixels(
                 0, 0, outputWidth, outputHeight,
-                GLES30.GL_RED_INTEGER, GLES30.GL_UNSIGNED_SHORT, 0)
+                yReadFormat, yReadType, 0)
 
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, uvFbo)
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, writeUv)
             GLES30.glReadPixels(
                 0, 0, outputWidth / 2, outputHeight / 2,
-                GLES30.GL_RG_INTEGER, GLES30.GL_UNSIGNED_SHORT, 0)
+                uvReadFormat, uvReadType, 0)
 
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
 
@@ -163,12 +177,20 @@ class HyperHdrCaptureShaderProgram(
                 val readUv = pboUvIds[pboNext]
                 readPboInto(readY, ySize, yBytes)
                 readPboInto(readUv, uvSize, uvBytes)
-                sink.sendP010(
-                    yBytes, uvBytes,
-                    outputWidth, outputHeight,
-                    /* strideY= */ outputWidth * 2,
-                    /* strideUv= */ outputWidth * 2,
-                )
+                when (mode) {
+                    CaptureMode.HDR_P010 -> sink.sendP010(
+                        yBytes, uvBytes,
+                        outputWidth, outputHeight,
+                        /* strideY= */ outputWidth * 2,
+                        /* strideUv= */ outputWidth * 2,
+                    )
+                    CaptureMode.SDR_NV12 -> sink.sendNv12(
+                        yBytes, uvBytes,
+                        outputWidth, outputHeight,
+                        /* strideY= */ outputWidth,
+                        /* strideUv= */ outputWidth,
+                    )
+                }
             }
         } finally {
             // Always restore the output FBO and viewport so the parent's output texture is intact.
@@ -218,54 +240,116 @@ void main() { oColor = texture(uTex, vTex); }
             )
         }
 
-        yProgram = GlProgram(PqDownscaleShaders.VERTEX, PqDownscaleShaders.Y_FRAGMENT).also { prog ->
-            prog.setBufferAttribute(
-                "aPos",
-                GlUtil.getNormalizedCoordinateBounds(),
-                GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
-            )
-            prog.setBufferAttribute(
-                "aTex",
-                GlUtil.getTextureCoordinateBounds(),
-                GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
-            )
+        // Branch on capture mode: pick shader source + compute sizes
+        when (mode) {
+            CaptureMode.HDR_P010 -> {
+                ySize = outputWidth * outputHeight * 2
+                uvSize = (outputWidth / 2) * (outputHeight / 2) * 4
+                yProgram = GlProgram(PqDownscaleShaders.VERTEX, PqDownscaleShaders.Y_FRAGMENT).also { prog ->
+                    prog.setBufferAttribute(
+                        "aPos",
+                        GlUtil.getNormalizedCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                    prog.setBufferAttribute(
+                        "aTex",
+                        GlUtil.getTextureCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                }
+                uvProgram = GlProgram(PqDownscaleShaders.VERTEX, PqDownscaleShaders.UV_FRAGMENT).also { prog ->
+                    prog.setBufferAttribute(
+                        "aPos",
+                        GlUtil.getNormalizedCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                    prog.setBufferAttribute(
+                        "aTex",
+                        GlUtil.getTextureCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                }
+            }
+            CaptureMode.SDR_NV12 -> {
+                ySize = outputWidth * outputHeight
+                uvSize = (outputWidth / 2) * (outputHeight / 2) * 2
+                yProgram = GlProgram(NvDownscaleShaders.VERTEX, NvDownscaleShaders.Y_FRAGMENT).also { prog ->
+                    prog.setBufferAttribute(
+                        "aPos",
+                        GlUtil.getNormalizedCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                    prog.setBufferAttribute(
+                        "aTex",
+                        GlUtil.getTextureCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                }
+                uvProgram = GlProgram(NvDownscaleShaders.VERTEX, NvDownscaleShaders.UV_FRAGMENT).also { prog ->
+                    prog.setBufferAttribute(
+                        "aPos",
+                        GlUtil.getNormalizedCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                    prog.setBufferAttribute(
+                        "aTex",
+                        GlUtil.getTextureCoordinateBounds(),
+                        GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+                    )
+                }
+            }
         }
 
-        uvProgram = GlProgram(PqDownscaleShaders.VERTEX, PqDownscaleShaders.UV_FRAGMENT).also { prog ->
-            prog.setBufferAttribute(
-                "aPos",
-                GlUtil.getNormalizedCoordinateBounds(),
-                GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
-            )
-            prog.setBufferAttribute(
-                "aTex",
-                GlUtil.getTextureCoordinateBounds(),
-                GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
-            )
-        }
+        // Allocate reusable byte arrays now that sizes are known
+        yBytes = ByteArray(ySize)
+        uvBytes = ByteArray(uvSize)
 
-        // Y-plane: GL_R16UI texture + FBO
+        // Y-plane texture + FBO — format depends on mode
         val texIds = IntArray(2)
         GLES20.glGenTextures(2, texIds, 0)
         yTextureId = texIds[0]
         uvTextureId = texIds[1]
 
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, yTextureId)
-        GLES30.glTexImage2D(
-            GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R16UI,
-            outputWidth, outputHeight, 0,
-            GLES30.GL_RED_INTEGER, GLES30.GL_UNSIGNED_SHORT, null)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
+        when (mode) {
+            CaptureMode.HDR_P010 -> {
+                // GL_R16UI — integer format; MUST use GL_NEAREST (linear undefined on integer textures)
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, yTextureId)
+                GLES30.glTexImage2D(
+                    GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R16UI,
+                    outputWidth, outputHeight, 0,
+                    GLES30.GL_RED_INTEGER, GLES30.GL_UNSIGNED_SHORT, null)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
 
-        // UV-plane: GL_RG16UI texture + FBO at half resolution
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, uvTextureId)
-        GLES30.glTexImage2D(
-            GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RG16UI,
-            outputWidth / 2, outputHeight / 2, 0,
-            GLES30.GL_RG_INTEGER, GLES30.GL_UNSIGNED_SHORT, null)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
+                // UV-plane: GL_RG16UI texture + FBO at half resolution
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, uvTextureId)
+                GLES30.glTexImage2D(
+                    GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RG16UI,
+                    outputWidth / 2, outputHeight / 2, 0,
+                    GLES30.GL_RG_INTEGER, GLES30.GL_UNSIGNED_SHORT, null)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
+            }
+            CaptureMode.SDR_NV12 -> {
+                // GL_R8 — normalized format; GL_LINEAR is valid (GL_NEAREST also fine)
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, yTextureId)
+                GLES30.glTexImage2D(
+                    GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R8,
+                    outputWidth, outputHeight, 0,
+                    GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, null)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+
+                // UV-plane: GL_RG8 texture + FBO at half resolution
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, uvTextureId)
+                GLES30.glTexImage2D(
+                    GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RG8,
+                    outputWidth / 2, outputHeight / 2, 0,
+                    GLES30.GL_RG, GLES20.GL_UNSIGNED_BYTE, null)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            }
+        }
 
         // Framebuffers
         val fboIds = IntArray(2)

@@ -85,6 +85,7 @@ import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
+import com.nexio.tv.integrations.hyperhdr.capture.CaptureMode
 import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
@@ -771,7 +772,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         try {
                             client.connect()
                             activeClient = client
-                            player.setVideoEffects(listOf(HyperHdrCaptureEffect(client)))
+                            player.setVideoEffects(listOf(HyperHdrCaptureEffect(client, CaptureMode.HDR_P010)))
                         } catch (t: Throwable) {
                             Log.w("HyperHdrIntegration", "Failed to connect to HyperHDR; not enabling effect", t)
                             client.close()

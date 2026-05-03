@@ -7,7 +7,10 @@ import androidx.media3.effect.GlShaderProgram
 import com.nexio.tv.integrations.hyperhdr.network.FrameSink
 
 @UnstableApi
-class HyperHdrCaptureEffect(private val sink: FrameSink) : GlEffect {
+class HyperHdrCaptureEffect(
+    private val sink: FrameSink,
+    private val mode: CaptureMode,
+) : GlEffect {
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram =
-        HyperHdrCaptureShaderProgram(context, useHdr, sink)
+        HyperHdrCaptureShaderProgram(context, useHdr, sink, mode)
 }
