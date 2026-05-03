@@ -99,6 +99,23 @@ object FfmpegStreamMetadataProbe {
         probeBlocking(url = url, headers = headers, addonHost = addonHost)
     }
 
+    /**
+     * Diagnostic-only: probe the supplied URL directly without proxy resolver
+     * substitution or the in-memory probe cache. This is used only for
+     * measuring proxy-direct ffprobe timing against the normal resolved-CDN
+     * path and must not feed playback selection.
+     */
+    suspend fun probeRawForDiagnostic(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): FfmpegStreamMetadataProbeResult? = withContext(Dispatchers.IO) {
+        val headerBlob = headers.toProbeHeaderBlob()
+        val rawJson = runCatching {
+            backend.probeStreamMetadataJson(url, headerBlob)
+        }.getOrNull() ?: return@withContext null
+        runCatching { parse(rawJson) }.getOrNull()
+    }
+
     fun probeBlocking(
         url: String,
         headers: Map<String, String> = emptyMap(),

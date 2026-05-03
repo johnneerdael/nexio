@@ -28,6 +28,8 @@ class DebugSettingsDataStore @Inject constructor(
     private val accountTabEnabledKey = booleanPreferencesKey("account_tab_enabled")
     private val syncCodeFeaturesEnabledKey = booleanPreferencesKey("sync_code_features_enabled")
     private val streamDiagnosticsEnabledKey = booleanPreferencesKey("stream_diagnostics_enabled")
+    private val probeProfilingDiagnosticEnabledKey =
+        booleanPreferencesKey("probe_profiling_diagnostic_enabled")
     private val startupPerfTelemetryEnabledKey = booleanPreferencesKey("startup_perf_telemetry_enabled")
     private val diskSpoolDiagnosticsEnabledKey = booleanPreferencesKey("disk_spool_diagnostics_enabled")
     private val dolbyVisionDiagnosticsEnabledKey =
@@ -64,6 +66,10 @@ class DebugSettingsDataStore @Inject constructor(
 
     val streamDiagnosticsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[streamDiagnosticsEnabledKey] ?: false
+    }
+
+    val probeProfilingDiagnosticEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[probeProfilingDiagnosticEnabledKey] ?: false
     }
 
     val startupPerfTelemetryEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -109,6 +115,12 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[streamDiagnosticsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setProbeProfilingDiagnosticEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[probeProfilingDiagnosticEnabledKey] = enabled
         }
     }
 

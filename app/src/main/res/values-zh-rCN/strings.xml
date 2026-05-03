@@ -131,6 +131,8 @@
   <string name="streams_deduplicate_grouped_sub">启用合并流媒体模式时隐藏可能重复的结果。</string>
   <string name="streams_filter_dv5_webdl_title">过滤 WEB-DL 杜比视界</string>
   <string name="streams_filter_dv5_webdl_sub">隐藏标记为 DV 或 DoVi 的 WEB-DL 资源，以避免 DV5 播放出现画面异常。</string>
+  <string name="streams_probe_profiling_title">探测分析诊断</string>
+  <string name="streams_probe_profiling_sub">在每次自动播放决策时记录代理与 CDN 竞速及并行扇出探测的耗时。不影响播放。Logcat 标签：ProbeProfiling。</string>
   <string name="streams_filter_wrong_episodes_title">过滤错误的剧集</string>
   <string name="streams_filter_wrong_episodes_sub">隐藏解析出的季数或集数与请求的剧集不匹配的资源。</string>
   <string name="streams_filter_wrong_movie_year_title">过滤错误的电影年份</string>
