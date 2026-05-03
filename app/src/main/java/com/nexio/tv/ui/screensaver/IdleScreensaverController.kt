@@ -1,13 +1,18 @@
 package com.nexio.tv.ui.screensaver
 
 import android.os.SystemClock
+import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 
 @Singleton
-class IdleScreensaverController @Inject constructor() {
+class IdleScreensaverController @Inject constructor(
+    private val layoutPrefs: LayoutPreferenceDataStore
+) {
     private val _lastInteractionAtMs = MutableStateFlow(SystemClock.elapsedRealtime())
     val lastInteractionAtMs = _lastInteractionAtMs.asStateFlow()
 
@@ -16,6 +21,8 @@ class IdleScreensaverController @Inject constructor() {
 
     private val _sessionId = MutableStateFlow(0L)
     val sessionId = _sessionId.asStateFlow()
+
+    val currentTimeoutMs: Flow<Long> = layoutPrefs.screensaverDelaySeconds.map { it * 1000L }
 
     fun registerInteraction(nowMs: Long = SystemClock.elapsedRealtime()) {
         _lastInteractionAtMs.value = nowMs

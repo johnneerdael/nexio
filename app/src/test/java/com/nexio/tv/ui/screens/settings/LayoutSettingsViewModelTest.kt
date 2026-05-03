@@ -114,5 +114,6 @@ class LayoutSettingsViewModelTest {
         every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
         every { layoutPreferenceDataStore.preferExternalMetaAddonDetail } returns flowOf(false)
         every { layoutPreferenceDataStore.trailerScreensaverEnabled } returns trailerScreensaverEnabled
+        every { layoutPreferenceDataStore.screensaverDelaySeconds } returns flowOf(300)
     }
 }

@@ -198,7 +198,9 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
         private const val STARTUP_PERF_WINDOW_MS = 12_000L
         private const val STARTUP_DEFERRED_WORK_MIN_DELAY_MS = 2_000L
-        internal const val IDLE_SCREENSAVER_TIMEOUT_MS = 5L * 60 * 1000L
+        internal const val IDLE_SCREENSAVER_DEFAULT_TIMEOUT_MS = 5L * 60 * 1000L
+        internal const val IDLE_SCREENSAVER_MIN_TIMEOUT_MS = 60L * 1000L
+        internal const val IDLE_SCREENSAVER_MAX_TIMEOUT_MS = 10L * 60 * 1000L
         private const val BROWSABLE_REQUEST_COOLDOWN_MS = 24L * 60 * 60 * 1000
 
         @Volatile
@@ -576,6 +578,9 @@ class MainActivity : ComponentActivity() {
                     val idleScreensaverVisible by idleScreensaverController.isVisible.collectAsState()
                     val idleScreensaverSessionId by idleScreensaverController.sessionId.collectAsState()
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
+                    val idleScreensaverTimeoutMs by idleScreensaverController.currentTimeoutMs.collectAsState(
+                        initial = IDLE_SCREENSAVER_DEFAULT_TIMEOUT_MS
+                    )
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
                     val idleTrailerCandidates = remember(
                         idleTrailerRepositoryCandidates,
@@ -759,7 +764,8 @@ class MainActivity : ComponentActivity() {
                         idleScreensaverSlides,
                         idleTrailerCandidates,
                         mainUiPrefs.trailerScreensaverEnabled,
-                        idleLastInteractionAtMs
+                        idleLastInteractionAtMs,
+                        idleScreensaverTimeoutMs
                     ) {
                         if (!shouldScheduleIdleScreensaverStart(
                                 lifecycleState = appLifecycleState,
@@ -786,7 +792,7 @@ class MainActivity : ComponentActivity() {
                             return@LaunchedEffect
                         }
                         val elapsed = (SystemClock.elapsedRealtime() - idleLastInteractionAtMs).coerceAtLeast(0L)
-                        val remainingDelayMs = (IDLE_SCREENSAVER_TIMEOUT_MS - elapsed).coerceAtLeast(0L)
+                        val remainingDelayMs = (idleScreensaverTimeoutMs - elapsed).coerceAtLeast(0L)
                         logIdleScreensaverDiagnostics(
                             buildIdleScreensaverDiagnosticsMessage(
                                 event = "start_scheduled",
