@@ -36,10 +36,10 @@ class WyzieSubtitleSettingsViewModel @Inject constructor(
 }
 
 /**
- * Returns the masked form of the key for display, or "Not configured" when blank.
+ * Returns the masked form of the key for display, or [notSetLabel] when blank.
  */
-internal fun maskWyzieKey(key: String?): String {
-    if (key.isNullOrBlank()) return "Not configured"
-    if (key.length <= 8) return "•".repeat(key.length)
-    return "${key.take(7)}•••${key.takeLast(3)}"
+internal fun maskWyzieKey(key: String?, notSetLabel: String): String {
+    val trimmed = key?.trim().orEmpty()
+    if (trimmed.isBlank()) return notSetLabel
+    return if (trimmed.length <= 4) "••••" else "••••••${trimmed.takeLast(4)}"
 }

@@ -816,8 +816,8 @@ private fun IntegrationSettingsContent(
                             }
                             item(key = "integration_hub_wyzie_subtitles") {
                                 SettingsActionRow(
-                                    title = "Wyzie subtitles",
-                                    subtitle = "Search subtitles via OpenSubtitles, SubDL, and more",
+                                    title = stringResource(R.string.wyzie_subtitles_title),
+                                    subtitle = stringResource(R.string.settings_wyzie_subtitles_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.WyzieSubtitles) }
                                 )
                             }
