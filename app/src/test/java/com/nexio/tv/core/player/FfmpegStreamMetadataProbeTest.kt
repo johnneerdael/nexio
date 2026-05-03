@@ -1,11 +1,16 @@
 package com.nexio.tv.core.player
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 class FfmpegStreamMetadataProbeTest {
     @After
@@ -72,6 +77,40 @@ class FfmpegStreamMetadataProbeTest {
 
         assertEquals(2, calls)
         assertEquals("hevc", recovered?.streams?.single()?.codecName)
+    }
+
+    @Test
+    fun probeBlockingAllowsConcurrentNativeProbesForDifferentUrls() = runBlocking {
+        val activeCalls = AtomicInteger(0)
+        val maxActiveCalls = AtomicInteger(0)
+        FfmpegStreamMetadataProbe.setBackendForTesting(
+            object : FfmpegStreamMetadataBackend {
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    val active = activeCalls.incrementAndGet()
+                    maxActiveCalls.updateAndGet { current -> maxOf(current, active) }
+                    Thread.sleep(120)
+                    activeCalls.decrementAndGet()
+                    return """{"streams":[{"codec_type":"video","codec_name":"hevc"}]}"""
+                }
+            }
+        )
+
+        val results = (0 until 4)
+            .map { index ->
+                async(Dispatchers.IO) {
+                    FfmpegStreamMetadataProbe.probeBlocking("https://example.test/video-$index.mkv")
+                }
+            }
+            .awaitAll()
+
+        assertTrue(results.all { it?.streams?.single()?.codecName == "hevc" })
+        assertTrue(
+            "native probes should overlap instead of serializing behind the cache lock",
+            maxActiveCalls.get() > 1
+        )
     }
 
     @Test
