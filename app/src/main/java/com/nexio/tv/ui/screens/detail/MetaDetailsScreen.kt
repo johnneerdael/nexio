@@ -1313,7 +1313,7 @@ private fun MetaDetailsContent(
     }
     val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
     val hasRelatedSection = relatedItems.isNotEmpty()
-    val hasReviewsSection = !isAnimeDetail && (isReviewsLoading || reviews.isNotEmpty() || !reviewsError.isNullOrBlank())
+    val hasReviewsSection = isReviewsLoading || reviews.isNotEmpty() || !reviewsError.isNullOrBlank()
     val hasRatingsSection = isTvShow && !isAnimeDetail
     val strTabCast = if (isAnimeDetail) "Characters" else stringResource(R.string.detail_tab_cast)
     val strTabRatings = stringResource(R.string.detail_tab_ratings)

@@ -13,8 +13,22 @@ import com.nexio.tv.core.metadata.router.ProviderPlanStep
 import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.integration.kitsu.KitsuIntegrationProvider
+import com.nexio.tv.data.remote.api.KitsuAnimeCharacterResource
+import com.nexio.tv.data.remote.api.KitsuAnimeProductionResource
+import com.nexio.tv.data.remote.api.KitsuAnimeResource
+import com.nexio.tv.data.remote.api.KitsuAnimeStaffResource
+import com.nexio.tv.data.remote.api.KitsuCollectionResponse
+import com.nexio.tv.data.remote.api.KitsuIncludedResource
+import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import javax.inject.Inject
 
 class KitsuMetadataProviderAdapter @Inject constructor(
@@ -28,7 +42,7 @@ class KitsuMetadataProviderAdapter @Inject constructor(
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
         val kitsuId = MetadataProviderTargetIds.kitsu(route.targetIds[MetadataPrimaryProvider.KITSU])
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
-        val mediaKind = route.mediaKind.toContentMediaKind()
+        val mediaKind = route.toAnimeContentMediaKind()
         val policy = LocalizationPolicy.kitsu(route.language)
         // F-E-02: emit localization_plan after policy construction. Kitsu has no per-episode
         // localization bundle, so perEpisodeFallbacksAttempted stays 0.
@@ -84,32 +98,69 @@ class KitsuMetadataProviderAdapter @Inject constructor(
                 // and `attributes.synopsis` for the description; there is no per-(episode, field) winner
                 // to emit. The series-level localization decision is captured by emitLocalizationPlan
                 // (see Task 5 / commit 974a7fd4b).
-                integrationProvider.fetchEpisodeEnrichment(rawId = route.parentId, kitsuId = kitsuId, mediaKind = mediaKind) { emptyMap() }
-                emptyCandidate(this.provider)
+                val episodeMetadata = integrationProvider.fetchEpisodeEnrichment(
+                    rawId = route.parentId,
+                    kitsuId = kitsuId,
+                    mediaKind = mediaKind
+                ) { episodes ->
+                    episodes.toEpisodeMetadata(route.seasonNumber)
+                }
+                return ProviderStepResult(
+                    step = step,
+                    candidate = emptyCandidate(this.provider),
+                    episodeMetadata = episodeMetadata
+                )
             }
             KitsuApiShapes.CASTINGS -> {
-                integrationProvider.fetchCastings(route.parentId, kitsuId, mediaKind)
-                emptyCandidate(this.provider)
+                integrationProvider.fetchAnimeCharacters(route.parentId, kitsuId, mediaKind)
+                    .toKitsuCharacterCandidate(this.provider)
             }
             KitsuApiShapes.ANIME_STAFF -> {
                 integrationProvider.fetchAnimeStaff(route.parentId, kitsuId, mediaKind)
-                emptyCandidate(this.provider)
+                    .toKitsuStaffCandidate(this.provider)
             }
             KitsuApiShapes.ANIME_PRODUCTIONS -> {
                 integrationProvider.fetchAnimeProductions(route.parentId, kitsuId, mediaKind)
-                emptyCandidate(this.provider)
+                    .toKitsuProductionCandidate(this.provider)
             }
             KitsuApiShapes.MEDIA_RELATIONSHIPS -> {
                 integrationProvider.fetchMediaRelationships(route.parentId, kitsuId, mediaKind)
-                emptyCandidate(this.provider)
+                    .toKitsuRelationshipCandidate(this.provider)
             }
             else -> emptyCandidate(this.provider)
         }
         return ProviderStepResult(step = step, candidate = candidate)
     }
 
-    private fun MetadataMediaKind.toContentMediaKind(): ContentMediaKind =
-        if (this == MetadataMediaKind.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
+    private fun MetadataRoute.toAnimeContentMediaKind(): ContentMediaKind {
+        return when (sourceContext.itemType?.trim()?.lowercase()) {
+            "movie", "film" -> ContentMediaKind.MOVIE
+            "series", "tv", "show", "tvshow", "anime" -> ContentMediaKind.SERIES
+            else -> if (mediaKind == MetadataMediaKind.MOVIE) ContentMediaKind.MOVIE else ContentMediaKind.SERIES
+        }
+    }
+
+    private fun List<KitsuAnimeResource>.toEpisodeMetadata(
+        seasonNumber: Int?
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> =
+        mapNotNull { episode ->
+            val attributes = episode.attributes ?: return@mapNotNull null
+            val season = attributes.seasonNumber ?: 1
+            val number = attributes.number ?: return@mapNotNull null
+            if (seasonNumber != null && season != seasonNumber) {
+                return@mapNotNull null
+            }
+            (season to number) to TvEpisodeMetadata(
+                providerEpisodeId = episode.id?.let { "kitsu:$it" },
+                seasonNumber = season,
+                episodeNumber = number,
+                title = attributes.canonicalTitle,
+                overview = attributes.synopsis ?: attributes.description,
+                thumbnail = attributes.thumbnail.bestUrl(),
+                airDate = attributes.airdate,
+                runtimeMinutes = attributes.length
+            )
+        }.toMap()
 
     private fun MetadataCandidate.withKitsuCanonicalId(kitsuId: String): MetadataCandidate =
         copy(fields = fields + (ResolvedField.CANONICAL_ID to FieldValue("kitsu:$kitsuId", FieldOwner.PRIMARY)))
@@ -125,6 +176,172 @@ class KitsuMetadataProviderAdapter @Inject constructor(
                     synopsisTrace?.let { ResolvedField.OVERVIEW to it.toMetadataTrace() }
                 )
         )
+
+    private fun KitsuCollectionResponse<KitsuAnimeCharacterResource>?.toKitsuCharacterCandidate(
+        provider: MetadataPrimaryProvider
+    ): MetadataCandidate {
+        val includedByKey = includedByKey()
+        val cast = this?.data.orEmpty()
+            .mapNotNull { relation ->
+                val characterRef = relation.relationships?.character?.data ?: return@mapNotNull null
+                val characterIncluded = includedByKey["${characterRef.type}:${characterRef.id}"] ?: return@mapNotNull null
+                val characterName = characterIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+                MetaCastMember(
+                    name = characterName,
+                    character = relation.attributes?.role,
+                    photo = characterIncluded.attributes.bestImageUrl(),
+                    provider = "kitsu",
+                    providerId = characterRef.id
+                )
+            }
+            .distinctBy { member -> "${member.name}|${member.character.orEmpty()}" }
+
+        return MetadataCandidate(
+            provider = provider,
+            fields = buildMap {
+                if (cast.isNotEmpty()) {
+                    put(ResolvedField.CAST, FieldValue(cast, FieldOwner.PRIMARY))
+                }
+            }
+        )
+    }
+
+    private fun KitsuCollectionResponse<KitsuAnimeStaffResource>?.toKitsuStaffCandidate(
+        provider: MetadataPrimaryProvider
+    ): MetadataCandidate {
+        val includedByKey = includedByKey()
+        val crew = this?.data.orEmpty()
+            .mapNotNull { relation ->
+                val personRef = relation.relationships?.person?.data ?: return@mapNotNull null
+                val personIncluded = includedByKey["${personRef.type}:${personRef.id}"] ?: return@mapNotNull null
+                val name = personIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+                MetaCastMember(
+                    name = name,
+                    character = relation.attributes?.role,
+                    photo = personIncluded.attributes.bestImageUrl(),
+                    provider = "kitsu",
+                    providerId = personRef.id
+                )
+            }
+            .distinctBy { member -> "${member.name}|${member.character.orEmpty()}" }
+
+        return MetadataCandidate(
+            provider = provider,
+            fields = buildMap {
+                if (crew.isNotEmpty()) {
+                    put(ResolvedField.CREW, FieldValue(crew, FieldOwner.PRIMARY))
+                }
+            }
+        )
+    }
+
+    private fun KitsuCollectionResponse<KitsuAnimeProductionResource>?.toKitsuProductionCandidate(
+        provider: MetadataPrimaryProvider
+    ): MetadataCandidate {
+        val includedByKey = includedByKey()
+        val companies = this?.data.orEmpty()
+            .mapNotNull { relation ->
+                val producerRef = relation.relationships?.producer?.data ?: return@mapNotNull null
+                val producerIncluded = includedByKey["${producerRef.type}:${producerRef.id}"] ?: return@mapNotNull null
+                val name = producerIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+                MetaCompany(
+                    name = name,
+                    kind = MetaCompanyKind.COMPANY,
+                    provider = "kitsu",
+                    providerId = producerRef.id
+                )
+            }
+            .distinctBy { company -> company.providerId ?: company.name.lowercase() }
+
+        return MetadataCandidate(
+            provider = provider,
+            fields = buildMap {
+                if (companies.isNotEmpty()) {
+                    put(ResolvedField.ORGANIZATION_LIST, FieldValue(companies, FieldOwner.PRIMARY))
+                }
+            }
+        )
+    }
+
+    private fun KitsuCollectionResponse<KitsuMediaRelationshipResource>?.toKitsuRelationshipCandidate(
+        provider: MetadataPrimaryProvider
+    ): MetadataCandidate {
+        val includedByKey = includedByKey()
+        val related = this?.data.orEmpty()
+            .mapNotNull { relation ->
+                val destinationRef = relation.relationships?.destination?.data ?: return@mapNotNull null
+                val destinationIncluded = includedByKey["${destinationRef.type}:${destinationRef.id}"] ?: return@mapNotNull null
+                val attributes = destinationIncluded.attributes
+                val title = attributes.bestDisplayName() ?: return@mapNotNull null
+                MetaPreview(
+                    id = "kitsu:${destinationRef.id}",
+                    type = if (attributes.stringValue("subtype").equals("movie", ignoreCase = true)) {
+                        ContentType.MOVIE
+                    } else {
+                        ContentType.SERIES
+                    },
+                    rawType = "anime",
+                    name = title,
+                    poster = attributes.bestPosterUrl(),
+                    posterShape = PosterShape.POSTER,
+                    background = attributes.bestCoverUrl(),
+                    logo = null,
+                    description = attributes.bestSynopsis(),
+                    releaseInfo = attributes.stringValue("startDate")?.take(4),
+                    imdbRating = null,
+                    genres = emptyList()
+                )
+            }
+            .distinctBy { preview -> preview.id }
+
+        return MetadataCandidate(
+            provider = provider,
+            fields = buildMap {
+                if (related.isNotEmpty()) {
+                    put(ResolvedField.RECOMMENDATIONS, FieldValue(related, FieldOwner.RECOMMENDATIONS))
+                }
+            }
+        )
+    }
+
+    private fun KitsuCollectionResponse<*>?.includedByKey(): Map<String, KitsuIncludedResource> =
+        this?.included.orEmpty().associateBy { "${it.type}:${it.id}" }
+
+    private fun Map<String, Any?>?.bestDisplayName(): String? =
+        stringValue("canonicalTitle")
+            ?: stringValue("canonicalName")
+            ?: stringValue("name")
+            ?: stringValue("title")
+
+    private fun Map<String, Any?>?.bestSynopsis(): String? =
+        stringValue("synopsis") ?: stringValue("description")
+
+    private fun Map<String, Any?>?.bestPosterUrl(): String? {
+        val posterMap = mapValue("posterImage") ?: mapValue("image")
+        return posterMap?.bestImageUrl()
+    }
+
+    private fun Map<String, Any?>?.bestCoverUrl(): String? {
+        val coverMap = mapValue("coverImage")
+        return coverMap?.bestImageUrl()
+    }
+
+    private fun Map<String, Any?>?.bestImageUrl(): String? {
+        val imageMap = mapValue("image") ?: mapValue("posterImage")
+        return imageMap?.bestImageUrl()
+            ?: stringValue("original")
+            ?: stringValue("large")
+            ?: stringValue("medium")
+            ?: stringValue("small")
+            ?: stringValue("tiny")
+    }
+
+    private fun Map<String, Any?>?.stringValue(key: String): String? =
+        this?.get(key)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+
+    private fun Map<String, Any?>?.mapValue(key: String): Map<String, Any?>? =
+        (this?.get(key) as? Map<*, *>)?.entries
+            ?.associate { entry -> entry.key.toString() to entry.value }
 
     private companion object {
         val kitsuShapes = setOf(

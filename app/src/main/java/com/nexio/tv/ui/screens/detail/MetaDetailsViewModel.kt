@@ -107,6 +107,7 @@ private fun debugLog(tag: String, message: String) {
     runCatching { Log.d(tag, message) }
 }
 private const val TRAKT_REVIEWS_PAGE_SIZE = 8
+private const val KITSU_REVIEWS_PAGE_SIZE = 20
 
 internal fun formatTvdbDetailLocalReleaseInfo(
     enrichment: TvMetadataEnrichment,
@@ -226,9 +227,13 @@ class MetaDetailsViewModel @Inject constructor(
     private var aggregatedReviewsCache: MutableList<MetaReview> = mutableListOf()
     private var hasMoreTraktReviews = false
     private var nextTraktReviewsPage = 2
+    private var hasMoreKitsuReviews = false
+    private var nextKitsuReviewsPage = 2
     private var isLoadingMoreReviews = false
     private var currentTmdbReviewId: String? = null
     private var currentTmdbReviewContentType: ContentType? = null
+    private var currentKitsuReviewRawId: String? = null
+    private var currentKitsuReviewMediaKind: ContentMediaKind? = null
 
     init {
         observeDeterministicAutoplaySetting()
@@ -738,7 +743,29 @@ class MetaDetailsViewModel @Inject constructor(
             .mapNotNull { it.season }
             .distinct()
             .singleOrNull()
-        val enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false)
+        var enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false)
+        val blockedForMandatoryKitsuEpisodes = shouldBlockKitsuSeriesReadyState(enrichment)
+        if (blockedForMandatoryKitsuEpisodes) {
+            val episodeHydratedMeta = applyTvEpisodeEnrichment(
+                targetMeta = enrichment.meta,
+                tvEnrichment = enrichment.tvEnrichment,
+                tmdbContentType = enrichment.tmdbContentType,
+                tvdbLanguage = enrichment.tvdbLanguage,
+                settings = enrichment.settings,
+                isTvContent = enrichment.isTvContent
+            )
+            if (episodeHydratedMeta.videos.isEmpty()) {
+                Log.w(TAG, "Kitsu series detail blocked without episode metadata for ${enrichment.meta.id}")
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Episode metadata is unavailable for ${enrichment.meta.name}."
+                    )
+                }
+                return
+            }
+            enrichment = enrichment.copy(meta = episodeHydratedMeta)
+        }
         applyMeta(enrichment.meta)
         if (preferredSeason != null) {
             _uiState.update { state ->
@@ -750,35 +777,63 @@ class MetaDetailsViewModel @Inject constructor(
             }
         }
         if (enrichment.isAnimeDetail) {
+            val shouldLoadAnimeReviews = shouldLoadReviews(enrichment.settings)
             _uiState.update { state ->
                 state.copy(
                     isAnimeDetail = true,
                     relatedItems = enrichment.animeRelated,
                     reviews = emptyList(),
-                    isReviewsLoading = false,
+                    isReviewsLoading = shouldLoadAnimeReviews,
                     reviewsError = null
                 )
             }
             hydrateKitsuNavigationTargetsAsync(enrichment.meta)
+            if (shouldLoadAnimeReviews) {
+                loadKitsuReviewsAsync(enrichment)
+            }
         } else {
             // Start recommendations fetch early for non-anime titles.
             _uiState.update { it.copy(isAnimeDetail = false) }
             loadMoreLikeThisAsync(meta)
             loadReviewsAsync(meta)
         }
-        loadEpisodeMetadataAsync(enrichment)
+        if (!blockedForMandatoryKitsuEpisodes) {
+            loadEpisodeMetadataAsync(enrichment)
+        }
         loadEpisodeRatingsAsync(enrichment.meta)
         loadMDBListRatings(enrichment.meta)
     }
 
+    private fun shouldBlockKitsuSeriesReadyState(enrichment: DetailMetadataEnrichment): Boolean =
+        enrichment.isAnimeDetail &&
+            enrichment.isTvContent &&
+            enrichment.settings.useEpisodes &&
+            enrichment.meta.videos.isEmpty()
+
     private fun loadEpisodeMetadataAsync(enrichment: DetailMetadataEnrichment) {
         episodeMetadataJob?.cancel()
-        if (!enrichment.isTvContent || !enrichment.settings.useEpisodes) return
+        if (!enrichment.isTvContent || !enrichment.settings.useEpisodes) {
+            Log.i(
+                TAG,
+                "detail.episode_enrichment_skipped metaId=${enrichment.meta.id} " +
+                    "isTvContent=${enrichment.isTvContent} useEpisodes=${enrichment.settings.useEpisodes}"
+            )
+            return
+        }
 
         val expectedMetaId = enrichment.meta.id
+        Log.i(
+            TAG,
+            "detail.episode_enrichment_started metaId=$expectedMetaId " +
+                "tvdbSeriesId=${enrichment.tvEnrichment?.seriesTvdbId} videos=${enrichment.meta.videos.size}"
+        )
         episodeMetadataJob = viewModelScope.launch {
             try {
-                val currentMeta = _uiState.value.meta?.takeIf { it.id == expectedMetaId } ?: return@launch
+                val currentMeta = _uiState.value.meta?.takeIf { it.id == expectedMetaId }
+                if (currentMeta == null) {
+                    Log.i(TAG, "detail.episode_enrichment_ignored metaId=$expectedMetaId reason=state_meta_mismatch_before_fetch")
+                    return@launch
+                }
                 val updated = applyTvEpisodeEnrichment(
                     targetMeta = currentMeta,
                     tvEnrichment = enrichment.tvEnrichment,
@@ -790,9 +845,26 @@ class MetaDetailsViewModel @Inject constructor(
 
                 _uiState.update { state ->
                     val stateMeta = state.meta ?: return@update state
-                    if (stateMeta.id != expectedMetaId || stateMeta.videos == updated.videos) {
+                    if (stateMeta.id != expectedMetaId) {
+                        Log.i(
+                            TAG,
+                            "detail.episode_enrichment_ignored metaId=$expectedMetaId " +
+                                "reason=state_meta_mismatch_after_fetch stateMetaId=${stateMeta.id}"
+                        )
+                        state
+                    } else if (stateMeta.videos == updated.videos) {
+                        Log.i(
+                            TAG,
+                            "detail.episode_enrichment_noop metaId=$expectedMetaId " +
+                                "videos=${updated.videos.size}"
+                        )
                         state
                     } else {
+                        Log.i(
+                            TAG,
+                            "detail.episode_enrichment_applied metaId=$expectedMetaId " +
+                                "beforeVideos=${stateMeta.videos.size} afterVideos=${updated.videos.size}"
+                        )
                         state.withRefreshedMeta(updated)
                     }
                 }
@@ -946,7 +1018,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun maybeLoadMoreReviews(focusedIndex: Int) {
         if (focusedIndex < 0) return
-        if (!hasMoreTraktReviews || isLoadingMoreReviews) return
+        if (isLoadingMoreReviews) return
         val expectedMetaId = currentReviewsMetaId ?: return
         if (_uiState.value.meta?.id != expectedMetaId) return
 
@@ -955,7 +1027,122 @@ class MetaDetailsViewModel @Inject constructor(
         val loadTriggerIndex = (lastIndex - 1).coerceAtLeast(0)
         if (focusedIndex < loadTriggerIndex) return
 
-        loadMoreTraktReviewsPage(expectedMetaId)
+        when {
+            hasMoreKitsuReviews -> loadMoreKitsuReviewsPage(expectedMetaId)
+            hasMoreTraktReviews -> loadMoreTraktReviewsPage(expectedMetaId)
+        }
+    }
+
+    private fun loadKitsuReviewsAsync(enrichment: DetailMetadataEnrichment) {
+        reviewsJob?.cancel()
+        reviewsJob = viewModelScope.launch {
+            val meta = enrichment.meta
+            currentReviewsMetaId = meta.id
+            resetReviewsPaginationState()
+
+            val rawId = listOf(meta.id, itemId)
+                .firstOrNull { AnimeStremioId.parse(it) != null }
+                ?: run {
+                    _uiState.update {
+                        it.copy(
+                            reviews = emptyList(),
+                            isReviewsLoading = false,
+                            reviewsError = "Reviews are unavailable for this title."
+                        )
+                    }
+                    return@launch
+                }
+            val mediaKind = enrichment.tmdbContentType.toAnimeMediaKind()
+            currentKitsuReviewRawId = rawId
+            currentKitsuReviewMediaKind = mediaKind
+
+            val initialPage = runCatching {
+                metadataSecondaryRepository.fetchKitsuReviews(
+                    rawId = rawId,
+                    mediaKind = mediaKind,
+                    page = 1,
+                    limit = KITSU_REVIEWS_PAGE_SIZE
+                )
+            }.getOrElse {
+                if (it is CancellationException) throw it
+                Log.w(TAG, "Failed to load Kitsu reviews for ${meta.id}: ${it.message}")
+                ReviewsPage(reviews = emptyList(), hasMore = false, nextPage = null)
+            }
+
+            if (currentReviewsMetaId != meta.id) return@launch
+
+            aggregatedReviewsCache = initialPage.reviews.toMutableList()
+            hasMoreKitsuReviews = initialPage.hasMore
+            nextKitsuReviewsPage = initialPage.nextPage ?: 2
+
+            _uiState.update { state ->
+                if (state.meta == null || state.meta.id == meta.id) {
+                    state.copy(
+                        reviews = aggregatedReviewsCache.toList(),
+                        isReviewsLoading = false,
+                        reviewsError = if (aggregatedReviewsCache.isEmpty()) "Reviews are unavailable for this title." else null
+                    )
+                } else {
+                    state
+                }
+            }
+        }
+    }
+
+    private fun loadMoreKitsuReviewsPage(expectedMetaId: String) {
+        if (!hasMoreKitsuReviews || isLoadingMoreReviews) return
+        val rawId = currentKitsuReviewRawId ?: return
+        val mediaKind = currentKitsuReviewMediaKind ?: return
+        val pageToLoad = nextKitsuReviewsPage
+
+        isLoadingMoreReviews = true
+        viewModelScope.launch {
+            try {
+                val pageResult = runCatching {
+                    metadataSecondaryRepository.fetchKitsuReviews(
+                        rawId = rawId,
+                        mediaKind = mediaKind,
+                        page = pageToLoad,
+                        limit = KITSU_REVIEWS_PAGE_SIZE
+                    )
+                }.getOrElse {
+                    if (it is CancellationException) throw it
+                    Log.w(TAG, "Failed to load Kitsu reviews page=$pageToLoad for $expectedMetaId: ${it.message}")
+                    return@launch
+                }
+
+                if (currentReviewsMetaId != expectedMetaId) return@launch
+
+                val existingIds = aggregatedReviewsCache
+                    .asSequence()
+                    .map { "${it.source}:${it.id}" }
+                    .toHashSet()
+                val uniqueNewReviews = pageResult.reviews.filter { review ->
+                    existingIds.add("${review.source}:${review.id}")
+                }
+                if (uniqueNewReviews.isNotEmpty()) {
+                    aggregatedReviewsCache.addAll(uniqueNewReviews)
+                }
+
+                hasMoreKitsuReviews = pageResult.hasMore
+                nextKitsuReviewsPage = pageResult.nextPage ?: (pageToLoad + 1)
+
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id == expectedMetaId) {
+                        state.copy(
+                            reviews = aggregatedReviewsCache.toList(),
+                            reviewsError = if (aggregatedReviewsCache.isEmpty()) "Reviews are unavailable for this title." else null
+                        )
+                    } else {
+                        state
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } finally {
+                isLoadingMoreReviews = false
+            }
+        }
     }
 
     private fun loadMoreTraktReviewsPage(expectedMetaId: String) {
@@ -1028,9 +1215,13 @@ class MetaDetailsViewModel @Inject constructor(
         aggregatedReviewsCache = mutableListOf()
         hasMoreTraktReviews = false
         nextTraktReviewsPage = 2
+        hasMoreKitsuReviews = false
+        nextKitsuReviewsPage = 2
         isLoadingMoreReviews = false
         currentTmdbReviewId = null
         currentTmdbReviewContentType = null
+        currentKitsuReviewRawId = null
+        currentKitsuReviewMediaKind = null
     }
 
     private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {
@@ -1262,6 +1453,15 @@ class MetaDetailsViewModel @Inject constructor(
             )
         } else {
             null
+        }
+        if (isKitsuAnimeByProvider) {
+            Log.i(
+                TAG,
+                "detail.kitsu_advanced_result metaId=${meta.id} sourceId=$kitsuAdvancedSourceId " +
+                    "characters=${kitsuAdvanced?.characters?.size ?: 0} " +
+                    "productions=${kitsuAdvanced?.productionCompanies?.size ?: 0} " +
+                    "related=${kitsuAdvanced?.relatedTitles?.size ?: 0}"
+            )
         }
 
         val releaseInfo = tvEnrichment?.releaseInfo ?: tmdbEnrichment?.releaseInfo
@@ -1648,12 +1848,23 @@ class MetaDetailsViewModel @Inject constructor(
             )
         )
         val episodeMap = tvdbCoreEpisodes + episodeDecision.value.orEmpty()
+        Log.i(
+            TAG,
+            "detail.episode_enrichment_result metaId=${targetMeta.id} provider=${episodeDecision.provider} " +
+                "coreEpisodes=${tvdbCoreEpisodes.size} fetchedEpisodes=${episodeDecision.value.orEmpty().size} " +
+                "targetVideos=${targetMeta.videos.size}"
+        )
         if (episodeMap.isEmpty()) return targetMeta
 
         // When the meta arrived with no pre-existing episode structure (e.g. from the canonical
         // router path which returns videos=emptyList()), build video stubs from the episode map
         // so that the enrichment results (runtimes, thumbnails, etc.) are not silently discarded.
         if (targetMeta.videos.isEmpty()) {
+            Log.i(
+                TAG,
+                "detail.episode_enrichment_building_video_stubs metaId=${targetMeta.id} " +
+                    "episodeCount=${episodeMap.size}"
+            )
             return targetMeta.copy(
                 videos = buildKitsuEpisodeVideos(
                     seriesId = targetMeta.id,

@@ -2,6 +2,7 @@ package com.nexio.tv.data.integration.metadata
 
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeDetail
@@ -59,6 +60,19 @@ class MetadataSecondaryRepository @Inject constructor(
             rawId = rawId,
             mediaKind = mediaKind,
             preferredLanguageCode = preferredLanguageCode
+        )
+
+    suspend fun fetchKitsuReviews(
+        rawId: String,
+        mediaKind: ContentMediaKind,
+        page: Int,
+        limit: Int
+    ): ReviewsPage =
+        kitsuMetadataService.fetchReviews(
+            rawId = rawId,
+            mediaKind = mediaKind,
+            page = page,
+            limit = limit
         )
 
     suspend fun findPersonIdByExactName(name: String): Int? =

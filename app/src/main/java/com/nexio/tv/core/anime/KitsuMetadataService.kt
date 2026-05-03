@@ -10,6 +10,7 @@ import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
+import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.data.remote.api.KitsuAnimeResource
 import com.nexio.tv.data.remote.api.KitsuAnimeCharacterResource
 import com.nexio.tv.data.remote.api.KitsuAnimeProductionResource
@@ -20,6 +21,9 @@ import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.data.remote.api.KitsuIncludedResource
 import com.nexio.tv.data.remote.api.KitsuInstallmentResource
 import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
+import com.nexio.tv.data.remote.api.KitsuReviewResource
+import com.nexio.tv.domain.model.MetaReview
+import com.nexio.tv.domain.model.MetaReviewSource
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -115,10 +119,28 @@ class KitsuMetadataService @Inject constructor(
         preferredLanguageCode: String? = null
     ): KitsuAdvancedAnimeDetail? = withContext(Dispatchers.IO) {
         val animeId = AnimeStremioId.parse(rawId) ?: return@withContext null
-        val kitsuId = idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
+        val kitsuId = when (animeId.source) {
+            AnimeIdSource.KITSU -> animeId.value
+            else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext null
+        }
         provider.fetchAdvancedDetail(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind) { payload ->
             payload.toAdvancedDetail(preferredLanguageCode)
         }
+    }
+
+    suspend fun fetchReviews(
+        rawId: String,
+        mediaKind: ContentMediaKind,
+        page: Int = 1,
+        limit: Int = 20
+    ): ReviewsPage = withContext(Dispatchers.IO) {
+        val animeId = AnimeStremioId.parse(rawId) ?: return@withContext ReviewsPage(emptyList(), false, null)
+        val kitsuId = when (animeId.source) {
+            AnimeIdSource.KITSU -> animeId.value
+            else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext ReviewsPage(emptyList(), false, null)
+        }
+        provider.fetchReviews(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind, page = page, limit = limit)
+            .toKitsuReviewsPage(page = page, limit = limit.coerceIn(1, 20))
     }
 }
 
@@ -127,7 +149,32 @@ private fun KitsuImage.bestUrl(): String? =
 
 private fun retrofit2.Response<*>?.isSuccessfulWithBody(): Boolean = this?.isSuccessful == true && this.body() != null
 
-private fun retrofit2.Response<KitsuCollectionResponse<KitsuCastingResource>>?.toAdvancedCharacters(
+private fun retrofit2.Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>?.toAdvancedCharacters(): List<KitsuAdvancedAnimeCharacter> {
+    if (!isSuccessfulWithBody()) return emptyList()
+    val body = this?.body() ?: return emptyList()
+    val includedByKey = body.included.orEmpty().associateBy { "${it.type}:${it.id}" }
+    return body.data.orEmpty()
+        .mapNotNull { relation ->
+            val characterRef = relation.relationships?.character?.data ?: return@mapNotNull null
+            val characterIncluded = includedByKey["${characterRef.type}:${characterRef.id}"] ?: return@mapNotNull null
+            val characterName = characterIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+            KitsuAdvancedAnimeCharacter(
+                characterId = characterRef.id.orEmpty(),
+                characterName = characterName,
+                role = relation.attributes?.role,
+                characterImage = characterIncluded.attributes.bestImageUrl(),
+                actorId = null,
+                actorName = null,
+                actorImage = null,
+                language = null,
+                featured = relation.attributes?.role.equals("main", ignoreCase = true)
+            )
+        }
+        .distinctBy { it.characterId }
+        .sortedWith(compareByDescending<KitsuAdvancedAnimeCharacter> { it.featured }.thenBy { it.characterName.lowercase() })
+}
+
+private fun retrofit2.Response<KitsuCollectionResponse<KitsuCastingResource>>?.toAdvancedVoiceCharacters(
     preferredLanguageCode: String?
 ): List<KitsuAdvancedAnimeCharacter> {
     if (!isSuccessfulWithBody()) return emptyList()
@@ -196,9 +243,12 @@ private fun KitsuAdvancedDetailPayload.toAdvancedDetail(
     preferredLanguageCode: String?
 ): KitsuAdvancedAnimeDetail {
     return KitsuAdvancedAnimeDetail(
-        characters = castingsResponse.toAdvancedCharacters(
-            preferredLanguageCode = preferredLanguageCode
-        ),
+        characters = animeCharactersResponse.toAdvancedCharacters()
+            .ifEmpty {
+                castingsResponse.toAdvancedVoiceCharacters(
+                    preferredLanguageCode = preferredLanguageCode
+                )
+            },
         staff = animeStaffResponse.toAdvancedStaff(),
         relatedTitles = mediaRelationshipsResponse
             .toAdvancedRelatedTitles()
@@ -206,6 +256,36 @@ private fun KitsuAdvancedDetailPayload.toAdvancedDetail(
             .distinctBy { "${it.mediaType}:${it.mediaId}" },
         productionCompanies = animeProductionsResponse.toAdvancedProductionCompanies(),
         franchiseIds = emptySet()
+    )
+}
+
+private fun KitsuCollectionResponse<KitsuReviewResource>?.toKitsuReviewsPage(
+    page: Int,
+    limit: Int
+): ReviewsPage {
+    val body = this
+    val includedByKey = body?.included.orEmpty().associateBy { "${it.type}:${it.id}" }
+    val reviews = body?.data.orEmpty().mapNotNull { review ->
+        val attributes = review.attributes ?: return@mapNotNull null
+        val content = attributes.content?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val userRef = review.relationships?.user?.data
+        val user = userRef?.let { includedByKey["${it.type}:${it.id}"] }
+        MetaReview(
+            id = review.id.orEmpty(),
+            author = user?.attributes.bestDisplayName() ?: userRef?.id?.let { "Kitsu user $it" } ?: "Kitsu",
+            content = content,
+            rating = attributes.rating?.let { it / 2.0 },
+            createdAt = attributes.createdAt,
+            updatedAt = attributes.updatedAt,
+            source = MetaReviewSource.KITSU,
+            hasSpoiler = attributes.spoiler == true
+        )
+    }
+    val rawCount = body?.data.orEmpty().size
+    return ReviewsPage(
+        reviews = reviews,
+        hasMore = rawCount >= limit,
+        nextPage = if (rawCount >= limit) page + 1 else null
     )
 }
 
