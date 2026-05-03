@@ -272,43 +272,6 @@ fun LayoutSettingsContent(
                     focusRequester = homeContentHeaderFocus,
                     onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                 ) {
-                    if (!uiState.modernSidebarEnabled) {
-                        CompactToggleRow(
-                            title = stringResource(R.string.layout_collapse_sidebar),
-                            subtitle = stringResource(R.string.layout_collapse_sidebar_sub),
-                            checked = uiState.sidebarCollapsedByDefault,
-                            onToggle = {
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
-                        )
-                    }
-                    CompactToggleRow(
-                        title = stringResource(R.string.layout_modern_sidebar),
-                        subtitle = stringResource(R.string.layout_modern_sidebar_sub),
-                        checked = uiState.modernSidebarEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                LayoutSettingsEvent.SetModernSidebarEnabled(!uiState.modernSidebarEnabled)
-                            )
-                        },
-                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
-                    )
-                    if (uiState.modernSidebarEnabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                        CompactToggleRow(
-                            title = stringResource(R.string.layout_modern_sidebar_blur),
-                            subtitle = stringResource(R.string.layout_modern_sidebar_blur_sub),
-                            checked = uiState.modernSidebarBlurEnabled,
-                            onToggle = {
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetModernSidebarBlurEnabled(!uiState.modernSidebarBlurEnabled)
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
-                        )
-                    }
                     CompactToggleRow(
                         title = stringResource(R.string.layout_show_hero),
                         subtitle = stringResource(R.string.layout_show_hero_sub),

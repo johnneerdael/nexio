@@ -19,43 +19,16 @@ import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val migrationSidebarCollapsedDefaultEnabledKey =
-    booleanPreferencesKey("migration_sidebar_collapsed_default_enabled")
 private val migrationHideUnreleasedDefaultEnabledKey =
     booleanPreferencesKey("migration_hide_unreleased_default_enabled")
-private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
-private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
-private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
 private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
 
 internal fun applyLayoutPreferenceMigrations(prefs: MutablePreferences) {
-    val sidebarCollapseDefaultMigrated = prefs[migrationSidebarCollapsedDefaultEnabledKey] ?: false
-    if (!sidebarCollapseDefaultMigrated) {
-        prefs[sidebarCollapsedKey] = true
-        prefs[migrationSidebarCollapsedDefaultEnabledKey] = true
-    }
-
     val hideUnreleasedDefaultMigrated = prefs[migrationHideUnreleasedDefaultEnabledKey] ?: false
     if (!hideUnreleasedDefaultMigrated) {
         // This preference is retired from UX; keep unreleased titles visible by default.
         prefs[hideUnreleasedContentKey] = false
         prefs[migrationHideUnreleasedDefaultEnabledKey] = true
-    }
-}
-
-internal fun modernSidebarEnabledFromPreferences(prefs: Preferences): Boolean =
-    prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
-
-internal fun sidebarCollapsedByDefaultFromPreferences(prefs: Preferences): Boolean {
-    if (modernSidebarEnabledFromPreferences(prefs)) {
-        return false
-    }
-
-    val sidebarCollapseDefaultMigrated = prefs[migrationSidebarCollapsedDefaultEnabledKey] ?: false
-    return if (!sidebarCollapseDefaultMigrated) {
-        true
-    } else {
-        prefs[sidebarCollapsedKey] ?: true
     }
 }
 
@@ -85,7 +58,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val heroCatalogKeysKey = stringPreferencesKey("hero_catalog_keys")
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
-    private val modernSidebarBlurEnabledKey = booleanPreferencesKey("modern_sidebar_blur_enabled")
     private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
@@ -148,18 +120,6 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val disabledHomeCatalogKeys: Flow<List<String>> = profileFlow { prefs ->
         parseCatalogKeys(prefs[disabledHomeCatalogKeysKey])
-    }
-
-    val sidebarCollapsedByDefault: Flow<Boolean> = profileFlow { prefs ->
-        sidebarCollapsedByDefaultFromPreferences(prefs)
-    }
-
-    val modernSidebarEnabled: Flow<Boolean> = profileFlow { prefs ->
-        modernSidebarEnabledFromPreferences(prefs)
-    }
-
-    val modernSidebarBlurEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernSidebarBlurEnabledKey] ?: false
     }
 
     val modernLandscapePostersEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -282,30 +242,6 @@ class LayoutPreferenceDataStore @Inject constructor(
             } else {
                 prefs[disabledHomeCatalogKeysKey] = gson.toJson(normalizedKeys)
             }
-        }
-    }
-
-    suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
-        store().edit { prefs ->
-            val modernSidebarEnabled = modernSidebarEnabledFromPreferences(prefs)
-            prefs[sidebarCollapsedKey] = if (modernSidebarEnabled) false else collapsed
-            prefs[migrationSidebarCollapsedDefaultEnabledKey] = true
-        }
-    }
-
-    suspend fun setModernSidebarEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[modernSidebarEnabledKey] = enabled
-            prefs.remove(legacyModernSidebarEnabledKey)
-            if (enabled) {
-                prefs[sidebarCollapsedKey] = false
-            }
-        }
-    }
-
-    suspend fun setModernSidebarBlurEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[modernSidebarBlurEnabledKey] = enabled
         }
     }
 

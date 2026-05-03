@@ -397,12 +397,6 @@
   <string name="layout_hero_catalogs_sub">Wähle einen oder mehrere Kataloge für die Hero-Inhalte aus.</string>
   <string name="layout_section_content">Home-Inhalte</string>
   <string name="layout_section_content_desc">Steuere, was auf der Startseite und in der Suche angezeigt wird.</string>
-  <string name="layout_collapse_sidebar">Seitenleiste einklappen</string>
-  <string name="layout_collapse_sidebar_sub">Seitenleiste standardmäßig ausblenden; nur beim Fokus anzeigen.</string>
-  <string name="layout_modern_sidebar">Moderne Seitenleiste</string>
-  <string name="layout_modern_sidebar_sub">Aktiviere die schwebende Navigation der Seitenleiste.</string>
-  <string name="layout_modern_sidebar_blur">Moderne Seitenleisten-Unschärfe</string>
-  <string name="layout_modern_sidebar_blur_sub">Aktiviere den Unschärfe-Effekt für die moderne Seitenleiste.</string>
   <string name="layout_show_hero">Hero-Bereich anzeigen</string>
   <string name="layout_show_hero_sub">Zeige das Hero-Karussell oben auf der Startseite an.</string>
   <string name="layout_show_discover">Entdecken in der Suche anzeigen</string>
@@ -817,7 +811,6 @@
   <string name="nav_library">Bibliothek</string>
   <string name="nav_addons">Add-ons</string>
   <string name="nav_settings">Einstellungen</string>
-  <string name="cd_expand_sidebar">Seitenleiste erweitern</string>
   <string name="update_close">Schließen</string>
   <string name="update_open_settings">Einstellungen öffnen</string>
   <string name="update_install">Installieren</string>
