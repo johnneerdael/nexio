@@ -85,7 +85,9 @@ import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
+import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
+import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
 private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
@@ -755,9 +757,29 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 .get(context.applicationContext, HyperHdrEntryPoint::class.java)
                 .hyperHdrConfigDataStore()
             scope.launch {
+                var activeClient: HyperHdrFlatBufferClient? = null
                 hyperHdrStore.config.collect { cfg ->
-                    // Production wiring lands in Task 10; spike removed in Task 9.
-                    _exoPlayer?.setVideoEffects(emptyList())
+                    // Tear down any previous client.
+                    activeClient?.close()
+                    activeClient = null
+                    val player = _exoPlayer ?: return@collect
+                    if (cfg.isUsable) {
+                        val client = HyperHdrFlatBufferClient(
+                            host = cfg.host, port = cfg.port, priority = cfg.priority,
+                            origin = "Nexio-HyperHDR",
+                        )
+                        try {
+                            client.connect()
+                            activeClient = client
+                            player.setVideoEffects(listOf(HyperHdrCaptureEffect(client)))
+                        } catch (t: Throwable) {
+                            Log.w("HyperHdrIntegration", "Failed to connect to HyperHDR; not enabling effect", t)
+                            client.close()
+                            player.setVideoEffects(emptyList())
+                        }
+                    } else {
+                        player.setVideoEffects(emptyList())
+                    }
                 }
             }
 
