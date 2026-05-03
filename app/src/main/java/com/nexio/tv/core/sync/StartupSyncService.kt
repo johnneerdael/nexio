@@ -3,6 +3,8 @@ package com.nexio.tv.core.sync
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
+import com.nexio.tv.core.auth.liveFullAccountSessionUserId
 import com.nexio.tv.core.profile.ProfileModeRoute
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.profile.ProfileManager
@@ -14,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -47,7 +50,10 @@ class StartupSyncService @Inject constructor(
 
     init {
         scope.launch {
-            authManager.sessionUserId.collect { userId ->
+            combine(authManager.authState, authManager.sessionUserId) { authState, sessionUserId ->
+                authState to sessionUserId
+            }.collect { (authState, sessionUserId) ->
+                val userId = liveFullAccountSessionUserId(authState, sessionUserId)
                 accountSettingsSyncService.onStartupSyncUserChanged(userId)
                 if (userId != null) {
                     val force = forceSyncRequested
@@ -68,6 +74,10 @@ class StartupSyncService @Inject constructor(
         }
         scope.launch {
             profileManager.profileSwitched.collect { activeId ->
+                if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+                    Log.d(TAG, "Skipping secondary profile sync for profile $activeId without a full account session")
+                    return@collect
+                }
                 when (val route = profileModeRouter.routeFor(activeId)) {
                     ProfileModeRoute.DefaultLegacyRoute -> {
                         Log.d(TAG, "Skipping secondary profile sync for default legacy profile $activeId")
@@ -95,6 +105,10 @@ class StartupSyncService @Inject constructor(
     }
 
     fun requestSyncNow() {
+        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+            Log.d(TAG, "Ignoring startup sync request without a full account session")
+            return
+        }
         forceSyncRequested = true
         authManager.currentSessionUserId?.let { userId ->
             val started = scheduleStartupPull(userId, force = true)

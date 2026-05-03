@@ -324,7 +324,7 @@ class AuthManager @Inject constructor(
         get() = _authState.value is AuthState.FullAccount
 
     val hasSyncSession: Boolean
-        get() = _sessionUserId.value != null
+        get() = hasLiveFullAccountSyncSession(_authState.value, _sessionUserId.value)
 
     val currentSessionUserId: String?
         get() = _sessionUserId.value
@@ -914,6 +914,20 @@ internal fun sessionUserIdWhileSessionUnavailable(): String? = null
 
 internal fun shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress: Boolean): Boolean =
     isLocalSignOutInProgress
+
+internal fun hasLiveFullAccountSyncSession(
+    authState: AuthState,
+    sessionUserId: String?
+): Boolean {
+    return authState is AuthState.FullAccount && !sessionUserId.isNullOrBlank()
+}
+
+internal fun liveFullAccountSessionUserId(
+    authState: AuthState,
+    sessionUserId: String?
+): String? {
+    return sessionUserId?.takeIf { hasLiveFullAccountSyncSession(authState, it) }
+}
 
 internal suspend fun handleManualSignOut(
     clearPresenceMarker: suspend () -> Unit,

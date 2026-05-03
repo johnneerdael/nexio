@@ -366,6 +366,23 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `account sync entrypoints require live full account session`() {
+        val accountSource = accountSettingsSyncService.readText()
+        val startupSource = startupSyncService.readText()
+        val addonSource = File("app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt").readText()
+        val addonRepositorySource = File("app/src/main/java/com/nexio/tv/data/repository/AddonRepositoryImpl.kt").readText()
+        val syncRepositorySource = File("app/src/main/java/com/nexio/tv/data/repository/SyncRepositoryImpl.kt").readText()
+
+        assertTrue(accountSource.contains("hasLiveFullAccountSyncSession"))
+        assertTrue(accountSource.contains("liveFullAccountSessionUserId"))
+        assertTrue(startupSource.contains("combine(authManager.authState, authManager.sessionUserId)"))
+        assertTrue(startupSource.contains("liveFullAccountSessionUserId(authState, sessionUserId)"))
+        assertTrue(addonSource.contains("hasLiveFullAccountSyncSession"))
+        assertTrue(addonRepositorySource.contains("hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)"))
+        assertTrue(syncRepositorySource.contains("No live full account session"))
+    }
+
+    @Test
     fun `profile boundary owns secondary route decisions and rejects default`() {
         val boundarySource = profileBoundary.readText()
         val routerSource = profileModeRouter.readText()

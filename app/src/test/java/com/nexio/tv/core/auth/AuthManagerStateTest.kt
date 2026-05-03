@@ -50,4 +50,15 @@ class AuthManagerStateTest {
         val out: AuthState = AuthState.SignedOut
         assertTrue(lost != out)
     }
+
+    @Test
+    fun `live full account sync session requires full account state and session user id`() {
+        val fullAccount = AuthState.FullAccount(userId = "user-123", email = "user@example.com")
+
+        assertTrue(hasLiveFullAccountSyncSession(fullAccount, "user-123"))
+        assertEquals("user-123", liveFullAccountSessionUserId(fullAccount, "user-123"))
+        assertEquals(null, liveFullAccountSessionUserId(AuthState.SessionLost, "user-123"))
+        assertEquals(null, liveFullAccountSessionUserId(AuthState.SignedOut, "user-123"))
+        assertEquals(null, liveFullAccountSessionUserId(fullAccount, null))
+    }
 }
