@@ -579,7 +579,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         )
         val hdrTier = hdrPolicy.effectiveHdrTier
         val hdrSupportTier = hdrPolicy.hdrSupportTier
-        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, releaseType, device)
+        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, device, releaseType)
         val audioTier = audioDecision.effectiveTier
         val audioSupportTier = audioDecision.supportStatus
         val codecPoints = config.contentRewards.codec.getValue(codecTier)
@@ -923,7 +923,7 @@ private data class ShadowHdrScoringPolicy(
     val additionalPenalty: Int = 0
 )
 
-private data class ShadowAudioScoringDecision(
+internal data class ShadowAudioScoringDecision(
     val effectiveTier: ShadowAudioTier,
     val supported: Boolean,
     val supportStatus: String
@@ -961,10 +961,10 @@ private fun ShadowContentScoreBreakdown.total(): Int {
         lowQuality4kPenalty
 }
 
-private fun resolveAudioScoringDecision(
+internal fun resolveAudioScoringDecision(
     tags: List<String>,
-    releaseType: ShadowReleaseType,
-    device: DeviceCapabilitySnapshot?
+    device: DeviceCapabilitySnapshot?,
+    releaseType: ShadowReleaseType
 ): ShadowAudioScoringDecision {
     val candidates = detectAudioTierCandidates(tags, releaseType)
     if (candidates.isEmpty()) {
@@ -984,6 +984,8 @@ private fun resolveAudioScoringDecision(
         )
     }
 
+    // No supported tier found. Penalize by the lowest base-point tier so the negative
+    // score is the least severe viable fallback for this detected audio family.
     return ShadowAudioScoringDecision(
         effectiveTier = candidates.minByOrNull(::audioBasePoints) ?: ShadowAudioTier.OTHER,
         supported = false,
@@ -1003,10 +1005,15 @@ private fun detectAudioTierCandidates(
     val hasDdp = normalized.any { it.contains("dd+") || it.contains("eac3") || it.contains("ddp") }
     val hasAc3 = normalized.any { it == "dd" || it.contains("ac3") }
     val hasDts = normalized.any { it == "dts" }
+
+    // Source-format-aware Atmos disambiguation. Explicit container co-tags override the
+    // release-type heuristic because parsed title metadata is more specific than source class.
     val isLosslessReleaseType = releaseType == ShadowReleaseType.REMUX ||
         releaseType == ShadowReleaseType.BLURAY_ENCODE
 
     return buildList {
+        // Atmos cases are exhaustive when hasAtmos is true; otherwise control falls
+        // through to the DTS and non-Atmos blocks below.
         when {
             hasAtmos && hasTrueHd -> {
                 add(ShadowAudioTier.TRUEHD_ATMOS)
@@ -1021,11 +1028,13 @@ private fun detectAudioTierCandidates(
                 add(ShadowAudioTier.TRUEHD)
             }
             hasAtmos -> {
+                // Default WEB-DL/WEBRIP/encode/unknown Atmos to the DDP ladder.
                 add(ShadowAudioTier.DDP_ATMOS)
                 add(ShadowAudioTier.DDP)
             }
         }
 
+        // DTS family keeps a real fallback ladder without inventing AC3 fallbacks.
         if (hasDtsX) {
             add(ShadowAudioTier.DTSX)
             add(ShadowAudioTier.DTSHD)
