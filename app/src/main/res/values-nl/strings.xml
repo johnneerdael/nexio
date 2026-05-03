@@ -333,7 +333,6 @@
   <string name="sub_vertical_offset">Verticale verschuiving</string>
   <string name="sub_bold">Vetgedrukt</string>
   <string name="sub_bold_sub">Gebruik vet lettertype voor ondertitels</string>
-  <string name="sub_text_color">Tekstkleur</string>
   <string name="sub_bg_color">Achtergrondkleur</string>
   <string name="sub_outline">Omtrek</string>
   <string name="sub_outline_sub">Voeg een omtrek toe rond de ondertiteltekst voor betere zichtbaarheid</string>
@@ -635,7 +634,6 @@
   <string name="subtitle_no_builtin">Geen ingebouwde ondertitels beschikbaar</string>
   <string name="subtitle_loading_addon">Ondertiteling laden vanuit add-ons\u2026</string>
   <string name="subtitle_no_addon">Er zijn geen add-on-ondertitels beschikbaar</string>
-  <string name="subtitle_text_color">Tekstkleur</string>
   <string name="subtitle_outline_color">Omtrekkleur</string>
   <string name="subtitle_reset_defaults">Standaardwaarden opnieuw instellen</string>
   <string name="subtitle_tab_addons">Add-ons</string>
@@ -665,7 +663,6 @@
   <string name="subtitle_style_reset">Opnieuw instellen</string>
   <string name="subtitle_style_font_size">Lettergrootte</string>
   <string name="subtitle_style_bold">Vetgedrukt</string>
-  <string name="subtitle_style_text_color">Tekstkleur</string>
   <string name="subtitle_style_outline">Omtrek</string>
   <string name="subtitle_style_bottom_offset">Onderste marge</string>
   <string name="subtitle_style_defaults">Standaardwaarden</string>
