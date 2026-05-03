@@ -212,12 +212,154 @@ class TvdbEpisodeLocalizationTest {
         assertEquals(42, episode.runtimeMinutes)
     }
 
+    @Test
+    fun `episode thumbnail falls back to tvdb thumbnail when image is absent`() {
+        val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
+            englishEpisodes = listOf(
+                episode(
+                    id = 601,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42,
+                    image = null,
+                    thumbnail = "/banners/v4/episode/601/screencap/thumb.jpg"
+                )
+            ),
+            localizedSeasonEpisodes = emptyList(),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/601/screencap/thumb.jpg",
+            mapped.getValue(1 to 1).thumbnail
+        )
+    }
+
+    @Test
+    fun `episode thumbnail normalizes relative tvdb image path`() {
+        val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
+            englishEpisodes = listOf(
+                episode(
+                    id = 602,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42,
+                    image = "/banners/v4/episode/602/screencap/test.jpg"
+                )
+            ),
+            localizedSeasonEpisodes = emptyList(),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/602/screencap/test.jpg",
+            mapped.getValue(1 to 1).thumbnail
+        )
+    }
+
+    @Test
+    fun `episode thumbnail uses TVDB episode screencap image type`() {
+        val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
+            englishEpisodes = listOf(
+                episode(
+                    id = 7140390,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42,
+                    image = "/banners/episodes/355567/7140390.jpg",
+                    imageType = 11
+                )
+            ),
+            localizedSeasonEpisodes = emptyList(),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/episodes/355567/7140390.jpg",
+            mapped.getValue(1 to 1).thumbnail
+        )
+    }
+
+    @Test
+    fun `episode thumbnail rejects series banner artwork`() {
+        val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
+            englishEpisodes = listOf(
+                episode(
+                    id = 7140390,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42,
+                    image = "https://artworks.thetvdb.com/banners/series/355567/banners/5f208242a5940.jpg",
+                    imageType = 1,
+                    thumbnail = null
+                )
+            ),
+            localizedSeasonEpisodes = emptyList(),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        assertEquals(null, mapped.getValue(1 to 1).thumbnail)
+    }
+
+    @Test
+    fun `episode thumbnail accepts episode path when image type is absent`() {
+        val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
+            englishEpisodes = listOf(
+                episode(
+                    id = 603,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42,
+                    image = "/banners/v4/episode/603/screencap/test.jpg",
+                    imageType = null
+                )
+            ),
+            localizedSeasonEpisodes = emptyList(),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/603/screencap/test.jpg",
+            mapped.getValue(1 to 1).thumbnail
+        )
+    }
+
+    @Test
+    fun `episode thumbnail rejects unsafe primary image and unsafe fallback thumbnail`() {
+        val mapped = TvdbEpisodeLocalization.mergeEnglishBase(
+            englishEpisodes = listOf(
+                episode(
+                    id = 604,
+                    number = 1,
+                    name = "English title",
+                    overview = "English overview",
+                    runtime = 42,
+                    image = "https://artworks.thetvdb.com/banners/series/355567/banners/5f208242a5940.jpg",
+                    imageType = 1,
+                    thumbnail = "https://artworks.thetvdb.com/banners/series/355567/posters/5f208242a5940.jpg"
+                )
+            ),
+            localizedSeasonEpisodes = emptyList(),
+            perEpisodeTranslations = emptyMap()
+        )
+
+        assertEquals(null, mapped.getValue(1 to 1).thumbnail)
+    }
+
     private fun episode(
         id: Int,
         number: Int,
         name: String,
         overview: String?,
-        runtime: Int
+        runtime: Int,
+        image: String? = "https://art.example/$id.jpg",
+        imageType: Int? = null,
+        thumbnail: String? = null
     ): TvdbEpisodeRecord =
         TvdbEpisodeRecord(
             id = id,
@@ -227,6 +369,8 @@ class TvdbEpisodeLocalizationTest {
             overview = overview,
             runtime = runtime,
             aired = "2024-01-0$number",
-            image = "https://art.example/$id.jpg"
+            image = image,
+            imageType = imageType,
+            thumbnail = thumbnail
         )
 }
