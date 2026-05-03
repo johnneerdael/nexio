@@ -34,6 +34,7 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 | Main Commit | Status On This Branch | Branch Commit | Notes |
 | --- | --- | --- | --- |
 | `bacd1e39b` | `PORTED` | `814212217`, `6c659246e` | Continue Watching now preserves stable playback context and addon origin through shared route builders/player args. |
+| `2ee707f96` | `PORTED` | this slice | Kitsu browser JSON:API headers are centralized on the shared Kitsu Retrofit/OkHttp clients used by runtime-backed Kitsu providers. |
 | `46d9b3bd8` | `PORTED` | `0d39ff67d` | Resolver wait budget parity is centralized in the autoplay resolver path. |
 | `aac4096d4` | `PORTED` | `c9133cebd` | Audio fallback scoring parity is centralized in `StreamAutoPlaySelector`. |
 | `1419bb608`, `14917f00b`, `2306180d1` | `PORTED` | `e3b1492e5` | TVDB localization and cache schema invalidation are in the shared runtime provider/service path. |
