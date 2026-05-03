@@ -312,6 +312,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleOutlineEnabled(enabled)
     }
 
+    suspend fun setBurnInProtectionEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setBurnInProtectionEnabled(enabled)
+    }
+
     suspend fun setSubtitleOutlineColor(color: Int) {
         playerSettingsDataStore.setSubtitleOutlineColor(color)
     }

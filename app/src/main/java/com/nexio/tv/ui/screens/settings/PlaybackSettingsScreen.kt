@@ -415,6 +415,9 @@ internal fun PlaybackSettingsContent(
                 onSetSubtitleVerticalOffset = { newOffset -> coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) } },
                 onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },
                 onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
+                onSetBurnInProtectionEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setBurnInProtectionEnabled(enabled) }
+                },
                 onSetUseParallelConnections = { enabled ->
                     coroutineScope.launch { viewModel.setUseParallelConnections(enabled) }
                 },

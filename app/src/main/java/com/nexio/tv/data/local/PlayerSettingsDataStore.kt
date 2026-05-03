@@ -17,9 +17,11 @@ import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import java.util.UUID
 import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -96,6 +98,17 @@ data class SubtitleStyleSettings(
     val outlineWidth: Int = 2 // 1-5
 )
 
+data class BurnInProtectionSettings(
+    val enabled: Boolean = true
+)
+
+fun clampSubtitleBackgroundAlpha(color: Int): Int {
+    val alpha = color ushr 24
+    if (alpha == 0) return color
+    val cappedAlpha = alpha.coerceAtMost(0xBF)
+    return (color and 0x00FFFFFF) or (cappedAlpha shl 24)
+}
+
 /**
  * Data class representing buffer settings
  */
@@ -161,6 +174,7 @@ data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
     val preferredExternalPlayerPackageName: String? = null,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
+    val burnInProtection: BurnInProtectionSettings = BurnInProtectionSettings(),
     val bufferSettings: BufferSettings = BufferSettings(),
     // Audio settings
     val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
@@ -560,6 +574,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val subtitleOutlineEnabledKey = booleanPreferencesKey("subtitle_outline_enabled")
     private val subtitleOutlineColorKey = intPreferencesKey("subtitle_outline_color")
     private val subtitleOutlineWidthKey = intPreferencesKey("subtitle_outline_width")
+    private val burnInProtectionEnabledKey = booleanPreferencesKey("subtitle_burn_in_protection_enabled")
+    private val burnInProtectionUserSaltKey = stringPreferencesKey("subtitle_burn_in_protection_user_salt")
 
     // Buffer settings keys
     private val minBufferMsKey = intPreferencesKey("min_buffer_ms")
@@ -887,10 +903,15 @@ class PlayerSettingsDataStore @Inject constructor(
                     verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
                     bold = prefs[subtitleBoldKey] ?: false,
                     textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
-                    backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
+                    backgroundColor = clampSubtitleBackgroundAlpha(
+                        prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb()
+                    ),
                     outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
                     outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
                     outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
+                ),
+                burnInProtection = BurnInProtectionSettings(
+                    enabled = prefs[burnInProtectionEnabledKey] ?: true
                 ),
                 bufferSettings = BufferSettings(
                     minBufferMs = prefs[minBufferMsKey] ?: BufferSettings.DEFAULT_MIN_BUFFER_MS,
@@ -1476,7 +1497,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setSubtitleBackgroundColor(color: Int) {
         store().edit { prefs ->
-            prefs[subtitleBackgroundColorKey] = color
+            prefs[subtitleBackgroundColorKey] = clampSubtitleBackgroundAlpha(color)
         }
     }
 
@@ -1496,6 +1517,28 @@ class PlayerSettingsDataStore @Inject constructor(
         store().edit { prefs ->
             prefs[subtitleOutlineWidthKey] = width.coerceIn(1, 5)
         }
+    }
+
+    suspend fun setBurnInProtectionEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[burnInProtectionEnabledKey] = enabled
+        }
+    }
+
+    suspend fun getOrCreateBurnInProtectionUserSalt(): String {
+        val existing = store().data.first()[burnInProtectionUserSaltKey]
+        if (!existing.isNullOrBlank()) return existing
+
+        var committed = UUID.randomUUID().toString()
+        store().edit { prefs ->
+            val current = prefs[burnInProtectionUserSaltKey]
+            if (!current.isNullOrBlank()) {
+                committed = current
+            } else {
+                prefs[burnInProtectionUserSaltKey] = committed
+            }
+        }
+        return committed
     }
 
     // Buffer settings functions

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.runtime.Composable
@@ -51,10 +52,10 @@ private val subtitleColors = listOf(
 
 private val subtitleBackgroundColors = listOf(
     Color.Transparent,
-    Color.Black,
+    Color(0xBF000000),
     Color(0x80000000),
-    Color(0xFF1A1A1A),
-    Color(0xFF2D2D2D)
+    Color(0xBF1A1A1A),
+    Color(0xBF2D2D2D)
 )
 
 private val subtitleOutlineColors = listOf(
@@ -76,6 +77,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
+    onSetBurnInProtectionEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -86,6 +88,18 @@ internal fun LazyListScope.subtitleSettingsItems(
             style = MaterialTheme.typography.titleMedium,
             color = NexioColors.TextSecondary,
             modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
+        )
+    }
+
+    item(key = "subtitle_burn_in_protection") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Shield,
+            title = stringResource(R.string.subtitle_burn_in_protection_title),
+            subtitle = stringResource(R.string.subtitle_burn_in_protection_subtitle),
+            isChecked = playerSettings.burnInProtection.enabled,
+            onCheckedChange = onSetBurnInProtectionEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
