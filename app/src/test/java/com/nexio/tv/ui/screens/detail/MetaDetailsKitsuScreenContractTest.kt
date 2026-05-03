@@ -20,14 +20,14 @@ class MetaDetailsKitsuScreenContractTest {
     }
 
     @Test
-    fun `anime detail suppresses ratings and reviews tabs`() {
+    fun `anime detail suppresses ratings but can render Kitsu reviews tab`() {
         val projectRoot = System.getProperty("user.dir")
             ?: error("Cannot determine project root")
         val screenFile = File(projectRoot, "app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsScreen.kt")
         assertTrue("MetaDetailsScreen.kt must exist", screenFile.exists())
 
         val source = screenFile.readText()
-        assertTrue(source.contains("val hasReviewsSection = !isAnimeDetail"))
+        assertTrue(source.contains("val hasReviewsSection = isReviewsLoading || reviews.isNotEmpty() || !reviewsError.isNullOrBlank()"))
         assertTrue(source.contains("val hasRatingsSection = isTvShow && !isAnimeDetail"))
     }
 }

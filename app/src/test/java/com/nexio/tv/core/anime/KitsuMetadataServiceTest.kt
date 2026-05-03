@@ -28,8 +28,12 @@ import com.nexio.tv.data.remote.api.KitsuMediaRelationshipRelationships
 import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
 import com.nexio.tv.data.remote.api.KitsuResourceResponse
 import com.nexio.tv.data.remote.api.KitsuResourceIdentifier
+import com.nexio.tv.data.remote.api.KitsuReviewAttributes
+import com.nexio.tv.data.remote.api.KitsuReviewRelationships
+import com.nexio.tv.data.remote.api.KitsuReviewResource
 import com.nexio.tv.data.remote.api.KitsuToOneRelationship
 import com.nexio.tv.data.repository.KitsuAuthService
+import com.nexio.tv.domain.model.MetaReviewSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -303,7 +307,30 @@ class KitsuMetadataServiceTest {
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
-        coEvery { api.getCastingsByMedia(null, "1", "person,character", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeCharacters(null, "1", "character", 20, 0) } returns Response.success(
+            KitsuCollectionResponse(
+                data = listOf(
+                    KitsuAnimeCharacterResource(
+                        id = "anime-character-1",
+                        attributes = KitsuAnimeCharacterAttributes(role = "main"),
+                        relationships = KitsuAnimeCharacterRelationships(
+                            character = KitsuToOneRelationship(KitsuResourceIdentifier(id = "char-1", type = "characters"))
+                        )
+                    )
+                ),
+                included = listOf(
+                    KitsuIncludedResource(
+                        id = "char-1",
+                        type = "characters",
+                        attributes = mapOf(
+                            "name" to "Spike Spiegel",
+                            "image" to mapOf("original" to "https://media.kitsu.io/spike.jpg")
+                        )
+                    )
+                )
+            )
+        )
+        coEvery { api.getCastingsByMedia(null, "1", "person,character", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuCastingResource(
@@ -340,7 +367,7 @@ class KitsuMetadataServiceTest {
                 )
             )
         )
-        coEvery { api.getAnimeStaff(null, "1", "person", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeStaff(null, "1", "person", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuAnimeStaffResource(
@@ -360,7 +387,7 @@ class KitsuMetadataServiceTest {
                 )
             )
         )
-        coEvery { api.getAnimeProductions(null, "1", "producer", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeProductions(null, "1", "producer", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuAnimeProductionResource(
@@ -380,7 +407,7 @@ class KitsuMetadataServiceTest {
                 )
             )
         )
-        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuMediaRelationshipResource(
@@ -409,12 +436,12 @@ class KitsuMetadataServiceTest {
 
         assertEquals("char-1", detail?.characters?.single()?.characterId)
         assertEquals("Spike Spiegel", detail?.characters?.single()?.characterName)
-        assertEquals("Voice Actor", detail?.characters?.single()?.role)
+        assertEquals("main", detail?.characters?.single()?.role)
         assertEquals("https://media.kitsu.io/spike.jpg", detail?.characters?.single()?.characterImage)
-        assertEquals("person-actor-1", detail?.characters?.single()?.actorId)
-        assertEquals("Koichi Yamadera", detail?.characters?.single()?.actorName)
-        assertEquals("https://media.kitsu.io/yamadera.jpg", detail?.characters?.single()?.actorImage)
-        assertEquals("Japanese", detail?.characters?.single()?.language)
+        assertEquals(null, detail?.characters?.single()?.actorId)
+        assertEquals(null, detail?.characters?.single()?.actorName)
+        assertEquals(null, detail?.characters?.single()?.actorImage)
+        assertEquals(null, detail?.characters?.single()?.language)
         assertEquals("person-1", detail?.staff?.single()?.personId)
         assertEquals("Shinichiro Watanabe", detail?.staff?.single()?.personName)
         assertEquals("Director", detail?.staff?.single()?.role)
@@ -437,10 +464,11 @@ class KitsuMetadataServiceTest {
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
-        coEvery { api.getCastingsByMedia(null, "1", "person,character", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeStaff(null, "1", "person", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeProductions(null, "1", "producer", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeCharacters(null, "1", "character", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getCastingsByMedia(null, "1", "person,character", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeStaff(null, "1", "person", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeProductions(null, "1", "producer", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuMediaRelationshipResource(
@@ -483,11 +511,12 @@ class KitsuMetadataServiceTest {
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
-        coEvery { api.getCastingsByMedia(null, "1", "person,character", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeStaff(null, "1", "person", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeInstallments(null, "1", "media", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeProductions(null, "1", "producer", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeCharacters(null, "1", "character", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getCastingsByMedia(null, "1", "person,character", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeStaff(null, "1", "person", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeInstallments(null, "1", "media", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeProductions(null, "1", "producer", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuAnimeProductionResource(
@@ -522,10 +551,11 @@ class KitsuMetadataServiceTest {
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
-        coEvery { api.getAnimeStaff(null, "1", "person", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeProductions(null, "1", "producer", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getCastingsByMedia(null, "1", "person,character", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeCharacters(null, "1", "character", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeStaff(null, "1", "person", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeProductions(null, "1", "producer", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getCastingsByMedia(null, "1", "person,character", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuCastingResource(
@@ -568,10 +598,11 @@ class KitsuMetadataServiceTest {
 
         coEvery { mapper.resolveKitsuId(any(), any()) } returns "1"
         coEvery { auth.validAccessToken() } returns null
-        coEvery { api.getAnimeStaff(null, "1", "person", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeProductions(null, "1", "producer", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 40, 0) } returns Response.success(KitsuCollectionResponse())
-        coEvery { api.getCastingsByMedia(null, "1", "person,character", 40, 0) } returns Response.success(
+        coEvery { api.getAnimeCharacters(null, "1", "character", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeStaff(null, "1", "person", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeProductions(null, "1", "producer", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getAnimeMediaRelationships(null, "1", "destination", 20, 0) } returns Response.success(KitsuCollectionResponse())
+        coEvery { api.getCastingsByMedia(null, "1", "person,character", 20, 0) } returns Response.success(
             KitsuCollectionResponse(
                 data = listOf(
                     KitsuCastingResource(
@@ -656,6 +687,54 @@ class KitsuMetadataServiceTest {
         assertEquals("Fullmetal Alchemist: Brotherhood", enrichment?.localizedTitle)
         coVerify(exactly = 1) { api.getAnime(null, "3936", any()) }
     }
+
+    @Test
+    fun `fetchReviews maps Kitsu reviews and applies page limit twenty`() = runTest {
+        val api = mockk<KitsuApi>()
+        val auth = mockk<KitsuAuthService>()
+        val service = service(api, mockk(relaxed = true), auth)
+
+        coEvery { auth.validAccessToken() } returns null
+        coEvery { api.getAnimeReviews(null, "12", "user", 20, 0) } returns Response.success(
+            KitsuCollectionResponse(
+                data = List(20) { index ->
+                    KitsuReviewResource(
+                        id = "review-$index",
+                        attributes = KitsuReviewAttributes(
+                            content = "Review body $index",
+                            rating = 18.0,
+                            createdAt = "2026-05-01T00:00:00.000Z",
+                            updatedAt = "2026-05-02T00:00:00.000Z",
+                            spoiler = index == 0
+                        ),
+                        relationships = KitsuReviewRelationships(
+                            user = KitsuToOneRelationship(KitsuResourceIdentifier(id = "4360", type = "users"))
+                        )
+                    )
+                },
+                included = listOf(
+                    KitsuIncludedResource(
+                        id = "4360",
+                        type = "users",
+                        attributes = mapOf("name" to "Zoro")
+                    )
+                )
+            )
+        )
+
+        val page = service.fetchReviews("kitsu:12", ContentMediaKind.SERIES, page = 1, limit = 50)
+
+        assertEquals(20, page.reviews.size)
+        assertEquals(true, page.hasMore)
+        assertEquals(2, page.nextPage)
+        assertEquals("review-0", page.reviews.first().id)
+        assertEquals("Zoro", page.reviews.first().author)
+        assertEquals(9.0, page.reviews.first().rating)
+        assertEquals(MetaReviewSource.KITSU, page.reviews.first().source)
+        assertEquals(true, page.reviews.first().hasSpoiler)
+        coVerify(exactly = 1) { api.getAnimeReviews(null, "12", "user", 20, 0) }
+    }
+
     private fun service(
         api: KitsuApi,
         mapper: AnimeIdMappingService,

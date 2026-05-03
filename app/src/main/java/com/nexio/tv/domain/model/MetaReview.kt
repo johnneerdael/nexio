@@ -4,7 +4,8 @@ import androidx.compose.runtime.Immutable
 
 enum class MetaReviewSource {
     TMDB,
-    TRAKT
+    TRAKT,
+    KITSU
 }
 
 enum class MetaReviewType {

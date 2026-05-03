@@ -259,6 +259,11 @@ private fun ReviewSourceBadge(source: MetaReviewSource) {
             Color(0xFFF35A5A),
             Color(0xFF351518)
         )
+        MetaReviewSource.KITSU -> Triple(
+            "KITSU",
+            Color(0xFFFF8BCB),
+            Color(0xFF37172B)
+        )
     }
 
     Box(

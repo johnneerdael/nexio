@@ -63,6 +63,7 @@ object KitsuApiShapes {
     const val ANIME_STAFF = "kitsu.anime_staff"
     const val ANIME_PRODUCTIONS = "kitsu.anime_productions"
     const val MEDIA_RELATIONSHIPS = "kitsu.media_relationships"
+    const val ANIME_REVIEWS = "kitsu.anime.reviews"
     const val SEARCH_TEXT = "kitsu.search.text"
 }
 

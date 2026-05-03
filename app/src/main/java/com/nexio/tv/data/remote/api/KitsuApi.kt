@@ -45,7 +45,7 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Path("id") id: String,
         @Query("include") include: String = "character",
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>
 
@@ -54,7 +54,7 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Path("id") id: String,
         @Query("include") include: String = "person",
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeStaffResource>>
 
@@ -63,7 +63,7 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Path("id") id: String,
         @Query("include") include: String = "producer",
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeProductionResource>>
 
@@ -72,7 +72,7 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Path("id") id: String,
         @Query("include") include: String = "destination",
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuMediaRelationshipResource>>
 
@@ -81,42 +81,51 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Path("id") id: String,
         @Query("include") include: String = "media",
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuInstallmentResource>>
+
+    @GET("anime/{id}/reviews")
+    suspend fun getAnimeReviews(
+        @Header("Authorization") authorization: String? = null,
+        @Path("id") id: String,
+        @Query("include") include: String = "user",
+        @Query("page[limit]") limit: Int = 20,
+        @Query("page[offset]") offset: Int = 0
+    ): Response<KitsuCollectionResponse<KitsuReviewResource>>
 
     @GET("characters")
     suspend fun getCharacters(
         @Header("Authorization") authorization: String? = null,
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
 
     @GET("castings")
     suspend fun getCastings(
         @Header("Authorization") authorization: String? = null,
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
 
     @GET("people")
     suspend fun getPeople(
         @Header("Authorization") authorization: String? = null,
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
 
     @GET("producers")
     suspend fun getProducers(
         @Header("Authorization") authorization: String? = null,
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
 
     @GET("franchises")
     suspend fun getFranchises(
         @Header("Authorization") authorization: String? = null,
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuIncludedResource>>
 
@@ -125,7 +134,7 @@ interface KitsuApi {
         @Header("Authorization") authorization: String? = null,
         @Query("filter[mediaId]") mediaId: String,
         @Query("include") include: String = "person,character",
-        @Query("page[limit]") limit: Int = 40,
+        @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuCastingResource>>
 }
@@ -199,6 +208,14 @@ data class KitsuCastingResource(
 )
 
 @JsonClass(generateAdapter = true)
+data class KitsuReviewResource(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "attributes") val attributes: KitsuReviewAttributes? = null,
+    @Json(name = "relationships") val relationships: KitsuReviewRelationships? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class KitsuAnimeAttributes(
     @Json(name = "canonicalTitle") val canonicalTitle: String? = null,
     @Json(name = "titles") val titles: Map<String, String?>? = null,
@@ -256,6 +273,15 @@ data class KitsuCastingAttributes(
 )
 
 @JsonClass(generateAdapter = true)
+data class KitsuReviewAttributes(
+    @Json(name = "content") val content: String? = null,
+    @Json(name = "rating") val rating: Double? = null,
+    @Json(name = "createdAt") val createdAt: String? = null,
+    @Json(name = "updatedAt") val updatedAt: String? = null,
+    @Json(name = "spoiler") val spoiler: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class KitsuImage(
     @Json(name = "tiny") val tiny: String? = null,
     @Json(name = "small") val small: String? = null,
@@ -302,6 +328,11 @@ data class KitsuInstallmentRelationships(
 data class KitsuCastingRelationships(
     @Json(name = "person") val person: KitsuToOneRelationship? = null,
     @Json(name = "character") val character: KitsuToOneRelationship? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuReviewRelationships(
+    @Json(name = "user") val user: KitsuToOneRelationship? = null
 )
 
 @JsonClass(generateAdapter = true)

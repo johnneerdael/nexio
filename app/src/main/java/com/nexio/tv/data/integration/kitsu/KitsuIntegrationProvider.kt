@@ -24,6 +24,7 @@ import com.nexio.tv.data.remote.api.KitsuAnimeStaffResource
 import com.nexio.tv.data.remote.api.KitsuCastingResource
 import com.nexio.tv.data.remote.api.KitsuCollectionResponse
 import com.nexio.tv.data.remote.api.KitsuMediaRelationshipResource
+import com.nexio.tv.data.remote.api.KitsuReviewResource
 import com.nexio.tv.data.repository.KitsuAuthService
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,8 +63,9 @@ class KitsuIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-                val response = runCatching { kitsuApi.getAnime(authorization, kitsuId) }
+                val response = fetchPublicKitsuResponse { authorization ->
+                    kitsuApi.getAnime(authorization, kitsuId)
+                }
                     .getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
                 val body = response.body()?.data ?: return@IntegrationSpec IntegrationLoadResult.HttpError(response.code(), reason = "missing_body")
                 val enrichment = mapper(body) ?: return@IntegrationSpec IntegrationLoadResult.HttpError(response.code(), reason = "mapping_failed")
@@ -95,9 +97,8 @@ class KitsuIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
                 IntegrationLoadResult.Success(
-                    mapper(fetchEpisodePages(authorization = authorization, kitsuId = kitsuId))
+                    mapper(fetchEpisodePages(authorization = publicAuthorization(), kitsuId = kitsuId))
                 )
             }
         )
@@ -110,13 +111,55 @@ class KitsuIntegrationProvider @Inject constructor(
         mediaKind: ContentMediaKind,
         mapper: (KitsuAdvancedDetailPayload) -> KitsuAdvancedAnimeDetail
     ): KitsuAdvancedAnimeDetail? {
+        val animeCharacters = fetchAnimeCharacters(rawId, kitsuId, mediaKind)
+        val castings = if (animeCharacters?.data.orEmpty().isEmpty()) {
+            fetchCastings(rawId, kitsuId, mediaKind)
+        } else {
+            null
+        }
         val payload = KitsuAdvancedDetailPayload(
-            castingsResponse = fetchCastings(rawId, kitsuId, mediaKind)?.let { Response.success(it) },
+            animeCharactersResponse = animeCharacters?.let { Response.success(it) },
+            castingsResponse = castings?.let { Response.success(it) },
             animeStaffResponse = fetchAnimeStaff(rawId, kitsuId, mediaKind)?.let { Response.success(it) },
             animeProductionsResponse = fetchAnimeProductions(rawId, kitsuId, mediaKind)?.let { Response.success(it) },
             mediaRelationshipsResponse = fetchMediaRelationships(rawId, kitsuId, mediaKind)?.let { Response.success(it) }
         )
         return mapper(payload)
+    }
+
+    suspend fun fetchAnimeCharacters(
+        rawId: String,
+        kitsuId: String,
+        mediaKind: ContentMediaKind
+    ): KitsuCollectionResponse<KitsuAnimeCharacterResource>? {
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.KITSU,
+            apiShapeId = KitsuApiShapes.CASTINGS,
+            operationKey = "kitsu.anime_characters",
+            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_characters:v2",
+            codec = gsonCodec<KitsuCollectionResponse<KitsuAnimeCharacterResource>>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = KITSU_ADVANCED_TTL_MS,
+                staleAfterExpiryMs = KITSU_ADVANCED_STALE_MS
+            ),
+            ownership = ownershipFactory.media(
+                mediaType = if (mediaKind == ContentMediaKind.MOVIE) "movie" else "series",
+                rawId = rawId
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            load = {
+                val response = fetchPublicKitsuResponse { authorization ->
+                    kitsuApi.getAnimeCharacters(authorization = authorization, id = kitsuId)
+                }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
+                if (!response.isSuccessful) {
+                    IntegrationLoadResult.HttpError(response.code())
+                } else {
+                    response.body()?.let { IntegrationLoadResult.Success(it) }
+                        ?: IntegrationLoadResult.HttpError(404, reason = "kitsu_anime_characters_missing")
+                }
+            }
+        )
+        return runtime.get(spec).valueOrNull()
     }
 
     suspend fun fetchCastings(
@@ -131,8 +174,8 @@ class KitsuIntegrationProvider @Inject constructor(
             cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:castings",
             codec = gsonCodec<KitsuCollectionResponse<KitsuCastingResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
-                ttlMs = 24L * 60L * 60L * 1000L,
-                staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
+                ttlMs = KITSU_ADVANCED_TTL_MS,
+                staleAfterExpiryMs = KITSU_ADVANCED_STALE_MS
             ),
             ownership = ownershipFactory.media(
                 mediaType = if (mediaKind == ContentMediaKind.MOVIE) "movie" else "series",
@@ -140,8 +183,7 @@ class KitsuIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-                val response = runCatching {
+                val response = fetchPublicKitsuResponse { authorization ->
                     kitsuApi.getCastingsByMedia(authorization = authorization, mediaId = kitsuId)
                 }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
                 if (!response.isSuccessful) {
@@ -167,8 +209,8 @@ class KitsuIntegrationProvider @Inject constructor(
             cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_staff",
             codec = gsonCodec<KitsuCollectionResponse<KitsuAnimeStaffResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
-                ttlMs = 24L * 60L * 60L * 1000L,
-                staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
+                ttlMs = KITSU_ADVANCED_TTL_MS,
+                staleAfterExpiryMs = KITSU_ADVANCED_STALE_MS
             ),
             ownership = ownershipFactory.media(
                 mediaType = if (mediaKind == ContentMediaKind.MOVIE) "movie" else "series",
@@ -176,8 +218,7 @@ class KitsuIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-                val response = runCatching {
+                val response = fetchPublicKitsuResponse { authorization ->
                     kitsuApi.getAnimeStaff(authorization = authorization, id = kitsuId)
                 }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
                 if (!response.isSuccessful) {
@@ -203,8 +244,8 @@ class KitsuIntegrationProvider @Inject constructor(
             cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_productions",
             codec = gsonCodec<KitsuCollectionResponse<KitsuAnimeProductionResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
-                ttlMs = 24L * 60L * 60L * 1000L,
-                staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
+                ttlMs = KITSU_ADVANCED_TTL_MS,
+                staleAfterExpiryMs = KITSU_ADVANCED_STALE_MS
             ),
             ownership = ownershipFactory.media(
                 mediaType = if (mediaKind == ContentMediaKind.MOVIE) "movie" else "series",
@@ -212,8 +253,7 @@ class KitsuIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-                val response = runCatching {
+                val response = fetchPublicKitsuResponse { authorization ->
                     kitsuApi.getAnimeProductions(authorization = authorization, id = kitsuId)
                 }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
                 if (!response.isSuccessful) {
@@ -239,6 +279,46 @@ class KitsuIntegrationProvider @Inject constructor(
             cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:media_relationships",
             codec = gsonCodec<KitsuCollectionResponse<KitsuMediaRelationshipResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = KITSU_ADVANCED_TTL_MS,
+                staleAfterExpiryMs = KITSU_ADVANCED_STALE_MS
+            ),
+            ownership = ownershipFactory.media(
+                mediaType = if (mediaKind == ContentMediaKind.MOVIE) "movie" else "series",
+                rawId = rawId
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            load = {
+                val response = fetchPublicKitsuResponse { authorization ->
+                    kitsuApi.getAnimeMediaRelationships(authorization = authorization, id = kitsuId)
+                }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
+                if (!response.isSuccessful) {
+                    IntegrationLoadResult.HttpError(response.code())
+                } else {
+                    response.body()?.let { IntegrationLoadResult.Success(it) }
+                        ?: IntegrationLoadResult.HttpError(404, reason = "kitsu_media_relationships_missing")
+                }
+            }
+        )
+        return runtime.get(spec).valueOrNull()
+    }
+
+    suspend fun fetchReviews(
+        rawId: String,
+        kitsuId: String,
+        mediaKind: ContentMediaKind,
+        page: Int = 1,
+        limit: Int = KITSU_PAGE_LIMIT
+    ): KitsuCollectionResponse<KitsuReviewResource>? {
+        val safePage = page.coerceAtLeast(1)
+        val safeLimit = limit.coerceIn(1, KITSU_PAGE_LIMIT)
+        val offset = (safePage - 1) * safeLimit
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.KITSU,
+            apiShapeId = KitsuApiShapes.ANIME_REVIEWS,
+            operationKey = "kitsu.anime_reviews",
+            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:reviews:v1:limit:$safeLimit:offset:$offset",
+            codec = gsonCodec<KitsuCollectionResponse<KitsuReviewResource>>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
                 staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
             ),
@@ -248,15 +328,19 @@ class KitsuIntegrationProvider @Inject constructor(
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-                val response = runCatching {
-                    kitsuApi.getAnimeMediaRelationships(authorization = authorization, id = kitsuId)
+                val response = fetchPublicKitsuResponse { authorization ->
+                    kitsuApi.getAnimeReviews(
+                        authorization = authorization,
+                        id = kitsuId,
+                        limit = safeLimit,
+                        offset = offset
+                    )
                 }.getOrElse { return@IntegrationSpec IntegrationLoadResult.NetworkError(it) }
                 if (!response.isSuccessful) {
                     IntegrationLoadResult.HttpError(response.code())
                 } else {
                     response.body()?.let { IntegrationLoadResult.Success(it) }
-                        ?: IntegrationLoadResult.HttpError(404, reason = "kitsu_media_relationships_missing")
+                        ?: IntegrationLoadResult.HttpError(404, reason = "kitsu_reviews_missing")
                 }
             }
         )
@@ -277,8 +361,7 @@ class KitsuIntegrationProvider @Inject constructor(
             cachePolicy = IntegrationCachePolicy.ObserveOnly("kitsu_text_search_request_scoped"),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
-                val authorization = kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
-                val response = runCatching {
+                val response = fetchPublicKitsuResponse { authorization ->
                     kitsuApi.getAnimeCollection(
                         authorization = authorization,
                         text = query,
@@ -306,12 +389,14 @@ class KitsuIntegrationProvider @Inject constructor(
         var pageCount = 0
         while (pageCount < KITSU_EPISODE_MAX_PAGES) {
             val response = runCatching {
-                kitsuApi.getAnimeEpisodes(
-                    authorization = authorization,
-                    id = kitsuId,
-                    limit = KITSU_EPISODE_PAGE_LIMIT,
-                    offset = offset
-                )
+                fetchPublicKitsuResponse(authorization) { requestAuthorization ->
+                    kitsuApi.getAnimeEpisodes(
+                        authorization = requestAuthorization,
+                        id = kitsuId,
+                        limit = KITSU_EPISODE_PAGE_LIMIT,
+                        offset = offset
+                    )
+                }.getOrThrow()
             }.getOrNull() ?: break
 
             if (!response.isSuccessful) break
@@ -325,14 +410,39 @@ class KitsuIntegrationProvider @Inject constructor(
         }
         return episodes
     }
+
+    private suspend fun publicAuthorization(): String? =
+        kitsuAuthService.validAccessToken()?.let { "Bearer $it" }
+
+    private suspend fun <T> fetchPublicKitsuResponse(
+        request: suspend (authorization: String?) -> Response<T>
+    ): Result<Response<T>> =
+        fetchPublicKitsuResponse(publicAuthorization(), request)
+
+    private suspend fun <T> fetchPublicKitsuResponse(
+        authorization: String?,
+        request: suspend (authorization: String?) -> Response<T>
+    ): Result<Response<T>> {
+        val first = runCatching { request(authorization) }
+        val firstResponse = first.getOrElse { return Result.failure(it) }
+        if (authorization != null && firstResponse.code() in PUBLIC_AUTH_FALLBACK_CODES) {
+            return runCatching { request(null) }
+        }
+        return first
+    }
 }
 
 data class KitsuAdvancedDetailPayload(
+    val animeCharactersResponse: Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>?,
     val castingsResponse: Response<KitsuCollectionResponse<KitsuCastingResource>>?,
     val animeStaffResponse: Response<KitsuCollectionResponse<KitsuAnimeStaffResource>>?,
     val animeProductionsResponse: Response<KitsuCollectionResponse<KitsuAnimeProductionResource>>?,
     val mediaRelationshipsResponse: Response<KitsuCollectionResponse<KitsuMediaRelationshipResource>>?
 )
 
-private const val KITSU_EPISODE_PAGE_LIMIT = 20
+private const val KITSU_PAGE_LIMIT = 20
+private const val KITSU_EPISODE_PAGE_LIMIT = KITSU_PAGE_LIMIT
 private const val KITSU_EPISODE_MAX_PAGES = 100
+private const val KITSU_ADVANCED_TTL_MS = 7L * 24L * 60L * 60L * 1000L
+private const val KITSU_ADVANCED_STALE_MS = 30L * 24L * 60L * 60L * 1000L
+private val PUBLIC_AUTH_FALLBACK_CODES = setOf(401, 403)

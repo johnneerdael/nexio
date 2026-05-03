@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.detail
 
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
@@ -15,6 +16,8 @@ import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaLink
+import com.nexio.tv.domain.model.MetaReview
+import com.nexio.tv.domain.model.MetaReviewSource
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
@@ -58,6 +61,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
 
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.KITSU,
@@ -148,6 +152,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
 
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.KITSU,
@@ -212,6 +217,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
 
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.KITSU,
@@ -273,6 +279,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
 
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.KITSU,
@@ -317,7 +324,20 @@ class MetaDetailsKitsuAdvancedMetadataTest {
             itemType = "series",
             tmdbMetadataService = tmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
-            kitsuMetadataService = kitsuMetadataService
+            kitsuMetadataService = kitsuMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useBasicInfo = true,
+                useDetails = true,
+                useCredits = true,
+                useProductions = true,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = true,
+                useReviews = true,
+                useCollections = false
+            )
         )
 
         runCurrent()
@@ -331,6 +351,130 @@ class MetaDetailsKitsuAdvancedMetadataTest {
 
         advanceTimeBy(10_000)
         advanceUntilIdle()
+    }
+
+    @Test
+    fun `anime series detail stays loading until Kitsu episode metadata is available`() = runTest(dispatcher) {
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = null,
+                localizedTitle = "One Piece",
+                language = "ja"
+            )
+        )
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } coAnswers {
+            delay(10_000)
+            TvMetadataDecision(
+                provider = TvProvider.KITSU,
+                reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to com.nexio.tv.core.tvdb.TvEpisodeMetadata(
+                        providerEpisodeId = "kitsu:103482",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        title = "I'm Luffy! The Man Who's Gonna Be King of the Pirates!",
+                        overview = "Luffy begins his voyage.",
+                        thumbnail = "https://media.kitsu.test/one-piece-e1.jpg",
+                        runtimeMinutes = 24
+                    )
+                )
+            )
+        }
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:12", any(), "ja") } returns KitsuAdvancedAnimeDetail()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildAnimeMeta().copy(id = "kitsu:12", name = "One Piece"),
+            itemId = "kitsu:12",
+            itemType = "series",
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useBasicInfo = true,
+                useDetails = true,
+                useCredits = true,
+                useProductions = true,
+                useNetworks = false,
+                useEpisodes = true,
+                useMoreLikeThis = true,
+                useReviews = false,
+                useCollections = false
+            )
+        )
+
+        runCurrent()
+
+        assertEquals(true, viewModel.uiState.value.isLoading)
+        assertEquals(null, viewModel.uiState.value.meta)
+
+        advanceTimeBy(10_000)
+        advanceUntilIdle()
+
+        val meta = viewModel.uiState.value.meta!!
+        assertEquals(false, viewModel.uiState.value.isLoading)
+        assertEquals(1, meta.videos.size)
+        assertEquals("I'm Luffy! The Man Who's Gonna Be King of the Pirates!", meta.videos.single().title)
+    }
+
+    @Test
+    fun `anime detail loads Kitsu reviews through metadata secondary repository`() = runTest(dispatcher) {
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(seriesTvdbId = null, localizedTitle = "One Piece", language = "ja")
+        )
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:12", any(), "ja") } returns KitsuAdvancedAnimeDetail()
+        coEvery { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 1, limit = 20) } returns ReviewsPage(
+            reviews = listOf(
+                MetaReview(
+                    id = "2355",
+                    author = "Zoro",
+                    content = "Before I begin, let me address one thing.",
+                    rating = 9.0,
+                    source = MetaReviewSource.KITSU
+                )
+            ),
+            hasMore = false,
+            nextPage = null
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildAnimeMeta().copy(id = "kitsu:12", name = "One Piece"),
+            itemId = "kitsu:12",
+            itemType = "series",
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useBasicInfo = true,
+                useDetails = true,
+                useCredits = true,
+                useProductions = true,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = true,
+                useReviews = true,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(MetaReviewSource.KITSU, viewModel.uiState.value.reviews.single().source)
+        assertEquals("Zoro", viewModel.uiState.value.reviews.single().author)
+        assertEquals(false, viewModel.uiState.value.isReviewsLoading)
     }
 
     @Test
@@ -460,4 +604,10 @@ class MetaDetailsKitsuAdvancedMetadataTest {
             links = emptyList()
         )
     }
+
+    private fun emptyReviewsPage(): ReviewsPage = ReviewsPage(
+        reviews = emptyList(),
+        hasMore = false,
+        nextPage = null
+    )
 }
