@@ -586,6 +586,12 @@ android {
             versionNameSuffix = "-profileable"
             matchingFallbacks += listOf("release")
         }
+        create("releaseEarlyAccess") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".earlyaccess"
+            versionNameSuffix = "-earlyaccess"
+            matchingFallbacks += listOf("release")
+        }
     }
 
     testOptions {
@@ -650,6 +656,7 @@ android {
                 "src/main/_jni_disabled",
                 "src/main/jniLibs"
             )
+            assets.setSrcDirs(emptyList<Any>())
         }
     }
 
