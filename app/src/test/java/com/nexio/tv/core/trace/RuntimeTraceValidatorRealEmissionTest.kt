@@ -6,10 +6,15 @@ import com.nexio.tv.core.integration.DefaultIntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationBackoffManager
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
+import com.nexio.tv.core.integration.IntegrationCachePolicy
+import com.nexio.tv.core.integration.IntegrationCodec
+import com.nexio.tv.core.integration.IntegrationFetchResult
+import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationSingleFlight
+import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.IntegrationWorkClass
 import com.nexio.tv.core.integration.InMemoryIntegrationProviderBackoffDao
 import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
@@ -51,6 +56,12 @@ import java.io.File
  */
 class RuntimeTraceValidatorRealEmissionTest {
     @get:Rule val tmp = TemporaryFolder()
+
+    private object StringIntegrationCodec : IntegrationCodec<String> {
+        override val mimeType: String = "text/plain"
+        override fun encode(value: String): ByteArray = value.toByteArray(Charsets.UTF_8)
+        override fun decode(bytes: ByteArray): String = bytes.toString(Charsets.UTF_8)
+    }
 
     @After
     fun resetStaticSinks() {
@@ -197,6 +208,84 @@ class RuntimeTraceValidatorRealEmissionTest {
             TraceVerdict.PASS,
             report.verdict
         )
+    }
+
+    @Test
+    fun `composite production trace sink records runtime cache decisions with active session id`() = runTest {
+        val tracesRoot = tmp.newFolder("composite-traces")
+        val gson = Gson()
+        val manager = TraceSessionManager(
+            tracesRoot = tracesRoot,
+            gson = gson,
+            clock = { 1_700_000_000_000L },
+            buildInfo = TraceBuildInfo(
+                appVersion = "1.0",
+                buildType = "releaseProfileable",
+                gitSha = "deadbeef",
+                deviceModel = "Pixel",
+                androidVersion = "14"
+            )
+        )
+        manager.start(TraceMode.SAFE_METADATA_RUNTIME, activeProfileHash = "ph_active")
+        val session = checkNotNull(manager.activeSession())
+        val sink = CompositeRuntimeTraceSink(
+            listOf(
+                manager.activeSink(),
+                LogcatRuntimeTraceSink(
+                    gate = object : LogcatChannelGate {
+                        override fun isEnabled(channel: LogcatTraceChannel): Boolean = false
+                    }
+                )
+            )
+        )
+        val registry = defaultIntegrationPolicyRegistry()
+        val runtime = DefaultIntegrationRuntime(
+            cacheStore = ByteArrayIntegrationCacheStore(),
+            requestGate = ProviderRequestGate(registry),
+            backoffManager = IntegrationBackoffManager(InMemoryIntegrationProviderBackoffDao()),
+            singleFlight = IntegrationSingleFlight(),
+            playbackGate = IntegrationPlaybackGate(),
+            registry = registry,
+            auditSink = RecordingIntegrationAuditSink(),
+            traceSink = sink
+        )
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.KITSU,
+            apiShapeId = "kitsu.anime.core",
+            operationKey = "kitsu.anime.core:7442:en",
+            cacheKey = "metadata:KITSU:kitsu.anime.core:7442:en",
+            codec = StringIntegrationCodec,
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 60_000L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = IntegrationScope.GlobalContent,
+            profileContext = null,
+            load = { IntegrationLoadResult.Success("payload") }
+        )
+
+        val first = runtime.get(spec)
+        val second = runtime.get(spec)
+
+        assertTrue("first runtime.get should return Updated, got $first", first is IntegrationFetchResult.Updated)
+        assertTrue("second runtime.get should return Fresh, got $second", second is IntegrationFetchResult.Fresh)
+
+        manager.stop()
+        val eventsFile = File(File(tracesRoot, session.traceSessionId), "trace-events.jsonl")
+        assertTrue("trace-events.jsonl exists", eventsFile.isFile)
+        val parsed = eventsFile.readLines()
+            .filter { it.isNotBlank() }
+            .map { gson.fromJson(it, TraceEventEnvelope::class.java) as TraceEventEnvelope<*> }
+        val hit = parsed.firstOrNull { event ->
+            val payload = event.payload as? Map<*, *> ?: return@firstOrNull false
+            event.eventType == "runtime.cache_decision" &&
+                payload["decision"] == TraceCacheDecision.HIT.name &&
+                payload["networkSuppressed"] == true
+        }
+
+        assertTrue(
+            "expected runtime.cache_decision HIT with networkSuppressed=true, got events=${parsed.map { it.eventType }}",
+            hit != null
+        )
+        assertEquals(session.traceSessionId, hit!!.traceSessionId)
     }
 
     /**

@@ -5,6 +5,9 @@ import kotlinx.coroutines.CancellationException
 class CompositeRuntimeTraceSink(
     private val sinks: List<RuntimeTraceSink>
 ) : RuntimeTraceSink {
+    override fun activeTraceSessionId(): String? =
+        sinks.firstNotNullOfOrNull { it.activeTraceSessionId() }
+
     override fun emit(event: TraceEventEnvelope<*>) {
         for (sink in sinks) {
             try {

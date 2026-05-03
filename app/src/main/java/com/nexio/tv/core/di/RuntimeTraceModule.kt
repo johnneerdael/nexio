@@ -195,6 +195,8 @@ object RuntimeTraceModule {
 private class ActiveSessionRuntimeTraceSink(
     private val manager: TraceSessionManager
 ) : RuntimeTraceSink {
+    override fun activeTraceSessionId(): String? = manager.activeSession()?.traceSessionId
+
     override fun emit(event: TraceEventEnvelope<*>) {
         manager.activeSink().emit(event)
     }

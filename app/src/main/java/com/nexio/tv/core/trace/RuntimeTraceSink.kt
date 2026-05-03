@@ -1,6 +1,7 @@
 package com.nexio.tv.core.trace
 
 interface RuntimeTraceSink {
+    fun activeTraceSessionId(): String? = null
     fun emit(event: TraceEventEnvelope<*>)
     fun eventsWritten(): Long
     fun eventsDropped(): Long
