@@ -61,6 +61,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
@@ -322,7 +323,7 @@ fun ContentCard(
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
+                    border = BorderStroke(posterCardStyle.focusedBorderWidth, rememberBreathingFocusRing()),
                     shape = cardShape
                 )
             ),

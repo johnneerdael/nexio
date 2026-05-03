@@ -12,6 +12,11 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal fun migrateThemePreference(stored: String?): AppTheme {
+    if (stored == "WHITE") return AppTheme.CRIMSON
+    return runCatching { AppTheme.valueOf(stored ?: "") }.getOrDefault(AppTheme.CRIMSON)
+}
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class ThemeDataStore @Inject constructor(
@@ -30,8 +35,7 @@ class ThemeDataStore @Inject constructor(
 
     val selectedTheme: Flow<AppTheme> = profileManager.activeProfileId.flatMapLatest { pid ->
         store(pid).data.map { prefs ->
-            val themeName = prefs[themeKey] ?: AppTheme.WHITE.name
-            runCatching { AppTheme.valueOf(themeName) }.getOrDefault(AppTheme.WHITE)
+            migrateThemePreference(prefs[themeKey])
         }
     }
 

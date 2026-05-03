@@ -784,7 +784,7 @@ class AccountSettingsSyncService @Inject constructor(
             TAG,
             "Applying remote layout order keys count=${settings.layout.homeCatalogOrderKeys.size} disabled count=${settings.layout.disabledHomeCatalogKeys.size}"
         )
-        themeDataStore.setTheme(enumValueOrDefault(settings.appearance.theme, AppTheme.WHITE))
+        themeDataStore.setTheme(enumValueOrDefault(settings.appearance.theme, AppTheme.CRIMSON))
         themeDataStore.setFont(enumValueOrDefault(settings.appearance.font, AppFont.INTER))
         // Locale: apply remote only when it is explicitly set to a language.
         // Never allow remote "system" to clear/override a local preference.

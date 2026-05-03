@@ -196,7 +196,7 @@ private const val STARTUP_SPLASH_HARD_TIMEOUT_MS = 12_000L
 private const val IDLE_SCREENSAVER_DEBUG_LOG_TAG = "IdleScreensaverDebug"
 
 private data class MainUiPrefs(
-    val theme: AppTheme = AppTheme.WHITE,
+    val theme: AppTheme = AppTheme.CRIMSON,
     val font: AppFont = AppFont.INTER,
     val hasChosenLayout: Boolean? = null,
     val sidebarCollapsed: Boolean = false,

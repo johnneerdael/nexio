@@ -37,12 +37,12 @@ val LocalNexioExtendedColors = staticCompositionLocalOf {
     )
 }
 
-val LocalAppTheme = staticCompositionLocalOf { AppTheme.WHITE }
+val LocalAppTheme = staticCompositionLocalOf { AppTheme.CRIMSON }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun NexioTheme(
-    appTheme: AppTheme = AppTheme.WHITE,
+    appTheme: AppTheme = AppTheme.CRIMSON,
     appFont: AppFont = AppFont.INTER,
     content: @Composable () -> Unit
 ) {

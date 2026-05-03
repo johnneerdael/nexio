@@ -44,6 +44,7 @@ import androidx.tv.material3.Text
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.ui.theme.rememberBreathingFocusRing
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -130,7 +131,7 @@ fun GridContentCard(
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
+                    border = BorderStroke(posterCardStyle.focusedBorderWidth, rememberBreathingFocusRing()),
                     shape = cardShape
                 )
             ),
