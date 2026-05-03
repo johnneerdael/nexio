@@ -125,6 +125,7 @@ internal fun PlaybackSettingsSections(
     onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
     onSetServiceWrapEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
+    onSetSkipPlaceholderStreamsEnabled: (Boolean) -> Unit,
     onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
@@ -411,6 +412,7 @@ internal fun PlaybackSettingsSections(
                 onSetDeduplicateGroupedStreamsEnabled = onSetDeduplicateGroupedStreamsEnabled,
                 onSetServiceWrapEnabled = onSetServiceWrapEnabled,
                 onSetFilterWebDolbyVisionStreamsEnabled = onSetFilterWebDolbyVisionStreamsEnabled,
+                onSetSkipPlaceholderStreamsEnabled = onSetSkipPlaceholderStreamsEnabled,
                 onSetFilterEpisodeMismatchStreamsEnabled = onSetFilterEpisodeMismatchStreamsEnabled,
                 onSetFilterMovieYearMismatchStreamsEnabled = onSetFilterMovieYearMismatchStreamsEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
@@ -1078,4 +1080,3 @@ private fun ExternalPlayerDialog(
         }
     }
 }
-

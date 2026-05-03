@@ -539,6 +539,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(enabled)
     }
 
+    suspend fun setSkipPlaceholderStreamsEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setSkipPlaceholderStreamsEnabled(enabled)
+    }
+
     suspend fun setFilterEpisodeMismatchStreamsEnabled(enabled: Boolean) {
         playerSettingsDataStore.setFilterEpisodeMismatchStreamsEnabled(enabled)
     }

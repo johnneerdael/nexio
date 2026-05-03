@@ -63,6 +63,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
     onSetServiceWrapEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
+    onSetSkipPlaceholderStreamsEnabled: (Boolean) -> Unit,
     onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
@@ -136,6 +137,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
             subtitle = stringResource(R.string.streams_filter_dv5_webdl_sub),
             isChecked = playerSettings.filterWebDolbyVisionStreamsEnabled,
             onCheckedChange = onSetFilterWebDolbyVisionStreamsEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "streams_skip_placeholder") {
+        ToggleSettingsItem(
+            icon = Icons.Default.FilterAlt,
+            title = stringResource(R.string.streams_skip_placeholder_title),
+            subtitle = stringResource(R.string.streams_skip_placeholder_sub),
+            isChecked = playerSettings.skipPlaceholderStreamsEnabled,
+            onCheckedChange = onSetSkipPlaceholderStreamsEnabled,
             onFocused = onItemFocused
         )
     }
