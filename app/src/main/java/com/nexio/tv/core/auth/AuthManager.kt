@@ -4,6 +4,7 @@ import android.util.Log
 import com.nexio.tv.data.integration.supabase.transport.TvLoginExchangeTransport
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
+import com.nexio.tv.data.local.DurableDeviceCredentialStore
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
 import com.nexio.tv.domain.model.AuthState
@@ -33,7 +34,8 @@ class AuthManager @Inject constructor(
     private val postgrest: Postgrest,
     private val tvLoginExchangeTransport: TvLoginExchangeTransport,
     private val authPresenceDataStore: AuthPresenceDataStore,
-    private val appOnboardingDataStore: AppOnboardingDataStore
+    private val appOnboardingDataStore: AppOnboardingDataStore,
+    private val durableDeviceCredentialStore: DurableDeviceCredentialStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -467,6 +469,10 @@ class AuthManager @Inject constructor(
                 deviceNonce = deviceNonce
             )
             auth.importAuthToken(result.accessToken, result.refreshToken)
+            durableDeviceCredentialStore.save(
+                devicePublicId = result.devicePublicId,
+                deviceSecret = result.deviceSecret
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to exchange TV login session", e)
