@@ -369,7 +369,6 @@
     <string name="sub_vertical_offset">Vertical Offset</string>
     <string name="sub_bold">Bold</string>
     <string name="sub_bold_sub">Use bold font weight for subtitles</string>
-    <string name="sub_text_color">Text Color</string>
     <string name="sub_bg_color">Background Color</string>
     <string name="sub_outline">Outline</string>
     <string name="sub_outline_sub">Add outline around subtitle text for better visibility</string>
@@ -1035,7 +1034,6 @@
     <string name="subtitle_no_builtin">No built-in subtitles available</string>
     <string name="subtitle_loading_addon">Loading subtitles from addons\u2026</string>
     <string name="subtitle_no_addon">No addon subtitles available</string>
-    <string name="subtitle_text_color">Text Color</string>
     <string name="subtitle_outline_color">Outline Color</string>
     <string name="subtitle_reset_defaults">Reset Defaults</string>
     <string name="subtitle_tab_builtin">Built-in</string>
@@ -1090,7 +1088,6 @@
     <string name="subtitle_style_reset">Reset</string>
     <string name="subtitle_style_font_size">Font Size</string>
     <string name="subtitle_style_bold">Bold</string>
-    <string name="subtitle_style_text_color">Text Color</string>
     <string name="subtitle_style_outline">Outline</string>
     <string name="subtitle_style_bottom_offset">Bottom Offset</string>
     <string name="subtitle_style_defaults">Defaults</string>
