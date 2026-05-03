@@ -13,6 +13,7 @@ import javax.inject.Singleton
 
 @Singleton
 class HyperHdrConfigDataStore @Inject constructor(
+    @com.nexio.tv.integrations.hyperhdr.di.HyperHdrPrefs
     private val dataStore: DataStore<Preferences>,
 ) {
     private object Keys {
