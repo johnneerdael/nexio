@@ -512,6 +512,189 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `fetch episode enrichment falls back to TVDB thumbnail when image is absent`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            image = null,
+                            thumbnail = "https://artworks.thetvdb.com/banners/v4/episode/1001/screencap/thumb.jpg"
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/1001/screencap/thumb.jpg",
+            episodes[1 to 1]?.thumbnail
+        )
+    }
+
+    @Test
+    fun `fetch episode enrichment normalizes relative TVDB image path`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(image = "/banners/v4/episode/1001/screencap/test.jpg")
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/1001/screencap/test.jpg",
+            episodes[1 to 1]?.thumbnail
+        )
+    }
+
+    @Test
+    fun `fetch episode enrichment uses TVDB 16 by 9 episode screencap as thumbnail`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 355567)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 7140390,
+                            seasonNumber = 1,
+                            number = 1,
+                            name = "The Name of the Game",
+                            image = "https://artworks.thetvdb.com/banners/episodes/355567/7140390.jpg",
+                            imageType = 11,
+                            thumbnail = null
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/episodes/355567/7140390.jpg",
+            episodes[1 to 1]?.thumbnail
+        )
+    }
+
+    @Test
+    fun `fetch episode enrichment normalizes relative TVDB episode screencap path`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 355567)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 0, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 8471571,
+                            image = "/banners/v4/episode/8471571/screencap/632237b344bfa.jpg",
+                            imageType = 11,
+                            number = 2,
+                            seasonNumber = 0,
+                            thumbnail = "https://art.example/fallback-thumb.jpg"
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(0), language = "en-US")
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/8471571/screencap/632237b344bfa.jpg",
+            episodes[0 to 2]?.thumbnail
+        )
+    }
+
+    @Test
+    fun `fetch episode enrichment accepts episode path when image type is absent`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 355567)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 7140390,
+                            image = "/banners/v4/episode/7140390/screencap/7140390.jpg",
+                            imageType = null,
+                            thumbnail = null
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertEquals(
+            "https://artworks.thetvdb.com/banners/v4/episode/7140390/screencap/7140390.jpg",
+            episodes[1 to 1]?.thumbnail
+        )
+    }
+
+    @Test
+    fun `fetch episode enrichment does not use non episode TVDB artwork image as thumbnail`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 355567)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord(
+                            id = 7140390,
+                            seasonNumber = 1,
+                            number = 1,
+                            image = "https://artworks.thetvdb.com/banners/series/355567/banners/5f208242a5940.jpg",
+                            imageType = 1,
+                            thumbnail = "https://artworks.thetvdb.com/banners/series/355567/posters/5f208242a5940.jpg"
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        assertNull(episodes[1 to 1]?.thumbnail)
+    }
+
+    @Test
     fun `fetch episode enrichment overlays only translated episode overviews`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
@@ -771,20 +954,32 @@ class TvdbMetadataServiceTest {
         )
     )
 
-    private fun episodeRecord(): TvdbEpisodeRecord = TvdbEpisodeRecord(
+    private fun episodeRecord(
+        id: Int? = 1001,
+        image: String? = "https://art.example/episode.jpg",
+        imageType: Int? = 11,
+        name: String? = "Winter Is Coming",
+        number: Int? = 1,
+        overview: String? = "The first episode.",
+        runtime: Int? = 62,
+        seasonNumber: Int? = 1,
+        thumbnail: String? = null
+    ): TvdbEpisodeRecord = TvdbEpisodeRecord(
         absoluteNumber = 1,
         aired = "2011-04-17",
         airsAfterSeason = 0,
         airsBeforeEpisode = 1,
         airsBeforeSeason = 2,
         finaleType = "series",
-        id = 1001,
-        image = "https://art.example/episode.jpg",
+        id = id,
+        image = image,
+        imageType = imageType,
+        thumbnail = thumbnail,
         linkedMovie = 4444,
-        name = "Winter Is Coming",
-        number = 1,
-        overview = "The first episode.",
-        runtime = 62,
-        seasonNumber = 1
+        name = name,
+        number = number,
+        overview = overview,
+        runtime = runtime,
+        seasonNumber = seasonNumber
     )
 }

@@ -304,12 +304,14 @@ data class TvdbEpisodeRecord(
     @Json(name = "finaleType") val finaleType: String? = null,
     @Json(name = "id") val id: Int? = null,
     @Json(name = "image") val image: String? = null,
+    @Json(name = "imageType") val imageType: Int? = null,
     @Json(name = "linkedMovie") val linkedMovie: Int? = null,
     @Json(name = "name") val name: String? = null,
     @Json(name = "number") val number: Int? = null,
     @Json(name = "overview") val overview: String? = null,
     @Json(name = "runtime") val runtime: Int? = null,
-    @Json(name = "seasonNumber") val seasonNumber: Int? = null
+    @Json(name = "seasonNumber") val seasonNumber: Int? = null,
+    @Json(name = "thumbnail") val thumbnail: String? = null
 )
 
 @JsonClass(generateAdapter = true)
