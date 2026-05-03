@@ -234,6 +234,55 @@ class AuthRecoveryInterceptorTest {
         assertEquals(2, secondHits.get())
     }
 
+    @Test
+    fun `transient 502 retries the same URL even when proxy is unknown`() {
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val attempt = hits.incrementAndGet()
+                return if (attempt == 1) MockResponse().setResponseCode(502)
+                else MockResponse().setResponseCode(200).setBody("ok")
+            }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+        val orphanUrl = server.url("/orphan").toString()
+
+        val response = client.newCall(Request.Builder().url(orphanUrl).build()).execute()
+        response.use { assertEquals(200, it.code) }
+
+        assertEquals("expected exactly one same-URL retry", 2, hits.get())
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected TRANSIENT_RETRIED for non-proxied 502 phase-1 recovery, got $outcomes",
+            AuthRecoveryTracker.Outcome.TRANSIENT_RETRIED in outcomes
+        )
+    }
+
+    @Test
+    fun `transient 502 records NO_PROXY_KNOWN only after phase-1 retry also fails`() {
+        val hits = AtomicInteger(0)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                hits.incrementAndGet()
+                return MockResponse().setResponseCode(502)
+            }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthRecoveryInterceptor()).build()
+        val orphanUrl = server.url("/orphan").toString()
+
+        val response = client.newCall(Request.Builder().url(orphanUrl).build()).execute()
+        response.use { assertEquals(502, it.code) }
+
+        assertEquals("expected one initial + one phase-1 retry", 2, hits.get())
+        val outcomes = AuthRecoveryTracker.snapshot().map { it.outcome }
+        assertTrue(
+            "expected NO_PROXY_KNOWN after phase-1 also fails, got $outcomes",
+            AuthRecoveryTracker.Outcome.NO_PROXY_KNOWN in outcomes
+        )
+    }
+
     private fun proxyUrl(tag: String): String =
         "https://comet.feels.legal/$tag/playback/x/0/0/n/n?torrent_name=t&name=n"
 }
