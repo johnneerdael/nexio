@@ -591,7 +591,10 @@ class TvdbMetadataService @Inject constructor(
             episodeNumber = number,
             title = name.trimmed(),
             overview = translatedOverview ?: overview.trimmed(),
-            thumbnail = image.trimmed(),
+            thumbnail = image.toTvdbEpisodeStillUrl(
+                imageType = imageType,
+                fallbackThumbnail = thumbnail
+            ),
             airDate = aired.trimmed(),
             runtimeMinutes = runtime,
             absoluteNumber = absoluteNumber,
