@@ -303,6 +303,9 @@ internal fun PlaybackSettingsContent(
                 onSetFilterWebDolbyVisionStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFilterWebDolbyVisionStreamsEnabled(enabled) }
                 },
+                onSetSkipPlaceholderStreamsEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setSkipPlaceholderStreamsEnabled(enabled) }
+                },
                 onSetFilterEpisodeMismatchStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFilterEpisodeMismatchStreamsEnabled(enabled) }
                 },
