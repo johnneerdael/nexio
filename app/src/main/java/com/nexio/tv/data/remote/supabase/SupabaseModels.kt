@@ -120,6 +120,14 @@ data class DurableDeviceSessionExchangeResult(
 )
 
 @Serializable
+data class DurableDeviceCredentialSelfServiceResult(
+    val status: String = "",
+    val active: Boolean = false,
+    val revoked: Boolean = false,
+    @SerialName("error") val error: String? = null
+)
+
+@Serializable
 data class SupabaseProfilePinVerifyResult(
     val unlocked: Boolean = false,
     @SerialName("retry_after_seconds") val retryAfterSeconds: Int = 0,
