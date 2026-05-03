@@ -61,24 +61,10 @@ class RetrofitTmdbDiscoveryClient @Inject constructor(
         if (credential.missing) return emptyList()
         val apiKey = credential.apiKey
         val now = LocalDate.now()
-        val today = now.toString()
         val currentYear = now.year
         val response = when (catalogId) {
             TmdbCatalogIds.TRENDING_MOVIES -> tmdbApi.getTrendingMovies(apiKey = apiKey)
             TmdbCatalogIds.TRENDING_SERIES -> tmdbApi.getTrendingTv(apiKey = apiKey)
-            TmdbCatalogIds.LATEST_RELEASES_MOVIES -> tmdbApi.discoverMovies(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "release_date.desc",
-                releaseDateLte = today,
-                withReleaseType = if (preferences.hideUnreleasedDigital) "4" else null
-            )
-            TmdbCatalogIds.LATEST_RELEASES_SERIES -> tmdbApi.discoverTv(
-                apiKey = apiKey,
-                includeAdult = preferences.includeAdult,
-                sortBy = "first_air_date.desc",
-                firstAirDateLte = today
-            )
             TmdbCatalogIds.POPULAR_MOVIES -> tmdbApi.getPopularMovies(apiKey = apiKey)
             TmdbCatalogIds.POPULAR_SERIES -> tmdbApi.getPopularTv(apiKey = apiKey)
             TmdbCatalogIds.YEAR_MOVIES -> tmdbApi.discoverMovies(
@@ -180,7 +166,6 @@ class TmdbDiscoveryService @Inject constructor(
             val missingCredentialSnapshot = TmdbDiscoverySnapshot(
                 updatedAtMs = System.currentTimeMillis(),
                 includeAdult = sanitized.includeAdult,
-                hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
                 catalogIdsWithCurrentPreferences = sanitized.enabledCatalogIds()
             )
             snapshot.value = missingCredentialSnapshot
@@ -225,7 +210,6 @@ class TmdbDiscoveryService @Inject constructor(
             rowsByCatalog = rows,
             updatedAtMs = System.currentTimeMillis(),
             includeAdult = sanitized.includeAdult,
-            hideUnreleasedDigital = sanitized.hideUnreleasedDigital,
             catalogIdsWithCurrentPreferences = catalogIdsWithCurrentPreferences
         )
         snapshot.value = refreshed
@@ -376,12 +360,10 @@ class TmdbDiscoveryService @Inject constructor(
     private fun catalogContentType(catalogId: String): ContentType? {
         return when (catalogId) {
             TmdbCatalogIds.TRENDING_MOVIES,
-            TmdbCatalogIds.LATEST_RELEASES_MOVIES,
             TmdbCatalogIds.POPULAR_MOVIES,
             TmdbCatalogIds.YEAR_MOVIES,
             TmdbCatalogIds.LANGUAGE_MOVIES -> ContentType.MOVIE
             TmdbCatalogIds.TRENDING_SERIES,
-            TmdbCatalogIds.LATEST_RELEASES_SERIES,
             TmdbCatalogIds.POPULAR_SERIES,
             TmdbCatalogIds.YEAR_SERIES,
             TmdbCatalogIds.LANGUAGE_SERIES -> ContentType.SERIES
