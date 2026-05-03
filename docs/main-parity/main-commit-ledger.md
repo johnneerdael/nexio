@@ -25,9 +25,9 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 | `46d9b3bd8` | Autoplay | `PORT` | autoplay resolver deadline | Bound wait per candidate with shared budget. |
 | `aac4096d4` | Autoplay | `PORT` | autoplay scoring loop | Warm verdicts every pass and accept 1080p x265 for series. |
 | `f44c71332` | Autoplay | `PORT` | autoplay scoring selection | Random-per-session tie-break across providers. |
-| `1419bb608` | TVDB localization | `PORT` | TVDB runtime provider and adapter | Apply translated episode titles and overviews. |
-| `14917f00b` | TVDB localization | `PORT` | TVDB runtime provider and adapter | Fetch English fallback translation. |
-| `2306180d1` | TVDB cache | `PORT` | metadata disk cache schema/runtime cache keys | Invalidate untranslated episode cache entries. |
+| `1419bb608` | TVDB localization | `ALREADY_COVERED` | TVDB runtime provider and localization bundle | Current shared runtime episode localization selects both title and overview from per-episode, localized season, or English fallback candidates. |
+| `14917f00b` | TVDB localization | `ALREADY_COVERED` | TVDB runtime provider and metadata adapter | Current TVDB adapter fetches English fallback translations and uses them for core fields. |
+| `2306180d1` | TVDB cache | `ALREADY_COVERED` | metadata disk cache schema/runtime cache keys | TVDB episode cache schema is already version 2, invalidating untranslated episode entries. |
 
 ## Port Progress
 
@@ -48,7 +48,7 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 | `2ee707f96` | `PORTED` | this slice | Kitsu browser JSON:API headers are centralized on the shared Kitsu Retrofit/OkHttp clients used by runtime-backed Kitsu providers. |
 | `46d9b3bd8` | `PORTED` | `0d39ff67d` | Resolver wait budget parity is centralized in the autoplay resolver path. |
 | `aac4096d4` | `PORTED` | `c9133cebd` | Audio fallback scoring parity is centralized in `StreamAutoPlaySelector`. |
-| `1419bb608`, `14917f00b`, `2306180d1` | `PORTED` | `e3b1492e5` | TVDB localization and cache schema invalidation are in the shared runtime provider/service path. |
+| `1419bb608`, `14917f00b`, `aec9a1f58`, `2306180d1` | `ALREADY_COVERED` | `e3b1492e5` | TVDB localization, English fallback coverage, and cache schema invalidation already live in the shared runtime provider/service path. |
 | `31741270b`, `f7b46e048`, `8e62e0832`, `30902cacd`, `12fbdbd45`, `ae1e88b76`, `fa18ec7ad`, `ff089620d`, `4216144c3`, `e7b08e2a3`, `dd9b480e4` | `PORTED` | this slice | Subtitle burn-in protection now lives in shared player settings, session-start state resolution, and subtitle presentation/mutation planning. |
 | `a0f4c47ff`, `65f35ff4d`, `625d35552` | `PORTED` | this slice | User-configurable subtitle text color and orphaned strings are removed so shared subtitle presentation owns off-white text color policy. |
 | `5723e649c` | `ALREADY_COVERED` | `814212217`, `9640f9301`, `c9133cebd` | Addon meta `idPrefixes` filtering lives in `MetaRepositoryImpl`; canonical detail loading routes through `MetadataRouterFacade` before addon fallback; diacritic title matching is covered in `StreamAutoPlaySelector`. Main's screen-local canonical fallback is intentionally not copied. |
@@ -262,10 +262,10 @@ Generated from `/tmp/main-parity-commits.tsv` using `git log --reverse --no-merg
 | `fc432c806` | 2026-04-27 | feat(trailers): YoutubeChunkedDataSourceFactory accepts UA override | Trailers | `PORTED` | this slice | The chunked YouTube data source uses the selected trailer user agent when present. |
 | `65154e532` | 2026-04-27 | feat(trailers): TrailerPlayer threads UA into chunked + bare DataSource branches | Playback/Autoplay | `PORTED` | this slice | `TrailerPlayer` applies the chosen UA to both chunked and standard HTTP data sources. |
 | `b14576c6e` | 2026-04-27 | wire(trailers): thread chosen client UA from extractor to TrailerPlayer | Playback/Autoplay | `PORTED` | this slice | Home, detail, and screensaver trailer playback pass the selected UA through existing trailer state. |
-| `1419bb608` | 2026-04-27 | fix(tvdb): apply translated episode titles, not just overviews | Provider Metadata | `PORT` | IntegrationRuntime TVDB provider adapter | Apply translated episode titles and overviews. |
-| `14917f00b` | 2026-04-27 | fix(tvdb): fetch english series translation when canonical record is non-english | Provider Metadata | `PORT` | IntegrationRuntime TVDB provider adapter | Fetch English fallback translation. |
-| `aec9a1f58` | 2026-04-27 | test(tvdb): cover english fallback for missing user-locale episode translations | Provider Metadata | `REDESIGN_FOR_SHARED_ARCHITECTURE` | IntegrationRuntime TVDB provider adapter/localization fallback tests | Keep TVDB fallback coverage in the runtime provider adapter. |
-| `2306180d1` | 2026-04-27 | chore(cache): bump TVDB episode cache schema to invalidate untranslated entries | Provider Metadata | `PORT` | metadata disk cache schema/runtime cache keys | Invalidate untranslated episode cache entries. |
+| `1419bb608` | 2026-04-27 | fix(tvdb): apply translated episode titles, not just overviews | Provider Metadata | `ALREADY_COVERED` | TVDB runtime provider and localization bundle | Current shared runtime episode localization selects both title and overview from per-episode, localized season, or English fallback candidates. |
+| `14917f00b` | 2026-04-27 | fix(tvdb): fetch english series translation when canonical record is non-english | Provider Metadata | `ALREADY_COVERED` | TVDB runtime provider and metadata adapter | Current TVDB adapter fetches English fallback translations and uses them for core fields. |
+| `aec9a1f58` | 2026-04-27 | test(tvdb): cover english fallback for missing user-locale episode translations | Provider Metadata | `ALREADY_COVERED` | TvdbEpisodeLocalizationTest/TvdbMetadataServiceTest | Focused runtime localization tests cover English fallback and per-episode fallback behavior through the shared bundle path. |
+| `2306180d1` | 2026-04-27 | chore(cache): bump TVDB episode cache schema to invalidate untranslated entries | Provider Metadata | `ALREADY_COVERED` | MetadataDiskCacheStore | TVDB episode cache schema is already version 2, invalidating untranslated episode entries. |
 | `6c80bdb82` | 2026-04-27 | build(variants): add side-by-side releaseEarlyAccess build type | Build/CI/Docs | `PORTED` | Gradle variant model + releaseEarlyAccess resources | Restored the side-by-side EarlyAccess release variant because the missing task blocked profileable/early-access validation from this worktree. |
 | `31741270b` | 2026-04-27 | feat(burnin): add BurnInProtectionState data class | Playback/Autoplay | `PORT` | shared stream/player components | Port behavior into shared playback/autoplay/proxy paths. |
 | `f7b46e048` | 2026-04-27 | feat(burnin): compute per-stream zone/jitter deltas from seed | Playback/Autoplay | `PORT` | shared stream/player components | Port behavior into shared playback/autoplay/proxy paths. |
