@@ -1,0 +1,60 @@
+namespace hyperhdrnet;
+
+// A priority value of -1 clears all priorities
+table Register {
+  origin:string (required);
+  priority:int;
+}
+
+table RawImage {
+  data:[ubyte];
+  width:int = -1;
+  height:int = -1;
+}
+
+table NV12Image {
+  data_y:[ubyte];
+  data_uv:[ubyte];
+  width:int;
+  height:int;
+  stride_y:int = 0;
+  stride_uv:int = 0;
+}
+
+// 10-bit per channel, Microsoft P010 byte layout: 10 high bits + 6 zero pad
+// per 16-bit little-endian word. Strides are in bytes (= width * 2 for both
+// planes). Routes to the same FrameDecoder path as the V4L2/MF/DX P010
+// grabbers, so HDR clients can deliver PQ-encoded frames straight to
+// HyperHDR's tone-map LUT.
+table P010Image {
+  data_y:[ubyte];
+  data_uv:[ubyte];
+  width:int;
+  height:int;
+  stride_y:int = 0;
+  stride_uv:int = 0;
+}
+
+union ImageType {RawImage, NV12Image, P010Image}
+
+table Image {
+  data:ImageType (required);
+  duration:int = -1;
+}
+
+table Clear {
+  priority:int;
+}
+
+table Color {
+  data:int = -1;
+  duration:int = -1;
+}
+
+union Command {Color, Image, Clear, Register}
+
+table Request {
+  command:Command (required);
+}
+
+root_type Request;

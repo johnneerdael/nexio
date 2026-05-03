@@ -829,6 +829,9 @@ dependencies {
 
     implementation(libs.gson)
 
+    // FlatBuffers runtime (HyperHDR ambilight protocol)
+    implementation("com.google.flatbuffers:flatbuffers-java:25.2.10")
+
     // Markdown rendering
     implementation(libs.markdown.renderer.m3)
 
