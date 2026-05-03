@@ -51,6 +51,7 @@ import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.core.player.PlayProbeCache
+import com.nexio.tv.core.player.auth.PlaybackErrorClassifier
 import com.nexio.tv.core.player.queryDisplayHdrCapabilities
 import com.nexio.tv.core.player.resolveDolbyVisionBaseLayerDecision
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
@@ -1158,9 +1159,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             retryCurrentStreamFromStartAfter416()
                             return
                         }
+                        val classification = PlaybackErrorClassifier.classify(error)
+                        val displayError = when (classification) {
+                            PlaybackErrorClassifier.Classification.LinkExpired,
+                            PlaybackErrorClassifier.Classification.Forbidden -> classification.userMessage
+                            PlaybackErrorClassifier.Classification.Generic -> detailedError
+                        }
                         _uiState.update {
                             it.copy(
-                                error = detailedError,
+                                error = displayError,
                                 showLoadingOverlay = false,
                                 showPauseOverlay = false
                             )
