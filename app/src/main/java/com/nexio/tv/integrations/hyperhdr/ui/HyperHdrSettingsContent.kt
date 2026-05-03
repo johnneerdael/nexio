@@ -139,7 +139,11 @@ fun HyperHdrSettingsContent(
                     SettingsActionRow(
                         title = "JSON API token",
                         subtitle = "Optional — required only if HyperHDR has token auth enabled",
-                        value = if (cfg.jsonToken.isBlank()) "Not set" else "•••••" + cfg.jsonToken.takeLast(4),
+                        value = when {
+                            cfg.jsonToken.isBlank() -> "Not set"
+                            cfg.jsonToken.length <= 4 -> "Set"
+                            else -> "•••••" + cfg.jsonToken.takeLast(4)
+                        },
                         onClick = { showTokenDialog = true },
                     )
                 }

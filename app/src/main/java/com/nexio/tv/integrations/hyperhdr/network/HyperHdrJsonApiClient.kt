@@ -17,7 +17,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *   - [setHdrVideoMode] — called once per Nexio playback session by the lifecycle wiring
  *     to tell HyperHDR what kind of frames are arriving on the FlatBuffer port.
  *
- * No subscribe/event support, no auth tokens, no instance switching. POSTs to
+ * No subscribe/event support, no instance switching. Optional Bearer token —
+ * when configured, every request body includes a "token" field. POSTs to
  * http://host:port/json-rpc. Ports a strict subset of HyperHDR-android's
  * eu.hyperhdr.android.json.HyperHdrJsonApiClient.
  */
