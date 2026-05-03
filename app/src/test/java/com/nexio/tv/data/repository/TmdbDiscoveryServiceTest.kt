@@ -5,6 +5,7 @@ import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
@@ -25,25 +26,26 @@ class TmdbDiscoveryServiceTest {
     @Test
     fun `search returns movies and series as one TMDB primary row with IMDb ids`() = runTest {
         val service = FakeTmdbDiscoveryClient(
-            movieSearch = listOf(
-                mediaResult(
+            multiSearch = listOf(
+                multiResult(
                     id = 603,
+                    mediaType = "movie",
                     title = "The Matrix",
-                    backdropPath = "/matrix-backdrop.jpg",
                     posterPath = "/matrix-poster.jpg",
                     releaseDate = "1999-03-31",
                     voteAverage = 8.2,
-                    originalLanguage = "en"
-                )
-            ),
-            tvSearch = listOf(
-                mediaResult(
+                    originalLanguage = "en",
+                    popularity = 8.0
+                ),
+                multiResult(
                     id = 1399,
+                    mediaType = "tv",
                     name = "Game of Thrones",
                     posterPath = "/got-poster.jpg",
                     firstAirDate = "2011-04-17",
                     voteAverage = 8.4,
-                    originalLanguage = "en"
+                    originalLanguage = "en",
+                    popularity = 7.0
                 )
             ),
             imdbIds = mapOf(
@@ -64,16 +66,45 @@ class TmdbDiscoveryServiceTest {
         assertFalse(row.supportsSkip)
         assertEquals("tt0133093", row.items[0].id)
         assertEquals(ContentType.MOVIE, row.items[0].type)
-        assertEquals("https://image.tmdb.org/t/p/w1280/matrix-backdrop.jpg", row.items[0].poster)
-        assertEquals("https://image.tmdb.org/t/p/w1280/matrix-backdrop.jpg", row.items[0].background)
-        assertEquals(PosterShape.LANDSCAPE, row.items[0].posterShape)
+        assertEquals("The Matrix (1999)", row.items[0].name)
+        assertEquals("https://image.tmdb.org/t/p/w780/matrix-poster.jpg", row.items[0].poster)
+        assertEquals(null, row.items[0].background)
+        assertEquals(PosterShape.POSTER, row.items[0].posterShape)
         assertEquals(8.2f, row.items[0].imdbRating)
         assertEquals(TitleRatingSource.TMDB, row.items[0].ratingSource)
         assertEquals("en", row.items[0].language)
         assertEquals("tt0944947", row.items[1].id)
         assertEquals(ContentType.SERIES, row.items[1].type)
+        assertEquals("Game of Thrones (2011)", row.items[1].name)
         assertEquals("https://image.tmdb.org/t/p/w780/got-poster.jpg", row.items[1].poster)
         assertEquals(PosterShape.POSTER, row.items[1].posterShape)
+    }
+
+    @Test
+    fun `search multi includes people sorted by popularity without media stable id routing`() = runTest {
+        val service = FakeTmdbDiscoveryClient(
+            multiSearch = listOf(
+                multiResult(id = 603, mediaType = "movie", title = "The Matrix", popularity = 2.0),
+                multiResult(
+                    id = 6384,
+                    mediaType = "person",
+                    name = "Keanu Reeves",
+                    profilePath = "/keanu.jpg",
+                    popularity = 12.0
+                )
+            )
+        ).createService()
+
+        val rows = service.search("matrix", TmdbCatalogPreferences())
+
+        val items = rows.single().items
+        assertEquals("tmdb_person:6384", items[0].id)
+        assertEquals(ContentType.PERSON, items[0].type)
+        assertEquals("person", items[0].apiType)
+        assertEquals("Keanu Reeves", items[0].name)
+        assertEquals("https://image.tmdb.org/t/p/w780/keanu.jpg", items[0].poster)
+        assertEquals("tmdb:603", items[1].id)
+        assertEquals(ContentType.MOVIE, items[1].type)
     }
 
     @Test
@@ -130,8 +161,7 @@ class TmdbDiscoveryServiceTest {
         )
         val service = FakeTmdbDiscoveryClient(
             credential = MetadataProviderCredential("", source = MetadataCredentialSource.MISSING),
-            movieSearch = listOf(mediaResult(id = 603, title = "The Matrix")),
-            tvSearch = listOf(mediaResult(id = 1399, name = "Game of Thrones")),
+            multiSearch = listOf(multiResult(id = 603, mediaType = "movie", title = "The Matrix")),
             catalogResults = mapOf(TmdbCatalogIds.TRENDING_MOVIES to listOf(mediaResult(id = 1, title = "Movie")))
         ).createService()
 
@@ -178,7 +208,7 @@ class TmdbDiscoveryServiceTest {
     @Test
     fun `mapped preview ID falls back to tmdb ID when IMDb ID is missing`() = runTest {
         val service = FakeTmdbDiscoveryClient(
-            movieSearch = listOf(mediaResult(id = 999, title = "Unknown Movie"))
+            multiSearch = listOf(multiResult(id = 999, mediaType = "movie", title = "Unknown Movie"))
         ).createService()
 
         val rows = service.search("unknown", TmdbCatalogPreferences())
@@ -189,7 +219,7 @@ class TmdbDiscoveryServiceTest {
     @Test
     fun `search propagates cancellation from child`() = runTest {
         val service = FakeTmdbDiscoveryClient(
-            movieSearch = listOf(mediaResult(id = 999, title = "Unknown Movie")),
+            multiSearch = listOf(multiResult(id = 999, mediaType = "movie", title = "Unknown Movie")),
             searchDelayMillis = 10_000L
         ).createService()
         var cancelled = false
@@ -398,8 +428,7 @@ class TmdbDiscoveryServiceTest {
             "key",
             source = MetadataCredentialSource.BUILT_IN
         ),
-        private val movieSearch: List<TmdbMediaResult> = emptyList(),
-        private val tvSearch: List<TmdbMediaResult> = emptyList(),
+        private val multiSearch: List<TmdbMultiSearchResult> = emptyList(),
         var catalogResults: Map<String, List<TmdbMediaResult>> = emptyMap(),
         private val imdbIds: Map<String, String> = emptyMap(),
         private val searchDelayMillis: Long = 0L,
@@ -409,24 +438,19 @@ class TmdbDiscoveryServiceTest {
 
         override suspend fun credential(): MetadataProviderCredential = credential
 
-        override suspend fun searchMovies(
+        override suspend fun searchMulti(
             query: String,
+            page: Int,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> {
+        ): List<TmdbMultiSearchResult> {
             if (searchDelayMillis > 0) {
                 delay(searchDelayMillis)
             }
-            return movieSearch
-        }
-
-        override suspend fun searchTv(
-            query: String,
-            preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> {
-            if (searchDelayMillis > 0) {
-                delay(searchDelayMillis)
+            return if (page == 1) {
+                multiSearch
+            } else {
+                emptyList()
             }
-            return tvSearch
         }
 
         override suspend fun fetchCatalog(
@@ -493,6 +517,40 @@ class TmdbDiscoveryServiceTest {
             releaseDate = releaseDate,
             firstAirDate = firstAirDate,
             voteAverage = voteAverage
+        )
+    }
+
+    private fun multiResult(
+        id: Int,
+        mediaType: String,
+        title: String? = null,
+        name: String? = null,
+        originalTitle: String? = null,
+        originalName: String? = null,
+        originalLanguage: String? = null,
+        posterPath: String? = null,
+        profilePath: String? = null,
+        overview: String? = null,
+        releaseDate: String? = null,
+        firstAirDate: String? = null,
+        voteAverage: Double? = null,
+        popularity: Double? = null
+    ): TmdbMultiSearchResult {
+        return TmdbMultiSearchResult(
+            id = id,
+            mediaType = mediaType,
+            title = title,
+            name = name,
+            originalTitle = originalTitle,
+            originalName = originalName,
+            originalLanguage = originalLanguage,
+            posterPath = posterPath,
+            profilePath = profilePath,
+            overview = overview,
+            releaseDate = releaseDate,
+            firstAirDate = firstAirDate,
+            voteAverage = voteAverage,
+            popularity = popularity
         )
     }
 }

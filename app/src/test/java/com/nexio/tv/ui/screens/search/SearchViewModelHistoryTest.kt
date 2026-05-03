@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import io.mockk.coEvery
@@ -158,15 +159,11 @@ class SearchViewModelHistoryTest {
             return MetadataProviderCredential("key", source = MetadataCredentialSource.BUILT_IN)
         }
 
-        override suspend fun searchMovies(
+        override suspend fun searchMulti(
             query: String,
+            page: Int,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = emptyList()
-
-        override suspend fun searchTv(
-            query: String,
-            preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = emptyList()
+        ): List<TmdbMultiSearchResult> = emptyList()
 
         override suspend fun fetchCatalog(
             catalogId: String,

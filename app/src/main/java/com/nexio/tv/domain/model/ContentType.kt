@@ -5,6 +5,7 @@ enum class ContentType {
     SERIES,
     CHANNEL,
     TV,
+    PERSON,
     UNKNOWN;
 
     companion object {
@@ -13,6 +14,7 @@ enum class ContentType {
             "series" -> SERIES
             "channel" -> CHANNEL
             "tv" -> TV
+            "person" -> PERSON
             else -> UNKNOWN
         }
     }
@@ -22,6 +24,7 @@ enum class ContentType {
         SERIES -> "series"
         CHANNEL -> "channel"
         TV -> "tv"
+        PERSON -> "person"
         UNKNOWN -> fallbackType
             ?.trim()
             ?.takeIf { it.isNotEmpty() }

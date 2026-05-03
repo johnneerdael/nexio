@@ -4,6 +4,7 @@ import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.RailPreviewCatalogRowRecord
@@ -79,8 +80,11 @@ fun tmdbCatalogTitle(catalogId: String): String? {
 
 interface TmdbDiscoveryClient {
     suspend fun credential(): MetadataProviderCredential
-    suspend fun searchMovies(query: String, preferences: TmdbCatalogPreferences): List<TmdbMediaResult>
-    suspend fun searchTv(query: String, preferences: TmdbCatalogPreferences): List<TmdbMediaResult>
+    suspend fun searchMulti(
+        query: String,
+        page: Int,
+        preferences: TmdbCatalogPreferences
+    ): List<TmdbMultiSearchResult>
     suspend fun fetchCatalog(catalogId: String, preferences: TmdbCatalogPreferences): List<TmdbMediaResult>
     suspend fun imdbId(tmdbId: Int, contentType: ContentType): String?
 }

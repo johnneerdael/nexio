@@ -85,6 +85,7 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nexio.tv.ui.components.CatalogRowSection
+import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.LoadingIndicator
@@ -129,6 +130,8 @@ internal data class SearchManualStreamSelectionTarget(
     val addonBaseUrl: String
 )
 
+private const val TMDB_PERSON_ID_PREFIX = TmdbDiscoveryService.TMDB_PERSON_ID_PREFIX
+
 internal fun shouldShowSearchManualStreamSelection(
     deterministicAutoplayEnabled: Boolean,
     apiType: String
@@ -171,6 +174,7 @@ fun SearchScreen(
     onNavigateToDetail: (String, String, String) -> Unit,
     onPlayWithManualStreamSelection: (MetaPreview, String) -> Unit = { _, _ -> },
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> },
+    onNavigateToCastDetail: (personId: Int, personName: String) -> Unit = { _, _ -> },
     onOpenDiscover: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -746,7 +750,18 @@ fun SearchScreen(
                                     }
                                 },
                                 onItemClick = { id, type, addonBaseUrl ->
-                                    onNavigateToDetail(id, type, addonBaseUrl)
+                                    val personId = id.takeIf { it.startsWith(TMDB_PERSON_ID_PREFIX) }
+                                        ?.removePrefix(TMDB_PERSON_ID_PREFIX)
+                                        ?.toIntOrNull()
+                                    if (personId != null) {
+                                        val personName = catalogRow.items
+                                            .firstOrNull { it.id == id }
+                                            ?.name
+                                            .orEmpty()
+                                        onNavigateToCastDetail(personId, personName)
+                                    } else {
+                                        onNavigateToDetail(id, type, addonBaseUrl)
+                                    }
                                 },
                                 onItemLongPress = { item, addonBaseUrl ->
                                     if (

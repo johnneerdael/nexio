@@ -9,9 +9,11 @@ import com.nexio.tv.core.metadata.MetadataCredentialSource
 import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbCompanySearchResponse
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResponse
 import com.nexio.tv.data.remote.api.TmdbPersonCreditsResponse
 import com.nexio.tv.data.remote.api.TmdbPersonResponse
 import com.nexio.tv.data.remote.api.TmdbPersonSearchResponse
+import com.nexio.tv.data.local.TmdbCatalogPreferences
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -106,6 +108,40 @@ class TmdbIntegrationProviderRuntimeContractTest {
 
         assertEquals(1, runtime.callSpecs.size)
         assertEquals(TmdbApiShapes.SEARCH_COMPANIES, runtime.callSpecs.single().apiShapeId)
+    }
+
+    @Test
+    fun `searchMulti routes through runtime get with SEARCH_MULTI apiShape`() = runTest {
+        val runtime = RecordingIntegrationRuntime<TmdbMultiSearchResponse>(
+            nextResult = IntegrationFetchResult.Updated(TmdbMultiSearchResponse())
+        )
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        coEvery {
+            tmdbApi.searchMulti(
+                apiKey = "tmdb-key",
+                query = "matrix",
+                includeAdult = true,
+                page = 2
+            )
+        } returns Response.success(TmdbMultiSearchResponse())
+
+        val provider = buildProvider(runtime = runtime, tmdbApi = tmdbApi)
+
+        provider.searchMulti(
+            query = "matrix",
+            page = 2,
+            preferences = TmdbCatalogPreferences(includeAdult = true)
+        )
+
+        assertEquals(0, runtime.callSpecs.size)
+        assertEquals(1, runtime.specs.size)
+        val spec = runtime.specs.single()
+        assertEquals(TmdbApiShapes.SEARCH_MULTI, spec.apiShapeId)
+        assertEquals("tmdb.search_multi", spec.operationKey)
+        assertTrue(
+            "expected Disabled, was ${spec.cachePolicy}",
+            spec.cachePolicy is IntegrationCachePolicy.Disabled
+        )
     }
 
     private fun personDetailFixture(): TmdbPersonResponse =
