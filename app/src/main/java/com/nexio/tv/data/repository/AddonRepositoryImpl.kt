@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.sync.AddonSyncService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -85,8 +86,8 @@ class AddonRepositoryImpl @Inject constructor(
             Log.d(TAG, "triggerRemoteSync: skipped (syncing from remote)")
             return
         }
-        if (!authManager.hasSyncSession) {
-            Log.d(TAG, "triggerRemoteSync: skipped (no sync session)")
+        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+            Log.d(TAG, "triggerRemoteSync: skipped (no live full account session)")
             return
         }
         Log.d(TAG, "triggerRemoteSync: scheduling push in 500ms")

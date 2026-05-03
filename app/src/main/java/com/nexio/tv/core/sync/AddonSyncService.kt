@@ -2,6 +2,7 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
@@ -47,6 +48,9 @@ class AddonSyncService @Inject constructor(
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            if (!hasLiveFullAccountSession()) {
+                return@withContext Result.success(Unit)
+            }
             val localAddons = addonPreferences.installedAddons.first()
             val parsedAddons = localAddons.mapNotNull { addon ->
                 runCatching { parseStoredAddonInstallUrl(addon.url) to addon.parserPreset }
@@ -172,6 +176,13 @@ class AddonSyncService @Inject constructor(
             Log.e(TAG, "Failed to get remote addon configs", e)
             Result.failure(e)
         }
+    }
+
+    private fun hasLiveFullAccountSession(): Boolean {
+        return hasLiveFullAccountSyncSession(
+            authState = authManager.authState.value,
+            sessionUserId = authManager.currentSessionUserId
+        )
     }
 
     private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {

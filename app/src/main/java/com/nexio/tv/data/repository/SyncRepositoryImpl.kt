@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.data.remote.supabase.ClaimSyncResult
 import com.nexio.tv.data.remote.supabase.SupabaseLinkedDevice
 import com.nexio.tv.data.remote.supabase.SyncCodeResult
@@ -22,6 +23,9 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun generateSyncCode(pin: String): Result<String> {
         return try {
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+                return Result.failure(IllegalStateException("No live full account session"))
+            }
             val params = buildJsonObject { put("p_pin", pin) }
             val response = postgrest.rpc("generate_sync_code", params)
             val results = response.decodeList<SyncCodeResult>()
@@ -36,6 +40,9 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun getSyncCode(pin: String): Result<String> {
         return try {
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+                return Result.failure(IllegalStateException("No live full account session"))
+            }
             val params = buildJsonObject { put("p_pin", pin) }
             val response = postgrest.rpc("get_sync_code", params)
             val results = response.decodeList<SyncCodeResult>()
@@ -54,6 +61,9 @@ class SyncRepositoryImpl @Inject constructor(
         deviceName: String?
     ): Result<ClaimSyncResult> {
         return try {
+            if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) {
+                return Result.failure(IllegalStateException("No live full account session"))
+            }
             val params = buildJsonObject {
                 put("p_code", code)
                 put("p_pin", pin)
