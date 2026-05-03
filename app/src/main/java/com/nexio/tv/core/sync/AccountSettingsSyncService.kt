@@ -51,6 +51,8 @@ import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountTraktAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountTraktRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountTvdbCredentialSecretPayload
+import com.nexio.tv.data.remote.supabase.requireValidV1Secret
+import com.nexio.tv.data.remote.supabase.requireValidV2Transport
 import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.AppearanceSettings
 import com.nexio.tv.data.remote.supabase.AudioSettings
@@ -1523,7 +1525,10 @@ class AccountSettingsSyncService @Inject constructor(
                             put("p_source", "app")
                         }
                     ).decodeAs<AccountAddonSecretPayload>()
-                }
+                }.requireValidV2Transport(
+                    secretRef = addon.transportSecretRef,
+                    addonUrl = addon.url
+                )
                 return@runCatching buildResolvedAddonUrl(
                     baseUrl = addon.transportBaseUrl ?: addon.url,
                     manifestUrl = null,
@@ -1544,7 +1549,10 @@ class AccountSettingsSyncService @Inject constructor(
                                 put("p_source", "app")
                             }
                         ).decodeAs<AccountAddonSecretPayload>()
-                    }
+                    }.requireValidV1Secret(
+                        secretRef = secretRef,
+                        addonUrl = addon.url
+                    )
                 }
 
             buildResolvedAddonUrl(
