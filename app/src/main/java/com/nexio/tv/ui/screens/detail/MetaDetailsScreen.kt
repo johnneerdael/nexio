@@ -1958,18 +1958,23 @@ private fun MetaDetailsContent(
                                         clearPendingRestore()
                                     },
                                     onCastMemberClick = { member ->
+                                        val navigationPersonName = if (member.provider.equals("kitsu", ignoreCase = true)) {
+                                            member.character?.trim()?.takeIf { it.isNotBlank() } ?: member.name
+                                        } else {
+                                            member.name
+                                        }
                                         member.tmdbId?.let { id ->
                                             markCastMemberRestore(id)
                                             val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
                                                 member.character.equals("Director", ignoreCase = true) ||
                                                 member.character.equals("Writer", ignoreCase = true)
-                                            onNavigateToCastDetail(id, member.name, preferCrew, "tmdb")
+                                            onNavigateToCastDetail(id, navigationPersonName, preferCrew, "tmdb")
                                         } ?: member.tvdbPeopleId?.let { id ->
                                             markCastMemberRestore(id)
                                             val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
                                                 member.character.equals("Director", ignoreCase = true) ||
                                                 member.character.equals("Writer", ignoreCase = true)
-                                            onNavigateToCastDetail(id, member.name, preferCrew, "tvdb")
+                                            onNavigateToCastDetail(id, navigationPersonName, preferCrew, "tvdb")
                                         }
                                     },
                                     modifier = Modifier.onSizeChanged { castSectionHeightPx = it.height }

@@ -29,6 +29,8 @@ import com.nexio.tv.data.remote.api.KitsuCollectionResponse
 import com.nexio.tv.data.remote.api.KitsuImage
 import com.nexio.tv.data.remote.api.KitsuIncludedResource
 import com.nexio.tv.data.remote.api.KitsuResourceIdentifier
+import com.nexio.tv.data.remote.api.KitsuCastingRelationships
+import com.nexio.tv.data.remote.api.KitsuToManyRelationship
 import com.nexio.tv.data.remote.api.KitsuToOneRelationship
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -162,7 +164,10 @@ class KitsuMetadataProviderAdapterTest {
                     id = "46064",
                     attributes = KitsuAnimeCharacterAttributes(role = "main"),
                     relationships = KitsuAnimeCharacterRelationships(
-                        character = KitsuToOneRelationship(KitsuResourceIdentifier(id = "410", type = "characters"))
+                        character = KitsuToOneRelationship(KitsuResourceIdentifier(id = "410", type = "characters")),
+                        castings = KitsuToManyRelationship(
+                            data = listOf(KitsuResourceIdentifier(id = "49087", type = "animeCastings"))
+                        )
                     )
                 )
             ),
@@ -173,6 +178,26 @@ class KitsuMetadataProviderAdapterTest {
                     attributes = mapOf(
                         "canonicalName" to "Brook",
                         "image" to mapOf("large" to "https://media.kitsu.io/brook.jpg")
+                    )
+                ),
+                KitsuIncludedResource(
+                    id = "49087",
+                    type = "animeCastings",
+                    attributes = mapOf(
+                        "role" to "Voice Actor",
+                        "voiceActor" to true,
+                        "language" to "Japanese"
+                    ),
+                    relationships = KitsuCastingRelationships(
+                        person = KitsuToOneRelationship(KitsuResourceIdentifier(id = "2339", type = "people"))
+                    )
+                ),
+                KitsuIncludedResource(
+                    id = "2339",
+                    type = "people",
+                    attributes = mapOf(
+                        "name" to "Hiromi Konno",
+                        "image" to mapOf("large" to "https://media.kitsu.io/hiromi.jpg")
                     )
                 )
             )
@@ -187,7 +212,7 @@ class KitsuMetadataProviderAdapterTest {
         val cast = result.candidate?.fields?.get(ResolvedField.CAST)?.value as? List<MetaCastMember>
         assertNotNull(cast)
         assertEquals("Brook", cast!!.single().name)
-        assertEquals("main", cast.single().character)
+        assertEquals("Hiromi Konno", cast.single().character)
         assertEquals("https://media.kitsu.io/brook.jpg", cast.single().photo)
         assertEquals("kitsu", cast.single().provider)
         assertEquals("410", cast.single().providerId)

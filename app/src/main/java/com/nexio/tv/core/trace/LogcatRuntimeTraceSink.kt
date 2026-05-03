@@ -170,18 +170,24 @@ class LogcatRuntimeTraceSink(
             "cacheKey" to payload["cacheKey"]
         )
         "http.request" -> linkedMapOf(
+            "runtimeOperationId" to payload["runtimeOperationId"],
             "provider" to payload["provider"],
+            "apiShapeId" to payload["apiShapeId"],
             "method" to payload["method"],
             "url" to payload["url"]
         )
         "http.response" -> linkedMapOf(
+            "runtimeOperationId" to payload["runtimeOperationId"],
             "provider" to payload["provider"],
+            "apiShapeId" to payload["apiShapeId"],
             "statusCode" to payload["statusCode"],
             "durationMs" to payload["durationMs"],
             "byteCount" to payload["byteCount"]
         )
         "http.error" -> linkedMapOf(
+            "runtimeOperationId" to payload["runtimeOperationId"],
             "provider" to payload["provider"],
+            "apiShapeId" to payload["apiShapeId"],
             "error" to payload["error"]
         )
         "trace.body_sample" -> linkedMapOf(
