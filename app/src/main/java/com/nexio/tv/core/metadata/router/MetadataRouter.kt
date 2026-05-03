@@ -25,6 +25,13 @@ class MetadataRouter @Inject constructor(
         val parsedId = MetadataIdParser.parse(normalized.parentId)
         val trace = mutableListOf<MetadataRouteTrace>()
 
+        previewStableImdbAnimeMapped(normalized, parsedId, trace)?.let { route ->
+            return route
+        }
+        tmdbExternalImdbAnimeMapped(normalized, parsedId, trace)?.let { route ->
+            return route
+        }
+
         return when (parsedId.scheme) {
             AnimeIdScheme.KITSU -> kitsuDirect(normalized, parsedId, trace)
             AnimeIdScheme.MAL,
@@ -51,6 +58,99 @@ class MetadataRouter @Inject constructor(
             AnimeIdScheme.SIMKL,
             AnimeIdScheme.UNKNOWN -> fallbackByItemType(normalized, trace)
         }
+    }
+
+    private suspend fun previewStableImdbAnimeMapped(
+        normalized: NormalizedMetadataRequest,
+        parsedId: ParsedMetadataId,
+        trace: MutableList<MetadataRouteTrace>
+    ): MetadataRoute? {
+        if (parsedId.scheme == AnimeIdScheme.IMDB) return null
+        val stableImdb = normalized.sourceContext.previewStableIds.imdb
+            ?.toCanonicalImdbParsedId()
+            ?: return null
+        return imdbAnimeMappedRoute(
+            normalized = normalized,
+            imdbId = stableImdb,
+            evidenceLabel = "preview stable IMDb",
+            trace = trace
+        )
+    }
+
+    private suspend fun tmdbExternalImdbAnimeMapped(
+        normalized: NormalizedMetadataRequest,
+        parsedId: ParsedMetadataId,
+        trace: MutableList<MetadataRouteTrace>
+    ): MetadataRoute? {
+        val lookup = tmdbExternalIdLookup ?: return null
+        if (parsedId.scheme != AnimeIdScheme.TMDB) return null
+        val tmdbId = parsedId.value.toIntOrNull() ?: return null
+        val mediaType = when (normalized.contentType) {
+            ContentType.SERIES, ContentType.TV -> "tv"
+            else -> return null
+        }
+        val imdbId = runCatching { lookup.findImdbIdByTmdbId(tmdbId, mediaType) }
+            .getOrNull()
+            ?.toCanonicalImdbParsedId()
+            ?: return null
+        return imdbAnimeMappedRoute(
+            normalized = normalized,
+            imdbId = imdbId,
+            evidenceLabel = "TMDB external IMDb",
+            trace = trace
+        )
+    }
+
+    private suspend fun imdbAnimeMappedRoute(
+        normalized: NormalizedMetadataRequest,
+        imdbId: ParsedMetadataId,
+        evidenceLabel: String,
+        trace: MutableList<MetadataRouteTrace>
+    ): MetadataRoute? {
+        val localMapping = idMappingStore.lookupKitsu(imdbId)
+        if (localMapping != null) {
+            trace += MetadataRouteTrace(
+                MetadataDecisionReason.ID_MAPPING_TO_KITSU,
+                "Mapped $evidenceLabel ${imdbId.raw} to kitsu:${localMapping.providerId} from ${localMapping.source}"
+            )
+            return route(
+                normalized = normalized,
+                provider = MetadataPrimaryProvider.KITSU,
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.ID_MAPPING_TO_KITSU,
+                targetId = "kitsu:${localMapping.providerId}",
+                trace = trace,
+                knownImdbId = imdbId.raw
+            )
+        }
+
+        val kitsuId = animeIdentityIndex.resolveKitsuId(imdbId)
+        if (kitsuId != null) {
+            idMappingStore.persist(
+                IdMapping(
+                    sourceId = imdbId,
+                    provider = MetadataPrimaryProvider.KITSU,
+                    providerId = kitsuId,
+                    source = IdMappingSource.FRIBB,
+                    evidence = "$evidenceLabel ${imdbId.raw} -> kitsu:$kitsuId"
+                )
+            )
+            trace += MetadataRouteTrace(
+                MetadataDecisionReason.ID_MAPPING_TO_KITSU,
+                "Mapped $evidenceLabel ${imdbId.raw} to kitsu:$kitsuId from FRIBB"
+            )
+            return route(
+                normalized = normalized,
+                provider = MetadataPrimaryProvider.KITSU,
+                mediaKind = MetadataMediaKind.ANIME,
+                reason = MetadataDecisionReason.ID_MAPPING_TO_KITSU,
+                targetId = "kitsu:$kitsuId",
+                trace = trace,
+                knownImdbId = imdbId.raw
+            )
+        }
+
+        return null
     }
 
     private suspend fun kitsuDirect(
@@ -254,12 +354,14 @@ class MetadataRouter @Inject constructor(
         reason: MetadataDecisionReason,
         targetId: String,
         trace: List<MetadataRouteTrace>,
-        requiresIdentityResolution: Boolean = false
+        requiresIdentityResolution: Boolean = false,
+        knownImdbId: String? = null
     ): MetadataRoute {
         val targetIdResult = buildTargetIds(
             normalized = normalized,
             provider = provider,
-            targetId = targetId
+            targetId = targetId,
+            knownImdbId = knownImdbId
         )
         val effectiveRequiresIdentityResolution = requiresIdentityResolution || targetIdResult.requiresIdentityResolution
         traceEvents.emitRouteDecision(
@@ -297,7 +399,8 @@ class MetadataRouter @Inject constructor(
     private suspend fun buildTargetIds(
         normalized: NormalizedMetadataRequest,
         provider: MetadataPrimaryProvider,
-        targetId: String
+        targetId: String,
+        knownImdbId: String? = null
     ): TargetIdBuildResult {
         val builder = mutableMapOf<MetadataPrimaryProvider, String>()
         val stableIds = normalized.sourceContext.previewStableIds
@@ -306,6 +409,7 @@ class MetadataRouter @Inject constructor(
         stableIds.tvdb?.numericProviderTarget("tvdb")?.let { builder[MetadataPrimaryProvider.TVDB] = it }
         stableIds.kitsu?.numericProviderTarget("kitsu")?.let { builder[MetadataPrimaryProvider.KITSU] = it }
         stableIds.imdb?.canonicalImdbTarget()?.let { builder[MetadataPrimaryProvider.IMDB] = it }
+        knownImdbId?.canonicalImdbTarget()?.let { builder[MetadataPrimaryProvider.IMDB] = it }
 
         val targetParsed = MetadataIdParser.parse(targetId)
         when (targetParsed.scheme) {
@@ -396,5 +500,14 @@ class MetadataRouter @Inject constructor(
         val raw = if (trimmed.startsWith("imdb:", ignoreCase = true)) trimmed.substringAfter(':').trim() else trimmed
         if (!Regex("^tt\\d+$", RegexOption.IGNORE_CASE).matches(raw)) return null
         return "tt" + raw.drop(2)
+    }
+
+    private fun String.toCanonicalImdbParsedId(): ParsedMetadataId? {
+        val canonical = canonicalImdbTarget() ?: return null
+        return ParsedMetadataId(
+            scheme = AnimeIdScheme.IMDB,
+            value = normalizeMetadataIdValue(AnimeIdScheme.IMDB, canonical),
+            raw = canonical
+        )
     }
 }
