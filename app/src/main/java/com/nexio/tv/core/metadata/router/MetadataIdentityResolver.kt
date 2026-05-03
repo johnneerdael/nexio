@@ -24,11 +24,12 @@ class MetadataIdentityResolver @Inject constructor(
         if (!route.targetIdRequiresIdentityResolution) return route
 
         val parsed = MetadataIdParser.parse(route.parentId)
+        val cacheSourceId = parsed.identityCacheSourceId(route)
         val now = System.currentTimeMillis()
 
         // F-B-06: short-circuit on prior negative-cached failure
         if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
-            val existing = idMappingStore.readRaw(provider = route.provider, sourceId = parsed)
+            val existing = idMappingStore.readRaw(provider = route.provider, sourceId = cacheSourceId)
             if (existing?.source == IdMappingSource.NEGATIVE) {
                 return route
             }
@@ -60,7 +61,7 @@ class MetadataIdentityResolver @Inject constructor(
             if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
                 idMappingStore.persist(
                     IdMapping(
-                        sourceId = parsed,
+                        sourceId = cacheSourceId,
                         provider = route.provider,
                         providerId = "",
                         source = IdMappingSource.NEGATIVE,
@@ -70,6 +71,19 @@ class MetadataIdentityResolver @Inject constructor(
                 )
             }
             return route
+        }
+
+        if (parsed.scheme != AnimeIdScheme.UNKNOWN) {
+            idMappingStore.persist(
+                IdMapping(
+                    sourceId = cacheSourceId,
+                    provider = route.provider,
+                    providerId = lookupResult,
+                    source = IdMappingSource.PROVIDER_LOOKUP,
+                    evidence = "identity lookup via $resolverName",
+                    expiresAtEpochMs = IdMappingTtlPolicy.expiresAt(IdMappingSource.PROVIDER_LOOKUP, now)
+                )
+            )
         }
 
         // F2-B-06: ROUTING_ID_TYPE_CONFLICT semantic clarification (cluster G F2-B-01, commit 37f44a99b).
@@ -94,4 +108,17 @@ class MetadataIdentityResolver @Inject constructor(
             } else route.trace
         )
     }
+
+    private fun ParsedMetadataId.identityCacheSourceId(route: MetadataRoute): ParsedMetadataId =
+        when {
+            scheme == AnimeIdScheme.TMDB &&
+                route.provider == MetadataPrimaryProvider.TVDB &&
+                route.mediaKind == MetadataMediaKind.SERIES ->
+                ParsedMetadataId(
+                    scheme = AnimeIdScheme.TMDB,
+                    value = "tv:$value",
+                    raw = "tmdb:tv:$value"
+                )
+            else -> this
+        }
 }

@@ -1622,7 +1622,13 @@ class MetaDetailsViewModel @Inject constructor(
     ): Meta {
         if (!settings.useEpisodes || !isTvContent) return targetMeta
 
-        val seasonNumbers = targetMeta.videos.mapNotNull { it.season }.distinct()
+        val tvdbCoreEpisodes = tvEnrichment?.episodeMetadata.orEmpty()
+        val seasonNumbers = targetMeta.videos
+            .mapNotNull { it.season }
+            .ifEmpty {
+                tvdbCoreEpisodes.keys.map { it.first }
+            }
+            .distinct()
 
         val episodeDecision = metadataRouterFacade.fetchTvEpisodeEnrichment(
             metadataRequest = MetadataRequest(
@@ -1641,7 +1647,7 @@ class MetaDetailsViewModel @Inject constructor(
                 seasonNumbers = seasonNumbers
             )
         )
-        val episodeMap = episodeDecision.value.orEmpty()
+        val episodeMap = tvdbCoreEpisodes + episodeDecision.value.orEmpty()
         if (episodeMap.isEmpty()) return targetMeta
 
         // When the meta arrived with no pre-existing episode structure (e.g. from the canonical

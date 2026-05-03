@@ -52,7 +52,8 @@ data class TvMetadataEnrichment(
     val seasonOrderContext: TvdbSeasonOrderContext? = null,
     val castMembers: List<MetaCastMember> = emptyList(),
     val productionCompanies: List<MetaCompany> = emptyList(),
-    val networks: List<MetaCompany> = emptyList()
+    val networks: List<MetaCompany> = emptyList(),
+    val episodeMetadata: Map<Pair<Int, Int>, TvEpisodeMetadata> = emptyMap()
 )
 
 data class TvEpisodeMetadata(

@@ -9,6 +9,7 @@ import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouteFailure
 import com.nexio.tv.core.metadata.router.MetadataRouteTrace
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
@@ -439,6 +440,43 @@ class HomeHydrationCoordinatorTest {
     }
 
     @Test
+    fun `identity resolution failure emits stable unobfuscated reason`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val ratings = mockk<TitleRatingOverrideRepository>(relaxed = true)
+        val sink = RecordingTraceSink()
+
+        coEvery {
+            facade.resolveRequest(any())
+        } throws MetadataRouteFailure.IdentityResolutionFailed(
+            parentId = "tmdb:321376",
+            provider = MetadataPrimaryProvider.TVDB
+        )
+
+        val result = coordinator(facade, store, ratings, sink).hydrate(
+            item = preview(
+                id = "tmdb:321376",
+                title = "Preview series",
+                type = ContentType.SERIES,
+                rawType = "series",
+                stableIds = ProviderIds(tmdb = "321376")
+            ),
+            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
+            priority = HomeHydrationPriority.FOCUSED,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertNull(result)
+        val failure = sink.events.single { it.eventType == "home.hydration_failed_using_preview" }
+        @Suppress("UNCHECKED_CAST")
+        val payload = failure.payload as Map<String, Any?>
+        assertEquals("identity_resolution_failed", payload["reason"])
+    }
+
+    @Test
     fun `rejected applied overlay writes durable overlay but does not emit applied trace`() = runTest {
         val facade = mockk<MetadataRouterFacade>()
         val store = mockk<HydratedHomeOverlayStore>()
@@ -484,11 +522,13 @@ class HomeHydrationCoordinatorTest {
     private fun preview(
         id: String,
         title: String,
-        stableIds: ProviderIds
+        stableIds: ProviderIds,
+        type: ContentType = ContentType.MOVIE,
+        rawType: String = "movie"
     ) = MetaPreview(
         id = id,
-        type = ContentType.MOVIE,
-        rawType = "movie",
+        type = type,
+        rawType = rawType,
         name = title,
         poster = "preview-poster.jpg",
         posterShape = PosterShape.POSTER,

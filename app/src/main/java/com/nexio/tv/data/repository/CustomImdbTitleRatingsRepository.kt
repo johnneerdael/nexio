@@ -17,6 +17,22 @@ internal fun extractCanonicalImdbId(rawId: String?): String? {
     return CANONICAL_IMDB_ID_REGEX.find(rawId)?.value
 }
 
+internal fun isTmdbIdLookupCandidate(rawId: String?): Boolean {
+    val trimmed = rawId?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    extractCanonicalImdbId(trimmed)?.let { return true }
+
+    val lower = trimmed.lowercase()
+    return when {
+        lower.startsWith("tmdb:") -> lower.substringAfter(':').substringBefore(':').all(Char::isDigit)
+        lower.startsWith("movie:") || lower.startsWith("series:") -> {
+            val nested = lower.substringAfter(':').substringBefore(':')
+            nested.all(Char::isDigit) || nested.startsWith("tt")
+        }
+        lower.substringBefore(':') in setOf("tvdb", "kitsu", "simkl", "trakt", "mal", "anilist", "anidb") -> false
+        else -> lower.substringBefore(':').substringBefore('/').all(Char::isDigit)
+    }
+}
+
 @Singleton
 class CustomImdbTitleRatingsRepository @Inject constructor(
     private val customImdbClient: CustomImdbClient,
@@ -74,9 +90,13 @@ class CustomImdbTitleRatingsRepository @Inject constructor(
         extractImdbId(fallbackItemId)?.let { return it }
 
         val tmdbType = normalizeMediaType(contentType, fallbackItemType)
-        val tmdbId = tmdbService.ensureTmdbId(contentId, tmdbType)
-            ?: tmdbService.ensureTmdbId(fallbackItemId, tmdbType)
-            ?: return null
+        var tmdbId: String? = null
+        for (candidate in listOf(contentId, fallbackItemId).distinct()) {
+            if (!isTmdbIdLookupCandidate(candidate)) continue
+            tmdbId = tmdbService.ensureTmdbId(candidate, tmdbType)
+            if (tmdbId != null) break
+        }
+        tmdbId ?: return null
 
         return tmdbId.toIntOrNull()?.let { tmdbService.tmdbToImdb(it, tmdbType) }
     }

@@ -8,6 +8,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CustomImdbTitleRatingsRepositoryTest {
@@ -80,5 +81,43 @@ class CustomImdbTitleRatingsRepositoryTest {
 
         assertEquals(9.2, rating ?: 0.0, 0.0)
         coVerify(exactly = 1) { tmdbService.tmdbToImdb(1399, "series") }
+    }
+
+    @Test
+    fun `does not bridge tvdb primary id through tmdb for title ratings`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>()
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        val rating = repository.getTitleRating(
+            contentId = "tvdb:355567",
+            fallbackItemId = "tvdb:355567",
+            contentType = ContentType.SERIES,
+            fallbackItemType = "series"
+        )
+
+        assertNull(rating)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbService.tmdbToImdb(any(), any()) }
+        coVerify(exactly = 0) { client.fetchTitleRatings(any()) }
+    }
+
+    @Test
+    fun `does not bridge kitsu primary id through tmdb for title ratings`() = runTest {
+        val client = mockk<CustomImdbClient>()
+        val tmdbService = mockk<TmdbService>()
+        val repository = CustomImdbTitleRatingsRepository(client, tmdbService)
+
+        val rating = repository.getTitleRating(
+            contentId = "kitsu:12",
+            fallbackItemId = "kitsu:12",
+            contentType = ContentType.SERIES,
+            fallbackItemType = "series"
+        )
+
+        assertNull(rating)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbService.tmdbToImdb(any(), any()) }
+        coVerify(exactly = 0) { client.fetchTitleRatings(any()) }
     }
 }

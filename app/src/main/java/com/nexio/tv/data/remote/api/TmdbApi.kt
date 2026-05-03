@@ -326,7 +326,7 @@ data class TmdbFindResult(
 
 @JsonClass(generateAdapter = true)
 data class TmdbExternalIdsResponse(
-    @Json(name = "id") val id: Int,
+    @Json(name = "id") val id: Int? = null,
     @Json(name = "imdb_id") val imdbId: String? = null,
     @Json(name = "tvdb_id") val tvdbId: Int? = null
 )

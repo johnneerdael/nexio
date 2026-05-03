@@ -47,6 +47,20 @@ class LogcatTraceChannelTest {
     }
 
     @Test
+    fun `metadata stable_id_bundle maps to META_ROUTE`() {
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("metadata.stable_id_bundle"))
+    }
+
+    @Test
+    fun `home hydration lifecycle maps to META_ROUTE`() {
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.hydration_started"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.hydration_overlay_written"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.hydration_applied"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.hydration_ignored"))
+        assertEquals(LogcatTraceChannel.META_ROUTE, LogcatTraceChannel.forEventType("home.hydration_failed_using_preview"))
+    }
+
+    @Test
     fun `runtime operation_start maps to INT_RUNTIME`() {
         assertEquals(LogcatTraceChannel.INT_RUNTIME, LogcatTraceChannel.forEventType("runtime.operation_start"))
     }

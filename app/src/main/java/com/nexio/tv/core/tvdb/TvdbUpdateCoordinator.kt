@@ -6,8 +6,6 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.nexio.tv.core.integration.gsonCodec
-import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.TvdbUpdateStateStore
 import com.nexio.tv.workers.TvdbUpdateWorker
 import java.time.Duration
@@ -48,8 +46,7 @@ class TvdbUpdateCoordinator @Inject constructor(
     private val credentialHealth: TvdbCredentialHealth,
     private val updateStateStore: TvdbUpdateStateStore,
     private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
-    private val referenceDataServiceProvider: Provider<TvdbReferenceDataService>,
-    private val tvdbIntegrationProvider: TvdbIntegrationProvider? = null
+    private val referenceDataServiceProvider: Provider<TvdbReferenceDataService>
 ) {
     companion object {
         private const val TAG = "TvdbUpdateCoordinator"
@@ -69,17 +66,7 @@ class TvdbUpdateCoordinator @Inject constructor(
      * [TvdbUpdateCoordinatorResult.Failed].
      */
     suspend fun catchUpUpdates(trigger: TvdbUpdateTrigger): TvdbUpdateCoordinatorResult {
-        val provider = tvdbIntegrationProvider
-        return if (provider != null) {
-            provider.runMaintenanceUpdate(
-                triggerKey = trigger.name.lowercase(),
-                codec = gsonCodec<TvdbUpdateCoordinatorResult>()
-            ) {
-                catchUpUpdatesDirect(trigger)
-            } ?: TvdbUpdateCoordinatorResult.Failed("maintenance_blocked")
-        } else {
-            catchUpUpdatesDirect(trigger)
-        }
+        return catchUpUpdatesDirect(trigger)
     }
 
     private suspend fun catchUpUpdatesDirect(trigger: TvdbUpdateTrigger): TvdbUpdateCoordinatorResult {

@@ -5,6 +5,7 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataRoute
+import com.nexio.tv.core.metadata.router.MetadataRouteFailure
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
@@ -156,7 +157,7 @@ class HomeHydrationCoordinator @Inject constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            failed(itemKey, trigger, error::class.java.simpleName)
+            failed(itemKey, trigger, error.toHomeHydrationFailureReason())
         }
     }
 
@@ -212,6 +213,17 @@ class HomeHydrationCoordinator @Inject constructor(
         )
         return null
     }
+
+    private fun Exception.toHomeHydrationFailureReason(): String =
+        when (this) {
+            is MetadataRouteFailure.IdentityResolutionFailed -> "identity_resolution_failed"
+            is MetadataRouteFailure.MissingPlanStepAdapter -> "missing_provider_plan_step_adapter"
+            is IllegalStateException -> "illegal_state"
+            else -> this::class.java.name
+                .substringAfterLast('.')
+                .takeIf { it.isNotBlank() && !it.matches(OBFUSCATED_CLASS_NAME) }
+                ?: "unexpected_exception"
+        }
 
     private suspend fun resolveStableIdBundle(
         route: MetadataRoute?,
@@ -408,5 +420,6 @@ class HomeHydrationCoordinator @Inject constructor(
         const val WORK_CLASS_BACKGROUND_HYDRATION = "BACKGROUND_HYDRATION"
         const val OVERLAY_STALE_MS = 24L * 60L * 60L * 1000L
         const val OVERLAY_EXPIRES_MS = 7L * 24L * 60L * 60L * 1000L
+        val OBFUSCATED_CLASS_NAME = Regex("[a-z]\\d*")
     }
 }

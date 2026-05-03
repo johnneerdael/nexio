@@ -107,6 +107,70 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
+    fun `stable_id_bundle event writes to MetaRoute tag with canonical and sidecar ids`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("metadata.stable_id_bundle", mapOf(
+            "itemKey" to "home:tmdb:series:1399",
+            "itemType" to "SERIES",
+            "status" to "READY",
+            "trigger" to "VISIBLE",
+            "tmdbMovieId" to null,
+            "tvdbSeriesId" to "121361",
+            "kitsuAnimeId" to null,
+            "imdbId" to "tt0944947",
+            "networkExecuted" to true
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=metadata.stable_id_bundle"))
+        assertTrue(msg.contains("itemKey=home:tmdb:series:1399"))
+        assertTrue(msg.contains("itemType=SERIES"))
+        assertTrue(msg.contains("status=READY"))
+        assertTrue(msg.contains("tvdbSeriesId=121361"))
+        assertTrue(msg.contains("imdbId=tt0944947"))
+        assertTrue(msg.contains("networkExecuted=true"))
+    }
+
+    @Test
+    fun `home hydration applied event writes to MetaRoute tag with changed fields and stability markers`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("home.hydration_applied", mapOf(
+            "railId" to "tmdb.popular.tv",
+            "itemKey" to "home:tmdb:series:1399",
+            "firstPaintSource" to "RAIL_PREVIEW",
+            "canonicalProvider" to "TVDB",
+            "canonicalId" to "121361",
+            "imdbId" to "tt0944947",
+            "trigger" to "VISIBLE",
+            "priority" to "HIGH",
+            "workClass" to "BACKGROUND_HYDRATION",
+            "changedFields" to listOf("poster", "rating"),
+            "displayHashBefore" to "preview-hash",
+            "displayHashAfter" to "canonical-hash",
+            "rowOrderChanged" to false,
+            "focusChanged" to false,
+            "networkExecuted" to false,
+            "cacheDecision" to "CACHE_HIT"
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(1, logs.size)
+        val msg = logs.first().msg
+        assertTrue(msg.contains("t=home.hydration_applied"))
+        assertTrue(msg.contains("railId=tmdb.popular.tv"))
+        assertTrue(msg.contains("itemKey=home:tmdb:series:1399"))
+        assertTrue(msg.contains("canonicalProvider=TVDB"))
+        assertTrue(msg.contains("canonicalId=121361"))
+        assertTrue(msg.contains("imdbId=tt0944947"))
+        assertTrue(msg.contains("changedFields=[poster,rating]"))
+        assertTrue(msg.contains("rowOrderChanged=false"))
+        assertTrue(msg.contains("focusChanged=false"))
+        assertTrue(msg.contains("cacheDecision=CACHE_HIT"))
+    }
+
+    @Test
     fun `cache_decision event writes to IntRuntime tag with decision and cacheKey`() {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         sink.emit(envelope("runtime.cache_decision", mapOf(
