@@ -50,11 +50,13 @@ def usage() -> int:
     return 2
 
 
-def payload_for(event: Dict[str, Any]) -> Dict[str, Any]:
+def payload_for(event: Dict[str, Any], line_number: int) -> Dict[str, Any]:
     payload = event.get("payload")
+    if payload is None:
+        return event
     if isinstance(payload, dict):
         return payload
-    return event
+    raise ValueError(f"line {line_number}: payload must be an object")
 
 
 def text(value: Any) -> str:
@@ -96,11 +98,14 @@ def read_proofs(path: str) -> Dict[str, OperationProof]:
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{line_number}: invalid JSON: {exc}") from exc
 
+            if not isinstance(event, dict):
+                raise ValueError(f"line {line_number}: event must be an object")
+
+            payload = payload_for(event, line_number)
             event_type = event.get("eventType")
             if event_type not in {"runtime.operation_start", "runtime.cache_decision", "http.request"}:
                 continue
 
-            payload = payload_for(event)
             runtimeOperationId = payload.get("runtimeOperationId")
             if not runtimeOperationId:
                 continue
@@ -123,9 +128,13 @@ def read_proofs(path: str) -> Dict[str, OperationProof]:
     return proofs
 
 
+def sorted_proofs(proofs: Dict[str, OperationProof]) -> List[OperationProof]:
+    return [proofs[runtimeOperationId] for runtimeOperationId in sorted(proofs)]
+
+
 def print_table(proofs: Dict[str, OperationProof]) -> None:
     print("\t".join(HEADER))
-    for proof in proofs.values():
+    for proof in sorted_proofs(proofs):
         print(
             "\t".join(
                 [
@@ -145,7 +154,7 @@ def print_table(proofs: Dict[str, OperationProof]) -> None:
 def print_miss_then_network_summary(proofs: Dict[str, OperationProof]) -> None:
     misses = [
         proof
-        for proof in proofs.values()
+        for proof in sorted_proofs(proofs)
         if any(decision.decision == "MISS_THEN_NETWORK" for decision in proof.decisions)
     ]
     if not misses:
@@ -171,7 +180,7 @@ def print_miss_then_network_summary(proofs: Dict[str, OperationProof]) -> None:
 
 def violations(proofs: Dict[str, OperationProof]) -> List[str]:
     failures: List[str] = []
-    for proof in proofs.values():
+    for proof in sorted_proofs(proofs):
         for decision in proof.decisions:
             if (
                 decision.decision in {"HIT", "STALE_HIT"}
