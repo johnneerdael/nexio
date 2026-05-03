@@ -13,8 +13,17 @@ import com.nexio.tv.integrations.hyperhdr.data.HdrMode
 object FormatDetector {
 
     @UnstableApi
-    fun detect(colorInfo: ColorInfo?, hdrMode: HdrMode): CaptureMode {
+    fun detect(
+        colorInfo: ColorInfo?,
+        hdrMode: HdrMode,
+        deviceComposesWideColor: Boolean,
+    ): CaptureMode {
+        // Strongest gate first: if the device's compositor doesn't operate in wide-color,
+        // any HDR pipeline we attempt would receive SDR-tone-mapped data anyway. Force SDR.
+        if (!deviceComposesWideColor) return CaptureMode.SDR_NV12
+
         if (hdrMode == HdrMode.ForceSdr) return CaptureMode.SDR_NV12
+
         return when (colorInfo?.colorTransfer) {
             C.COLOR_TRANSFER_ST2084, C.COLOR_TRANSFER_HLG -> CaptureMode.HDR_P010
             else -> CaptureMode.SDR_NV12

@@ -1002,7 +1002,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             scope.launch {
                                 val cfg = hyperHdrCfg
                                 val colorInfo = _exoPlayer?.videoFormat?.colorInfo
-                                val mode = FormatDetector.detect(colorInfo, cfg.hdrMode)
+                                val mode = FormatDetector.detect(colorInfo, cfg.hdrMode, deviceComposesWideColor = true)
                                 startHyperHdrCapture(mode)
                             }
                         } else {
@@ -1040,7 +1040,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         // ===== HyperHDR ambilight: re-detect mode if it changed =====
                         if (hyperHdrCfg.isUsable && _exoPlayer?.isPlaying == true) {
                             val colorInfo = _exoPlayer?.videoFormat?.colorInfo
-                            val newMode = FormatDetector.detect(colorInfo, hyperHdrCfg.hdrMode)
+                            val newMode = FormatDetector.detect(colorInfo, hyperHdrCfg.hdrMode, deviceComposesWideColor = true)
                             if (newMode != hyperHdrCurrentMode) {
                                 scope.launch { startHyperHdrCapture(newMode) }
                             }
