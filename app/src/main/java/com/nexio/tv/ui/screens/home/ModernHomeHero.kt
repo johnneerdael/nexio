@@ -62,6 +62,7 @@ internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
+    trailerPreviewUserAgent: String?,
     showLoadingIndicator: Boolean,
     trailerMuted: Boolean,
     showFullscreenHint: Boolean,
@@ -108,6 +109,7 @@ internal fun ModernHeroMediaLayer(
             TrailerPlayer(
                 trailerUrl = trailerPreviewUrl,
                 trailerAudioUrl = trailerPreviewAudioUrl,
+                trailerUserAgent = trailerPreviewUserAgent,
                 isPlaying = true,
                 onEnded = {
                     trailerFirstFrameRendered = false

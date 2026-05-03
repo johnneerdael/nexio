@@ -37,7 +37,9 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
+import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
+import com.nexio.tv.data.trailer.buildStableYouTubeRequestHeaders
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -94,6 +96,7 @@ fun TrailerPlayer(
     onRemoteKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean = { _, _, _ -> false },
     cropToFill: Boolean = false,
     overscanZoom: Float = 1f,
+    trailerUserAgent: String? = null,
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
@@ -153,10 +156,18 @@ fun TrailerPlayer(
         videoUrl: String,
         audioUrl: String?
     ): DefaultMediaSourceFactory {
+        val effectiveUserAgent = trailerUserAgent
+            ?.takeIf { it.isNotBlank() }
+            ?: YOUTUBE_STABLE_WEB_USER_AGENT
         return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
-            DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+            DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory(userAgent = effectiveUserAgent))
         } else {
-            DefaultMediaSourceFactory(DefaultHttpDataSource.Factory())
+            DefaultMediaSourceFactory(
+                DefaultHttpDataSource.Factory()
+                    .setUserAgent(effectiveUserAgent)
+                    .setDefaultRequestProperties(buildStableYouTubeRequestHeaders())
+                    .setAllowCrossProtocolRedirects(true)
+            )
         }
     }
 

@@ -274,6 +274,7 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewNegativeCache = mutableStateMapOf<String, Boolean>()
     internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
+    internal val trailerPreviewUserAgentsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
     internal val trailerMetadataAvailabilityInFlightKeys = Collections.synchronizedSet(mutableSetOf<String>())
@@ -363,6 +364,8 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewUrlsState
     val trailerPreviewAudioUrls: Map<String, String>
         get() = trailerPreviewAudioUrlsState
+    val trailerPreviewUserAgents: Map<String, String>
+        get() = trailerPreviewUserAgentsState
     val trailerPreviewExternalUrls: Map<String, String>
         get() = trailerPreviewExternalUrlsState
     val trailerPreviewLoadingItemIds: Set<String>

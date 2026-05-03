@@ -22,6 +22,7 @@ data class MetaDetailsUiState(
     val episodeProgressMap: Map<Pair<Int, Int>, WatchProgress> = emptyMap(),
     val trailerUrl: String? = null,
     val trailerAudioUrl: String? = null,
+    val trailerUserAgent: String? = null,
     val trailerExternalUrl: String? = null,
     val pendingExternalTrailerUrl: String? = null,
     val titleHasPlayableTrailerMedia: Boolean = false,
@@ -145,11 +146,13 @@ internal fun MetaDetailsUiState.withFailedSeasonMediaPlaybackAttempt(
     availability: SeasonMediaActionAvailability,
     previousTrailerUrl: String?,
     previousTrailerAudioUrl: String?,
+    previousTrailerUserAgent: String?,
     previousTrailerExternalUrl: String?
 ): MetaDetailsUiState {
     return withSeasonMediaAvailability(season, availability).copy(
         trailerUrl = previousTrailerUrl,
         trailerAudioUrl = previousTrailerAudioUrl,
+        trailerUserAgent = previousTrailerUserAgent,
         trailerExternalUrl = previousTrailerExternalUrl,
         pendingExternalTrailerUrl = null,
         trailerResolutionStatus = TrailerResolutionStatus.FAILED,

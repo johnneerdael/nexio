@@ -741,6 +741,7 @@ fun MetaDetailsScreen(
                         titleHasPlayableTrailerMedia = uiState.titleHasPlayableTrailerMedia,
                         trailerUrl = uiState.trailerUrl,
                         trailerAudioUrl = uiState.trailerAudioUrl,
+                        trailerUserAgent = uiState.trailerUserAgent,
                         trailerExternalUrl = uiState.trailerExternalUrl,
                         isTrailerPlaying = uiState.isTrailerPlaying,
                         isTrailerLoading = uiState.isTrailerLoading,
@@ -1006,6 +1007,7 @@ private fun MetaDetailsContent(
     titleHasPlayableTrailerMedia: Boolean,
     trailerUrl: String?,
     trailerAudioUrl: String?,
+    trailerUserAgent: String?,
     trailerExternalUrl: String?,
     isTrailerPlaying: Boolean,
     isTrailerLoading: Boolean,
@@ -2126,6 +2128,7 @@ private fun MetaDetailsContent(
                     TrailerPlayer(
                         trailerUrl = trailerUrl,
                         trailerAudioUrl = trailerAudioUrl,
+                        trailerUserAgent = trailerUserAgent,
                         isPlaying = true,
                         onEnded = {
                             trailerFirstFrameRendered = false

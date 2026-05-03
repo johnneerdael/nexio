@@ -26,11 +26,13 @@ class MetaDetailsSeasonMediaStateTest {
             ),
             previousTrailerUrl = "https://example.com/series.m3u8",
             previousTrailerAudioUrl = "https://example.com/series-audio.m4a",
+            previousTrailerUserAgent = "test-agent",
             previousTrailerExternalUrl = "https://youtube.com/watch?v=series"
         )
 
         assertEquals("https://example.com/series.m3u8", updated.trailerUrl)
         assertEquals("https://example.com/series-audio.m4a", updated.trailerAudioUrl)
+        assertEquals("test-agent", updated.trailerUserAgent)
         assertEquals("https://youtube.com/watch?v=series", updated.trailerExternalUrl)
         assertEquals(null, updated.pendingExternalTrailerUrl)
         assertFalse(updated.isTrailerPlaying)
@@ -57,11 +59,13 @@ class MetaDetailsSeasonMediaStateTest {
             ),
             previousTrailerUrl = "https://example.com/series.m3u8",
             previousTrailerAudioUrl = "https://example.com/series-audio.m4a",
+            previousTrailerUserAgent = "test-agent",
             previousTrailerExternalUrl = "https://youtube.com/watch?v=series"
         )
 
         assertEquals("https://example.com/series.m3u8", updated.trailerUrl)
         assertEquals("https://example.com/series-audio.m4a", updated.trailerAudioUrl)
+        assertEquals("test-agent", updated.trailerUserAgent)
         assertEquals("https://youtube.com/watch?v=series", updated.trailerExternalUrl)
         assertEquals(null, updated.pendingExternalTrailerUrl)
         assertFalse(updated.isTrailerPlaying)

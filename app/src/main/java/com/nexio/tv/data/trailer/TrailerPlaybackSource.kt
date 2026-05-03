@@ -2,23 +2,26 @@ package com.nexio.tv.data.trailer
 
 data class TrailerPlaybackSource(
     val videoUrl: String,
-    val audioUrl: String? = null
+    val audioUrl: String? = null,
+    val userAgent: String? = null
 )
 
 internal fun selectPreferredTrailerPlaybackSource(
     combinedUrl: String?,
     adaptiveVideoUrl: String?,
-    adaptiveAudioUrl: String?
+    adaptiveAudioUrl: String?,
+    userAgent: String? = null
 ): TrailerPlaybackSource? {
     val normalizedCombinedUrl = combinedUrl?.takeIf { it.isNotBlank() }
     if (normalizedCombinedUrl != null) {
-        return TrailerPlaybackSource(videoUrl = normalizedCombinedUrl)
+        return TrailerPlaybackSource(videoUrl = normalizedCombinedUrl, userAgent = userAgent)
     }
 
     val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() } ?: return null
     return TrailerPlaybackSource(
         videoUrl = normalizedAdaptiveVideoUrl,
-        audioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() }
+        audioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() },
+        userAgent = userAgent
     )
 }
 

@@ -292,6 +292,7 @@ internal fun IdleTrailerScreensaverOverlay(
         TrailerPlayer(
             trailerUrl = currentPlayback.source.videoUrl,
             trailerAudioUrl = currentPlayback.source.audioUrl,
+            trailerUserAgent = currentPlayback.source.userAgent,
             isPlaying = true,
             muted = sessionMuted,
             onEnded = { advanceSignal += 1 },
