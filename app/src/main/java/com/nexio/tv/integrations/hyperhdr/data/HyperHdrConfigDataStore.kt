@@ -20,7 +20,9 @@ class HyperHdrConfigDataStore @Inject constructor(
         val ENABLED = booleanPreferencesKey("hyperhdr_enabled")
         val HOST = stringPreferencesKey("hyperhdr_host")
         val PORT = intPreferencesKey("hyperhdr_port")
+        val JSON_PORT = intPreferencesKey("hyperhdr_json_port")
         val PRIORITY = intPreferencesKey("hyperhdr_priority")
+        val HDR_MODE = stringPreferencesKey("hyperhdr_hdr_mode")
     }
 
     val config: Flow<HyperHdrConfig> = dataStore.data.map { prefs ->
@@ -28,7 +30,11 @@ class HyperHdrConfigDataStore @Inject constructor(
             enabled = prefs[Keys.ENABLED] ?: false,
             host = prefs[Keys.HOST] ?: "",
             port = prefs[Keys.PORT] ?: 19400,
+            jsonPort = prefs[Keys.JSON_PORT] ?: 19444,
             priority = prefs[Keys.PRIORITY] ?: 100,
+            hdrMode = prefs[Keys.HDR_MODE]?.let {
+                runCatching { HdrMode.valueOf(it) }.getOrDefault(HdrMode.Auto)
+            } ?: HdrMode.Auto,
         )
     }
 
@@ -38,13 +44,19 @@ class HyperHdrConfigDataStore @Inject constructor(
                 enabled = prefs[Keys.ENABLED] ?: false,
                 host = prefs[Keys.HOST] ?: "",
                 port = prefs[Keys.PORT] ?: 19400,
+                jsonPort = prefs[Keys.JSON_PORT] ?: 19444,
                 priority = prefs[Keys.PRIORITY] ?: 100,
+                hdrMode = prefs[Keys.HDR_MODE]?.let {
+                    runCatching { HdrMode.valueOf(it) }.getOrDefault(HdrMode.Auto)
+                } ?: HdrMode.Auto,
             )
             val next = transform(current)
             prefs[Keys.ENABLED] = next.enabled
             prefs[Keys.HOST] = next.host
             prefs[Keys.PORT] = next.port
+            prefs[Keys.JSON_PORT] = next.jsonPort
             prefs[Keys.PRIORITY] = next.priority
+            prefs[Keys.HDR_MODE] = next.hdrMode.name
         }
     }
 }

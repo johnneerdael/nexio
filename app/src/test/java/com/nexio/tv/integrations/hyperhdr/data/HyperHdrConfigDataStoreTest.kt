@@ -46,4 +46,20 @@ class HyperHdrConfigDataStoreTest {
             enabled = true, host = "192.168.1.10", port = 19444, priority = 50,
         ))
     }
+
+    @Test
+    fun `default config has Auto hdrMode and 19444 jsonPort`() = runTest {
+        val cfg = store.config.first()
+        assertThat(cfg.hdrMode).isEqualTo(HdrMode.Auto)
+        assertThat(cfg.jsonPort).isEqualTo(19444)
+    }
+
+    @Test
+    fun `update persists hdrMode and jsonPort independently`() = runTest {
+        store.update { it.copy(hdrMode = HdrMode.ForceSdr) }
+        store.update { it.copy(jsonPort = 19500) }
+        val cfg = store.config.first()
+        assertThat(cfg.hdrMode).isEqualTo(HdrMode.ForceSdr)
+        assertThat(cfg.jsonPort).isEqualTo(19500)
+    }
 }
