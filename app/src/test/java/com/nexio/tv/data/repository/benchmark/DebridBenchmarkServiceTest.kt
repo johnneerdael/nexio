@@ -89,49 +89,9 @@ class DebridBenchmarkServiceTest {
         coVerify(exactly = 1) {
             store().saveLatest(completedResult)
         }
-        coVerify(exactly = 1) {
-            uploader().submitIfEnabled(completedResult)
-        }
         verify(exactly = 1) {
             logger().logCompleted(completedResult)
         }
-    }
-
-    @Test
-    fun `service uploads completed benchmark results independently of settings ui`() = runTest {
-        val summary = DebridBenchmarkSummary(
-            startupTimeMs = 4_000L,
-            sustainedThroughputMbps = 123.5,
-            transferredBytes = 600.mb,
-            elapsedMs = 130.seconds
-        )
-        val completedResult = DebridBenchmarkResult(
-            provider = DebridBenchmarkProvider.REAL_DEBRID,
-            measuredAtMs = 42_000L,
-            summary = summary,
-            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-        )
-        val service = buildService(
-            runSession = { _, _, _ ->
-                DebridBenchmarkSessionResult(
-                    summary = summary,
-                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-                    result = completedResult
-                )
-            },
-            scope = backgroundScope
-        )
-        val uploaded = CompletableDeferred<DebridBenchmarkResult>()
-
-        coEvery { uploader().submitIfEnabled(any()) } answers {
-            uploaded.complete(firstArg())
-            Unit
-        }
-
-        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
-
-        assertEquals(completedResult, uploaded.await())
-        coVerify(exactly = 1) { uploader().submitIfEnabled(completedResult) }
     }
 
     @Test
@@ -267,7 +227,6 @@ class DebridBenchmarkServiceTest {
 
     private lateinit var benchmarkStore: DebridBenchmarkStore
     private lateinit var benchmarkSessionRunner: DebridBenchmarkSessionRunner
-    private lateinit var benchmarkCollectionUploader: DebridBenchmarkCollectionUploader
     private lateinit var benchmarkResultJsonLogger: BenchmarkResultJsonLogger
     private lateinit var playerSettingsDataStore: PlayerSettingsDataStore
 
@@ -280,7 +239,6 @@ class DebridBenchmarkServiceTest {
         val resolver = mockk<DebridBenchmarkCandidateResolver>()
         benchmarkStore = mockk(relaxed = true)
         benchmarkSessionRunner = mockk()
-        benchmarkCollectionUploader = mockk(relaxed = true)
         benchmarkResultJsonLogger = mockk(relaxed = true)
         playerSettingsDataStore = mockk(relaxed = true)
 
@@ -296,7 +254,6 @@ class DebridBenchmarkServiceTest {
             resolver = resolver,
             store = benchmarkStore,
             sessionRunner = benchmarkSessionRunner,
-            collectionUploader = benchmarkCollectionUploader,
             benchmarkResultJsonLogger = benchmarkResultJsonLogger,
             playerSettingsDataStore = playerSettingsDataStore,
             scope = scope,
@@ -306,7 +263,6 @@ class DebridBenchmarkServiceTest {
     }
 
     private fun store(): DebridBenchmarkStore = benchmarkStore
-    private fun uploader(): DebridBenchmarkCollectionUploader = benchmarkCollectionUploader
     private fun logger(): BenchmarkResultJsonLogger = benchmarkResultJsonLogger
     private fun playerSettingsStore(): PlayerSettingsDataStore = playerSettingsDataStore
 
