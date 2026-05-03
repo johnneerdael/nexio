@@ -503,22 +503,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             
             subtitleDelayUs.set(_uiState.value.subtitleDelayMs.toLong() * 1000L)
-            val dv5SoftwareToneMapEnabled = playerSettings.experimentalDv5ToneMapToSdrEnabled
+            val dv5SoftwareToneMapEnabled = false
             isDv5SoftwareToneMapSettingEnabledForCurrentPlayback = dv5SoftwareToneMapEnabled
-            val dv5HardwareToneMapEnabled =
-                playerSettings.experimentalDv5HardwareToneMapToSdrEnabled
-            val dv5HardwareToneMapCpuFallbackEnabled =
-                playerSettings.experimentalDv5HardwareToneMapCpuFallbackEnabled
+            val dv5HardwareToneMapEnabled = false
+            val dv5HardwareToneMapCpuFallbackEnabled = false
             isDv5HardwareToneMapSettingEnabledForCurrentPlayback = dv5HardwareToneMapEnabled
-            val dv5ToneMapNativeBuildSupported = FfmpegLibrary.supportsExperimentalDv5ToneMapToSdr()
-            val dv5SoftwareToneMapRuntimeSupported =
-                FfmpegLibrary.supportsExperimentalDv5SoftwareToneMapToSdrRuntime()
+            val dv5ToneMapNativeBuildSupported = false
+            val dv5SoftwareToneMapRuntimeSupported = false
             isDv5HardwareToneMapNativeSupportedForCurrentPlayback = dv5ToneMapNativeBuildSupported
             isDv5SoftwareToneMapNativeSupportedForCurrentPlayback =
                 dv5ToneMapNativeBuildSupported && dv5SoftwareToneMapRuntimeSupported
-            val dv5HardwareForced = dv5HardwareToneMapPreferredStreamUrls.contains(url)
-            val dv5SoftwareForced = !dv5HardwareForced &&
-                dv5SoftwareToneMapPreferredStreamUrls.contains(url)
+            val dv5HardwareForced = false
+            val dv5SoftwareForced = false
             val dv5DetectedByProfile = dv5SoftwareForced || dv5HardwareForced
             val displaySupportsDolbyVision = displayHdrCapabilities.supportsDolbyVision
             isCurrentDisplayDolbyVisionCapable = displaySupportsDolbyVision
@@ -554,7 +550,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 enabled = dv7ToDv81SettingActive,
                 allowDv5Conversion = playerSettings.experimentalDv5ToDv81Enabled,
                 preserveMappingEnabled = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
-                enableRpuTap = dv5HardwareToneMapActive,
+                enableRpuTap = false,
                 streamUrl = url
             )
             if (dolbyVisionHookInstalledForPlayback) {
@@ -587,18 +583,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
             val codecSelector = createDolbyVisionFallbackCodecSelector(
                 forceVc1SoftwareDecode = true,
-                forceDolbyVisionSoftwareDecode = dv5SoftwareToneMapActive
+                forceDolbyVisionSoftwareDecode = false
             )
             val effectiveDecoderPriority = if (av1FfmpegFallbackActive) {
                 DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
             } else if (vc1SoftwareFallbackActive) {
                 DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-            } else if (dv5SoftwareToneMapActive) {
-                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
             } else {
                 playerSettings.decoderPriority
             }
-            FfmpegLibrary.setExperimentalDv5ToneMapToSdrEnabled(dv5SoftwareToneMapActive)
+            FfmpegLibrary.setExperimentalDv5ToneMapToSdrEnabled(false)
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
                 subtitleDelayUsProvider = subtitleDelayUs::get,
@@ -607,9 +601,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 experimentalFireOsIecPassthroughEnabled =
                     playerSettings.experimentalDtsIecPassthroughEnabled,
                 disableDav1dForAv1 = av1FfmpegFallbackActive,
-                experimentalDv5HardwareToneMapEnabled = dv5HardwareToneMapActive,
-                experimentalDv5HardwareToneMapCpuFallbackEnabled =
-                    dv5HardwareToneMapCpuFallbackEnabled,
+                experimentalDv5HardwareToneMapEnabled = false,
+                experimentalDv5HardwareToneMapCpuFallbackEnabled = false,
                 assSsaRenderControllerProvider = { assSsaRenderController }
             )
                 .setEnableMediaCodecVideoRendererDurationToProgressUs(

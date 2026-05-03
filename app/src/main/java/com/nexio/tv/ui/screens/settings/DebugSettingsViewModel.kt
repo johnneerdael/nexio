@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
 import com.nexio.tv.data.local.TvdbDiagnosticsSnapshot
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,7 +18,6 @@ import javax.inject.Inject
 @HiltViewModel
 class DebugSettingsViewModel @Inject constructor(
     private val dataStore: DebugSettingsDataStore,
-    private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val authManager: AuthManager,
     private val tvdbDiagnosticsDataStore: TvdbDiagnosticsDataStore
 ) : ViewModel() {
@@ -36,19 +34,6 @@ class DebugSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             dataStore.syncCodeFeaturesEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(syncCodeFeaturesEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            playerSettingsDataStore.playerSettings.collectLatest { settings ->
-                _uiState.update {
-                    it.copy(
-                        dv5ToneMapToSdrEnabled = settings.experimentalDv5ToneMapToSdrEnabled,
-                        dv5HardwareToneMapToSdrEnabled =
-                            settings.experimentalDv5HardwareToneMapToSdrEnabled,
-                        dv5HardwareToneMapCpuFallbackEnabled =
-                            settings.experimentalDv5HardwareToneMapCpuFallbackEnabled
-                    )
-                }
             }
         }
         viewModelScope.launch {
@@ -82,27 +67,6 @@ class DebugSettingsViewModel @Inject constructor(
                     }
                 }
             }
-            is DebugSettingsEvent.ToggleDv5ToneMapToSdr -> {
-                viewModelScope.launch {
-                    playerSettingsDataStore.setExperimentalDv5ToneMapToSdrEnabled(event.enabled)
-                }
-            }
-            is DebugSettingsEvent.ToggleDv5HardwareToneMapToSdr -> {
-                viewModelScope.launch {
-                    playerSettingsDataStore
-                        .setExperimentalDv5HardwareToneMapToSdrEnabled(event.enabled)
-                    if (!event.enabled) {
-                        playerSettingsDataStore
-                            .setExperimentalDv5HardwareToneMapCpuFallbackEnabled(false)
-                    }
-                }
-            }
-            is DebugSettingsEvent.ToggleDv5HardwareToneMapCpuFallback -> {
-                viewModelScope.launch {
-                    playerSettingsDataStore
-                        .setExperimentalDv5HardwareToneMapCpuFallbackEnabled(event.enabled)
-                }
-            }
         }
     }
 }
@@ -110,9 +74,6 @@ class DebugSettingsViewModel @Inject constructor(
 data class DebugSettingsUiState(
     val accountTabEnabled: Boolean = false,
     val syncCodeFeaturesEnabled: Boolean = false,
-    val dv5ToneMapToSdrEnabled: Boolean = false,
-    val dv5HardwareToneMapToSdrEnabled: Boolean = false,
-    val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
     val signInLoading: Boolean = false,
     val signInResult: String? = null,
     val tvdbDiagnostics: TvdbDiagnosticsSnapshot = TvdbDiagnosticsSnapshot(),
@@ -121,8 +82,5 @@ data class DebugSettingsUiState(
 sealed class DebugSettingsEvent {
     data class ToggleAccountTab(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleSyncCodeFeatures(val enabled: Boolean) : DebugSettingsEvent()
-    data class ToggleDv5ToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
-    data class ToggleDv5HardwareToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
-    data class ToggleDv5HardwareToneMapCpuFallback(val enabled: Boolean) : DebugSettingsEvent()
     data class SignIn(val email: String, val password: String) : DebugSettingsEvent()
 }
