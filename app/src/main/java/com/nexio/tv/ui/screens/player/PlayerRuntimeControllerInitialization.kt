@@ -86,9 +86,12 @@ import java.net.SocketTimeoutException
 import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
 import com.nexio.tv.integrations.hyperhdr.capture.CaptureMode
+import com.nexio.tv.integrations.hyperhdr.capture.FormatDetector
 import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
+import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
+import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
 private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
@@ -752,36 +755,68 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             assSsaPipelineSwitchInFlight = false
             _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
 
-            // Inject HyperHDR ambilight capture via setVideoEffects when enabled.
-            // Observes the DataStore so toggling the setting at runtime re-applies/clears effects.
+            // ===== HyperHDR ambilight capture — Player.Listener-driven session lifecycle =====
             val hyperHdrStore = EntryPoints
                 .get(context.applicationContext, HyperHdrEntryPoint::class.java)
                 .hyperHdrConfigDataStore()
+
+            // ===== HyperHDR ambilight state (scoped to this player init) =====
+            var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
+            var hyperHdrFbClient: HyperHdrFlatBufferClient? = null
+            var hyperHdrCurrentMode: CaptureMode? = null
+
+            // Live-update the local cfg snapshot when the user changes Settings mid-session.
             scope.launch {
-                var activeClient: HyperHdrFlatBufferClient? = null
-                hyperHdrStore.config.collect { cfg ->
-                    // Tear down any previous client.
-                    activeClient?.close()
-                    activeClient = null
-                    val player = _exoPlayer ?: return@collect
-                    if (cfg.isUsable) {
-                        val client = HyperHdrFlatBufferClient(
-                            host = cfg.host, port = cfg.port, priority = cfg.priority,
-                            origin = "Nexio-HyperHDR",
-                        )
-                        try {
-                            client.connect()
-                            activeClient = client
-                            player.setVideoEffects(listOf(HyperHdrCaptureEffect(client, CaptureMode.HDR_P010)))
-                        } catch (t: Throwable) {
-                            Log.w("HyperHdrIntegration", "Failed to connect to HyperHDR; not enabling effect", t)
-                            client.close()
-                            player.setVideoEffects(emptyList())
-                        }
-                    } else {
-                        player.setVideoEffects(emptyList())
-                    }
+                hyperHdrStore.config.collect { hyperHdrCfg = it }
+            }
+
+            // Helper: open FlatBuffer + JSON connections, signal HDR mode, install effect.
+            suspend fun startHyperHdrCapture(targetMode: CaptureMode) {
+                val player = _exoPlayer ?: return
+                val cfg = hyperHdrCfg
+                if (!cfg.isUsable) return
+
+                // Stop any prior session before starting a new one.
+                hyperHdrFbClient?.close()
+                hyperHdrFbClient = null
+
+                val fbClient = HyperHdrFlatBufferClient(
+                    host = cfg.host, port = cfg.port, priority = cfg.priority,
+                    origin = "Nexio-HyperHDR",
+                )
+                try {
+                    fbClient.connect()
+                } catch (t: Throwable) {
+                    Log.w("HyperHdrIntegration", "FlatBuffer connect failed; not enabling effect", t)
+                    fbClient.close()
+                    player.setVideoEffects(emptyList())
+                    hyperHdrCurrentMode = null
+                    return
                 }
+
+                // Best-effort JSON HDR mode signal — failure is non-fatal (FlatBuffer still works).
+                runCatching {
+                    val jsonClient = HyperHdrJsonApiClient(
+                        host = cfg.host, port = cfg.jsonPort,
+                    )
+                    jsonClient.setHdrVideoMode(targetMode == CaptureMode.HDR_P010)
+                }.onFailure {
+                    Log.w("HyperHdrIntegration", "JSON setHdrVideoMode failed (continuing)", it)
+                }
+
+                hyperHdrFbClient = fbClient
+                hyperHdrCurrentMode = targetMode
+                player.setVideoEffects(listOf(
+                    HyperHdrCaptureEffect(fbClient, targetMode)
+                ))
+            }
+
+            fun stopHyperHdrCapture() {
+                val player = _exoPlayer ?: return
+                player.setVideoEffects(emptyList())
+                hyperHdrFbClient?.close()
+                hyperHdrFbClient = null
+                hyperHdrCurrentMode = null
             }
 
             scope.launch {
@@ -959,6 +994,22 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        // ===== HyperHDR ambilight =====
+                        if (!hyperHdrCfg.isUsable) {
+                            // Still tear down if we somehow had a session running.
+                            if (hyperHdrFbClient != null) stopHyperHdrCapture()
+                        } else if (isPlaying) {
+                            scope.launch {
+                                val cfg = hyperHdrCfg
+                                val colorInfo = _exoPlayer?.videoFormat?.colorInfo
+                                val mode = FormatDetector.detect(colorInfo, cfg.hdrMode)
+                                startHyperHdrCapture(mode)
+                            }
+                        } else {
+                            stopHyperHdrCapture()
+                        }
+                        // ===== /HyperHDR ambilight =====
+
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         _uiState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
@@ -986,6 +1037,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onTracksChanged(tracks: Tracks) {
+                        // ===== HyperHDR ambilight: re-detect mode if it changed =====
+                        if (hyperHdrCfg.isUsable && _exoPlayer?.isPlaying == true) {
+                            val colorInfo = _exoPlayer?.videoFormat?.colorInfo
+                            val newMode = FormatDetector.detect(colorInfo, hyperHdrCfg.hdrMode)
+                            if (newMode != hyperHdrCurrentMode) {
+                                scope.launch { startHyperHdrCapture(newMode) }
+                            }
+                        }
+                        // ===== /HyperHDR ambilight =====
+
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         updateAvailableTracks(tracks)
                     }
