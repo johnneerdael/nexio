@@ -33,6 +33,7 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 
 | Main Commit | Status On This Branch | Branch Commit | Notes |
 | --- | --- | --- | --- |
+| `466c05711` | `PORTED` | this slice | Shared `PlayProbeCache` now reuses one per-play FFmpeg metadata probe across DV profile detection, ASS/SSA startup, and AFR detection. |
 | `4a59157c1` | `PORTED` | this slice | FFmpeg probe now skips unsafe Comet proxy probing when resolver does not return a real CDN redirect, preventing placeholder/sample bytes from poisoning DV/codec decisions. |
 | `330f8fbfc` | `PORTED` | this slice | FFmpeg startup probe now uses Comet addon-host context and drops proxy-only headers after resolving to the CDN URL. |
 | `bacd1e39b` | `PORTED` | `814212217`, `6c659246e` | Continue Watching now preserves stable playback context and addon origin through shared route builders/player args. |
