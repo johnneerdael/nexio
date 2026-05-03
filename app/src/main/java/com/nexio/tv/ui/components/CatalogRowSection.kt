@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -36,6 +37,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import com.nexio.tv.R
@@ -51,6 +57,7 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.util.formatAddonTypeLabel
+import kotlinx.coroutines.launch
 
 internal fun catalogRowItemContentType(item: MetaPreview): String = item.apiType
 
@@ -98,6 +105,7 @@ fun CatalogRowSection(
     val itemFocusRequestersByKey = remember { mutableMapOf<String, FocusRequester>() }
     var lastRequestedFocusItemKey by remember { mutableStateOf<String?>(null) }
     var lastFocusedItemIndex by remember { mutableIntStateOf(-1) }
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(catalogRow.items) {
         val validKeys = catalogRow.items.mapIndexedTo(mutableSetOf()) { index, item ->
             rowItemFocusKey(index, item)
@@ -198,6 +206,28 @@ fun CatalogRowSection(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.type != KeyEventType.KeyDown ||
+                        keyEvent.key != Key.DirectionLeft ||
+                        catalogRow.items.isEmpty()
+                    ) {
+                        return@onKeyEvent false
+                    }
+                    val currentIndex = lastFocusedItemIndex
+                    if (currentIndex <= 0) {
+                        return@onKeyEvent true
+                    }
+                    val targetIndex = currentIndex - 1
+                    val targetItem = catalogRow.items.getOrNull(targetIndex)
+                        ?: return@onKeyEvent true
+                    val targetKey = rowItemFocusKey(targetIndex, targetItem)
+                    val requester = itemFocusRequestersByKey.getOrPut(targetKey) { FocusRequester() }
+                    coroutineScope.launch {
+                        listState.animateScrollToItem(targetIndex)
+                        runCatching { requester.requestFocus() }
+                    }
+                    true
+                }
                 .focusRequester(resolvedRowFocusRequester)
                 .then(
                     if (enableRowFocusRestorer && focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
