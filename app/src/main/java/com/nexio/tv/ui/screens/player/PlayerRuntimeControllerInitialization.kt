@@ -1223,8 +1223,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
                 }
                 val initialMediaSource = withContext(Dispatchers.IO) {
+                    val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(addonBaseUrl)
+                    val playableUrl = prepareMediaSourceUrl(url, headers, addonHost)
                     mediaSourceFactory.createMediaSource(
-                        url = url,
+                        url = playableUrl,
                         headers = headers,
                         subtitleConfigurations = startupSubtitleConfigurations
                     )
