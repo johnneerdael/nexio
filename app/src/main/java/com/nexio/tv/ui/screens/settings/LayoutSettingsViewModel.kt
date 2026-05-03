@@ -22,9 +22,6 @@ data class LayoutSettingsUiState(
     val hasChosen: Boolean = false,
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),
-    val sidebarCollapsedByDefault: Boolean = false,
-    val modernSidebarEnabled: Boolean = false,
-    val modernSidebarBlurEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
     val heroSectionEnabled: Boolean = true,
     val searchDiscoverEnabled: Boolean = true,
@@ -56,9 +53,6 @@ data class CatalogInfo(
 sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
-    data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
-    data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
-    data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernLandscapePostersEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -116,21 +110,6 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.heroCatalogSelections.distinctUntilChanged().collectLatest { keys ->
                 updateUiStateIfChanged { it.copy(heroCatalogKeys = keys) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.sidebarCollapsedByDefault.distinctUntilChanged().collectLatest { collapsed ->
-                updateUiStateIfChanged { it.copy(sidebarCollapsedByDefault = collapsed) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.modernSidebarEnabled.distinctUntilChanged().collectLatest { enabled ->
-                updateUiStateIfChanged { it.copy(modernSidebarEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.modernSidebarBlurEnabled.distinctUntilChanged().collectLatest { enabled ->
-                updateUiStateIfChanged { it.copy(modernSidebarBlurEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -235,9 +214,6 @@ class LayoutSettingsViewModel @Inject constructor(
         when (event) {
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
-            is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
-            is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
-            is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernLandscapePostersEnabled -> setModernLandscapePostersEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
             is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
@@ -276,27 +252,6 @@ class LayoutSettingsViewModel @Inject constructor(
                 selected.add(catalogKey)
             }
             layoutPreferenceDataStore.setHeroCatalogKeys(selected)
-        }
-    }
-
-    private fun setSidebarCollapsed(collapsed: Boolean) {
-        if (_uiState.value.sidebarCollapsedByDefault == collapsed) return
-        viewModelScope.launch {
-            layoutPreferenceDataStore.setSidebarCollapsedByDefault(collapsed)
-        }
-    }
-
-    private fun setModernSidebarEnabled(enabled: Boolean) {
-        if (_uiState.value.modernSidebarEnabled == enabled) return
-        viewModelScope.launch {
-            layoutPreferenceDataStore.setModernSidebarEnabled(enabled)
-        }
-    }
-
-    private fun setModernSidebarBlurEnabled(enabled: Boolean) {
-        if (_uiState.value.modernSidebarBlurEnabled == enabled) return
-        viewModelScope.launch {
-            layoutPreferenceDataStore.setModernSidebarBlurEnabled(enabled)
         }
     }
 

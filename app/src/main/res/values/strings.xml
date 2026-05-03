@@ -468,12 +468,6 @@
     <string name="layout_hero_catalogs_sub">Select one or more catalogs for hero content.</string>
     <string name="layout_section_content">Home Content</string>
     <string name="layout_section_content_desc">Control what appears on home and search.</string>
-    <string name="layout_collapse_sidebar">Collapse Sidebar</string>
-    <string name="layout_collapse_sidebar_sub">Hide sidebar by default; show when focused.</string>
-    <string name="layout_modern_sidebar">Modern Sidebar</string>
-    <string name="layout_modern_sidebar_sub">Enable floating sidebar navigation.</string>
-    <string name="layout_modern_sidebar_blur">Modern Sidebar Blur</string>
-    <string name="layout_modern_sidebar_blur_sub">Toggle blur effect for modern sidebar surfaces.</string>
     <string name="layout_show_hero">Show Hero Section</string>
     <string name="layout_show_hero_sub">Display hero carousel at top of home.</string>
     <string name="layout_show_discover">Show Discover in Search</string>
@@ -1310,7 +1304,6 @@
     <string name="nav_addons">Addons</string>
     <string name="nav_settings">Settings</string>
     <string name="settings_rounded_ui">Rounded UI</string>
-    <string name="cd_expand_sidebar">Expand sidebar</string>
 
     <string name="update_close">Close</string>
     <string name="update_open_settings">Open Settings</string>

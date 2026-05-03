@@ -397,12 +397,6 @@
   <string name="layout_hero_catalogs_sub">选择一个或多个目录作为顶部焦点推荐的内容。</string>
   <string name="layout_section_content">主页内容</string>
   <string name="layout_section_content_desc">控制主页和搜索界面上显示的内容。</string>
-  <string name="layout_collapse_sidebar">折叠侧边栏</string>
-  <string name="layout_collapse_sidebar_sub">默认隐藏侧边栏；选中时显示。</string>
-  <string name="layout_modern_sidebar">现代侧边栏</string>
-  <string name="layout_modern_sidebar_sub">启用悬浮式侧边栏导航。</string>
-  <string name="layout_modern_sidebar_blur">侧边栏模糊效果</string>
-  <string name="layout_modern_sidebar_blur_sub">开启现代侧边栏背景的毛玻璃模糊效果。</string>
   <string name="layout_show_hero">显示焦点推荐区</string>
   <string name="layout_show_hero_sub">在主页顶部显示焦点海报轮播。</string>
   <string name="layout_show_discover">在搜索中显示“发现”</string>
@@ -817,7 +811,6 @@
   <string name="nav_library">媒体库</string>
   <string name="nav_addons">插件</string>
   <string name="nav_settings">设置</string>
-  <string name="cd_expand_sidebar">展开侧边栏</string>
   <string name="update_close">关闭</string>
   <string name="update_open_settings">打开设置</string>
   <string name="update_install">安装</string>

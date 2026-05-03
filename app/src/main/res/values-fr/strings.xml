@@ -206,13 +206,6 @@
   <string name="layout_hero_catalogs_sub">Sélectionne un ou plusieurs catalogues pour le contenu vedette.</string>
   <string name="layout_section_content">Contenu de l\'accueil</string>
   <string name="layout_section_content_desc">Contrôle ce qui apparaît sur l\'accueil et la recherche.</string>
-  <string name="cd_expand_sidebar">Développer la barre latérale</string>
-  <string name="layout_collapse_sidebar">Réduire la barre latérale</string>
-  <string name="layout_collapse_sidebar_sub">Masque la barre latérale par défaut ; l\'afficher au focus.</string>
-  <string name="layout_modern_sidebar">Barre latérale moderne</string>
-  <string name="layout_modern_sidebar_sub">Active la navigation par barre latérale flottante.</string>
-  <string name="layout_modern_sidebar_blur">Flou de la barre latérale moderne</string>
-  <string name="layout_modern_sidebar_blur_sub">Active l\'effet de flou pour la barre latérale moderne.</string>
   <string name="layout_show_hero">Afficher la section vedette</string>
   <string name="layout_show_hero_sub">Affiche le carrousel vedette en haut de l\'accueil.</string>
   <string name="layout_show_discover">Afficher Découvrir dans la recherche</string>

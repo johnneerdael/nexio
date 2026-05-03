@@ -3,13 +3,14 @@ package com.nexio.tv.data.local
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LayoutPreferenceDataStoreMigrationTest {
 
     @Test
-    fun `collapse sidebar migration forces requested default once`() {
+    fun `layout migration no longer rewrites retired sidebar preferences`() {
         val prefs = mutablePreferencesOf(
             booleanPreferencesKey("migration_sidebar_collapsed_default_enabled") to false,
             booleanPreferencesKey("sidebar_collapsed_by_default") to false
@@ -17,27 +18,18 @@ class LayoutPreferenceDataStoreMigrationTest {
 
         applyLayoutPreferenceMigrations(prefs)
 
-        assertTrue(prefs[booleanPreferencesKey("migration_sidebar_collapsed_default_enabled")] == true)
-        assertTrue(prefs[booleanPreferencesKey("sidebar_collapsed_by_default")] == true)
-    }
-
-    @Test
-    fun `collapse sidebar migration leaves later manual changes alone after one time upgrade`() {
-        val prefs = mutablePreferencesOf(
-            booleanPreferencesKey("migration_sidebar_collapsed_default_enabled") to true,
-            booleanPreferencesKey("sidebar_collapsed_by_default") to false
-        )
-
-        applyLayoutPreferenceMigrations(prefs)
-
+        assertFalse(prefs[booleanPreferencesKey("migration_sidebar_collapsed_default_enabled")] ?: true)
         assertFalse(prefs[booleanPreferencesKey("sidebar_collapsed_by_default")] ?: true)
     }
 
     @Test
-    fun `collapse sidebar defaults enabled for fresh installs`() {
+    fun `fresh layout migration does not create retired sidebar keys`() {
         val prefs = mutablePreferencesOf()
 
-        assertTrue(sidebarCollapsedByDefaultFromPreferences(prefs))
+        applyLayoutPreferenceMigrations(prefs)
+
+        assertNull(prefs[booleanPreferencesKey("migration_sidebar_collapsed_default_enabled")])
+        assertNull(prefs[booleanPreferencesKey("sidebar_collapsed_by_default")])
     }
 
     @Test
