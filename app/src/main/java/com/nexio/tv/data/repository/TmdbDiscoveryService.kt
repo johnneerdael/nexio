@@ -4,6 +4,7 @@ import com.nexio.tv.data.integration.railpreview.TmdbRailPreviewMapper
 import com.nexio.tv.data.local.TmdbCatalogIds
 import com.nexio.tv.data.local.TmdbCatalogPreferences
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
@@ -41,14 +42,17 @@ class TmdbDiscoveryService @Inject constructor(
         if (trimmedQuery.length < 2) return@coroutineScope emptyList()
         if (client.credential().missing) return@coroutineScope emptyList()
 
-        val movieResults = async {
-            runCatchingOrEmpty { client.searchMovies(trimmedQuery, preferences) }
+        val pageJobs = (1..SEARCH_PAGES).map { page ->
+            async {
+                runCatchingMultiOrEmpty { client.searchMulti(trimmedQuery, page, preferences) }
+            }
         }
-        val tvResults = async {
-            runCatchingOrEmpty { client.searchTv(trimmedQuery, preferences) }
-        }
-        val items = mapSearchResults(movieResults.await(), ContentType.MOVIE) +
-            mapSearchResults(tvResults.await(), ContentType.SERIES)
+        val items = mapMultiSearchResults(
+            pageJobs.awaitAll()
+                .flatten()
+                .sortedByDescending { it.popularity ?: 0.0 }
+                .take(SEARCH_MAX_ITEMS)
+        )
         if (items.isEmpty()) return@coroutineScope emptyList()
 
         listOf(
@@ -165,6 +169,16 @@ class TmdbDiscoveryService @Inject constructor(
             emptyList()
     }
 
+    private suspend fun runCatchingMultiOrEmpty(
+        block: suspend () -> List<TmdbMultiSearchResult>
+    ): List<TmdbMultiSearchResult> = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        emptyList()
+    }
+
     private fun mapCatalogResults(
         railId: String,
         results: List<TmdbMediaResult>,
@@ -190,50 +204,72 @@ class TmdbDiscoveryService @Inject constructor(
             }
     }
 
-    private suspend fun mapSearchResults(
-        results: List<TmdbMediaResult>,
-        contentType: ContentType
+    private suspend fun mapMultiSearchResults(
+        results: List<TmdbMultiSearchResult>
     ): List<MetaPreview> = coroutineScope {
-        results.take(MAX_ITEMS_PER_SOURCE)
-            .map { result ->
-                async {
-                    imdbLookupSemaphore.withPermit {
-                        mapSearchResult(result, contentType)
-                    }
+        results.map { result ->
+            async {
+                when (result.mediaType?.lowercase()) {
+                    "movie" -> mapMultiMovieOrTv(result, ContentType.MOVIE)
+                    "tv" -> mapMultiMovieOrTv(result, ContentType.SERIES)
+                    "person" -> mapMultiPerson(result)
+                    else -> null
                 }
             }
-            .awaitAll()
-            .filterNotNull()
+        }.awaitAll().filterNotNull()
     }
 
-    private suspend fun mapSearchResult(
-        result: TmdbMediaResult,
+    private suspend fun mapMultiMovieOrTv(
+        result: TmdbMultiSearchResult,
         contentType: ContentType
     ): MetaPreview? {
-        val title = firstNonBlank(
+        val rawTitle = firstNonBlank(
             result.title,
             result.name,
             result.originalTitle,
             result.originalName
         ) ?: return null
-        val backdrop = tmdbImageUrl(result.backdropPath, "w1280")
-        val poster = backdrop ?: tmdbImageUrl(result.posterPath, "w780")
-        val imdbId = client.imdbId(result.id, contentType)
+        val date = firstNonBlank(result.releaseDate, result.firstAirDate)
+        val year = date?.take(4)?.takeIf { value -> value.length == 4 && value.all(Char::isDigit) }
+        val displayName = if (year != null) "$rawTitle ($year)" else rawTitle
+        val poster = tmdbImageUrl(result.posterPath, "w780")
+        val imdbId = imdbLookupSemaphore.withPermit { client.imdbId(result.id, contentType) }
         return MetaPreview(
             id = imdbId ?: "tmdb:${result.id}",
             type = contentType,
             rawType = contentType.toApiString(),
-            name = title,
+            name = displayName,
             poster = poster,
-            posterShape = if (backdrop != null) PosterShape.LANDSCAPE else PosterShape.POSTER,
-            background = backdrop,
+            posterShape = PosterShape.POSTER,
+            background = null,
             logo = null,
             description = result.overview?.trim()?.takeIf { it.isNotBlank() },
-            releaseInfo = firstNonBlank(result.releaseDate, result.firstAirDate),
+            releaseInfo = date,
             imdbRating = result.voteAverage?.toFloat(),
             ratingSource = TitleRatingSource.TMDB,
             genres = emptyList(),
             language = result.originalLanguage?.trim()?.takeIf { it.isNotBlank() }
+        )
+    }
+
+    private fun mapMultiPerson(result: TmdbMultiSearchResult): MetaPreview? {
+        val name = firstNonBlank(result.name, result.originalName) ?: return null
+        val poster = tmdbImageUrl(result.profilePath, "w780")
+        return MetaPreview(
+            id = "$TMDB_PERSON_ID_PREFIX${result.id}",
+            type = ContentType.PERSON,
+            rawType = ContentType.PERSON.toApiString(),
+            name = name,
+            poster = poster,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            ratingSource = null,
+            genres = emptyList(),
+            language = null
         )
     }
 
@@ -273,6 +309,9 @@ class TmdbDiscoveryService @Inject constructor(
         private const val SEARCH_CATALOG_NAME = "TMDB Search"
         private const val MAX_ITEMS_PER_SOURCE = 20
         private const val IMDB_LOOKUP_CONCURRENCY = 6
+        private const val SEARCH_PAGES = 2
+        private const val SEARCH_MAX_ITEMS = 40
+        const val TMDB_PERSON_ID_PREFIX = "tmdb_person:"
     }
 }
 

@@ -140,6 +140,7 @@ object TmdbApiShapes {
     const val POPULAR_TV = "tmdb.popular.tv"
     const val SEARCH_COMPANIES = "tmdb.search.companies"
     const val SEARCH_MOVIE = "tmdb.search.movie"
+    const val SEARCH_MULTI = "tmdb.search.multi"
     const val SEARCH_PEOPLE = "tmdb.search.people"
     const val SEARCH_TV = "tmdb.search.tv"
     const val SEASON_EPISODES = "tmdb.season.episodes"

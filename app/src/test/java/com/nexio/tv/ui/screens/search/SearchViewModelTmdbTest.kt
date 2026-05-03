@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.remote.api.ImdbSuggestion
 import com.nexio.tv.data.repository.ImdbTitleSearchRepository
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.data.repository.TmdbDiscoveryClient
 import com.nexio.tv.data.repository.TmdbDiscoveryService
 import com.nexio.tv.domain.model.Addon
@@ -73,7 +74,7 @@ class SearchViewModelTmdbTest {
             addonRepository = FakeAddonRepository(listOf(searchableAddon())),
             catalogRepository = FakeCatalogRepository(addonRow = addonCatalogRow()),
             tmdbDiscoveryService = FakeTmdbDiscoveryClient(
-                movieSearch = listOf(tmdbMediaResult(id = 603, title = "The Matrix"))
+                multiSearch = listOf(tmdbMultiResult(id = 603, mediaType = "movie", title = "The Matrix"))
             ).createService()
         )
 
@@ -93,7 +94,7 @@ class SearchViewModelTmdbTest {
             val viewModel = createViewModel(
                 addonRepository = FakeAddonRepository(emptyList()),
                 tmdbDiscoveryService = FakeTmdbDiscoveryClient(
-                    movieSearch = listOf(tmdbMediaResult(id = 603, title = "The Matrix"))
+                    multiSearch = listOf(tmdbMultiResult(id = 603, mediaType = "movie", title = "The Matrix"))
                 ).createService()
             )
 
@@ -126,11 +127,11 @@ class SearchViewModelTmdbTest {
 
     @Test
     fun `submitted search does not publish stale TMDB results after query changes`() = runTest(dispatcher) {
-        val tmdbSearch = CompletableDeferred<List<TmdbMediaResult>>()
+        val tmdbSearch = CompletableDeferred<List<TmdbMultiSearchResult>>()
         val viewModel = createViewModel(
             addonRepository = FakeAddonRepository(listOf(searchableAddon())),
             catalogRepository = FakeCatalogRepository(addonRow = addonCatalogRow()),
-            tmdbDiscoveryService = FakeTmdbDiscoveryClient(movieSearchDeferred = tmdbSearch).createService()
+            tmdbDiscoveryService = FakeTmdbDiscoveryClient(multiSearchDeferred = tmdbSearch).createService()
         )
 
         viewModel.onEvent(SearchEvent.QueryChanged("matrix"))
@@ -138,7 +139,7 @@ class SearchViewModelTmdbTest {
         testScheduler.runCurrent()
 
         viewModel.onEvent(SearchEvent.QueryChanged("matrixx"))
-        tmdbSearch.complete(listOf(tmdbMediaResult(id = 603, title = "The Matrix")))
+        tmdbSearch.complete(listOf(tmdbMultiResult(id = 603, mediaType = "movie", title = "The Matrix")))
         testScheduler.advanceUntilIdle()
 
         assertEquals(emptyList<CatalogRow>(), viewModel.uiState.value.catalogRows)
@@ -146,11 +147,11 @@ class SearchViewModelTmdbTest {
 
     @Test
     fun `submitted search publishes addon rows before delayed TMDB search completes`() = runTest(dispatcher) {
-        val tmdbSearch = CompletableDeferred<List<TmdbMediaResult>>()
+        val tmdbSearch = CompletableDeferred<List<TmdbMultiSearchResult>>()
         val viewModel = createViewModel(
             addonRepository = FakeAddonRepository(listOf(searchableAddon())),
             catalogRepository = FakeCatalogRepository(addonRow = addonCatalogRow()),
-            tmdbDiscoveryService = FakeTmdbDiscoveryClient(movieSearchDeferred = tmdbSearch).createService()
+            tmdbDiscoveryService = FakeTmdbDiscoveryClient(multiSearchDeferred = tmdbSearch).createService()
         )
 
         viewModel.onEvent(SearchEvent.QueryChanged("matrix"))
@@ -159,7 +160,7 @@ class SearchViewModelTmdbTest {
 
         assertEquals(listOf("addon_search"), viewModel.uiState.value.catalogRows.map { it.catalogId })
 
-        tmdbSearch.complete(listOf(tmdbMediaResult(id = 603, title = "The Matrix")))
+        tmdbSearch.complete(listOf(tmdbMultiResult(id = 603, mediaType = "movie", title = "The Matrix")))
         testScheduler.advanceUntilIdle()
 
         assertEquals(
@@ -261,9 +262,8 @@ class SearchViewModelTmdbTest {
     }
 
     private class FakeTmdbDiscoveryClient(
-        private val movieSearch: List<TmdbMediaResult> = emptyList(),
-        private val tvSearch: List<TmdbMediaResult> = emptyList(),
-        private val movieSearchDeferred: CompletableDeferred<List<TmdbMediaResult>>? = null,
+        private val multiSearch: List<TmdbMultiSearchResult> = emptyList(),
+        private val multiSearchDeferred: CompletableDeferred<List<TmdbMultiSearchResult>>? = null,
         private val throwCredential: Boolean = false
     ) : TmdbDiscoveryClient {
         override suspend fun credential(): MetadataProviderCredential {
@@ -271,15 +271,15 @@ class SearchViewModelTmdbTest {
             return MetadataProviderCredential("key", source = MetadataCredentialSource.BUILT_IN)
         }
 
-        override suspend fun searchMovies(
+        override suspend fun searchMulti(
             query: String,
+            page: Int,
             preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = movieSearchDeferred?.await() ?: movieSearch
-
-        override suspend fun searchTv(
-            query: String,
-            preferences: TmdbCatalogPreferences
-        ): List<TmdbMediaResult> = tvSearch
+        ): List<TmdbMultiSearchResult> = if (page == 1) {
+            multiSearchDeferred?.await() ?: multiSearch
+        } else {
+            emptyList()
+        }
 
         override suspend fun fetchCatalog(
             catalogId: String,
@@ -343,21 +343,12 @@ class SearchViewModelTmdbTest {
         )
     }
 
-    private fun tmdbMediaResult(id: Int, title: String): TmdbMediaResult {
-        return TmdbMediaResult(
+    private fun tmdbMultiResult(id: Int, mediaType: String, title: String): TmdbMultiSearchResult {
+        return TmdbMultiSearchResult(
             id = id,
+            mediaType = mediaType,
             title = title,
-            name = null,
-            originalTitle = null,
-            originalName = null,
-            mediaType = null,
-            originalLanguage = null,
-            posterPath = null,
-            backdropPath = null,
-            overview = null,
-            releaseDate = null,
-            firstAirDate = null,
-            voteAverage = null
+            popularity = 1.0
         )
     }
 }

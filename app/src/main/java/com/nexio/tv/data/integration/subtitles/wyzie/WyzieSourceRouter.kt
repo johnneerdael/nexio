@@ -44,7 +44,7 @@ object WyzieSourceRouter {
         return when (type) {
             ContentType.MOVIE -> if (anime) ANIME_MOVIE else NON_ANIME_MOVIE
             ContentType.SERIES, ContentType.TV -> if (anime) ANIME_TV else NON_ANIME_TV
-            ContentType.CHANNEL, ContentType.UNKNOWN -> emptyList()
+            ContentType.CHANNEL, ContentType.PERSON, ContentType.UNKNOWN -> emptyList()
         }
     }
 }

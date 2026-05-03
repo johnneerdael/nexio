@@ -37,6 +37,8 @@ import com.nexio.tv.data.remote.api.TmdbFindResponse
 import com.nexio.tv.data.remote.api.TmdbImagesResponse
 import com.nexio.tv.data.remote.api.TmdbRecommendationsResponse
 import com.nexio.tv.data.remote.api.TmdbMediaResult
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResponse
+import com.nexio.tv.data.remote.api.TmdbMultiSearchResult
 import com.nexio.tv.data.remote.api.TmdbPagedMediaResponse
 import com.nexio.tv.data.remote.api.TmdbRecommendationResult
 import com.nexio.tv.data.remote.api.TmdbReviewsResponse
@@ -110,35 +112,20 @@ class TmdbIntegrationProvider private constructor(
         return tmdbCredentialProvider()
     }
 
-    override suspend fun searchMovies(
+    override suspend fun searchMulti(
         query: String,
+        page: Int,
         preferences: TmdbCatalogPreferences
-    ): List<TmdbMediaResult> {
+    ): List<TmdbMultiSearchResult> {
         val credential = credential()
         if (credential.missing) return emptyList()
         val apiKey = credential.apiKey
         val includeAdult = preferences.includeAdult
-        return fetchMediaResults(
-            cacheKey = "tmdb:search:movie:${query.hashCode()}:adult=$includeAdult",
-            apiShapeId = TmdbApiShapes.SEARCH_MOVIE,
-            operationKey = "tmdb.search_movies",
-            call = { tmdbApi.searchMovies(apiKey = apiKey, query = query, includeAdult = includeAdult) }
-        )
-    }
-
-    override suspend fun searchTv(
-        query: String,
-        preferences: TmdbCatalogPreferences
-    ): List<TmdbMediaResult> {
-        val credential = credential()
-        if (credential.missing) return emptyList()
-        val apiKey = credential.apiKey
-        val includeAdult = preferences.includeAdult
-        return fetchMediaResults(
-            cacheKey = "tmdb:search:tv:${query.hashCode()}:adult=$includeAdult",
-            apiShapeId = TmdbApiShapes.SEARCH_TV,
-            operationKey = "tmdb.search_tv",
-            call = { tmdbApi.searchTv(apiKey = apiKey, query = query, includeAdult = includeAdult) }
+        return fetchMultiSearchResults(
+            cacheKey = "tmdb:search:multi:${query.hashCode()}:page=$page:adult=$includeAdult",
+            apiShapeId = TmdbApiShapes.SEARCH_MULTI,
+            operationKey = "tmdb.search_multi",
+            call = { tmdbApi.searchMulti(apiKey = apiKey, query = query, includeAdult = includeAdult, page = page) }
         )
     }
 
@@ -1543,6 +1530,43 @@ class TmdbIntegrationProvider private constructor(
                                 IntegrationLoadResult.HttpError(response.code())
                             } else {
                                 IntegrationLoadResult.Success(response.body() ?: TmdbPagedMediaResponse())
+                            }
+                        },
+                        onFailure = { exception ->
+                            when (exception) {
+                                is CancellationException -> throw exception
+                                else -> IntegrationLoadResult.NetworkError(exception)
+                            }
+                        }
+                    )
+            }
+        )
+
+        return runtime.get(spec).valueOrNull()?.results.orEmpty()
+    }
+
+    private suspend fun fetchMultiSearchResults(
+        cacheKey: String,
+        apiShapeId: String,
+        operationKey: String,
+        call: suspend () -> Response<TmdbMultiSearchResponse>
+    ): List<TmdbMultiSearchResult> {
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TMDB,
+            apiShapeId = apiShapeId,
+            operationKey = operationKey,
+            cacheKey = cacheKey,
+            codec = gsonCodec<TmdbMultiSearchResponse>(),
+            cachePolicy = IntegrationCachePolicy.Disabled,
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            load = {
+                runCatching { call() }
+                    .fold(
+                        onSuccess = { response ->
+                            if (!response.isSuccessful) {
+                                IntegrationLoadResult.HttpError(response.code())
+                            } else {
+                                IntegrationLoadResult.Success(response.body() ?: TmdbMultiSearchResponse())
                             }
                         },
                         onFailure = { exception ->
