@@ -33,6 +33,7 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 
 | Main Commit | Status On This Branch | Branch Commit | Notes |
 | --- | --- | --- | --- |
+| `ad5a24bd8`, `3761d1c3a`, `0acd9806b`, `6111c4d38`, `672d5b132`, `43af06586` | `ALREADY_COVERED` | `0acd9806b` | Auth recovery tracker, egress IP diagnostics, transparent recovery interceptor, playback-client install, and UA parity already live in shared playback auth/network code with focused coverage. |
 | `e2b28ae0d`, `69574e011`, `09f9c6f60` | `ALREADY_COVERED` | `0acd9806b` | Comet proxy reverse-cache, retained headers/addon host, invalidation, and debounce behavior already live in `CometProxyUrlResolver` with recovery tests. |
 | `b4a3d8ef9` | `ALREADY_COVERED` | `0acd9806b` | Shared `core.player.auth.AuthFailureCodes` exists and is used by `AuthRecoveryInterceptor`; no screen-local recovery code needed. |
 | `f44c71332` | `ALREADY_COVERED` | `c9133cebd` | Session-seeded stream dedupe and autoplay scorer tie-breaks already live in the shared stream presentation/scorer boundaries, with provider bucket diagnostics in deterministic autoplay. |
