@@ -31,6 +31,7 @@ class IntegrationPolicyRegistryTest {
             IntegrationProvider.EASY_DEBRID,
             IntegrationProvider.SHADOW_COLLECTOR,
             IntegrationProvider.GITHUB,
+            IntegrationProvider.OPEN_SUBTITLES,
             IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
             IntegrationProvider.SUBTITLE_TRANSLATION
         )

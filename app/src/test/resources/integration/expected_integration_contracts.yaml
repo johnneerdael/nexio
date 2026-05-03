@@ -113,6 +113,11 @@ contractSources:
     sourceFile: "apiblueprints/full-audit.md"
     sourceType: "audit scope classification"
     reviewer: "IntegrationRuntime audit"
+  OPEN_SUBTITLES:
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    sourceFile: "apiblueprints/full-audit.md"
+    sourceType: "audit scope classification"
+    reviewer: "IntegrationRuntime audit"
   SUBTITLE_SOURCE_DOWNLOAD:
     lifecycleStatus: ACTIVE_RUNTIME_COVERED
     sourceFile: "apiblueprints/full-audit.md"
@@ -2053,6 +2058,30 @@ apiShapes:
     runtimePolicy:
       workClasses: [USER_VISIBLE]
       defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  opensubtitles.search:
+    provider: OPEN_SUBTITLES
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "https://rest.opensubtitles.org/search/{filters}"
+    headerPolicy: subtitle-provider-v1
+    cacheContract: cache-first-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
       scope: Global
       providerConcurrency: 1
       playbackBehavior: defer background work during playback

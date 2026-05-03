@@ -14,6 +14,7 @@ import com.nexio.tv.data.remote.dto.SubtitleItemDto
 import com.nexio.tv.data.remote.dto.SubtitleResponseDto
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.repository.OpenSubtitlesSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -81,6 +82,7 @@ class SubtitleRepositoryAddonRoutingTest {
         val addon = subtitleAddon()
         val addonRepository = mockk<AddonRepositoryImpl>()
         val provider = mockk<AddonSubtitleIntegrationProvider>()
+        val openSubtitlesSource = mockk<OpenSubtitlesSource>()
         val subtitleUrl = buildAddonRequestUrl(
             addon.baseUrl,
             "subtitles/series/tt123:1:2/videoHash=hash123&videoSize=321&filename=Episode.mkv.json"
@@ -98,11 +100,13 @@ class SubtitleRepositoryAddonRoutingTest {
                 )
             )
         )
+        coEvery { openSubtitlesSource.search(any(), any(), any(), any(), any(), any()) } returns emptyList()
 
         val repository = SubtitleRepositoryImpl(
             addonSubtitleIntegrationProvider = provider,
             addonRepository = addonRepository,
             wyzieSubtitleIntegrationProvider = mockk(relaxed = true),
+            openSubtitlesSource = openSubtitlesSource,
         )
 
         val result = repository.getSubtitles(

@@ -7,6 +7,8 @@ import com.nexio.tv.data.remote.dto.SubtitleResponseDto
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.domain.repository.OpenSubtitlesSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -62,6 +64,7 @@ class SubtitleRepositoryImplTest {
             provider,
             addonRepository,
             mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+            noOpenSubtitlesSource(),
         )
         val subtitles = repository.getSubtitles(
             type = "tv",
@@ -121,6 +124,7 @@ class SubtitleRepositoryImplTest {
             provider,
             addonRepository,
             mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+            noOpenSubtitlesSource(),
         )
         val subtitles = repository.getSubtitles(
             type = "movie",
@@ -173,6 +177,7 @@ class SubtitleRepositoryImplTest {
             provider,
             addonRepository,
             mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+            noOpenSubtitlesSource(),
         )
 
         try {
@@ -203,6 +208,7 @@ class SubtitleRepositoryImplTest {
             provider,
             addonRepository,
             mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>(relaxed = true),
+            noOpenSubtitlesSource(),
         )
 
         try {
@@ -260,7 +266,7 @@ class SubtitleRepositoryImplTest {
             ),
         )
 
-        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider, noOpenSubtitlesSource())
         val subs = repository.getSubtitles(
             type = "movie", id = "tt1", videoId = null,
             videoHash = null, videoSize = null, filename = null,
@@ -302,7 +308,7 @@ class SubtitleRepositoryImplTest {
             wyzieProvider.search(any(), any(), any(), any(), any())
         } throws RuntimeException("wyzie boom")
 
-        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider, noOpenSubtitlesSource())
         val subs = repository.getSubtitles(
             type = "movie", id = "tt1", videoId = null,
             videoHash = null, videoSize = null, filename = null,
@@ -331,7 +337,7 @@ class SubtitleRepositoryImplTest {
             ),
         )
 
-        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider, noOpenSubtitlesSource())
         val subs = repository.getSubtitles(
             type = "movie", id = "tt1", videoId = null,
             videoHash = null, videoSize = null, filename = null,
@@ -351,7 +357,7 @@ class SubtitleRepositoryImplTest {
 
         every { addonRepo.getInstalledAddons() } returns flowOf(emptyList())
 
-        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider)
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider, noOpenSubtitlesSource())
         val subs = repository.getSubtitles(
             type = "movie", id = "tt1", videoId = null,
             videoHash = null, videoSize = null, filename = null,
@@ -361,4 +367,61 @@ class SubtitleRepositoryImplTest {
         assertTrue(subs.isEmpty())
         coVerify(exactly = 0) { wyzieProvider.search(any(), any(), any(), any(), any()) }
     }
+
+    @Test
+    fun `open subtitles lane results merge after wyzie and addon results`() = runTest {
+        val addonProvider = mockk<AddonSubtitleIntegrationProvider>()
+        val addonRepo = mockk<AddonRepositoryImpl>()
+        val wyzieProvider = mockk<com.nexio.tv.data.integration.subtitles.wyzie.WyzieSubtitleIntegrationProvider>()
+        val openSubtitlesSource = mockk<OpenSubtitlesSource>()
+
+        every { addonRepo.getInstalledAddons() } returns flowOf(emptyList())
+        coEvery { wyzieProvider.search(any(), any(), any(), any(), any()) } returns listOf(
+            com.nexio.tv.data.remote.dto.WyzieSubtitleDto(
+                id = "w1", url = "https://w/1.srt", format = "srt", encoding = "UTF-8",
+                display = "English", language = "en", media = "X", isHearingImpaired = false,
+                source = "subdl",
+            ),
+        )
+        coEvery {
+            openSubtitlesSource.search("movie", "tt1", null, "0123456789abcdef", 123L, "movie.mkv")
+        } returns listOf(
+            Subtitle(
+                id = "opensubtitles:1",
+                url = "https://os/1.srt",
+                lang = "en",
+                addonName = "OpenSubtitles",
+                addonLogo = null,
+                isHashMatch = true,
+            )
+        )
+
+        val repository = SubtitleRepositoryImpl(addonProvider, addonRepo, wyzieProvider, openSubtitlesSource)
+        val subs = repository.getSubtitles(
+            type = "movie",
+            id = "tt1",
+            videoId = null,
+            videoHash = "0123456789abcdef",
+            videoSize = 123L,
+            filename = "movie.mkv",
+            wyzieHints = com.nexio.tv.domain.model.WyzieIdHints(imdb = "tt1"),
+        )
+
+        assertEquals(2, subs.size)
+        assertEquals("wyzie:w1", subs[0].id)
+        assertEquals("opensubtitles:1", subs[1].id)
+        assertTrue(subs[1].isHashMatch)
+    }
+
+    private fun noOpenSubtitlesSource(): OpenSubtitlesSource =
+        object : OpenSubtitlesSource {
+            override suspend fun search(
+                type: String,
+                id: String,
+                videoId: String?,
+                videoHash: String?,
+                videoSize: Long?,
+                filename: String?
+            ): List<Subtitle> = emptyList()
+        }
 }

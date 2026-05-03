@@ -655,6 +655,38 @@ object NetworkModule {
     ): com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieSubtitleApi =
         retrofit.create(com.nexio.tv.data.integration.subtitles.wyzie.transport.WyzieSubtitleApi::class.java)
 
+    // --- OpenSubtitles REST subtitles ---
+
+    @Provides
+    @Singleton
+    @Named("openSubtitles")
+    fun provideOpenSubtitlesRetrofit(
+        okHttpClient: OkHttpClient,
+        moshi: Moshi,
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("${com.nexio.tv.data.remote.api.OpenSubtitlesApiClient.DEFAULT_BASE_URL}/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideOpenSubtitlesRestApi(
+        @Named("openSubtitles") retrofit: Retrofit,
+    ): com.nexio.tv.data.remote.api.OpenSubtitlesRestApi =
+        retrofit.create(com.nexio.tv.data.remote.api.OpenSubtitlesRestApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideOpenSubtitlesApiClient(
+        api: com.nexio.tv.data.remote.api.OpenSubtitlesRestApi,
+    ): com.nexio.tv.data.remote.api.OpenSubtitlesApiClient =
+        com.nexio.tv.data.remote.api.OpenSubtitlesApiClient(
+            api = api,
+            userAgent = NEXIO_PLAYBACK_USER_AGENT,
+        )
+
     @Provides
     @Singleton
     @Named("aniSkip")

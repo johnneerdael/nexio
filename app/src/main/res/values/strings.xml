@@ -1033,6 +1033,7 @@
     <string name="subtitle_no_builtin">No built-in subtitles available</string>
     <string name="subtitle_loading_addon">Loading subtitles from addons\u2026</string>
     <string name="subtitle_no_addon">No addon subtitles available</string>
+    <string name="subtitle_hash_match">Exact video hash match</string>
     <string name="subtitle_outline_color">Outline Color</string>
     <string name="subtitle_reset_defaults">Reset Defaults</string>
     <string name="subtitle_tab_builtin">Built-in</string>
