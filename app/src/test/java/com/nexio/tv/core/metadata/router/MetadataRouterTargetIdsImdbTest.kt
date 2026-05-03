@@ -213,6 +213,77 @@ class MetadataRouterTargetIdsImdbTest {
     }
 
     @Test
+    fun `tmdb search result routes to Kitsu when sidecar IMDB id maps to anime`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup()
+        val animeIdentityIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.IMDB, "tt21209876", "46231"))
+        )
+        val router = router(
+            lookup = lookup,
+            animeIdentityIndex = animeIdentityIndex
+        )
+
+        val route = router.route(
+            request(
+                id = "tmdb:127532",
+                type = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewStableIds = ProviderIds(
+                        imdb = "tt21209876",
+                        tmdb = "127532"
+                    )
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.KITSU, route.provider)
+        assertEquals(MetadataMediaKind.ANIME, route.mediaKind)
+        assertEquals(MetadataDecisionReason.ID_MAPPING_TO_KITSU, route.reason)
+        assertEquals("kitsu:46231", route.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals("tt21209876", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals("tmdb:127532", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(AnimeIdentityLookup(AnimeIdScheme.IMDB, "tt21209876")), animeIdentityIndex.lookups)
+        assertEquals(emptyList<LookupCall>(), lookup.calls)
+    }
+
+    @Test
+    fun `tmdb search result routes to Kitsu when external IMDB lookup maps to anime`() = runTest {
+        val lookup = FakeTmdbExternalIdLookup(
+            imdbForTv = mapOf(127532 to "tt21209876")
+        )
+        val animeIdentityIndex = InMemoryAnimeIdentityIndex(
+            mappings = listOf(AnimeIdentityMapping(AnimeIdScheme.IMDB, "tt21209876", "46231"))
+        )
+        val router = router(
+            lookup = lookup,
+            animeIdentityIndex = animeIdentityIndex
+        )
+
+        val route = router.route(
+            request(
+                id = "tmdb:127532",
+                type = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewStableIds = ProviderIds(tmdb = "127532")
+                )
+            )
+        )
+
+        assertEquals(MetadataPrimaryProvider.KITSU, route.provider)
+        assertEquals(MetadataMediaKind.ANIME, route.mediaKind)
+        assertEquals(MetadataDecisionReason.ID_MAPPING_TO_KITSU, route.reason)
+        assertEquals("kitsu:46231", route.targetIds[MetadataPrimaryProvider.KITSU])
+        assertEquals("tt21209876", route.targetIds[MetadataPrimaryProvider.IMDB])
+        assertEquals("tmdb:127532", route.targetIds[MetadataPrimaryProvider.TMDB])
+        assertEquals(false, route.targetIdRequiresIdentityResolution)
+        assertEquals(listOf(AnimeIdentityLookup(AnimeIdScheme.IMDB, "tt21209876")), animeIdentityIndex.lookups)
+        assertEquals(listOf(LookupCall.FindImdb(127532, "tv")), lookup.calls)
+    }
+
+    @Test
     fun `malformed addon preview provider stable ids are ignored`() = runTest {
         val lookup = FakeTmdbExternalIdLookup()
         val router = router(lookup = lookup)
