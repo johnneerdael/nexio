@@ -139,6 +139,36 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
+    fun `TMDB person DETAIL_SECONDARY uses person detail shape`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TMDB,
+                mediaKind = MetadataMediaKind.MOVIE,
+                parentId = "tmdb:person:287"
+            ),
+            depth = MetadataDepth.DETAIL_SECONDARY
+        )
+
+        assertEquals(listOf(TmdbApiShapes.PERSON_DETAIL), plan.apiShapeIds())
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
+    fun `TVDB person DETAIL_SECONDARY uses person extended shape`() {
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.TVDB,
+                mediaKind = MetadataMediaKind.SERIES,
+                parentId = "tvdb:person:287"
+            ),
+            depth = MetadataDepth.DETAIL_SECONDARY
+        )
+
+        assertEquals(listOf(TvdbApiShapes.PERSON_EXTENDED), plan.apiShapeIds())
+        assertAllShapesCovered(plan)
+    }
+
+    @Test
     fun `TMDB series SEASON includes season episodes`() {
         val plan = executor.buildPlan(
             route = route(
@@ -511,19 +541,20 @@ class ProviderPlanExecutorTest {
     private fun route(
         provider: MetadataPrimaryProvider,
         mediaKind: MetadataMediaKind,
+        parentId: String = "provider:1",
         language: String? = null,
         seasonNumber: Int? = null,
         targetIdRequiresIdentityResolution: Boolean = false
     ): MetadataRoute =
         MetadataRoute(
             provider = provider,
-            parentId = "provider:1",
+            parentId = parentId,
             mediaKind = mediaKind,
             reason = MetadataDecisionReason.PROVIDER_NATIVE_DIRECT,
             sourceContext = MetadataSourceContext(),
             language = language,
             seasonNumber = seasonNumber,
-            targetIds = mapOf(provider to "provider:1"),
+            targetIds = mapOf(provider to parentId),
             targetIdRequiresIdentityResolution = targetIdRequiresIdentityResolution,
             trace = listOf(
                 MetadataRouteTrace(

@@ -65,6 +65,19 @@ class MetadataRequestNormalizerTest {
     }
 
     @Test
+    fun `provider person id remains unchanged`() {
+        val request = MetadataRequest(
+            contentId = "tvdb:person:287",
+            contentType = ContentType.SERIES,
+            sourceContext = MetadataSourceContext()
+        )
+
+        val normalized = normalizer.normalize(request)
+
+        assertEquals("tvdb:person:287", normalized.parentId)
+    }
+
+    @Test
     fun `blank id is preserved as blank`() {
         val request = MetadataRequest(
             contentId = "   ",

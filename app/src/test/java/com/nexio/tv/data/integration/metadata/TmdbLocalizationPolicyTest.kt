@@ -4,6 +4,9 @@ import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -67,10 +70,38 @@ class TmdbLocalizationPolicyTest {
         assertEquals(listOf("en-US"), policy.languageChain().map { it.providerCode })
     }
 
+    @Test
+    fun `tmdb localized candidate carries rich cast and organization fields`() {
+        val policy = LocalizationPolicy.tmdb("en-US")
+        val cast = listOf(MetaCastMember(name = "Actor", tmdbId = 42, provider = "tmdb", providerId = "42"))
+        val companies = listOf(MetaCompany(tmdbId = 7, name = "Studio", kind = MetaCompanyKind.COMPANY))
+        val networks = listOf(MetaCompany(tmdbId = 8, name = "Network", kind = MetaCompanyKind.NETWORK))
+
+        val candidate = buildTmdbLocalizedCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            policy = policy,
+            requested = enrichment(
+                title = "Title",
+                overview = "Overview",
+                poster = "poster",
+                castMembers = cast,
+                productionCompanies = companies,
+                networks = networks
+            ),
+            english = null
+        )
+
+        assertEquals(cast, candidate.fields.getValue(ResolvedField.CAST).value)
+        assertEquals(companies + networks, candidate.fields.getValue(ResolvedField.ORGANIZATION_LIST).value)
+    }
+
     private fun enrichment(
         title: String?,
         overview: String?,
-        poster: String?
+        poster: String?,
+        castMembers: List<MetaCastMember> = emptyList(),
+        productionCompanies: List<MetaCompany> = emptyList(),
+        networks: List<MetaCompany> = emptyList()
     ): TmdbEnrichment =
         TmdbEnrichment(
             localizedTitle = title,
@@ -81,14 +112,14 @@ class TmdbLocalizationPolicyTest {
             poster = poster,
             directorMembers = emptyList(),
             writerMembers = emptyList(),
-            castMembers = emptyList(),
+            castMembers = castMembers,
             releaseInfo = null,
             rating = null,
             runtimeMinutes = null,
             director = emptyList(),
             writer = emptyList(),
-            productionCompanies = emptyList(),
-            networks = emptyList(),
+            productionCompanies = productionCompanies,
+            networks = networks,
             ageRating = null,
             countries = null,
             language = null,

@@ -24,7 +24,7 @@ import org.junit.Test
  *  2. Return the underlying [MetadataSecondaryRepository] result unchanged.
  *
  * Facade-level pin for Task 17 of the cluster-A facade-bypass migration:
- * `MetaDetailsViewModel.hydrateKitsuNavigationTargetsAsync` no longer calls the
+ * `MetaDetailsViewModel` secondary navigation-target hydration path no longer calls the
  * secondary repository directly for actor / company id resolution, so trace
  * observability (audit's primary goal) is restored. `fetchPersonDetail` is also
  * exposed on the facade for the cast-detail path.
