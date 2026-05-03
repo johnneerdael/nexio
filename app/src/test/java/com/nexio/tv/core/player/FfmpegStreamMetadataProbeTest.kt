@@ -138,6 +138,58 @@ class FfmpegStreamMetadataProbeTest {
     }
 
     @Test
+    fun probeBlockingSkipsProbeWhenCometResolverReturnsResolveFailed() {
+        val cometUrl = "https://comet.feels.legal/cfg/playback/" +
+            "09b382fa312ad70adaba13d707b500697e72e6fb/0/0/n/n?torrent_name=x&name=y"
+        var backendCalls = 0
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.ResolveFailed
+        }
+        FfmpegStreamMetadataProbe.setBackendForTesting(
+            object : FfmpegStreamMetadataBackend {
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    backendCalls += 1
+                    return """{"streams":[{"codec_type":"video","codec_name":"hevc"}]}"""
+                }
+            }
+        )
+
+        val result = FfmpegStreamMetadataProbe.probeBlocking(cometUrl)
+
+        assertNull(result)
+        assertEquals(0, backendCalls)
+    }
+
+    @Test
+    fun probeBlockingSkipsProbeWhenCometResolverReturnsPlaceholder() {
+        val cometUrl = "https://comet.feels.legal/cfg/playback/" +
+            "09b382fa312ad70adaba13d707b500697e72e6fb/0/0/n/n?torrent_name=x&name=y"
+        var backendCalls = 0
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Placeholder
+        }
+        FfmpegStreamMetadataProbe.setBackendForTesting(
+            object : FfmpegStreamMetadataBackend {
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    backendCalls += 1
+                    return """{"streams":[{"codec_type":"video","codec_name":"hevc"}]}"""
+                }
+            }
+        )
+
+        val result = FfmpegStreamMetadataProbe.probeBlocking(cometUrl)
+
+        assertNull(result)
+        assertEquals(0, backendCalls)
+    }
+
+    @Test
     fun debugCommandLogsExactUrlAndHeaderBlob() {
         val command = FfmpegStreamMetadataProbe.debugProbeCommandForTesting(
             url = "https://example.test/secret/path/movie.mkv?token=abc",
