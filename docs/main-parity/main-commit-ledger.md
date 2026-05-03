@@ -33,6 +33,7 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 
 | Main Commit | Status On This Branch | Branch Commit | Notes |
 | --- | --- | --- | --- |
+| `f44c71332` | `ALREADY_COVERED` | `c9133cebd` | Session-seeded stream dedupe and autoplay scorer tie-breaks already live in the shared stream presentation/scorer boundaries, with provider bucket diagnostics in deterministic autoplay. |
 | `a2357b29c` | `ALREADY_COVERED` | `9640f9301` | Wrong-title autoplay rejection already lives in shared `StreamAutoPlaySelector` with diacritic-safe coverage; main's screen-local filter path is intentionally not copied. |
 | `466c05711` | `PORTED` | this slice | Shared `PlayProbeCache` now reuses one per-play FFmpeg metadata probe across DV profile detection, ASS/SSA startup, and AFR detection. |
 | `4a59157c1` | `PORTED` | this slice | FFmpeg probe now skips unsafe Comet proxy probing when resolver does not return a real CDN redirect, preventing placeholder/sample bytes from poisoning DV/codec decisions. |
