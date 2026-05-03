@@ -57,6 +57,43 @@
     HyperHDR LUT switches to the SDR profile.
 13. Switch back to **Auto** when done.
 
+## SDR-only device behaviour (compositor without wide-color support)
+
+Some Android TV devices — including UGOOS-AM6 on Android 9 and older
+hardware in general — have compositors that only report
+`COLOR_MODE_DEFAULT` (sRGB). On these devices, Nexio's HyperHDR
+integration automatically forces SDR_NV12 regardless of the user's HDR
+Mode setting or the source's colorimetry, because no HDR data reaches
+the GL effect pipeline anyway.
+
+You'll see this in the Settings screen:
+
+- Toggle **Enabled** on
+- Fill in host/ports/priority as normal
+- Where the HDR Mode picker would be, the screen displays:
+  > • Force SDR (locked)
+  >
+  > This device's compositor only supports sRGB. HDR ambilight requires
+  > a wide-color-capable Android TV (Google TV Streamer, Shield, or any
+  > Android 13+ device whose Display reports a BT2020 or BT2100 color
+  > mode). SDR ambilight works correctly here.
+
+Behaviour on the wire is then identical to the **HDR Mode override** →
+**Force SDR** scenario: NV12 frames, `videomode HDR=0` JSON signal,
+HyperHDR's SDR LUT engaged. The connected HDR display still shows HDR
+content from the device's hardware overlay path — Nexio's ambilight
+just reflects the SDR composition that the compositor produces, not
+the HDR overlay.
+
+To confirm the device is SDR-only:
+```bash
+adb -s <device-ip>:5555 shell dumpsys display | grep "supportedColorModes"
+```
+If the output reads `supportedColorModes=[0]` or `mSupportedColorModes=[0]`,
+this gate is correctly engaged. If the array contains additional entries
+(e.g. `[0, 12, 13]` for BT2020/BT2100_PQ), the device IS wide-color
+capable and the HDR Mode picker should be visible.
+
 ## Verify clean handoff between sessions
 
 14. Start an HDR episode, let it play for ~10 seconds, hit Stop.
@@ -92,6 +129,12 @@
   design. HyperHDR will still receive frames; it just won't auto-switch
   HDR/SDR LUT profiles based on our signal. Check JSON port reachability
   separately with `nc -v <host> 19444`.
+- **HDR Mode picker isn't visible on a device you expect to be HDR-capable** —
+  the device's compositor doesn't actually report HDR modes. Verify with
+  the dumpsys command above. Some HDR-capable TVs/displays connected to
+  SDR-compositor source devices (e.g. AM6 → HDR TV) won't unlock the
+  picker, because Nexio's capture path operates on the device's
+  compositor output, not the display.
 
 ## Reverting / disabling
 
