@@ -1,7 +1,10 @@
 package com.nexio.tv.ui.screens.player
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.util.UnstableApi
+import com.nexio.tv.core.player.CometProxyUrlResolver
+import com.nexio.tv.core.player.ProxyResolution
 import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.StreamBingeGroupResolver
@@ -442,10 +445,14 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     resetNextEpisodeCardState(clearEpisode = false)
 
     _exoPlayer?.let { player ->
+        val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
+        authRecoveryInterceptor.resetSessionState()
+        scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
         scope.launch {
             try {
                 val mediaSource = withContext(Dispatchers.IO) {
-                    mediaSourceFactory.createMediaSource(url, newHeaders)
+                    val playableUrl = prepareMediaSourceUrl(url, newHeaders, addonHost)
+                    mediaSourceFactory.createMediaSource(playableUrl, newHeaders)
                 }
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
@@ -806,10 +813,14 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
 
     _exoPlayer?.let { player ->
+        val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(stream.addonBaseUrl)
+        authRecoveryInterceptor.resetSessionState()
+        scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
         scope.launch {
             try {
                 val mediaSource = withContext(Dispatchers.IO) {
-                    mediaSourceFactory.createMediaSource(url, newHeaders)
+                    val playableUrl = prepareMediaSourceUrl(url, newHeaders, addonHost)
+                    mediaSourceFactory.createMediaSource(playableUrl, newHeaders)
                 }
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
@@ -828,6 +839,27 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     loadSavedProgressFor(currentSeason, currentEpisode)
 }
+
+internal fun prepareMediaSourceUrl(
+    url: String,
+    headers: Map<String, String>,
+    addonHost: String?
+): String {
+    if (!CometProxyUrlResolver.isCometProxy(url, addonHost)) return url
+    return when (val outcome = CometProxyUrlResolver.resolveBlocking(url, headers, addonHost)) {
+        is ProxyResolution.Redirected -> outcome.url
+        ProxyResolution.Placeholder,
+        ProxyResolution.NotEligible,
+        ProxyResolution.ResolveFailed -> url
+    }
+}
+
+@VisibleForTesting
+internal fun prepareMediaSourceUrlForTesting(
+    url: String,
+    headers: Map<String, String>,
+    addonHost: String?
+): String = prepareMediaSourceUrl(url, headers, addonHost)
 
 internal fun PlayerRuntimeController.showEpisodeStreamPicker(video: Video, forceRefresh: Boolean = true) {
     _uiState.update {

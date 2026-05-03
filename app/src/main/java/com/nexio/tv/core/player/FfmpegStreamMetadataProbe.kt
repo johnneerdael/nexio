@@ -186,7 +186,7 @@ object FfmpegStreamMetadataProbe {
     private fun resolveDirectProbeUrl(url: String, headers: Map<String, String>): String? {
         if (CometProxyUrlResolver.isCometProxy(url)) {
             val resolved = CometProxyUrlResolver.resolveBlocking(url, headers)
-            return resolved?.takeIf { it.isNotBlank() } ?: url
+            return (resolved as? ProxyResolution.Redirected)?.url?.takeIf { it.isNotBlank() } ?: url
         }
         if (!isResolveProxyUrl(url)) return url
         val embedded = extractEmbeddedResolveUrl(url)

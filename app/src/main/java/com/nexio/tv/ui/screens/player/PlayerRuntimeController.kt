@@ -9,6 +9,8 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
+import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
+import com.nexio.tv.core.player.auth.EgressIpFingerprint
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.playback.PlaybackOwnerContext
@@ -75,6 +77,8 @@ class PlayerRuntimeController(
     internal val openSubtitlesHashIntegrationProvider: OpenSubtitlesHashIntegrationProvider,
     internal val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
     internal val playbackOwnerContext: PlaybackOwnerContext,
+    internal val egressIpFingerprint: EgressIpFingerprint,
+    internal val authRecoveryInterceptor: AuthRecoveryInterceptor,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {

@@ -1128,10 +1128,24 @@ class StreamScreenViewModel @Inject constructor(
         isFinalPass: Boolean
     ): StreamPlaybackInfo? {
         if (organizedStreams.isEmpty()) return null
-        val eligibleStreams = applyDeterministicOriginalLanguageGuard(
+        val languageFiltered = applyDeterministicOriginalLanguageGuard(
             originalLanguage = originalLanguage,
             streams = organizedStreams
-        ).filterNot { it.hasBlockedDeterministicAutoplayFilename() }
+        )
+        val titleFiltered = StreamAutoPlaySelector.filterCandidatesByContentTitle(
+            contentName = contentName ?: title,
+            streams = languageFiltered
+        )
+        val rejectedTitleCount = languageFiltered.size - titleFiltered.size
+        if (rejectedTitleCount > 0) {
+            Log.i(
+                TAG,
+                "DETERMINISTIC_TITLE_GUARD contentName=${contentName ?: title.ifBlank { "none" }} " +
+                    "in=${languageFiltered.size} out=${titleFiltered.size} rejected=$rejectedTitleCount"
+            )
+        }
+        val eligibleStreams = titleFiltered
+            .filterNot { it.hasBlockedDeterministicAutoplayFilename() }
         if (eligibleStreams.isEmpty()) return null
 
         val event = benchmarkAwareStreamScorer.scoreWithManualCap(

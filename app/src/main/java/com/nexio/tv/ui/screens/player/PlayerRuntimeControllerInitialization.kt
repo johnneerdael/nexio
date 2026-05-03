@@ -187,6 +187,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
     val playbackSessionId = playbackSessionGuard.beginPlaybackSession()
 
+    authRecoveryInterceptor.resetSessionState()
+    scope.launch(Dispatchers.IO) { egressIpFingerprint.captureBaseline() }
+
     scope.launch {
         try {
             autoSubtitleSelected = false
