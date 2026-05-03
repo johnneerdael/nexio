@@ -16,6 +16,14 @@ Do not cherry-pick code when the main implementation uses a path that this branc
 | Playback proxy recovery | Shared player/proxy recovery components |
 | TVDB localization | TVDB runtime provider and metadata adapter |
 | Modern Home refresh | CatalogRailRepository, first-paint preview stream, HydratedHomeOverlayStore |
+| Auth/session/durable credentials | AuthManager, durable credential/session stores, Supabase session authority |
+| Account sync/reset | AccountSettingsSyncService, local account reset coordinator, profile credential stores |
+| Profile deletion/session gates | ProfileManager and profile-scoped sync/session gate checks |
+| UI theme/focus/sidebar | ThemeDataStore, AppTheme, shared focusable components, MainActivity/SidebarNavigation, LayoutPreferenceDataStore |
+| Settings troubleshooting toggles | Settings/troubleshooting presentation and backing preference stores |
+| Benchmark/device capability | Benchmark repository, device capability models, benchmark diagnostics/reporting |
+| Build branding/release metadata | Product flavor resources, build config, and release documentation only when profileable behavior depends on it |
+| Multi-domain snapshots | Split by touched file; port each behavior to its own shared architecture boundary |
 
 ## Architecture Guardrails
 
