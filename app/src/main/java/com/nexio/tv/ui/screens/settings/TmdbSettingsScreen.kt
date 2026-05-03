@@ -149,20 +149,6 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item(key = "tmdb_digital_release_filter") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_digital_release_filter_title),
-                        subtitle = stringResource(R.string.tmdb_digital_release_filter_subtitle),
-                        checked = uiState.hideUnreleasedDigital,
-                        enabled = uiState.catalogControlsEditable,
-                        onToggle = {
-                            viewModel.onEvent(
-                                TmdbSettingsEvent.ToggleDigitalReleaseFilter(!uiState.hideUnreleasedDigital)
-                            )
-                        }
-                    )
-                }
-
                 item(key = "tmdb_artwork") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_artwork_title),
@@ -464,8 +450,6 @@ private fun tmdbCatalogTitle(catalogId: String): String {
     return when (catalogId) {
         TmdbCatalogIds.TRENDING_MOVIES -> stringResource(R.string.tmdb_catalog_trending_movies)
         TmdbCatalogIds.TRENDING_SERIES -> stringResource(R.string.tmdb_catalog_trending_series)
-        TmdbCatalogIds.LATEST_RELEASES_MOVIES -> stringResource(R.string.tmdb_catalog_latest_releases_movies)
-        TmdbCatalogIds.LATEST_RELEASES_SERIES -> stringResource(R.string.tmdb_catalog_latest_releases_series)
         TmdbCatalogIds.POPULAR_MOVIES -> stringResource(R.string.tmdb_catalog_popular_movies)
         TmdbCatalogIds.POPULAR_SERIES -> stringResource(R.string.tmdb_catalog_popular_series)
         TmdbCatalogIds.YEAR_MOVIES -> stringResource(R.string.tmdb_catalog_movies_by_year)
@@ -481,8 +465,6 @@ private fun tmdbCatalogSubtitle(catalogId: String): String {
     return when (catalogId) {
         TmdbCatalogIds.TRENDING_MOVIES -> stringResource(R.string.tmdb_catalog_trending_movies_subtitle)
         TmdbCatalogIds.TRENDING_SERIES -> stringResource(R.string.tmdb_catalog_trending_series_subtitle)
-        TmdbCatalogIds.LATEST_RELEASES_MOVIES -> stringResource(R.string.tmdb_catalog_latest_releases_movies_subtitle)
-        TmdbCatalogIds.LATEST_RELEASES_SERIES -> stringResource(R.string.tmdb_catalog_latest_releases_series_subtitle)
         TmdbCatalogIds.POPULAR_MOVIES -> stringResource(R.string.tmdb_catalog_popular_movies_subtitle)
         TmdbCatalogIds.POPULAR_SERIES -> stringResource(R.string.tmdb_catalog_popular_series_subtitle)
         TmdbCatalogIds.YEAR_MOVIES -> stringResource(R.string.tmdb_catalog_movies_by_year_subtitle)

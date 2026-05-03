@@ -74,9 +74,6 @@ class TmdbSettingsViewModel @Inject constructor(
             is TmdbSettingsEvent.ToggleAdultContent -> update {
                 tmdbCatalogSettingsDataStore.setIncludeAdult(event.enabled)
             }
-            is TmdbSettingsEvent.ToggleDigitalReleaseFilter -> update {
-                tmdbCatalogSettingsDataStore.setHideUnreleasedDigital(event.enabled)
-            }
         }
     }
 
@@ -127,8 +124,7 @@ data class TmdbSettingsUiState(
     val useCollections: Boolean = true,
     val catalogOrder: List<String> = TmdbCatalogIds.BUILT_IN_ORDER,
     val enabledCatalogKeys: Set<String> = TmdbCatalogIds.DEFAULT_ENABLED,
-    val includeAdult: Boolean = false,
-    val hideUnreleasedDigital: Boolean = true
+    val includeAdult: Boolean = false
 ) {
     val isActive: Boolean
         get() = enabled
@@ -154,8 +150,7 @@ data class TmdbSettingsUiState(
     fun fromCatalogPreferences(catalogPreferences: TmdbCatalogPreferences): TmdbSettingsUiState = copy(
         catalogOrder = catalogPreferences.catalogOrder,
         enabledCatalogKeys = catalogPreferences.enabledCatalogs,
-        includeAdult = catalogPreferences.includeAdult,
-        hideUnreleasedDigital = catalogPreferences.hideUnreleasedDigital
+        includeAdult = catalogPreferences.includeAdult
     )
 }
 
@@ -175,7 +170,6 @@ sealed class TmdbSettingsEvent {
     data class MoveCatalogUp(val catalogId: String) : TmdbSettingsEvent()
     data class MoveCatalogDown(val catalogId: String) : TmdbSettingsEvent()
     data class ToggleAdultContent(val enabled: Boolean) : TmdbSettingsEvent()
-    data class ToggleDigitalReleaseFilter(val enabled: Boolean) : TmdbSettingsEvent()
 }
 
 enum class TmdbValidationError {
