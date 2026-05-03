@@ -7,6 +7,7 @@ data class HyperHdrConfig(
     val jsonPort: Int = 19444,
     val priority: Int = 100,
     val hdrMode: HdrMode = HdrMode.Auto,
+    val jsonToken: String = "",
 ) {
     val isUsable: Boolean = enabled
         && host.isNotBlank()

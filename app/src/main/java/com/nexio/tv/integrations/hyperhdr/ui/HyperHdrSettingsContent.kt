@@ -65,6 +65,7 @@ fun HyperHdrSettingsContent(
     var showJsonPortDialog by remember { mutableStateOf(false) }
     var showPriorityDialog by remember { mutableStateOf(false) }
     var showHdrModeDialog by remember { mutableStateOf(false) }
+    var showTokenDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -131,6 +132,15 @@ fun HyperHdrSettingsContent(
                         subtitle = "0–255 (default 100, lower preempts higher)",
                         value = cfg.priority.toString(),
                         onClick = { showPriorityDialog = true }
+                    )
+                }
+
+                item(key = "hyperhdr_token") {
+                    SettingsActionRow(
+                        title = "JSON API token",
+                        subtitle = "Optional — required only if HyperHDR has token auth enabled",
+                        value = if (cfg.jsonToken.isBlank()) "Not set" else "•••••" + cfg.jsonToken.takeLast(4),
+                        onClick = { showTokenDialog = true },
                     )
                 }
 
@@ -249,6 +259,17 @@ fun HyperHdrSettingsContent(
             current = cfg.hdrMode,
             onSelect = { viewModel.setHdrMode(it) },
             onDismiss = { showHdrModeDialog = false }
+        )
+    }
+
+    if (showTokenDialog) {
+        HyperHdrTextInputDialog(
+            title = "JSON API token",
+            subtitle = "Leave blank if HyperHDR doesn't require a token",
+            initialValue = cfg.jsonToken,
+            keyboardNumeric = false,
+            onSave = { viewModel.setJsonToken(it) },
+            onDismiss = { showTokenDialog = false },
         )
     }
 }

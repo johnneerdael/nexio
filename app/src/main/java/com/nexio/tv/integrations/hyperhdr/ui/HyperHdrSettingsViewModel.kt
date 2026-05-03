@@ -56,6 +56,9 @@ class HyperHdrSettingsViewModel @Inject constructor(
     fun setHdrMode(value: HdrMode) =
         viewModelScope.launch { store.update { it.copy(hdrMode = value) } }
 
+    fun setJsonToken(value: String) =
+        viewModelScope.launch { store.update { it.copy(jsonToken = value.trim()) } }
+
     fun testConnection() = viewModelScope.launch {
         val cfg = config.value
         if (cfg.host.isBlank()) {
@@ -77,7 +80,9 @@ class HyperHdrSettingsViewModel @Inject constructor(
         }
 
         // Test 2: JSON port — fetch serverInfo.
-        val jsonClient = HyperHdrJsonApiClient(host = cfg.host, port = cfg.jsonPort)
+        val jsonClient = HyperHdrJsonApiClient(
+            host = cfg.host, port = cfg.jsonPort, token = cfg.jsonToken.ifBlank { null },
+        )
         val jsonOutcome = runCatching { jsonClient.serverInfo() }
         _testResult.value = jsonOutcome.fold(
             onSuccess = { TestResult.Success(it.hostname, it.instanceName) },

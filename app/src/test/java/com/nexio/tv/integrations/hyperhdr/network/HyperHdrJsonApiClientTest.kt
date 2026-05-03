@@ -77,4 +77,29 @@ class HyperHdrJsonApiClientTest {
         val body = JSONObject(request.body.readUtf8())
         assertThat(body.getInt("HDR")).isEqualTo(0)
     }
+
+    @Test
+    fun `setHdrVideoMode includes token field when token is provided`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"success":true,"command":"videomode","tan":1}"""))
+
+        val tokenClient = HyperHdrJsonApiClient(
+            host = server.hostName, port = server.port, token = "secret-token-xyz",
+        )
+        tokenClient.setHdrVideoMode(hdr = true)
+
+        val request = server.takeRequest()
+        val body = JSONObject(request.body.readUtf8())
+        assertThat(body.getString("token")).isEqualTo("secret-token-xyz")
+    }
+
+    @Test
+    fun `setHdrVideoMode omits token field when token is null`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"success":true,"command":"videomode","tan":1}"""))
+
+        client.setHdrVideoMode(hdr = true)   // default client has token = null
+
+        val request = server.takeRequest()
+        val body = JSONObject(request.body.readUtf8())
+        assertThat(body.has("token")).isFalse()
+    }
 }

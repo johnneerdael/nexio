@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class HyperHdrJsonApiClient(
     private val host: String,
     private val port: Int,
+    private val token: String? = null,
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(2, TimeUnit.SECONDS)
         .readTimeout(3, TimeUnit.SECONDS)
@@ -37,6 +38,7 @@ class HyperHdrJsonApiClient(
         val req = JSONObject().apply {
             put("command", "serverinfo")
             put("tan", tanCounter.getAndIncrement())
+            token?.let { put("token", it) }
         }
         val body = post(req)
         if (!body.optBoolean("success", false)) {
@@ -65,6 +67,7 @@ class HyperHdrJsonApiClient(
             put("command", "videomode")
             put("HDR", if (hdr) 1 else 0)
             put("tan", tanCounter.getAndIncrement())
+            token?.let { put("token", it) }
         }
         val body = post(req)
         if (!body.optBoolean("success", false)) {

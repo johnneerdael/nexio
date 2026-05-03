@@ -62,4 +62,15 @@ class HyperHdrConfigDataStoreTest {
         assertThat(cfg.hdrMode).isEqualTo(HdrMode.ForceSdr)
         assertThat(cfg.jsonPort).isEqualTo(19500)
     }
+
+    @Test
+    fun `default config has empty jsonToken`() = runTest {
+        assertThat(store.config.first().jsonToken).isEqualTo("")
+    }
+
+    @Test
+    fun `update persists jsonToken independently`() = runTest {
+        store.update { it.copy(jsonToken = "abc123def456") }
+        assertThat(store.config.first().jsonToken).isEqualTo("abc123def456")
+    }
 }
