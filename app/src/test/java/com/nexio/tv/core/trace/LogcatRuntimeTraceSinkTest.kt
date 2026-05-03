@@ -171,21 +171,45 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
-    fun `cache_decision event writes to IntRuntime tag with decision and cacheKey`() {
+    fun `cache_decision event writes to IntRuntime tag with cache proof fields for all decisions`() {
         val sink = LogcatRuntimeTraceSink(allEnabled)
-        sink.emit(envelope("runtime.cache_decision", mapOf(
-            "runtimeOperationId" to "op-1",
-            "provider" to "TMDB",
-            "apiShapeId" to "tmdb.movie.details",
-            "operationKey" to "getDetails:550",
-            "cacheKey" to "tmdb:movie:550",
-            "decision" to "FRESH"
-        )))
-        val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
-        assertTrue(msg.contains("t=runtime.cache_decision"))
-        assertTrue(msg.contains("provider=TMDB"))
-        assertTrue(msg.contains("decision=FRESH"))
-        assertTrue(msg.contains("cacheKey=tmdb:movie:550"))
+        val cases = listOf(
+            Triple("HIT", "fresh-cache-hit", true),
+            Triple("MISS_THEN_NETWORK", "cache-miss", false),
+            Triple("STALE_HIT", "stale-cache-hit", true),
+            Triple("WRITE", "cache-write", false)
+        )
+
+        cases.forEachIndexed { index, (decision, reason, networkSuppressed) ->
+            ShadowLog.clear()
+            sink.emit(envelope("runtime.cache_decision", mapOf(
+                "runtimeOperationId" to "op-$index",
+                "provider" to "TMDB",
+                "apiShapeId" to "tmdb.movie.details",
+                "operationKey" to "getDetails:550",
+                "decision" to decision,
+                "reason" to reason,
+                "networkSuppressed" to networkSuppressed,
+                "ttlMs" to 300000L,
+                "staleWindowMs" to 60000L,
+                "cacheKey" to "tmdb:movie:550:$decision"
+            )))
+
+            val logs = ShadowLog.getLogsForTag("Nexio.IntRuntime")
+            assertEquals(1, logs.size)
+            val msg = logs.first().msg
+            assertTrue("expected event type in $msg", msg.contains("t=runtime.cache_decision"))
+            assertTrue("expected runtimeOperationId in $msg", msg.contains("runtimeOperationId=op-$index"))
+            assertTrue("expected provider in $msg", msg.contains("provider=TMDB"))
+            assertTrue("expected apiShapeId in $msg", msg.contains("apiShapeId=tmdb.movie.details"))
+            assertTrue("expected operationKey in $msg", msg.contains("operationKey=getDetails:550"))
+            assertTrue("expected decision in $msg", msg.contains("decision=$decision"))
+            assertTrue("expected reason in $msg", msg.contains("reason=$reason"))
+            assertTrue("expected networkSuppressed in $msg", msg.contains("networkSuppressed=$networkSuppressed"))
+            assertTrue("expected ttlMs in $msg", msg.contains("ttlMs=300000"))
+            assertTrue("expected staleWindowMs in $msg", msg.contains("staleWindowMs=60000"))
+            assertTrue("expected cacheKey in $msg", msg.contains("cacheKey=tmdb:movie:550:$decision"))
+        }
     }
 
     @Test

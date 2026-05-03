@@ -158,9 +158,15 @@ class LogcatRuntimeTraceSink(
             "durationMs" to payload["durationMs"]
         )
         "runtime.cache_decision" -> linkedMapOf(
+            "runtimeOperationId" to payload["runtimeOperationId"],
             "provider" to payload["provider"],
+            "apiShapeId" to payload["apiShapeId"],
             "operationKey" to payload["operationKey"],
             "decision" to payload["decision"],
+            "reason" to payload["reason"],
+            "networkSuppressed" to payload["networkSuppressed"],
+            "ttlMs" to payload["ttlMs"],
+            "staleWindowMs" to payload["staleWindowMs"],
             "cacheKey" to payload["cacheKey"]
         )
         "http.request" -> linkedMapOf(
