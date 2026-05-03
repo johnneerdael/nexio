@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.R
 import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
@@ -833,6 +834,15 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
             releasePlayer()
             initializePlayer(currentStreamUrl, currentHeaders)
+        }
+        PlayerEvent.OnLoadingTimedOut -> {
+            releasePlayer()
+            _uiState.update {
+                it.copy(
+                    showLoadingOverlay = false,
+                    error = context.getString(R.string.player_loading_timeout)
+                )
+            }
         }
         is PlayerEvent.OnShowDisplayModeInfo -> {
             _uiState.update {
