@@ -72,14 +72,12 @@ class KitsuMetadataService @Inject constructor(
             AnimeIdSource.KITSU -> animeId.value
             else -> idMappingService.resolveKitsuId(animeId, mediaKind) ?: return@withContext emptyMap()
         }
-        provider.fetchEpisodeEnrichment(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind) { episodes ->
-            val acceptedSeasons = seasonNumbers.toSet()
+        val allEpisodes = provider.fetchEpisodeEnrichment(rawId = rawId, kitsuId = kitsuId, mediaKind = mediaKind) { episodes ->
             episodes
                 .mapNotNull { episode ->
                     val attributes = episode.attributes ?: return@mapNotNull null
                     val season = attributes.seasonNumber ?: 1
                     val number = attributes.number ?: return@mapNotNull null
-                    if (acceptedSeasons.isNotEmpty() && season !in acceptedSeasons) return@mapNotNull null
                     (season to number) to TvEpisodeMetadata(
                         providerEpisodeId = episode.id?.let { "kitsu:$it" },
                         seasonNumber = season,
@@ -92,6 +90,12 @@ class KitsuMetadataService @Inject constructor(
                     )
                 }
                 .toMap()
+        }
+        val acceptedSeasons = seasonNumbers.toSet()
+        if (acceptedSeasons.isEmpty()) {
+            allEpisodes
+        } else {
+            allEpisodes.filterKeys { (season, _) -> season in acceptedSeasons }
         }
     }
 
@@ -149,24 +153,44 @@ private fun KitsuImage.bestUrl(): String? =
 
 private fun retrofit2.Response<*>?.isSuccessfulWithBody(): Boolean = this?.isSuccessful == true && this.body() != null
 
-private fun retrofit2.Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>?.toAdvancedCharacters(): List<KitsuAdvancedAnimeCharacter> {
+private fun retrofit2.Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>?.toAdvancedCharacters(
+    preferredLanguageCode: String?
+): List<KitsuAdvancedAnimeCharacter> {
     if (!isSuccessfulWithBody()) return emptyList()
     val body = this?.body() ?: return emptyList()
     val includedByKey = body.included.orEmpty().associateBy { "${it.type}:${it.id}" }
     return body.data.orEmpty()
         .mapNotNull { relation ->
-            val characterRef = relation.relationships?.character?.data ?: return@mapNotNull null
+            val relationships = relation.relationships ?: return@mapNotNull null
+            val characterRef = relationships.character?.data ?: return@mapNotNull null
             val characterIncluded = includedByKey["${characterRef.type}:${characterRef.id}"] ?: return@mapNotNull null
             val characterName = characterIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+            val voiceActor = relationships.castings?.data.orEmpty()
+                .asSequence()
+                .mapNotNull { castingRef -> includedByKey["${castingRef.type}:${castingRef.id}"] }
+                .mapNotNull { casting ->
+                    val personRef = casting.relationships?.person?.data ?: return@mapNotNull null
+                    val personIncluded = includedByKey["${personRef.type}:${personRef.id}"] ?: return@mapNotNull null
+                    val personName = personIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+                    IncludedVoiceActor(
+                        personId = personRef.id,
+                        personName = personName,
+                        personImage = personIncluded.attributes.bestImageUrl(),
+                        language = casting.attributes?.stringValue("language"),
+                        featured = casting.attributes.booleanValue("featured") == true
+                    )
+                }
+                .sortedWith(includedVoiceActorComparator(preferredLanguageCode = preferredLanguageCode))
+                .firstOrNull()
             KitsuAdvancedAnimeCharacter(
                 characterId = characterRef.id.orEmpty(),
                 characterName = characterName,
                 role = relation.attributes?.role,
                 characterImage = characterIncluded.attributes.bestImageUrl(),
-                actorId = null,
-                actorName = null,
-                actorImage = null,
-                language = null,
+                actorId = voiceActor?.personId,
+                actorName = voiceActor?.personName,
+                actorImage = voiceActor?.personImage,
+                language = voiceActor?.language,
                 featured = relation.attributes?.role.equals("main", ignoreCase = true)
             )
         }
@@ -183,10 +207,11 @@ private fun retrofit2.Response<KitsuCollectionResponse<KitsuCastingResource>>?.t
     return body.data.orEmpty()
         .filter { it.attributes?.voiceActor == true }
         .mapNotNull { relation ->
-            val characterRef = relation.relationships?.character?.data ?: return@mapNotNull null
+            val relationships = relation.relationships ?: return@mapNotNull null
+            val characterRef = relationships.character?.data ?: return@mapNotNull null
             val characterIncluded = includedByKey["${characterRef.type}:${characterRef.id}"] ?: return@mapNotNull null
             val characterName = characterIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
-            val personRef = relation.relationships?.person?.data
+            val personRef = relationships.person?.data
             val personIncluded = personRef?.let { includedByKey["${it.type}:${it.id}"] }
             KitsuAdvancedAnimeCharacter(
                 characterId = characterRef.id.orEmpty(),
@@ -243,7 +268,7 @@ private fun KitsuAdvancedDetailPayload.toAdvancedDetail(
     preferredLanguageCode: String?
 ): KitsuAdvancedAnimeDetail {
     return KitsuAdvancedAnimeDetail(
-        characters = animeCharactersResponse.toAdvancedCharacters()
+        characters = animeCharactersResponse.toAdvancedCharacters(preferredLanguageCode)
             .ifEmpty {
                 castingsResponse.toAdvancedVoiceCharacters(
                     preferredLanguageCode = preferredLanguageCode
@@ -345,9 +370,33 @@ private fun Map<String, Any?>?.bestImageUrl(): String? {
 private fun Map<String, Any?>.stringValue(key: String): String? =
     (this[key] as? String)?.trim()?.takeIf { it.isNotEmpty() }
 
+private fun Map<String, Any?>?.booleanValue(key: String): Boolean? =
+    this?.get(key) as? Boolean
+
 @Suppress("UNCHECKED_CAST")
 private fun Map<String, Any?>.mapValue(key: String): Map<String, Any?>? =
     this[key] as? Map<String, Any?>
+
+private data class IncludedVoiceActor(
+    val personId: String?,
+    val personName: String,
+    val personImage: String?,
+    val language: String?,
+    val featured: Boolean
+)
+
+private fun includedVoiceActorComparator(preferredLanguageCode: String?): Comparator<IncludedVoiceActor> {
+    val ranked = when (preferredLanguageCode?.lowercase()) {
+        "ja" -> listOf("Japanese", "English")
+        "ko" -> listOf("Korean", "Japanese", "English")
+        "zh", "zh-cn", "zh-tw", "cmn" -> listOf("Chinese", "Mandarin", "Japanese", "English")
+        else -> listOf("Japanese", "English")
+    }
+    return compareBy<IncludedVoiceActor> { actor ->
+        ranked.indexOfFirst { it.equals(actor.language, ignoreCase = true) }
+            .takeIf { it >= 0 } ?: Int.MAX_VALUE
+    }.thenByDescending { it.featured }
+}
 
 private fun characterLanguageComparator(preferredLanguageCode: String?): Comparator<KitsuAdvancedAnimeCharacter> {
     val ranked = when (preferredLanguageCode?.lowercase()) {

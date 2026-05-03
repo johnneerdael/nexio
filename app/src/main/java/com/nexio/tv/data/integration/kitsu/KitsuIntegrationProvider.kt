@@ -85,8 +85,8 @@ class KitsuIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.KITSU,
             apiShapeId = KitsuApiShapes.ANIME_EPISODES,
             operationKey = "kitsu.fetch_episode_enrichment",
-            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:episodes",
-            codec = gsonCodec<Map<Pair<Int, Int>, TvEpisodeMetadata>>(),
+            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:episodes:v2",
+            codec = gsonCodec<List<KitsuAnimeResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = 24L * 60L * 60L * 1000L,
                 staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
@@ -98,11 +98,11 @@ class KitsuIntegrationProvider @Inject constructor(
             workClass = IntegrationWorkClass.USER_VISIBLE,
             load = {
                 IntegrationLoadResult.Success(
-                    mapper(fetchEpisodePages(authorization = publicAuthorization(), kitsuId = kitsuId))
+                    fetchEpisodePages(authorization = publicAuthorization(), kitsuId = kitsuId)
                 )
             }
         )
-        return runtime.get(spec).valueOrNull().orEmpty()
+        return runtime.get(spec).valueOrNull()?.let(mapper).orEmpty()
     }
 
     suspend fun fetchAdvancedDetail(
@@ -136,7 +136,7 @@ class KitsuIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.KITSU,
             apiShapeId = KitsuApiShapes.CASTINGS,
             operationKey = "kitsu.anime_characters",
-            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_characters:v2",
+            cacheKey = "kitsu:${mediaKind.name.lowercase()}:$rawId:anime_characters:v3",
             codec = gsonCodec<KitsuCollectionResponse<KitsuAnimeCharacterResource>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = KITSU_ADVANCED_TTL_MS,

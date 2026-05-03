@@ -44,7 +44,7 @@ interface KitsuApi {
     suspend fun getAnimeCharacters(
         @Header("Authorization") authorization: String? = null,
         @Path("id") id: String,
-        @Query("include") include: String = "character",
+        @Query("include") include: String = "character,castings.person",
         @Query("page[limit]") limit: Int = 20,
         @Query("page[offset]") offset: Int = 0
     ): Response<KitsuCollectionResponse<KitsuAnimeCharacterResource>>
@@ -294,12 +294,14 @@ data class KitsuImage(
 data class KitsuIncludedResource(
     @Json(name = "id") val id: String? = null,
     @Json(name = "type") val type: String? = null,
-    @Json(name = "attributes") val attributes: Map<String, Any?>? = null
+    @Json(name = "attributes") val attributes: Map<String, Any?>? = null,
+    @Json(name = "relationships") val relationships: KitsuCastingRelationships? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class KitsuAnimeCharacterRelationships(
-    @Json(name = "character") val character: KitsuToOneRelationship? = null
+    @Json(name = "character") val character: KitsuToOneRelationship? = null,
+    @Json(name = "castings") val castings: KitsuToManyRelationship? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -338,6 +340,11 @@ data class KitsuReviewRelationships(
 @JsonClass(generateAdapter = true)
 data class KitsuToOneRelationship(
     @Json(name = "data") val data: KitsuResourceIdentifier? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class KitsuToManyRelationship(
+    @Json(name = "data") val data: List<KitsuResourceIdentifier>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

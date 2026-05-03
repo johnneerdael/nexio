@@ -225,6 +225,9 @@ class LogcatRuntimeTraceSinkTest {
         )))
         val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
         assertTrue(msg.contains("t=http.request"))
+        assertTrue(msg.contains("runtimeOperationId=op-1"))
+        assertTrue(msg.contains("provider=TMDB"))
+        assertTrue(msg.contains("apiShapeId=tmdb.movie.details"))
         assertTrue(msg.contains("method=GET"))
         assertTrue(msg.contains("url=https://api.themoviedb.org/3/movie/550"))
     }
@@ -242,9 +245,29 @@ class LogcatRuntimeTraceSinkTest {
             "byteCount" to 4096L
         )))
         val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+        assertTrue(msg.contains("runtimeOperationId=op-1"))
+        assertTrue(msg.contains("provider=TMDB"))
+        assertTrue(msg.contains("apiShapeId=tmdb.movie.details"))
         assertTrue(msg.contains("statusCode=200"))
         assertTrue(msg.contains("durationMs=142"))
         assertTrue(msg.contains("byteCount=4096"))
+    }
+
+    @Test
+    fun `http_error event writes runtime operation correlation fields`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+        sink.emit(envelope("http.error", mapOf(
+            "runtimeOperationId" to "op-1",
+            "provider" to "KITSU",
+            "apiShapeId" to "kitsu.anime.episodes",
+            "error" to "SocketTimeoutException"
+        )))
+        val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+        assertTrue(msg.contains("t=http.error"))
+        assertTrue(msg.contains("runtimeOperationId=op-1"))
+        assertTrue(msg.contains("provider=KITSU"))
+        assertTrue(msg.contains("apiShapeId=kitsu.anime.episodes"))
+        assertTrue(msg.contains("error=SocketTimeoutException"))
     }
 
     @Test

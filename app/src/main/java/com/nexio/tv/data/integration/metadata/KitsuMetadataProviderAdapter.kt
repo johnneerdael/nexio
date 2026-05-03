@@ -183,12 +183,23 @@ class KitsuMetadataProviderAdapter @Inject constructor(
         val includedByKey = includedByKey()
         val cast = this?.data.orEmpty()
             .mapNotNull { relation ->
-                val characterRef = relation.relationships?.character?.data ?: return@mapNotNull null
+                val relationships = relation.relationships ?: return@mapNotNull null
+                val characterRef = relationships.character?.data ?: return@mapNotNull null
                 val characterIncluded = includedByKey["${characterRef.type}:${characterRef.id}"] ?: return@mapNotNull null
                 val characterName = characterIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+                val voiceActor = relationships.castings?.data.orEmpty()
+                    .asSequence()
+                    .mapNotNull { castingRef -> includedByKey["${castingRef.type}:${castingRef.id}"] }
+                    .mapNotNull { casting ->
+                        val personRef = casting.relationships?.person?.data ?: return@mapNotNull null
+                        val personIncluded = includedByKey["${personRef.type}:${personRef.id}"] ?: return@mapNotNull null
+                        val personName = personIncluded.attributes.bestDisplayName() ?: return@mapNotNull null
+                        personName
+                    }
+                    .firstOrNull()
                 MetaCastMember(
                     name = characterName,
-                    character = relation.attributes?.role,
+                    character = voiceActor ?: relation.attributes?.role,
                     photo = characterIncluded.attributes.bestImageUrl(),
                     provider = "kitsu",
                     providerId = characterRef.id
