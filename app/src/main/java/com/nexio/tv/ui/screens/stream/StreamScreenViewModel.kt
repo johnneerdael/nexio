@@ -20,6 +20,7 @@ import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
 import com.nexio.tv.core.player.DolbyVisionAutoPlayDecisionReason
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
+import com.nexio.tv.core.player.ProbeProfilingDiagnostic
 import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
@@ -108,6 +109,7 @@ class StreamScreenViewModel @Inject constructor(
     private var activeStreamSearchRequestId: String? = null
     private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     private var streamDiagnosticsEnabled: Boolean = false
+    private var probeProfilingDiagnosticEnabled: Boolean = false
     private var streamParserCache = StreamPresentationEngine.ParserCache()
     private val shadowAutoPlayReplayCoordinator =
         ShadowAutoPlayReplayCoordinator(benchmarkAwareStreamScorer)
@@ -182,6 +184,11 @@ class StreamScreenViewModel @Inject constructor(
         viewModelScope.launch {
             debugSettingsDataStore.streamDiagnosticsEnabled.collectLatest { enabled ->
                 streamDiagnosticsEnabled = enabled
+            }
+        }
+        viewModelScope.launch {
+            debugSettingsDataStore.probeProfilingDiagnosticEnabled.collectLatest { enabled ->
+                probeProfilingDiagnosticEnabled = enabled
             }
         }
         viewModelScope.launch {
@@ -1115,6 +1122,12 @@ class StreamScreenViewModel @Inject constructor(
             "AUTOPLAY_HERO_GATED_RESOLUTION_READY selected=${result.playbackInfo.streamKey ?: "unknown"} " +
                 "overlayActive=true readyForPlayback=true"
         )
+        if (probeProfilingDiagnosticEnabled) {
+            ProbeProfilingDiagnostic.launch(
+                scope = viewModelScope,
+                playbackInfo = result.playbackInfo
+            )
+        }
         return result.playbackInfo
     }
 

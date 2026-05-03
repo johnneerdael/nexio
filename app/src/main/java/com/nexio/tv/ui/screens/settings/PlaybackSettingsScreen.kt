@@ -143,6 +143,9 @@ internal fun PlaybackSettingsContent(
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
     val trailerSettings by viewModel.trailerSettings.collectAsStateWithLifecycle(initialValue = TrailerSettings())
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val probeProfilingDiagnosticEnabled by viewModel.probeProfilingDiagnosticEnabled.collectAsStateWithLifecycle(
+        initialValue = false
+    )
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolDiagnosticsEnabled by viewModel.diskSpoolDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val dolbyVisionDiagnosticsEnabled by viewModel.dolbyVisionDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
@@ -361,6 +364,7 @@ internal fun PlaybackSettingsContent(
                     }
                 },
                 streamDiagnosticsEnabled = streamDiagnosticsEnabled,
+                probeProfilingDiagnosticEnabled = probeProfilingDiagnosticEnabled,
                 startupPerfTelemetryEnabled = startupPerfTelemetryEnabled,
                 diskSpoolDiagnosticsEnabled = diskSpoolDiagnosticsEnabled,
                 dolbyVisionDiagnosticsEnabled = dolbyVisionDiagnosticsEnabled,
@@ -383,6 +387,9 @@ internal fun PlaybackSettingsContent(
                 },
                 onSetStreamDiagnosticsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStreamDiagnosticsEnabled(enabled) }
+                },
+                onSetProbeProfilingDiagnosticEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setProbeProfilingDiagnosticEnabled(enabled) }
                 },
                 onSetStartupPerfTelemetryEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStartupPerfTelemetryEnabled(enabled) }

@@ -649,6 +649,8 @@
   <string name="streams_deduplicate_grouped_sub">Masque les résultats probablement en double lorsque le groupement est activé.</string>
   <string name="streams_filter_dv5_webdl_title">Filtrer WEB-DL Dolby Vision</string>
   <string name="streams_filter_dv5_webdl_sub">Masque les flux WEB-DL tagués DV ou DoVi pour éviter les bugs de lecture DV5.</string>
+  <string name="streams_probe_profiling_title">Diagnostic de profilage des sondes</string>
+  <string name="streams_probe_profiling_sub">Journalise les temps de la course proxy contre CDN et des sondes de fanout parallèle à chaque décision de lecture automatique. Sans effet sur la lecture. Tag logcat : ProbeProfiling.</string>
   <string name="streams_filter_wrong_episodes_title">Filtrer les épisodes incorrects</string>
   <string name="streams_filter_wrong_episodes_sub">Masque les flux dont la saison ou l\'épisode détecté ne correspond pas à l\'épisode demandé.</string>
   <string name="streams_filter_wrong_movie_year_title">Filtrer l\'année incorrecte (films)</string>

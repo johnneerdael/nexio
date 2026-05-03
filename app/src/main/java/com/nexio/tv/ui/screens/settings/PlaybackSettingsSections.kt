@@ -149,6 +149,7 @@ internal fun PlaybackSettingsSections(
     onSetIecPackerDtshdCoreFallbackEnabled: (Boolean) -> Unit,
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
     streamDiagnosticsEnabled: Boolean,
+    probeProfilingDiagnosticEnabled: Boolean,
     startupPerfTelemetryEnabled: Boolean,
     diskSpoolDiagnosticsEnabled: Boolean,
     dolbyVisionDiagnosticsEnabled: Boolean,
@@ -164,6 +165,7 @@ internal fun PlaybackSettingsSections(
     onSetEnableBufferLogs: (Boolean) -> Unit,
     onSetTraktScrobbleApiLoggingEnabled: (Boolean) -> Unit,
     onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
+    onSetProbeProfilingDiagnosticEnabled: (Boolean) -> Unit,
     onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
     onSetDiskSpoolDiagnosticsEnabled: (Boolean) -> Unit,
     onSetDolbyVisionDiagnosticsEnabled: (Boolean) -> Unit,
@@ -564,6 +566,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_stream_subtitle),
                     isChecked = streamDiagnosticsEnabled,
                     onCheckedChange = onSetStreamDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_probe_profiling") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.streams_probe_profiling_title),
+                    subtitle = stringResource(R.string.streams_probe_profiling_sub),
+                    isChecked = probeProfilingDiagnosticEnabled,
+                    onCheckedChange = onSetProbeProfilingDiagnosticEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

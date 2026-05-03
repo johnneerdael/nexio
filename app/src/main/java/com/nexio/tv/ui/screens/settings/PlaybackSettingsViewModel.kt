@@ -74,6 +74,8 @@ class PlaybackSettingsViewModel @Inject constructor(
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
+    val probeProfilingDiagnosticEnabled: Flow<Boolean> =
+        debugSettingsDataStore.probeProfilingDiagnosticEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
     val diskSpoolDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.diskSpoolDiagnosticsEnabled
     val dolbyVisionDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.dolbyVisionDiagnosticsEnabled
@@ -248,6 +250,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
         debugSettingsDataStore.setStreamDiagnosticsEnabled(enabled)
+    }
+
+    suspend fun setProbeProfilingDiagnosticEnabled(enabled: Boolean) {
+        debugSettingsDataStore.setProbeProfilingDiagnosticEnabled(enabled)
     }
 
     suspend fun setStartupPerfTelemetryEnabled(enabled: Boolean) {
