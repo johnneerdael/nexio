@@ -7,13 +7,11 @@ import org.junit.Assert.assertTrue
 
 class TmdbCatalogSettingsDataStoreTest {
     @Test
-    fun `tmdb catalog defaults enable trending and latest release catalogs only`() {
+    fun `tmdb catalog defaults enable trending and popular catalogs only`() {
         assertEquals(
             listOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.TRENDING_SERIES,
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES,
-                TmdbCatalogIds.LATEST_RELEASES_SERIES,
                 TmdbCatalogIds.POPULAR_MOVIES,
                 TmdbCatalogIds.POPULAR_SERIES,
                 TmdbCatalogIds.YEAR_MOVIES,
@@ -27,8 +25,8 @@ class TmdbCatalogSettingsDataStoreTest {
             setOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.TRENDING_SERIES,
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES,
-                TmdbCatalogIds.LATEST_RELEASES_SERIES
+                TmdbCatalogIds.POPULAR_MOVIES,
+                TmdbCatalogIds.POPULAR_SERIES
             ),
             TmdbCatalogIds.DEFAULT_ENABLED
         )
@@ -43,14 +41,32 @@ class TmdbCatalogSettingsDataStoreTest {
                 "unknown",
                 TmdbCatalogIds.TRENDING_MOVIES
             ),
-            includeAdult = true,
-            hideUnreleasedDigital = false
+            includeAdult = true
         ).sanitized()
 
         assertEquals(setOf(TmdbCatalogIds.POPULAR_SERIES), prefs.enabledCatalogs)
         assertEquals(TmdbCatalogIds.POPULAR_SERIES, prefs.catalogOrder.first())
         assertEquals(TmdbCatalogIds.TRENDING_MOVIES, prefs.catalogOrder[1])
         assertTrue(prefs.includeAdult)
-        assertFalse(prefs.hideUnreleasedDigital)
+    }
+
+    @Test
+    fun `catalog preference sanitizer drops legacy latest releases ids`() {
+        val prefs = TmdbCatalogPreferences(
+            enabledCatalogs = setOf(
+                "tmdb_latest_releases_movies",
+                "tmdb_latest_releases_series",
+                TmdbCatalogIds.POPULAR_MOVIES
+            ),
+            catalogOrder = listOf(
+                "tmdb_latest_releases_movies",
+                TmdbCatalogIds.POPULAR_MOVIES
+            )
+        ).sanitized()
+
+        assertFalse("tmdb_latest_releases_movies" in prefs.enabledCatalogs)
+        assertFalse("tmdb_latest_releases_series" in prefs.enabledCatalogs)
+        assertFalse(prefs.catalogOrder.any { it.startsWith("tmdb_latest_releases") })
+        assertTrue(TmdbCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs)
     }
 }

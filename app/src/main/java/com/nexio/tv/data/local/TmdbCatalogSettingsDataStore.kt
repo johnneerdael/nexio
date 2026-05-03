@@ -15,8 +15,6 @@ import javax.inject.Singleton
 object TmdbCatalogIds {
     const val TRENDING_MOVIES = "tmdb_trending_movies"
     const val TRENDING_SERIES = "tmdb_trending_series"
-    const val LATEST_RELEASES_MOVIES = "tmdb_latest_releases_movies"
-    const val LATEST_RELEASES_SERIES = "tmdb_latest_releases_series"
     const val POPULAR_MOVIES = "tmdb_popular_movies"
     const val POPULAR_SERIES = "tmdb_popular_series"
     const val YEAR_MOVIES = "tmdb_year_movies"
@@ -27,8 +25,6 @@ object TmdbCatalogIds {
     val BUILT_IN_ORDER: List<String> = listOf(
         TRENDING_MOVIES,
         TRENDING_SERIES,
-        LATEST_RELEASES_MOVIES,
-        LATEST_RELEASES_SERIES,
         POPULAR_MOVIES,
         POPULAR_SERIES,
         YEAR_MOVIES,
@@ -40,16 +36,15 @@ object TmdbCatalogIds {
     val DEFAULT_ENABLED: Set<String> = setOf(
         TRENDING_MOVIES,
         TRENDING_SERIES,
-        LATEST_RELEASES_MOVIES,
-        LATEST_RELEASES_SERIES
+        POPULAR_MOVIES,
+        POPULAR_SERIES
     )
 }
 
 data class TmdbCatalogPreferences(
     val enabledCatalogs: Set<String> = TmdbCatalogIds.DEFAULT_ENABLED,
     val catalogOrder: List<String> = TmdbCatalogIds.BUILT_IN_ORDER,
-    val includeAdult: Boolean = false,
-    val hideUnreleasedDigital: Boolean = true
+    val includeAdult: Boolean = false
 ) {
     fun enabledCatalogIds(): Set<String> {
         val sanitized = sanitized()
@@ -81,7 +76,6 @@ class TmdbCatalogSettingsDataStore @Inject constructor(
     private val catalogEnabledSetKey = stringSetPreferencesKey("catalog_enabled_set")
     private val catalogOrderCsvKey = stringPreferencesKey("catalog_order_csv")
     private val includeAdultKey = booleanPreferencesKey("include_adult")
-    private val hideUnreleasedDigitalKey = booleanPreferencesKey("hide_unreleased_digital")
 
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
@@ -95,8 +89,7 @@ class TmdbCatalogSettingsDataStore @Inject constructor(
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
                     ?: TmdbCatalogIds.BUILT_IN_ORDER,
-                includeAdult = prefs[includeAdultKey] ?: false,
-                hideUnreleasedDigital = prefs[hideUnreleasedDigitalKey] ?: true
+                includeAdult = prefs[includeAdultKey] ?: false
             ).sanitized()
         }
     }
@@ -133,12 +126,6 @@ class TmdbCatalogSettingsDataStore @Inject constructor(
     suspend fun setIncludeAdult(enabled: Boolean) {
         store().edit { prefs ->
             prefs[includeAdultKey] = enabled
-        }
-    }
-
-    suspend fun setHideUnreleasedDigital(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[hideUnreleasedDigitalKey] = enabled
         }
     }
 
