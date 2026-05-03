@@ -507,6 +507,9 @@ class FfmpegDolbyVisionProfileProbe(
             } else {
                 FfmpegStreamMetadataProbe.parse(backend.probeStreamMetadataJson(url, headerBlob))
             }
+            if (metadata != null) {
+                PlayProbeCache.put(url = url, headers = headers, metadata = metadata)
+            }
             val parsedResult = parseStreamMetadataProbeResult(
                 metadata = metadata,
                 device = deviceSnapshot
