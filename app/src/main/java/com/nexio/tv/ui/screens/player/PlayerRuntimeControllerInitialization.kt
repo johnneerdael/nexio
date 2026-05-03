@@ -90,7 +90,7 @@ import com.nexio.tv.integrations.hyperhdr.capture.FormatDetector
 import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
-import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
+import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferReconnector
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
@@ -766,7 +766,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             // ===== HyperHDR ambilight state (scoped to this player init) =====
             var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
-            var hyperHdrFbClient: HyperHdrFlatBufferClient? = null
+            var hyperHdrFbClient: HyperHdrFlatBufferReconnector? = null
             var hyperHdrCurrentMode: CaptureMode? = null
 
             // Live-update the local cfg snapshot when the user changes Settings mid-session.
@@ -784,34 +784,27 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 hyperHdrFbClient?.close()
                 hyperHdrFbClient = null
 
-                val fbClient = HyperHdrFlatBufferClient(
+                val reconnector = HyperHdrFlatBufferReconnector(
                     host = cfg.host, port = cfg.port, priority = cfg.priority,
                     origin = "Nexio-HyperHDR",
                 )
-                try {
-                    fbClient.connect()
-                } catch (t: Throwable) {
-                    Log.w("HyperHdrIntegration", "FlatBuffer connect failed; not enabling effect", t)
-                    fbClient.close()
-                    player.setVideoEffects(emptyList())
-                    hyperHdrCurrentMode = null
-                    return
-                }
+                reconnector.start()
+                hyperHdrFbClient = reconnector
 
-                // Best-effort JSON HDR mode signal — failure is non-fatal (FlatBuffer still works).
+                // Best-effort JSON HDR mode signal — failure is non-fatal (FlatBuffer reconnects independently).
                 runCatching {
                     val jsonClient = HyperHdrJsonApiClient(
                         host = cfg.host, port = cfg.jsonPort,
+                        token = cfg.jsonToken.ifBlank { null },
                     )
                     jsonClient.setHdrVideoMode(targetMode == CaptureMode.HDR_P010)
                 }.onFailure {
                     Log.w("HyperHdrIntegration", "JSON setHdrVideoMode failed (continuing)", it)
                 }
 
-                hyperHdrFbClient = fbClient
                 hyperHdrCurrentMode = targetMode
                 player.setVideoEffects(listOf(
-                    HyperHdrCaptureEffect(fbClient, targetMode)
+                    HyperHdrCaptureEffect(reconnector, targetMode)
                 ))
             }
 
