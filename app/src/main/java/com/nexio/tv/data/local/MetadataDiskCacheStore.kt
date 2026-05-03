@@ -53,7 +53,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val HOME_DISPLAY_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_CACHE_SCHEMA_VERSION = 2
-        private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 1
+        private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 2
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 2
         private val TMDB_ENRICHMENT_CACHE_TTL: Duration = Duration.ofDays(7)
         private val TVDB_ENRICHMENT_CACHE_TTL: Duration = Duration.ofDays(7)

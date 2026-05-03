@@ -2,6 +2,8 @@ package com.nexio.tv.core.tvdb
 
 import android.util.Log
 import com.nexio.tv.core.integration.IntegrationLoadResult
+import com.nexio.tv.core.integration.TvdbApiShapes
+import com.nexio.tv.core.metadata.router.MetadataLocalizationFallbackRole
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -216,8 +218,7 @@ class TvdbMetadataService @Inject constructor(
         val translatedOverview = fetchSeriesTranslationOverview(
             seriesId = resolvedId,
             language = normalizedLanguage,
-            withinRuntimeLoad = withinRuntimeLoad,
-            runtimeLoadFailure = runtimeLoadFailure
+            withinRuntimeLoad = withinRuntimeLoad
         )
         val enrichment = baseEnrichment.copy(
             description = translatedOverview ?: baseEnrichment.description
@@ -358,18 +359,18 @@ class TvdbMetadataService @Inject constructor(
             return@withContext cached.map { metadata -> metadata.toSeasonEpisode() }
         }
 
-        val data = runCatching {
-            provider.fetchSeriesEpisodes(
+        val localizedBundle = runCatching {
+            provider.fetchLocalizedSeasonEpisodeBundle(
                 tvdbId = identity.tvdbId,
                 seasonType = DEFAULT_SEASON_TYPE,
-                page = 0,
+                requestedLanguage = normalizedLanguage,
                 season = seasonNumber
             )
         }.onFailure { error ->
             Log.w(TAG, "TVDB season metadata request failed reason=${error.javaClass.simpleName}")
         }.getOrNull()
 
-        if (data == null) {
+        if (localizedBundle == null || localizedBundle.englishFallbackPayloadMissing()) {
             // D-07: Serve stale cached episodes on network failure
             val staleCached = metadataDiskCacheStore.readTvdbSeasonEpisodes(
                 seriesId = identity.tvdbId,
@@ -389,25 +390,8 @@ class TvdbMetadataService @Inject constructor(
             return@withContext emptyList()
         }
 
-        val records = data.episodes.orEmpty()
-        val translatedOverviewsById = fetchTranslatedSeasonEpisodeOverviews(
-            seriesId = identity.tvdbId,
-            seasonNumber = seasonNumber,
-            language = normalizedLanguage
-        )
-        val perEpisodeTranslatedOverviewsById = fetchPerEpisodeTranslationOverviews(
-            episodeIds = records.mapNotNull { record -> record.id }
-                .filterNot { episodeId -> episodeId in translatedOverviewsById },
-            language = normalizedLanguage
-        )
-        val allTranslatedOverviewsById = translatedOverviewsById + perEpisodeTranslatedOverviewsById
-
-        val mapped = records
-            .map { record ->
-                record.toEpisodeMetadata(
-                    translatedOverview = record.id?.let { allTranslatedOverviewsById[it] }
-                )
-            }
+        val mapped = localizedBundle.episodes.values
+            .map { episode -> episode.metadata }
             .filter { metadata -> metadata.seasonNumber == seasonNumber }
             .sortedWith(compareBy<TvEpisodeMetadata> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.providerEpisodeId })
 
@@ -422,13 +406,18 @@ class TvdbMetadataService @Inject constructor(
         mapped.map { metadata -> metadata.toSeasonEpisode() }
     }
 
+    private fun com.nexio.tv.data.integration.metadata.LocalizedEpisodeBundle.englishFallbackPayloadMissing(): Boolean =
+        localizationPayloads.any { payload ->
+            payload.apiShapeId == TvdbApiShapes.SERIES_EPISODES_LANGUAGE &&
+                payload.fallbackRole == MetadataLocalizationFallbackRole.LANGUAGE_FALLBACK &&
+                payload.cacheDecision == "MISS_NETWORK_SUPPRESSED"
+        }
+
     private suspend fun fetchSeriesTranslationOverview(
         seriesId: Int,
         language: String,
-        withinRuntimeLoad: Boolean = false,
-        runtimeLoadFailure: ((IntegrationLoadResult<TvMetadataEnrichment>) -> Unit)? = null
+        withinRuntimeLoad: Boolean = false
     ): String? {
-        if (language == "eng") return null
         return runCatching {
             if (withinRuntimeLoad) {
                 when (val result = provider.fetchSeriesTranslationWithinRuntimeLoad(
@@ -436,16 +425,8 @@ class TvdbMetadataService @Inject constructor(
                     language = language
                 )) {
                     is IntegrationLoadResult.Success -> result.value
-                    is IntegrationLoadResult.HttpError -> {
-                        if (result.statusCode == 429 || result.statusCode >= 500) {
-                            runtimeLoadFailure?.invoke(result)
-                        }
-                        null
-                    }
-                    is IntegrationLoadResult.NetworkError -> {
-                        runtimeLoadFailure?.invoke(result)
-                        null
-                    }
+                    is IntegrationLoadResult.HttpError -> null
+                    is IntegrationLoadResult.NetworkError -> null
                 }
             } else {
                 provider.fetchSeriesTranslation(
@@ -532,65 +513,13 @@ class TvdbMetadataService @Inject constructor(
         )
     }
 
-    private suspend fun fetchTranslatedSeasonEpisodeOverviews(
-        seriesId: Int,
-        seasonNumber: Int,
-        language: String
-    ): Map<Int, String> {
-        if (language == "eng") return emptyMap()
-        return runCatching {
-            provider.fetchSeriesEpisodesTranslated(
-                tvdbId = seriesId,
-                seasonType = DEFAULT_SEASON_TYPE,
-                language = language,
-                page = 0,
-                season = seasonNumber
-            )
-        }.onFailure { error ->
-            Log.w(TAG, "TVDB translated season episodes request failed reason=${error.javaClass.simpleName}")
-        }.getOrNull()
-            ?.episodes
-            .orEmpty()
-            .mapNotNull { record ->
-                val id = record.id ?: return@mapNotNull null
-                val overview = record.overview.trimmed() ?: return@mapNotNull null
-                id to overview
-            }
-            .toMap()
-    }
-
-    private suspend fun fetchPerEpisodeTranslationOverviews(
-        episodeIds: List<Int>,
-        language: String
-    ): Map<Int, String> {
-        if (language == "eng" || episodeIds.isEmpty()) return emptyMap()
-        val translated = linkedMapOf<Int, String>()
-        episodeIds.distinct().forEach { episodeId ->
-            val overview = runCatching {
-                provider.fetchEpisodeTranslation(
-                    episodeId = episodeId,
-                    language = language
-                )
-            }.onFailure { error ->
-                Log.w(TAG, "TVDB episode translation request failed reason=${error.javaClass.simpleName}")
-            }.getOrNull()
-                .overviewText()
-            if (overview != null) {
-                translated[episodeId] = overview
-            }
-        }
-        return translated
-    }
-
-    private fun TvdbEpisodeRecord.toEpisodeMetadata(
-        translatedOverview: String? = null
-    ): TvEpisodeMetadata {
+    private fun TvdbEpisodeRecord.toEpisodeMetadata(): TvEpisodeMetadata {
         val base = TvEpisodeMetadata(
             providerEpisodeId = id?.let { "tvdb:$it" },
             seasonNumber = seasonNumber,
             episodeNumber = number,
             title = name.trimmed(),
-            overview = translatedOverview ?: overview.trimmed(),
+            overview = overview.trimmed(),
             thumbnail = image.toTvdbEpisodeStillUrl(
                 imageType = imageType,
                 fallbackThumbnail = thumbnail

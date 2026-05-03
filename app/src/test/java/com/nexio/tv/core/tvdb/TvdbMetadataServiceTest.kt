@@ -442,6 +442,40 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `series enrichment overlays english translation when base overview is not localized`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
+        } returns Response.success(
+            TvdbSeriesExtendedResponse(
+                data = fullSeriesRecord().copy(
+                    name = "Game of Thrones",
+                    overview = "Beschrijving in brontaal"
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "eng")
+        } returns Response.success(
+            TvdbTranslationResponse(
+                data = TvdbTranslationRecord(
+                    language = "eng",
+                    overview = "English TVDB description"
+                )
+            )
+        )
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
+
+        assertNotNull(enrichment)
+        assertEquals("English TVDB description", enrichment?.description)
+        coVerify(exactly = 1) { tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "eng") }
+    }
+
+    @Test
     fun `series enrichment keeps base overview when tvdb translation is missing`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
@@ -496,7 +530,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 121361)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = listOf(episodeRecord()))))
 
         val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
@@ -518,7 +552,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 121361)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -547,7 +581,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 355567)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 355567, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -571,7 +605,7 @@ class TvdbMetadataServiceTest {
             episodes[1 to 1]?.thumbnail
         )
         coVerify(exactly = 1) {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 355567, "default", "eng", 0, 1, null, null)
         }
         coVerify(exactly = 0) {
             tvdbApi.getSeriesExtended(any(), any(), any(), any())
@@ -585,7 +619,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 121361)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -611,7 +645,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 355567)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 355567, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -645,7 +679,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 355567)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 0, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 355567, "default", "eng", 0, 0, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -678,7 +712,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 355567)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 355567, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -709,7 +743,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 355567)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 355567, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 355567, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -733,13 +767,13 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
-    fun `fetch episode enrichment overlays only translated episode overviews`() = runTest {
+    fun `fetch episode enrichment overlays translated episode title and overview`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
         val identity = TvdbSeriesIdentity(tvdbId = 121361)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -775,7 +809,7 @@ class TvdbMetadataServiceTest {
 
         val episode = episodes[1 to 1]
         assertNotNull(episode)
-        assertEquals("Winter Is Coming", episode?.title)
+        assertEquals("Dutch title from translation endpoint", episode?.title)
         assertEquals("Nederlandse afleveringstekst", episode?.overview)
         assertEquals(62, episode?.runtimeMinutes)
         coVerify(exactly = 1) {
@@ -784,13 +818,13 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
-    fun `fetch episode enrichment falls back to per episode translation overview`() = runTest {
+    fun `fetch episode enrichment falls back to per episode translation fields`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
         val identity = TvdbSeriesIdentity(tvdbId = 121361)
 
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.success(
             TvdbSeriesEpisodesResponse(
                 data = TvdbSeriesEpisodesData(
@@ -834,7 +868,7 @@ class TvdbMetadataServiceTest {
 
         val episode = episodes[1 to 1]
         assertNotNull(episode)
-        assertEquals("Winter Is Coming", episode?.title)
+        assertEquals("Dutch title from episode translation endpoint", episode?.title)
         assertEquals("Nederlandse afleveringstekst", episode?.overview)
         coVerify(exactly = 1) {
             tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "nld")
@@ -866,7 +900,7 @@ class TvdbMetadataServiceTest {
 
         assertEquals("Cached Pilot", episodes.single().metadata.title)
         coVerify(exactly = 0) { authService.bearerToken() }
-        coVerify(exactly = 0) { tvdbApi.getSeriesEpisodes(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { tvdbApi.getSeriesEpisodesTranslated(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -881,7 +915,7 @@ class TvdbMetadataServiceTest {
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } throws RuntimeException("remote down")
 
         val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
@@ -902,7 +936,7 @@ class TvdbMetadataServiceTest {
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.error(
             500,
             "{}".toResponseBody("application/json".toMediaType())
@@ -926,7 +960,7 @@ class TvdbMetadataServiceTest {
         every { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "eng", emptyList()) } just Runs
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
-            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "eng", 0, 1, null, null)
         } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = emptyList())))
 
         val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
