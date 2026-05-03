@@ -4,6 +4,7 @@ import com.nexio.tv.core.integration.TvdbApiShapes
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.toTvdbEpisodeStillUrl
 import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 
@@ -118,7 +119,10 @@ internal object TvdbEpisodeLocalization {
             episodeNumber = number,
             title = title ?: name.cleanLocalizedValue(),
             overview = overview ?: this.overview.cleanLocalizedValue(),
-            thumbnail = image.cleanLocalizedValue(),
+            thumbnail = image.toTvdbEpisodeStillUrl(
+                imageType = imageType,
+                fallbackThumbnail = thumbnail
+            ),
             airDate = aired.cleanLocalizedValue(),
             runtimeMinutes = runtime,
             absoluteNumber = absoluteNumber,
