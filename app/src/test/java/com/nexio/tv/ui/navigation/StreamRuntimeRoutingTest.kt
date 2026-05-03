@@ -8,6 +8,10 @@ import com.nexio.tv.ui.screens.home.NextUpInfo
 import kotlinx.coroutines.test.runTest
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import kotlin.io.path.invariantSeparatorsPathString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -161,6 +165,16 @@ class StreamRuntimeRoutingTest {
         assertEquals("50.0", args.getValue("resumeProgressPercent"))
         assertEquals("98765", args.getValue("resumeLastWatchedMs"))
         assertEquals(WatchProgress.SOURCE_TRAKT_PLAYBACK, args.getValue("resumeSource"))
+    }
+
+    @Test
+    fun `stream view model bridges route addon context into playback info fallback`() {
+        val source = sourceFile("com/nexio/tv/ui/screens/stream/StreamScreenViewModel.kt").toFile().readText()
+
+        assertTrue(source.contains("sourceAddonBaseUrl: String? = savedStateHandle.getOptionalString(\"addonBaseUrl\")"))
+        assertTrue(source.contains("addonBaseUrl = sourceAddonBaseUrl"))
+        assertTrue(source.contains("addonBaseUrl = stream.addonBaseUrl ?: sourceAddonBaseUrl"))
+        assertTrue(source.contains("addonBaseUrl = candidate.stream.addonBaseUrl ?: sourceAddonBaseUrl"))
     }
 
     @Test
@@ -328,5 +342,20 @@ class StreamRuntimeRoutingTest {
 
     private fun decode(value: String): String {
         return URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+    }
+
+    private fun sourceFile(relativePath: String): Path {
+        val cwd = Paths.get("").toAbsolutePath().normalize()
+        val relative = Paths.get("app", "src", "main", "java")
+        val directCandidate = cwd.resolve(relative)
+        val parentCandidate = cwd.resolve("..").resolve(relative).normalize()
+        val sourceRoot = when {
+            Files.exists(directCandidate) -> directCandidate
+            Files.exists(parentCandidate) -> parentCandidate
+            else -> error("Unable to locate app/src/main/java from working directory $cwd")
+        }
+        return sourceRoot.resolve(relativePath).also { path ->
+            require(path.invariantSeparatorsPathString.endsWith(relativePath))
+        }
     }
 }
