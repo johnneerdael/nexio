@@ -645,14 +645,15 @@ object StreamPresentationEngine {
     }
 
     private fun pickBestRepresentative(items: List<StreamCardModel>): StreamCardModel {
+        if (items.size == 1) return items.first()
+        val clusterId = dedupeKeys(items.first()).sorted().joinToString("|")
         return items.minWithOrNull(
             compareBy<StreamCardModel> { dedupePriority(it) }
-                .thenBy { servicePriority(it) }
-                .thenBy { addonPriority(it) }
                 .thenByDescending { it.parsed.hasUsablePlaybackTarget }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
                 .thenByDescending { metadataRichness(it.parsed) }
+                .thenBy { sessionTiebreakHash(it, clusterId) }
                 .thenBy { it.title.lowercase(Locale.US) }
         ) ?: items.first()
     }
@@ -661,10 +662,11 @@ object StreamPresentationEngine {
         return item.stream.addonName.lowercase(Locale.US)
     }
 
-    private fun servicePriority(item: StreamCardModel): Int {
-        val serviceId = item.parsed.serviceId ?: return Int.MAX_VALUE
-        val index = StreamDeduplicationDefaults.preferredServiceOrder.indexOf(serviceId)
-        return if (index >= 0) index else StreamDeduplicationDefaults.preferredServiceOrder.size
+    private fun sessionTiebreakHash(item: StreamCardModel, clusterId: String): Int {
+        val identity = item.stream.addonName + "|" +
+            (item.parsed.serviceId ?: "") + "|" +
+            clusterId
+        return (identity.hashCode().toLong() xor STREAM_PRESENTATION_SESSION_TIEBREAK_SEED).toInt()
     }
 
     private fun metadataRichness(parsed: ParsedStreamInfo): Int {
@@ -1061,9 +1063,10 @@ private object StreamDeduplicationDefaults {
         youtube = DeduplicationMode.DISABLED,
         external = DeduplicationMode.DISABLED
     )
-
-    val preferredServiceOrder = listOf("RD", "PM", "AD", "DL", "TB", "ED", "PK")
 }
+
+private val STREAM_PRESENTATION_SESSION_TIEBREAK_SEED: Long =
+    java.util.concurrent.ThreadLocalRandom.current().nextLong()
 
 internal object AioStyleStreamParser {
     private val seasonEpisodeTokenRegex = Regex("""(?i)^s\d{1,2}e\d{1,2}$""")

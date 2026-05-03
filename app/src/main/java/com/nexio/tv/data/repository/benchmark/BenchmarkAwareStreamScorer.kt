@@ -826,7 +826,16 @@ private fun baseDecisionComparator(): Comparator<ShadowStreamDecision> {
         .thenByDescending { it.safeBudgetMbps }
         .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
         .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
+        .thenBy { autoplaySessionTiebreakHash(it) }
 }
+
+private fun autoplaySessionTiebreakHash(decision: ShadowStreamDecision): Int {
+    val key = decision.provider.storageKey + "|" + decision.streamKey
+    return (key.hashCode().toLong() xor AUTOPLAY_SESSION_TIEBREAK_SEED).toInt()
+}
+
+private val AUTOPLAY_SESSION_TIEBREAK_SEED: Long =
+    java.util.concurrent.ThreadLocalRandom.current().nextLong()
 
 private data class ShadowTransportOption(
     val transport: DebridBenchmarkTransportMode,

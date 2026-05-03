@@ -46,6 +46,19 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
+    fun `skip placeholder streams defaults on and persists`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        assertEquals(true, dataStore.playerSettings.first().skipPlaceholderStreamsEnabled)
+
+        dataStore.setSkipPlaceholderStreamsEnabled(false)
+        assertEquals(false, dataStore.playerSettings.first().skipPlaceholderStreamsEnabled)
+
+        dataStore.setSkipPlaceholderStreamsEnabled(true)
+        assertEquals(true, dataStore.playerSettings.first().skipPlaceholderStreamsEnabled)
+    }
+
+    @Test
     fun `dynamic video scheduling defaults disabled and persists selection`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 

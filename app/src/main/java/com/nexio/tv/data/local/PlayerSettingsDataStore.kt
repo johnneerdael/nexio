@@ -236,6 +236,7 @@ data class PlayerSettings(
     val serviceWrapEnabled: Boolean = false,
     val shadowAutoplayDataCollectionEnabled: Boolean = false,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
+    val skipPlaceholderStreamsEnabled: Boolean = true,
     val filterEpisodeMismatchStreamsEnabled: Boolean = true,
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
@@ -541,6 +542,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val serviceWrapEnabledKey = booleanPreferencesKey("service_wrap_enabled")
     private val shadowAutoplayDataCollectionEnabledKey = booleanPreferencesKey("shadow_autoplay_data_collection_enabled")
     private val filterWebDolbyVisionStreamsEnabledKey = booleanPreferencesKey("filter_web_dolby_vision_streams_enabled")
+    private val skipPlaceholderStreamsEnabledKey = booleanPreferencesKey("skip_placeholder_streams_enabled")
     private val filterEpisodeMismatchStreamsEnabledKey = booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
     private val filterMovieYearMismatchStreamsEnabledKey = booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
@@ -849,6 +851,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 serviceWrapEnabled = prefs[serviceWrapEnabledKey] ?: false,
                 shadowAutoplayDataCollectionEnabled = prefs[shadowAutoplayDataCollectionEnabledKey] ?: false,
                 filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
+                skipPlaceholderStreamsEnabled = prefs[skipPlaceholderStreamsEnabledKey] ?: true,
                 filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
                 filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
@@ -1224,6 +1227,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setFilterWebDolbyVisionStreamsEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[filterWebDolbyVisionStreamsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSkipPlaceholderStreamsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[skipPlaceholderStreamsEnabledKey] = enabled
         }
     }
 
