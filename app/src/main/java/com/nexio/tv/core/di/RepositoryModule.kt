@@ -6,6 +6,7 @@ import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.data.repository.CatalogRepositoryImpl
 import com.nexio.tv.data.repository.LibraryRepositoryImpl
 import com.nexio.tv.data.repository.MetaRepositoryImpl
+import com.nexio.tv.data.repository.OpenSubtitlesSourceImpl
 import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
@@ -25,6 +26,7 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.domain.repository.OpenSubtitlesSource
 import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.SubtitleRepository
 import com.nexio.tv.domain.repository.SyncRepository
@@ -65,6 +67,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSubtitleRepository(impl: SubtitleRepositoryImpl): SubtitleRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindOpenSubtitlesSource(impl: OpenSubtitlesSourceImpl): OpenSubtitlesSource
 
     @Binds
     @Singleton

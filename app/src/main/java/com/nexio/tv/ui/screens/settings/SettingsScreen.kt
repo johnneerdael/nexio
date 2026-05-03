@@ -90,6 +90,7 @@ private enum class IntegrationSettingsSection {
     MdbList,
     AnimeSkip,
     SubtitleTranslation,
+    OpenSubtitles,
     WyzieSubtitles,
     PosterRatings
 }
@@ -226,6 +227,7 @@ fun SettingsScreen(
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
+    val integrationOpenSubtitlesFocusRequester = remember { FocusRequester() }
     val integrationWyzieSubtitlesFocusRequester = remember { FocusRequester() }
     val integrationPosterRatingsFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
@@ -420,6 +422,7 @@ fun SettingsScreen(
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
+                            openSubtitlesFocusRequester = integrationOpenSubtitlesFocusRequester,
                             wyzieSubtitlesFocusRequester = integrationWyzieSubtitlesFocusRequester,
                             posterRatingsFocusRequester = integrationPosterRatingsFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
@@ -652,6 +655,7 @@ private fun IntegrationSettingsContent(
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     subtitleTranslationFocusRequester: FocusRequester,
+    openSubtitlesFocusRequester: FocusRequester,
     wyzieSubtitlesFocusRequester: FocusRequester,
     posterRatingsFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
@@ -667,6 +671,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Omdb,
             IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
+            IntegrationSettingsSection.OpenSubtitles,
             IntegrationSettingsSection.WyzieSubtitles,
             IntegrationSettingsSection.PosterRatings
         )
@@ -694,6 +699,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
+            IntegrationSettingsSection.OpenSubtitles -> openSubtitlesFocusRequester
             IntegrationSettingsSection.WyzieSubtitles -> wyzieSubtitlesFocusRequester
             IntegrationSettingsSection.PosterRatings -> posterRatingsFocusRequester
         }
@@ -801,6 +807,13 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
                                 )
                             }
+                            item(key = "integration_hub_open_subtitles") {
+                                SettingsActionRow(
+                                    title = "OpenSubtitles",
+                                    subtitle = "Native subtitle search and exact file-hash matching",
+                                    onClick = { onSelectSection(IntegrationSettingsSection.OpenSubtitles) }
+                                )
+                            }
                             item(key = "integration_hub_wyzie_subtitles") {
                                 SettingsActionRow(
                                     title = "Wyzie subtitles",
@@ -884,6 +897,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.SubtitleTranslation -> {
             SubtitleTranslationSettingsContent(
                 initialFocusRequester = subtitleTranslationFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.OpenSubtitles -> {
+            OpenSubtitlesSettingsContent(
+                initialFocusRequester = openSubtitlesFocusRequester
             )
         }
 

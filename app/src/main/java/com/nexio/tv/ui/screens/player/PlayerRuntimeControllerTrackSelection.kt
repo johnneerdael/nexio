@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.ZipInputStream
 import java.security.MessageDigest
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -536,30 +538,42 @@ internal suspend fun materializeAddonSubtitleToCacheViaProvider(
     if (originalUrl.startsWith("file:")) return subtitle
 
     return try {
-        val extension = addonSubtitleCacheExtension(originalUrl)
+        val initialExtension = addonSubtitleCacheExtension(originalUrl)
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(originalUrl.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-        val cacheFile = runInterruptible(Dispatchers.IO) {
+        var cacheFile = runInterruptible(Dispatchers.IO) {
             cacheRoot.mkdirs()
-            File(cacheRoot, "$digest.$extension")
+            addonSubtitleCacheCandidates(cacheRoot, digest, initialExtension)
+                .firstOrNull { it.exists() && it.length() > 0L }
+                ?: File(cacheRoot, "$digest.$initialExtension")
         }
 
-        val needsWrite = runInterruptible(Dispatchers.IO) {
+        var needsWrite = runInterruptible(Dispatchers.IO) {
             !cacheFile.exists() || cacheFile.length() == 0L
         }
         if (needsWrite) {
             when (val result = downloadBytes(originalUrl, headers)) {
                 is IntegrationCallResult.Success -> {
+                    val payload = extractAddonSubtitlePayload(result.value, initialExtension)
+                    cacheFile = runInterruptible(Dispatchers.IO) {
+                        File(cacheRoot, "$digest.${payload.extension}")
+                    }
+                    needsWrite = runInterruptible(Dispatchers.IO) {
+                        !cacheFile.exists() || cacheFile.length() == 0L
+                    }
+                    if (!needsWrite) {
+                        return subtitle.copy(url = cacheFile.toURI().toString())
+                    }
                     runInterruptible(Dispatchers.IO) {
                         val tempFile = File.createTempFile(
                             "${digest}.",
-                            ".${extension}.tmp",
+                            ".${payload.extension}.tmp",
                             cacheRoot
                         )
                         try {
                             FileOutputStream(tempFile).use { fos ->
-                                fos.write(result.value)
+                                fos.write(payload.bytes)
                                 fos.flush()
                                 try {
                                     fos.fd.sync()
@@ -636,6 +650,63 @@ private fun addonSubtitleCacheExtension(url: String): String {
         PlayerSubtitleUtils.mimeTypeFromUrl(url) == MimeTypes.TEXT_SSA -> "ass"
         PlayerSubtitleUtils.mimeTypeFromUrl(url) == MimeTypes.TEXT_VTT -> "vtt"
         else -> "srt"
+    }
+}
+
+private fun addonSubtitleCacheCandidates(
+    cacheRoot: File,
+    digest: String,
+    initialExtension: String
+): List<File> {
+    return (listOf(initialExtension) + listOf("srt", "vtt", "ass", "ssa"))
+        .distinct()
+        .map { extension -> File(cacheRoot, "$digest.$extension") }
+}
+
+internal data class ExtractedAddonSubtitlePayload(
+    val bytes: ByteArray,
+    val extension: String
+)
+
+internal fun extractAddonSubtitlePayload(
+    bytes: ByteArray,
+    fallbackExtension: String
+): ExtractedAddonSubtitlePayload {
+    if (bytes.isEmpty()) return ExtractedAddonSubtitlePayload(bytes, fallbackExtension)
+    return when {
+        isZip(bytes) -> extractAddonSubtitleZip(bytes) ?: ExtractedAddonSubtitlePayload(bytes, fallbackExtension)
+        isGzip(bytes) -> ExtractedAddonSubtitlePayload(
+            bytes = GZIPInputStream(bytes.inputStream()).use { it.readBytes() },
+            extension = fallbackExtension.takeIf { it != "zip" } ?: "srt"
+        )
+        else -> ExtractedAddonSubtitlePayload(bytes, fallbackExtension)
+    }
+}
+
+private fun isGzip(bytes: ByteArray): Boolean =
+    bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()
+
+private fun isZip(bytes: ByteArray): Boolean =
+    bytes.size >= 4 &&
+        bytes[0] == 0x50.toByte() &&
+        bytes[1] == 0x4B.toByte() &&
+        (bytes[2] == 0x03.toByte() || bytes[2] == 0x05.toByte() || bytes[2] == 0x07.toByte())
+
+private fun extractAddonSubtitleZip(bytes: ByteArray): ExtractedAddonSubtitlePayload? {
+    ZipInputStream(bytes.inputStream()).use { stream ->
+        while (true) {
+            val entry = stream.nextEntry ?: return null
+            if (entry.isDirectory) continue
+            val extension = entry.name
+                .substringAfterLast('.', missingDelimiterValue = "srt")
+                .lowercase()
+            if (extension == "srt" || extension == "vtt" || extension == "ass" || extension == "ssa") {
+                return ExtractedAddonSubtitlePayload(
+                    bytes = stream.readBytes(),
+                    extension = extension
+                )
+            }
+        }
     }
 }
 

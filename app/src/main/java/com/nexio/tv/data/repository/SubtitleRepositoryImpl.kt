@@ -12,6 +12,7 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.domain.model.WyzieIdHints
+import com.nexio.tv.domain.repository.OpenSubtitlesSource
 import com.nexio.tv.domain.repository.SubtitleRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -27,6 +28,7 @@ class SubtitleRepositoryImpl @Inject constructor(
     private val addonSubtitleIntegrationProvider: AddonSubtitleIntegrationProvider,
     private val addonRepository: AddonRepositoryImpl,
     private val wyzieSubtitleIntegrationProvider: WyzieSubtitleIntegrationProvider,
+    private val openSubtitlesSource: OpenSubtitlesSource,
 ) : SubtitleRepository {
 
     companion object {
@@ -68,7 +70,23 @@ class SubtitleRepositoryImpl @Inject constructor(
                         emptyList()
                     }
             }
-            val merged = listOf(addonDeferred, wyzieDeferred).awaitAll().flatten()
+            val openSubtitlesDeferred = async {
+                runCatching {
+                    openSubtitlesSource.search(
+                        type = type,
+                        id = id,
+                        videoId = videoId,
+                        videoHash = videoHash,
+                        videoSize = videoSize,
+                        filename = filename
+                    )
+                }.getOrElse { e ->
+                    if (e is CancellationException) throw e
+                    Log.e(TAG, "OpenSubtitles lane failed", e)
+                    emptyList()
+                }
+            }
+            val merged = listOf(addonDeferred, wyzieDeferred, openSubtitlesDeferred).awaitAll().flatten()
             Log.d(
                 TAG,
                 "Subtitle fetch completed total=${merged.size} in ${System.currentTimeMillis() - startedAtMs}ms",

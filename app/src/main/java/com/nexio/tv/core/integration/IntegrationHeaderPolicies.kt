@@ -60,6 +60,7 @@ object IntegrationHeaderPolicies {
             IntegrationProvider.SHADOW_COLLECTOR -> COLLECTOR_JSON_V1
             IntegrationProvider.GITHUB -> GITHUB_JSON_V1
             IntegrationProvider.YOUTUBE_TRAILER -> YOUTUBE_HTML_V1
+            IntegrationProvider.OPEN_SUBTITLES,
             IntegrationProvider.SUBTITLE_SOURCE_DOWNLOAD,
             IntegrationProvider.SUBTITLE_TRANSLATION,
             IntegrationProvider.WYZIE_SUBTITLES -> SUBTITLE_PROVIDER_V1

@@ -16,6 +16,9 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.nio.charset.StandardCharsets
 import java.util.Collections
+import java.util.zip.GZIPOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.async
@@ -351,6 +354,95 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     }
 
     @Test
+    fun `provider backed materialization extracts gzipped subtitles before caching`() {
+        val cacheRoot = createTempDirectory("addon-subtitle-gzip-").toFile()
+        val subtitle = Subtitle(
+            id = "remote-subtitle",
+            url = "https://example.test/subtitles/episode.srt.gz",
+            lang = "en",
+            addonName = "OpenSubtitles",
+            addonLogo = null
+        )
+        val subtitleText = "1\n00:00:00,000 --> 00:00:01,000\nHello\n"
+
+        try {
+            val materialized = runBlocking {
+                materializeAddonSubtitleToCacheViaProvider(
+                    cacheRoot = cacheRoot,
+                    subtitle = subtitle,
+                    downloadBytes = { _, _ -> IntegrationCallResult.Success(gzip(subtitleText)) }
+                )
+            } ?: throw AssertionError("Expected cached subtitle")
+
+            assertEquals(subtitleText, File(java.net.URI(materialized.url)).readText(StandardCharsets.UTF_8))
+        } finally {
+            cacheRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `provider backed materialization extracts subtitle file from zip before caching`() {
+        val cacheRoot = createTempDirectory("addon-subtitle-zip-").toFile()
+        val subtitle = Subtitle(
+            id = "remote-subtitle",
+            url = "https://example.test/subtitles/episode.zip",
+            lang = "en",
+            addonName = "OpenSubtitles",
+            addonLogo = null
+        )
+        val subtitleText = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n"
+
+        try {
+            val materialized = runBlocking {
+                materializeAddonSubtitleToCacheViaProvider(
+                    cacheRoot = cacheRoot,
+                    subtitle = subtitle,
+                    downloadBytes = { _, _ -> IntegrationCallResult.Success(zip("episode.vtt", subtitleText)) }
+                )
+            } ?: throw AssertionError("Expected cached subtitle")
+
+            val cacheFile = File(java.net.URI(materialized.url))
+            assertTrue(cacheFile.name.endsWith(".vtt"))
+            assertEquals(subtitleText, cacheFile.readText(StandardCharsets.UTF_8))
+        } finally {
+            cacheRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `provider backed materialization reuses extracted archive cache without redownloading`() {
+        val cacheRoot = createTempDirectory("addon-subtitle-zip-reuse-").toFile()
+        val subtitle = Subtitle(
+            id = "remote-subtitle",
+            url = "https://example.test/subtitles/episode.zip",
+            lang = "en",
+            addonName = "OpenSubtitles",
+            addonLogo = null
+        )
+        val subtitleText = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n"
+        val downloads = AtomicInteger(0)
+
+        try {
+            repeat(2) {
+                runBlocking {
+                    materializeAddonSubtitleToCacheViaProvider(
+                        cacheRoot = cacheRoot,
+                        subtitle = subtitle,
+                        downloadBytes = { _, _ ->
+                            downloads.incrementAndGet()
+                            IntegrationCallResult.Success(zip("episode.vtt", subtitleText))
+                        }
+                    )
+                } ?: throw AssertionError("Expected cached subtitle")
+            }
+
+            assertEquals(1, downloads.get())
+        } finally {
+            cacheRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `refresh selection preparation uses materialized file url for state and media source`() {
         val cacheRoot = createTempDirectory("addon-subtitle-refresh-").toFile()
         val remoteSubtitle = Subtitle(
@@ -481,5 +573,21 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     private fun buildAddonSubtitleTrackIdForTest(subtitle: Subtitle): String {
         val urlHashSuffix = subtitle.url.hashCode().toUInt().toString(16)
         return "${PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX}${subtitle.id}:$urlHashSuffix"
+    }
+
+    private fun gzip(text: String): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        GZIPOutputStream(output).use { it.write(text.toByteArray(StandardCharsets.UTF_8)) }
+        return output.toByteArray()
+    }
+
+    private fun zip(name: String, text: String): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        ZipOutputStream(output).use { stream ->
+            stream.putNextEntry(ZipEntry(name))
+            stream.write(text.toByteArray(StandardCharsets.UTF_8))
+            stream.closeEntry()
+        }
+        return output.toByteArray()
     }
 }
