@@ -174,6 +174,119 @@ class MetaRepositoryImplTest {
     }
 
     @Test
+    fun `hydrateAddonOriginItem skips addon meta calls when id is outside declared prefixes`() = runTest {
+        val context = mockk<Context>()
+        val provider = mockk<AddonMetaIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val fixtureAddon = Addon(
+            id = "cinemeta",
+            name = "Cinemeta",
+            version = "1.0.0",
+            description = null,
+            logo = null,
+            baseUrl = "https://addon.example",
+            catalogs = emptyList(),
+            types = listOf(ContentType.MOVIE),
+            resources = listOf(
+                AddonResource(
+                    name = "meta",
+                    types = listOf("movie"),
+                    idPrefixes = listOf("mt:", "mu:", "kitsu")
+                )
+            )
+        )
+
+        val localePrefs = InMemorySharedPreferences()
+        every { context.getSharedPreferences("app_locale", Context.MODE_PRIVATE) } returns localePrefs
+        AppLocaleResolver.setStoredLocaleTag(context, "en")
+        coEvery { posterResolver.getActiveProvider() } returns null
+        every { diskCacheStore.readMeta(any(), any(), any()) } returns null
+
+        val repository = MetaRepositoryImpl(
+            context = context,
+            addonMetaIntegrationProvider = provider,
+            addonRepository = addonRepository,
+            posterRatingsUrlResolver = posterResolver,
+            metadataDiskCacheStore = diskCacheStore
+        )
+
+        val emissions = repository.hydrateAddonOriginItem(
+            addon = fixtureAddon,
+            type = "movie",
+            id = "tt0068646",
+            cacheOnDisk = true,
+            writeToDisk = false,
+            origin = "test"
+        ).toList()
+
+        assertEquals(2, emissions.size)
+        assertTrue(emissions.first() is NetworkResult.Loading)
+        assertTrue(emissions.last() is NetworkResult.Error)
+        coVerify(exactly = 0) {
+            provider.getMeta(any(), any())
+        }
+    }
+
+    @Test
+    fun `getMeta skips unsupported id prefixes when base url matches installed addon manifest`() = runTest {
+        val context = mockk<Context>()
+        val provider = mockk<AddonMetaIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val diskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val fixtureAddon = Addon(
+            id = "cinemeta",
+            name = "Cinemeta",
+            version = "1.0.0",
+            description = null,
+            logo = null,
+            baseUrl = "https://addon.example/",
+            catalogs = emptyList(),
+            types = listOf(ContentType.MOVIE),
+            resources = listOf(
+                AddonResource(
+                    name = "meta",
+                    types = listOf("movie"),
+                    idPrefixes = listOf("mt:", "mu:", "kitsu")
+                )
+            )
+        )
+
+        val localePrefs = InMemorySharedPreferences()
+        every { context.getSharedPreferences("app_locale", Context.MODE_PRIVATE) } returns localePrefs
+        AppLocaleResolver.setStoredLocaleTag(context, "en")
+        coEvery { posterResolver.getActiveProvider() } returns null
+        coEvery { addonRepository.getCachedInstalledAddons() } returns listOf(fixtureAddon)
+        every { diskCacheStore.readMeta(any(), any(), any()) } returns null
+
+        val repository = MetaRepositoryImpl(
+            context = context,
+            addonMetaIntegrationProvider = provider,
+            addonRepository = addonRepository,
+            posterRatingsUrlResolver = posterResolver,
+            metadataDiskCacheStore = diskCacheStore
+        )
+
+        val emissions = repository.getMeta(
+            addonBaseUrl = "https://addon.example",
+            type = "movie",
+            id = "tt0068646",
+            cacheOnDisk = true,
+            writeToDisk = false,
+            origin = "test"
+        ).toList()
+
+        assertEquals(2, emissions.size)
+        assertTrue(emissions.first() is NetworkResult.Loading)
+        assertTrue(emissions.last() is NetworkResult.Error)
+        coVerify(exactly = 0) {
+            provider.getMeta(any(), any())
+        }
+    }
+
+    @Test
     fun `meta disk aliases include resolved response type when request type differs`() {
         val meta = meta(type = ContentType.SERIES, rawType = "series")
 
