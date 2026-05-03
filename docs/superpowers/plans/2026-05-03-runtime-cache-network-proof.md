@@ -276,13 +276,13 @@ git commit -m "fix(trace): preserve runtime session ids"
 - Modify: `app/src/main/java/com/nexio/tv/core/trace/LogcatRuntimeTraceSink.kt`
 - Test: `app/src/test/java/com/nexio/tv/core/trace/LogcatRuntimeTraceSinkTest.kt`
 
-- [ ] **Step 1: Write the failing logcat test**
+- [ ] **Step 1: Write failing logcat tests for every cache decision**
 
-Replace the existing `cache_decision event writes to IntRuntime tag with decision and cacheKey` test with:
+Replace the existing `cache_decision event writes to IntRuntime tag with decision and cacheKey` test with these tests:
 
 ```kotlin
 @Test
-fun `cache_decision event writes cache proof fields to IntRuntime tag`() {
+fun `cache_decision fresh hit writes cache proof fields to IntRuntime tag`() {
     val sink = LogcatRuntimeTraceSink(allEnabled)
     sink.emit(envelope("runtime.cache_decision", mapOf(
         "runtimeOperationId" to "op-1",
@@ -310,6 +310,92 @@ fun `cache_decision event writes cache proof fields to IntRuntime tag`() {
     assertTrue(msg.contains("staleWindowMs=2592000000"))
     assertTrue(msg.contains("cacheKey=kitsu:series:12:anime_characters:v3"))
 }
+
+@Test
+fun `cache_decision miss then network writes network-required fields to IntRuntime tag`() {
+    val sink = LogcatRuntimeTraceSink(allEnabled)
+    sink.emit(envelope("runtime.cache_decision", mapOf(
+        "runtimeOperationId" to "op-2",
+        "provider" to "KITSU",
+        "apiShapeId" to "kitsu.anime.core",
+        "operationKey" to "kitsu.fetch_enrichment",
+        "cacheKey" to "kitsu:series:12:enrichment:policy:test",
+        "decision" to "MISS_THEN_NETWORK",
+        "reason" to "cache-miss",
+        "networkSuppressed" to false,
+        "ttlMs" to 86400000L,
+        "staleWindowMs" to 604800000L
+    )))
+
+    val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+    assertTrue(msg.contains("t=runtime.cache_decision"))
+    assertTrue(msg.contains("runtimeOperationId=op-2"))
+    assertTrue(msg.contains("apiShapeId=kitsu.anime.core"))
+    assertTrue(msg.contains("operationKey=kitsu.fetch_enrichment"))
+    assertTrue(msg.contains("decision=MISS_THEN_NETWORK"))
+    assertTrue(msg.contains("reason=cache-miss"))
+    assertTrue(msg.contains("networkSuppressed=false"))
+    assertTrue(msg.contains("ttlMs=86400000"))
+    assertTrue(msg.contains("staleWindowMs=604800000"))
+    assertTrue(msg.contains("cacheKey=kitsu:series:12:enrichment:policy:test"))
+}
+
+@Test
+fun `cache_decision stale hit writes suppression fields to IntRuntime tag`() {
+    val sink = LogcatRuntimeTraceSink(allEnabled)
+    sink.emit(envelope("runtime.cache_decision", mapOf(
+        "runtimeOperationId" to "op-3",
+        "provider" to "KITSU",
+        "apiShapeId" to "kitsu.anime.characters",
+        "operationKey" to "kitsu.anime_characters",
+        "cacheKey" to "kitsu:series:12:anime_characters:v3",
+        "decision" to "STALE_HIT",
+        "reason" to "stale-cache-hit-network-suppressed",
+        "networkSuppressed" to true,
+        "ttlMs" to 604800000L,
+        "staleWindowMs" to 2592000000L
+    )))
+
+    val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+    assertTrue(msg.contains("t=runtime.cache_decision"))
+    assertTrue(msg.contains("runtimeOperationId=op-3"))
+    assertTrue(msg.contains("apiShapeId=kitsu.anime.characters"))
+    assertTrue(msg.contains("decision=STALE_HIT"))
+    assertTrue(msg.contains("reason=stale-cache-hit-network-suppressed"))
+    assertTrue(msg.contains("networkSuppressed=true"))
+    assertTrue(msg.contains("ttlMs=604800000"))
+    assertTrue(msg.contains("staleWindowMs=2592000000"))
+    assertTrue(msg.contains("cacheKey=kitsu:series:12:anime_characters:v3"))
+}
+
+@Test
+fun `cache_decision write records cache write fields to IntRuntime tag`() {
+    val sink = LogcatRuntimeTraceSink(allEnabled)
+    sink.emit(envelope("runtime.cache_decision", mapOf(
+        "runtimeOperationId" to "op-4",
+        "provider" to "KITSU",
+        "apiShapeId" to "kitsu.anime.core",
+        "operationKey" to "kitsu.fetch_enrichment",
+        "cacheKey" to "kitsu:series:12:enrichment:policy:test",
+        "decision" to "WRITE",
+        "reason" to "network-response-cached",
+        "networkSuppressed" to false,
+        "ttlMs" to 86400000L,
+        "staleWindowMs" to 604800000L
+    )))
+
+    val msg = ShadowLog.getLogsForTag("Nexio.IntRuntime").first().msg
+    assertTrue(msg.contains("t=runtime.cache_decision"))
+    assertTrue(msg.contains("runtimeOperationId=op-4"))
+    assertTrue(msg.contains("apiShapeId=kitsu.anime.core"))
+    assertTrue(msg.contains("operationKey=kitsu.fetch_enrichment"))
+    assertTrue(msg.contains("decision=WRITE"))
+    assertTrue(msg.contains("reason=network-response-cached"))
+    assertTrue(msg.contains("networkSuppressed=false"))
+    assertTrue(msg.contains("ttlMs=86400000"))
+    assertTrue(msg.contains("staleWindowMs=604800000"))
+    assertTrue(msg.contains("cacheKey=kitsu:series:12:enrichment:policy:test"))
+}
 ```
 
 - [ ] **Step 2: Run the failing test**
@@ -317,7 +403,7 @@ fun `cache_decision event writes cache proof fields to IntRuntime tag`() {
 Run:
 
 ```bash
-./gradlew :app:testUniversalReleaseProfileableUnitTest --tests "com.nexio.tv.core.trace.LogcatRuntimeTraceSinkTest.cache_decision event writes cache proof fields to IntRuntime tag"
+./gradlew :app:testUniversalReleaseProfileableUnitTest --tests "com.nexio.tv.core.trace.LogcatRuntimeTraceSinkTest.cache_decision fresh hit writes cache proof fields to IntRuntime tag" --tests "com.nexio.tv.core.trace.LogcatRuntimeTraceSinkTest.cache_decision miss then network writes network-required fields to IntRuntime tag" --tests "com.nexio.tv.core.trace.LogcatRuntimeTraceSinkTest.cache_decision stale hit writes suppression fields to IntRuntime tag" --tests "com.nexio.tv.core.trace.LogcatRuntimeTraceSinkTest.cache_decision write records cache write fields to IntRuntime tag"
 ```
 
 Expected before implementation:
@@ -486,8 +572,10 @@ data class TraceCacheProofEntry(
 and add to `TraceValidationReport`:
 
 ```kotlin
-val cacheProofs: List<TraceCacheProofEntry>
+val cacheProofs: List<TraceCacheProofEntry> = emptyList()
 ```
+
+Keep the default value so existing tests that directly construct `TraceValidationReport` remain source-compatible while implementation code can opt in to per-operation proof entries.
 
 - [ ] **Step 4: Implement suppressed stale validation**
 
