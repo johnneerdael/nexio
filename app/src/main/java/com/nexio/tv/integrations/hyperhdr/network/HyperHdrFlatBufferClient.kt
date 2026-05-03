@@ -81,6 +81,7 @@ class HyperHdrFlatBufferClient(
                 socket = sock
                 output = DataOutputStream(sock.getOutputStream())
                 writeOutbound(Outbound.Register)   // Synchronous Register
+                _state.value = ConnectionState.CONNECTED
                 writerJob = scope.launch { for (msg in outbox) writeOutbound(msg) }
                 // Background reader: detect server-side disconnect (EOF or error → ERROR state).
                 readerJob = scope.launch(Dispatchers.IO) {
@@ -91,13 +92,12 @@ class HyperHdrFlatBufferClient(
                             val n = input.read(buf)
                             if (n < 0) break   // EOF — server closed connection
                         }
-                    } catch (_: Exception) { /* socket closed */ }
+                    } catch (_: IOException) { /* socket closed */ }
                     if (_state.value == ConnectionState.CONNECTED) {
                         _state.value = ConnectionState.ERROR
                         runCatching { socket?.close() }
                     }
                 }
-                _state.value = ConnectionState.CONNECTED
             } catch (e: Throwable) {
                 _state.value = ConnectionState.ERROR
                 runCatching { socket?.close() }
