@@ -64,6 +64,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,6 +124,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 
 internal const val EXTERNAL_SUBTITLE_OVERLAY_TAG = "external-subtitle-overlay"
 
@@ -224,6 +226,7 @@ fun PlayerScreen(
     val skipIntroFocusRequester = remember { FocusRequester() }
     var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
+    val rebufferScope = rememberCoroutineScope()
     val playNextOwnsSegmentCta = PlayerSegmentCtaPolicy.shouldReplaceSkipButtonWithPlayNext(
         activeInterval = uiState.activeSkipInterval,
         hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null,
@@ -568,6 +571,32 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 assSsaRenderOverlayProvider = viewModel::setAssSsaRenderOverlayViewProvider
             )
+        }
+
+        val isMidStreamBuffering = uiState.isBuffering && !uiState.showLoadingOverlay
+        val rebufferTimeoutController = remember {
+            LoadingTimeoutController(phase = LoadingPhase.MidStream, scope = rebufferScope)
+        }
+        LaunchedEffect(rebufferTimeoutController) {
+            rebufferTimeoutController.events.collect { event ->
+                when (event) {
+                    LoadingTimeoutEvent.Retry -> {
+                        viewModel.onEvent(PlayerEvent.OnRetry)
+                        rebufferTimeoutController.start()
+                    }
+                    LoadingTimeoutEvent.Error -> viewModel.surfaceLoadingTimeout()
+                }
+            }
+        }
+        LaunchedEffect(isMidStreamBuffering) {
+            if (isMidStreamBuffering) {
+                rebufferTimeoutController.start()
+            } else {
+                rebufferTimeoutController.cancel()
+            }
+        }
+        DisposableEffect(rebufferTimeoutController) {
+            onDispose { rebufferTimeoutController.cancel() }
         }
 
         LoadingOverlay(

@@ -93,12 +93,16 @@ import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.components.StreamsSkeletonList
 import com.nexio.tv.ui.components.InlineIconText
 import com.nexio.tv.ui.components.streamBadgeKinds
+import com.nexio.tv.ui.screens.player.LoadingPhase
 import com.nexio.tv.ui.screens.player.LoadingOverlay
+import com.nexio.tv.ui.screens.player.LoadingTimeoutController
+import com.nexio.tv.ui.screens.player.LoadingTimeoutEvent
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay as coroutineDelay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch as coroutineLaunch
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -130,6 +134,7 @@ fun StreamScreen(
     var pendingPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
     var directAutoPlayResolveInFlight by rememberSaveable { mutableStateOf(false) }
     val autoPlayScope = rememberCoroutineScope()
+    val loadingScope = rememberCoroutineScope()
 
     fun routePlayback(playbackInfo: StreamPlaybackInfo) {
         when (playerPreference) {
@@ -240,7 +245,35 @@ fun StreamScreen(
             isLoading = uiState.isLoading
         )
 
-        if (uiState.showDirectAutoPlayOverlay || uiState.isDeterministicAutoplay) {
+        val loadingTimeoutController = remember {
+            LoadingTimeoutController(phase = LoadingPhase.Initial, scope = loadingScope)
+        }
+        val showLoadingOverlay =
+            (uiState.showDirectAutoPlayOverlay || uiState.isDeterministicAutoplay) &&
+                uiState.error == null
+        LaunchedEffect(loadingTimeoutController) {
+            loadingTimeoutController.events.collect { event ->
+                when (event) {
+                    LoadingTimeoutEvent.Retry -> {
+                        viewModel.onEvent(StreamScreenEvent.OnRetry)
+                        loadingTimeoutController.start()
+                    }
+                    LoadingTimeoutEvent.Error -> viewModel.surfaceTimeoutError()
+                }
+            }
+        }
+        LaunchedEffect(showLoadingOverlay) {
+            if (showLoadingOverlay) {
+                loadingTimeoutController.start()
+            } else {
+                loadingTimeoutController.cancel()
+            }
+        }
+        DisposableEffect(loadingTimeoutController) {
+            onDispose { loadingTimeoutController.cancel() }
+        }
+
+        if (showLoadingOverlay) {
             LoadingOverlay(
                 visible = true,
                 backdropUrl = uiState.backdrop ?: uiState.poster,
