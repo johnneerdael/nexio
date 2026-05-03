@@ -901,6 +901,54 @@ class DiskSpoolWriterTest {
         }
     }
 
+    @Test
+    fun `range download does not retry on auth failure response`() {
+        val attempts = AtomicInteger(0)
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/4096")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+
+                    else -> {
+                        attempts.incrementAndGet()
+                        MockResponse().setResponseCode(401)
+                    }
+                }
+            }
+        }
+        server.start()
+        val session = DiskSpoolSession(
+            File(temp.root, "spool-401.bin"),
+            capacityBytes = 4096,
+            waitTimeoutMs = 1_000L
+        )
+
+        try {
+            val writer = DiskSpoolWriter(
+                transport = OkHttpDiskSpoolHttpTransport(OkHttpClient()),
+                chunkBytes = 1024
+            )
+
+            try {
+                writer.downloadUntil(server.url("/movie.bin").toString(), session, 4096L)
+                org.junit.Assert.fail("Expected IOException for unrecoverable 401")
+            } catch (error: DiskSpoolWriter.UnrecoverableHttpException) {
+                assertEquals(401, error.statusCode)
+            }
+
+            assertEquals(1, attempts.get())
+        } finally {
+            session.close()
+            server.shutdown()
+        }
+    }
+
     private fun rangedResponse(content: ByteArray, rangeHeader: String): MockResponse {
         val match = Regex("""bytes=(\d+)-(\d+)""").matchEntire(rangeHeader)
             ?: error("Unexpected Range header: $rangeHeader")
