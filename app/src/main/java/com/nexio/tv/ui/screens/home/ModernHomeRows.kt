@@ -184,6 +184,7 @@ private fun ModernCatalogRowItem(
     focusedPosterBackdropTrailerMuted: Boolean,
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
+    trailerPreviewUserAgent: String?,
     trailerPreviewExternalUrl: String?,
     isWatched: Boolean,
     onFocused: () -> Unit,
@@ -238,6 +239,7 @@ private fun ModernCatalogRowItem(
         focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
         trailerPreviewUrl = trailerPreviewUrl,
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
+        trailerPreviewUserAgent = trailerPreviewUserAgent,
         trailerPreviewExternalUrl = trailerPreviewExternalUrl,
         isWatched = isWatched,
         focusRequester = requester,
@@ -282,6 +284,7 @@ internal fun ModernRowSection(
     focusedPosterBackdropTrailerMuted: Boolean,
     trailerPreviewUrls: Map<String, String>,
     trailerPreviewAudioUrls: Map<String, String>,
+    trailerPreviewUserAgents: Map<String, String>,
     trailerPreviewExternalUrls: Map<String, String>,
     modernCatalogCardWidth: Dp,
     modernCatalogCardHeight: Dp,
@@ -599,6 +602,11 @@ internal fun ModernRowSection(
                             } else {
                                 null
                             }
+                            val trailerPreviewUserAgent = if (playTrailerInExpandedCard) {
+                                trailerPreviewUserAgents[payload.itemId]
+                            } else {
+                                null
+                            }
                             val trailerPreviewExternalUrl = if (playTrailerInExpandedCard) {
                                 trailerPreviewExternalUrls[payload.itemId]
                             } else {
@@ -622,6 +630,7 @@ internal fun ModernRowSection(
                                 focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                                 trailerPreviewUrl = trailerPreviewUrl,
                                 trailerPreviewAudioUrl = trailerPreviewAudioUrl,
+                                trailerPreviewUserAgent = trailerPreviewUserAgent,
                                 trailerPreviewExternalUrl = trailerPreviewExternalUrl,
                                 isWatched = isWatched,
                                 onFocused = onFocused,
@@ -691,6 +700,7 @@ private fun ModernCarouselCard(
     focusedPosterBackdropTrailerMuted: Boolean,
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
+    trailerPreviewUserAgent: String?,
     trailerPreviewExternalUrl: String?,
     isWatched: Boolean,
     focusRequester: FocusRequester,
@@ -950,6 +960,7 @@ private fun ModernCarouselCard(
                         TrailerPlayer(
                             trailerUrl = trailerPreviewUrl,
                             trailerAudioUrl = trailerPreviewAudioUrl,
+                            trailerUserAgent = trailerPreviewUserAgent,
                             isPlaying = true,
                             onEnded = {
                                 trailerFirstFrameRendered = false

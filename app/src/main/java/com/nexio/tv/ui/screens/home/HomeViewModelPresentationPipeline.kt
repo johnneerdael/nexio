@@ -362,6 +362,10 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                     trailerPreviewNegativeCache.remove(itemId)
                     trailerPreviewExternalUrlsState.remove(itemId)
                     trailerPreviewUrlsState[itemId] = trailerResult.source.videoUrl
+                    trailerResult.source.userAgent
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { trailerPreviewUserAgentsState[itemId] = it }
+                        ?: trailerPreviewUserAgentsState.remove(itemId)
                     val audioUrl = trailerResult.source.audioUrl
                     if (audioUrl.isNullOrBlank()) {
                         trailerPreviewAudioUrlsState.remove(itemId)
@@ -374,6 +378,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                     trailerPreviewNegativeCache.remove(itemId)
                     trailerPreviewUrlsState.remove(itemId)
                     trailerPreviewAudioUrlsState.remove(itemId)
+                    trailerPreviewUserAgentsState.remove(itemId)
                     trailerPreviewExternalUrlsState[itemId] = trailerResult.url
                 }
 
@@ -381,6 +386,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
                     trailerPreviewNegativeCache[itemId] = true
                     trailerPreviewUrlsState.remove(itemId)
                     trailerPreviewAudioUrlsState.remove(itemId)
+                    trailerPreviewUserAgentsState.remove(itemId)
                     trailerPreviewExternalUrlsState.remove(itemId)
                 }
             }

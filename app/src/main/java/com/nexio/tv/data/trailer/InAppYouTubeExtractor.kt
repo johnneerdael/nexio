@@ -20,14 +20,14 @@ import javax.inject.Singleton
 
 private const val TAG = "InAppYouTubeExtractor"
 private const val EXTRACTOR_TIMEOUT_MS = 30_000L
-private const val PREFERRED_SEPARATE_CLIENT = "android_vr"
+private const val PREFERRED_SEPARATE_CLIENT = "ios"
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 private val API_KEY_REGEX = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"")
 private val VISITOR_DATA_REGEX = Regex("\"VISITOR_DATA\":\"([^\"]+)\"")
 private val QUALITY_LABEL_REGEX = Regex("(\\d{2,4})p")
 
-private data class YouTubeClient(
+internal data class YouTubeClient(
     val key: String,
     val id: String,
     val version: String,
@@ -112,22 +112,23 @@ private fun trailerContainerPreference(ext: String): Int {
     }
 }
 
+internal val CLIENTS_FOR_TEST: List<YouTubeClient> get() = CLIENTS
+
 private val CLIENTS = listOf(
+    // NewPipe prefers iOS for HLS: non-iOS clients do not reliably return hlsManifestUrl.
     YouTubeClient(
-        key = "android_vr",
-        id = "28",
-        version = "1.56.21",
-        userAgent = "com.google.android.apps.youtube.vr.oculus/1.56.21 " +
-            "(Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1) gzip",
+        key = "ios",
+        id = "5",
+        version = "21.03.2",
+        userAgent = "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)",
         context = mapOf(
-            "clientName" to "ANDROID_VR",
-            "clientVersion" to "1.56.21",
-            "deviceMake" to "Oculus",
-            "deviceModel" to "Quest 3",
-            "osName" to "Android",
-            "osVersion" to "12",
+            "clientName" to "IOS",
+            "clientVersion" to "21.03.2",
+            "deviceMake" to "Apple",
+            "deviceModel" to "iPhone16,2",
+            "osName" to "iPhone",
+            "osVersion" to "18.7.2.22G100",
             "platform" to "MOBILE",
-            "androidSdkVersion" to 32,
             "hl" to "en",
             "gl" to "US"
         ),
@@ -136,38 +137,27 @@ private val CLIENTS = listOf(
     YouTubeClient(
         key = "android",
         id = "3",
-        version = "20.10.35",
-        userAgent = "com.google.android.youtube/20.10.35 (Linux; U; Android 14; en_US) gzip",
+        version = "21.03.36",
+        userAgent = "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip",
         context = mapOf(
             "clientName" to "ANDROID",
-            "clientVersion" to "20.10.35",
+            "clientVersion" to "21.03.36",
             "osName" to "Android",
-            "osVersion" to "14",
+            "osVersion" to "15",
             "platform" to "MOBILE",
-            "androidSdkVersion" to 34,
+            "androidSdkVersion" to 35,
             "hl" to "en",
             "gl" to "US"
         ),
         priority = 1
-    ),
-    YouTubeClient(
-        key = "ios",
-        id = "5",
-        version = "20.10.1",
-        userAgent = "com.google.ios.youtube/20.10.1 (iPhone16,2; U; CPU iOS 17_4 like Mac OS X)",
-        context = mapOf(
-            "clientName" to "IOS",
-            "clientVersion" to "20.10.1",
-            "deviceModel" to "iPhone16,2",
-            "osName" to "iPhone",
-            "osVersion" to "17.4.0.21E219",
-            "platform" to "MOBILE",
-            "hl" to "en",
-            "gl" to "US"
-        ),
-        priority = 2
     )
 )
+
+internal fun lookupClientUserAgent(clientKey: String?): String? =
+    clientKey?.let { key -> CLIENTS.firstOrNull { it.key == key }?.userAgent }
+
+internal fun lookupClientUserAgentForTest(clientKey: String?): String? =
+    lookupClientUserAgent(clientKey)
 
 @Singleton
 class InAppYouTubeExtractor @Inject constructor(
@@ -374,11 +364,19 @@ class InAppYouTubeExtractor @Inject constructor(
             manifestUrl = bestManifest?.manifestUrl,
             progressiveUrl = bestProgressive?.url
         )
+        val resolvedClientKey = when {
+            combinedUrl != null && combinedUrl == bestManifest?.manifestUrl -> bestManifest.client
+            combinedUrl != null && combinedUrl == bestProgressive?.url -> bestProgressive.client
+            bestVideo != null -> bestVideo.client
+            else -> null
+        }
+        val resolvedUserAgent = lookupClientUserAgent(resolvedClientKey)
 
         val playbackSource = selectPreferredTrailerPlaybackSource(
             combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
             adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
-            adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) }
+            adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) },
+            userAgent = resolvedUserAgent
         ) ?: return null
 
         if (BuildConfig.DEBUG) {

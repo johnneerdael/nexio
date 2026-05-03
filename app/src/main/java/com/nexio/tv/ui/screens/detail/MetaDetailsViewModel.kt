@@ -331,6 +331,7 @@ class MetaDetailsViewModel @Inject constructor(
                 isTrailerLoading = true,
                 trailerUrl = null,
                 trailerAudioUrl = null,
+                trailerUserAgent = null,
                 trailerExternalUrl = null,
                 pendingExternalTrailerUrl = null,
                 selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
@@ -543,6 +544,7 @@ class MetaDetailsViewModel @Inject constructor(
                     error = null,
                     trailerUrl = null,
                     trailerAudioUrl = null,
+                    trailerUserAgent = null,
                     trailerExternalUrl = null,
                     pendingExternalTrailerUrl = null,
                     isTrailerPlaying = false,
@@ -1952,6 +1954,7 @@ class MetaDetailsViewModel @Inject constructor(
             it.withManualSeasonSelection(season).copy(
                 trailerUrl = null,
                 trailerAudioUrl = null,
+                trailerUserAgent = null,
                 trailerExternalUrl = null,
                 pendingExternalTrailerUrl = null,
                 trailerResolutionStatus = TrailerResolutionStatus.IDLE,
@@ -1979,6 +1982,7 @@ class MetaDetailsViewModel @Inject constructor(
                         availability = availability,
                         previousTrailerUrl = previousState.trailerUrl,
                         previousTrailerAudioUrl = previousState.trailerAudioUrl,
+                        previousTrailerUserAgent = previousState.trailerUserAgent,
                         previousTrailerExternalUrl = previousState.trailerExternalUrl
                     )
                 }
@@ -2001,6 +2005,7 @@ class MetaDetailsViewModel @Inject constructor(
                         availability = availability,
                         previousTrailerUrl = previousState.trailerUrl,
                         previousTrailerAudioUrl = previousState.trailerAudioUrl,
+                        previousTrailerUserAgent = previousState.trailerUserAgent,
                         previousTrailerExternalUrl = previousState.trailerExternalUrl
                     )
                 }
@@ -2021,6 +2026,7 @@ class MetaDetailsViewModel @Inject constructor(
                 isTrailerLoading = true,
                 trailerUrl = null,
                 trailerAudioUrl = null,
+                trailerUserAgent = null,
                 trailerExternalUrl = null,
                 isTrailerPlaying = false,
                 showTrailerControls = false,
@@ -2799,6 +2805,7 @@ class MetaDetailsViewModel @Inject constructor(
                     is TrailerResolutionResult.Playback -> baseState.copy(
                         trailerUrl = trailerResult.source.videoUrl,
                         trailerAudioUrl = trailerResult.source.audioUrl,
+                        trailerUserAgent = trailerResult.source.userAgent,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
                         isTrailerLoading = false,
@@ -2812,6 +2819,7 @@ class MetaDetailsViewModel @Inject constructor(
                     is TrailerResolutionResult.External -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
+                        trailerUserAgent = null,
                         trailerExternalUrl = trailerResult.url,
                         pendingExternalTrailerUrl = if (playWhenReady) trailerResult.url else null,
                         trailerResolutionStatus = TrailerResolutionStatus.READY,
@@ -2821,6 +2829,7 @@ class MetaDetailsViewModel @Inject constructor(
                     null -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
+                        trailerUserAgent = null,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
@@ -2856,6 +2865,7 @@ class MetaDetailsViewModel @Inject constructor(
                     isTrailerLoading = true,
                     trailerUrl = null,
                     trailerAudioUrl = null,
+                    trailerUserAgent = null,
                     trailerExternalUrl = null,
                     pendingExternalTrailerUrl = null,
                     selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
@@ -2896,6 +2906,7 @@ class MetaDetailsViewModel @Inject constructor(
                         availability = availability,
                         previousTrailerUrl = previousState.trailerUrl,
                         previousTrailerAudioUrl = previousState.trailerAudioUrl,
+                        previousTrailerUserAgent = previousState.trailerUserAgent,
                         previousTrailerExternalUrl = previousState.trailerExternalUrl
                     )
                 } else {
@@ -2905,6 +2916,7 @@ class MetaDetailsViewModel @Inject constructor(
                     ).copy(
                         trailerUrl = recapSource?.videoUrl,
                         trailerAudioUrl = recapSource?.audioUrl,
+                        trailerUserAgent = recapSource?.userAgent,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = if (recapSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
@@ -2943,6 +2955,7 @@ class MetaDetailsViewModel @Inject constructor(
                     isTrailerLoading = true,
                     trailerUrl = null,
                     trailerAudioUrl = null,
+                    trailerUserAgent = null,
                     trailerExternalUrl = null,
                     pendingExternalTrailerUrl = null,
                     selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
@@ -2983,6 +2996,7 @@ class MetaDetailsViewModel @Inject constructor(
                         availability = availability,
                         previousTrailerUrl = previousState.trailerUrl,
                         previousTrailerAudioUrl = previousState.trailerAudioUrl,
+                        previousTrailerUserAgent = previousState.trailerUserAgent,
                         previousTrailerExternalUrl = previousState.trailerExternalUrl
                     )
                 } else {
@@ -2992,6 +3006,7 @@ class MetaDetailsViewModel @Inject constructor(
                     ).copy(
                         trailerUrl = seasonTrailerSource?.videoUrl,
                         trailerAudioUrl = seasonTrailerSource?.audioUrl,
+                        trailerUserAgent = seasonTrailerSource?.userAgent,
                         trailerExternalUrl = null,
                         trailerResolutionStatus = if (seasonTrailerSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
