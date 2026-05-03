@@ -91,27 +91,31 @@ object FfmpegStreamMetadataProbe {
 
     suspend fun probe(
         url: String,
-        headers: Map<String, String> = emptyMap()
+        headers: Map<String, String> = emptyMap(),
+        addonHost: String? = null
     ): FfmpegStreamMetadataProbeResult? = withContext(Dispatchers.IO) {
-        probeBlocking(url = url, headers = headers)
+        probeBlocking(url = url, headers = headers, addonHost = addonHost)
     }
 
     fun probeBlocking(
         url: String,
-        headers: Map<String, String> = emptyMap()
+        headers: Map<String, String> = emptyMap(),
+        addonHost: String? = null
     ): FfmpegStreamMetadataProbeResult? {
         val startedAtMs = System.currentTimeMillis()
-        val headerBlob = headers.toProbeHeaderBlob()
-        // The addon-proxy hop adds a full TLS handshake + server-side buffering for no gain —
-        // the proxy just re-serves CDN bytes. Never probe a proxy URL. When the proxy path
-        // embeds a resolved target we use that directly; otherwise skip the probe entirely.
-        val probeUrl = resolveDirectProbeUrl(url, headers) ?: run {
+        val probeTarget = resolveDirectProbeTarget(
+            url = url,
+            headers = headers,
+            addonHost = addonHost
+        ) ?: run {
             Log.i(
                 TAG,
                 "FFMPEG_PROBE_SKIPPED reason=proxy_url_no_resolved_target url=$url"
             )
             return null
         }
+        val probeUrl = probeTarget.url
+        val headerBlob = probeTarget.requestHeadersBlob
         if (probeUrl != url && diagnosticsEnabled) {
             Log.i(
                 TAG,
@@ -176,21 +180,35 @@ object FfmpegStreamMetadataProbe {
 
     /**
      * Returns the URL to use for a native probe:
-     * - Comet `/playback/` proxy URLs try the [CometProxyUrlResolver] cache; on
-     *   a hit we probe the real CDN URL, on a miss we fall back to the proxy
-     *   URL unchanged (callers paid this cost before this wiring existed).
+     * - Comet `/playback/` proxy URLs try [CometProxyUrlResolver] and probe the
+     *   resolved CDN URL when available; proxy-specific request headers are
+     *   dropped after substitution because they are not meant for the CDN host.
+     *   On a miss we fall back to the proxy URL unchanged.
      * - `/resolve/` proxy URLs: decoded embedded target if present, null
      *   otherwise (caller must skip).
      * - Every other URL passes through unchanged.
      */
-    private fun resolveDirectProbeUrl(url: String, headers: Map<String, String>): String? {
-        if (CometProxyUrlResolver.isCometProxy(url)) {
-            val resolved = CometProxyUrlResolver.resolveBlocking(url, headers)
-            return (resolved as? ProxyResolution.Redirected)?.url?.takeIf { it.isNotBlank() } ?: url
+    private fun resolveDirectProbeTarget(
+        url: String,
+        headers: Map<String, String>,
+        addonHost: String?
+    ): ProbeTarget? {
+        val originalHeaderBlob = headers.toProbeHeaderBlob()
+        if (CometProxyUrlResolver.isCometProxy(url, addonHost)) {
+            val resolved = CometProxyUrlResolver.resolveBlocking(url, headers, addonHost)
+            val probeUrl = (resolved as? ProxyResolution.Redirected)?.url?.takeIf { it.isNotBlank() } ?: url
+            return ProbeTarget(
+                url = probeUrl,
+                requestHeadersBlob = if (probeUrl != url) null else originalHeaderBlob
+            )
         }
-        if (!isResolveProxyUrl(url)) return url
+        if (!isResolveProxyUrl(url)) {
+            return ProbeTarget(url = url, requestHeadersBlob = originalHeaderBlob)
+        }
         val embedded = extractEmbeddedResolveUrl(url)
-        return embedded?.takeIf { it.isNotBlank() }
+        return embedded
+            ?.takeIf { it.isNotBlank() }
+            ?.let { ProbeTarget(url = it, requestHeadersBlob = null) }
     }
 
     private fun isResolveProxyUrl(sourceUrl: String): Boolean {
@@ -279,6 +297,11 @@ object FfmpegStreamMetadataProbe {
 }
 
 private data class ProbeKey(
+    val url: String,
+    val requestHeadersBlob: String?
+)
+
+private data class ProbeTarget(
     val url: String,
     val requestHeadersBlob: String?
 )

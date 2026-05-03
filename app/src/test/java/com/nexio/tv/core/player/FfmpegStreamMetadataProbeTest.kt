@@ -11,6 +11,7 @@ class FfmpegStreamMetadataProbeTest {
     @After
     fun resetProbeBackend() {
         FfmpegStreamMetadataProbe.resetForTesting()
+        CometProxyUrlResolver.resetForTesting()
     }
 
     @Test
@@ -101,6 +102,39 @@ class FfmpegStreamMetadataProbeTest {
 
         assertEquals(8, result.streams.first().dvProfile)
         assertTrue(result.hasEmbeddedAssSsaSubtitleStream)
+    }
+
+    @Test
+    fun probeBlockingDropsProxyHeadersAfterResolvingCometUrl() {
+        val cometUrl = "https://comet.feels.legal/cfg/playback/" +
+            "09b382fa312ad70adaba13d707b500697e72e6fb/0/0/n/n?torrent_name=x&name=y"
+        val resolvedUrl = "https://43-4.download.real-debrid.com/d/TOKEN/file.mkv"
+        var probedUrl: String? = null
+        var probedHeadersBlob: String? = null
+        CometProxyUrlResolver.setTransportForTesting { _, _ ->
+            ProxyResolution.Redirected(resolvedUrl)
+        }
+        FfmpegStreamMetadataProbe.setBackendForTesting(
+            object : FfmpegStreamMetadataBackend {
+                override fun probeStreamMetadataJson(
+                    url: String,
+                    requestHeadersBlob: String?
+                ): String? {
+                    probedUrl = url
+                    probedHeadersBlob = requestHeadersBlob
+                    return """{"streams":[{"codec_type":"subtitle","codec_name":"ass"}]}"""
+                }
+            }
+        )
+
+        val result = FfmpegStreamMetadataProbe.probeBlocking(
+            url = cometUrl,
+            headers = linkedMapOf("Authorization" to "Bearer x")
+        )
+
+        assertEquals(resolvedUrl, probedUrl)
+        assertNull(probedHeadersBlob)
+        assertTrue(result?.hasEmbeddedAssSsaSubtitleStream == true)
     }
 
     @Test

@@ -45,6 +45,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
+import com.nexio.tv.core.player.CometProxyUrlResolver
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
@@ -265,8 +266,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     url = url
                 )
             ) {
+                val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(addonBaseUrl)
                 val metadata = withTimeoutOrNull(ASS_SSA_STARTUP_PROBE_TIMEOUT_MS) {
-                    FfmpegStreamMetadataProbe.probe(url = url, headers = headers)
+                    FfmpegStreamMetadataProbe.probe(
+                        url = url,
+                        headers = headers,
+                        addonHost = addonHost
+                    )
                 }
                 if (metadata?.hasEmbeddedAssSsaSubtitleStream == true) {
                     assSsaPipelineOverrideForCurrentStream = true
