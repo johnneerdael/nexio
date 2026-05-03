@@ -2,6 +2,7 @@ package com.nexio.tv.integrations.hyperhdr.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
 import com.nexio.tv.integrations.hyperhdr.data.HdrMode
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
@@ -19,7 +20,10 @@ import javax.inject.Inject
 @HiltViewModel
 class HyperHdrSettingsViewModel @Inject constructor(
     private val store: HyperHdrConfigDataStore,
+    private val displayCapability: DisplayColorCapability,
 ) : ViewModel() {
+
+    val composesWideColor: Boolean = displayCapability.composesWideColor
 
     val config: StateFlow<HyperHdrConfig> = store.config
         .stateIn(viewModelScope, SharingStarted.Eagerly, HyperHdrConfig())

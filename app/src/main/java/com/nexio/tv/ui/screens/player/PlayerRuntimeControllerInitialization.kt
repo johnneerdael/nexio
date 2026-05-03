@@ -104,6 +104,7 @@ private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
 @InstallIn(SingletonComponent::class)
 internal interface HyperHdrEntryPoint {
     fun hyperHdrConfigDataStore(): HyperHdrConfigDataStore
+    fun displayColorCapability(): com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
 }
 
 internal data class StartupSubtitlePreparation(
@@ -759,6 +760,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val hyperHdrStore = EntryPoints
                 .get(context.applicationContext, HyperHdrEntryPoint::class.java)
                 .hyperHdrConfigDataStore()
+            val hyperHdrDisplayCapability = EntryPoints
+                .get(context.applicationContext, HyperHdrEntryPoint::class.java)
+                .displayColorCapability()
 
             // ===== HyperHDR ambilight state (scoped to this player init) =====
             var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
@@ -1002,7 +1006,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             scope.launch {
                                 val cfg = hyperHdrCfg
                                 val colorInfo = _exoPlayer?.videoFormat?.colorInfo
-                                val mode = FormatDetector.detect(colorInfo, cfg.hdrMode, deviceComposesWideColor = true)
+                                val mode = FormatDetector.detect(colorInfo, cfg.hdrMode, deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor)
                                 startHyperHdrCapture(mode)
                             }
                         } else {
@@ -1040,7 +1044,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         // ===== HyperHDR ambilight: re-detect mode if it changed =====
                         if (hyperHdrCfg.isUsable && _exoPlayer?.isPlaying == true) {
                             val colorInfo = _exoPlayer?.videoFormat?.colorInfo
-                            val newMode = FormatDetector.detect(colorInfo, hyperHdrCfg.hdrMode, deviceComposesWideColor = true)
+                            val newMode = FormatDetector.detect(colorInfo, hyperHdrCfg.hdrMode, deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor)
                             if (newMode != hyperHdrCurrentMode) {
                                 scope.launch { startHyperHdrCapture(newMode) }
                             }

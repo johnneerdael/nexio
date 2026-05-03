@@ -95,14 +95,30 @@ fun HyperHdrSettingsContent(
         )
 
         Text("HDR mode")
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            HdrModeRadio("Auto (detect from source)", cfg.hdrMode == HdrMode.Auto) {
-                viewModel.setHdrMode(HdrMode.Auto)
+        if (viewModel.composesWideColor) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                HdrModeRadio("Auto (detect from source)", cfg.hdrMode == HdrMode.Auto) {
+                    viewModel.setHdrMode(HdrMode.Auto)
+                }
+                Spacer(Modifier.height(4.dp))
+                HdrModeRadio("Force SDR", cfg.hdrMode == HdrMode.ForceSdr) {
+                    viewModel.setHdrMode(HdrMode.ForceSdr)
+                }
             }
-            Spacer(Modifier.height(4.dp))
-            HdrModeRadio("Force SDR", cfg.hdrMode == HdrMode.ForceSdr) {
-                viewModel.setHdrMode(HdrMode.ForceSdr)
-            }
+        } else {
+            // Compositor is sRGB-only on this device — HDR ambilight isn't possible
+            // here regardless of source. Lock the mode and explain why.
+            Text(
+                text = "• Force SDR (locked)",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = "This device's compositor only supports sRGB. HDR ambilight " +
+                    "requires a wide-color-capable Android TV (Google TV Streamer, " +
+                    "Shield, or any Android 13+ device whose Display reports a BT2020 " +
+                    "or BT2100 color mode). SDR ambilight works correctly here.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
 
         Spacer(Modifier.height(16.dp))
