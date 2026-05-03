@@ -7,6 +7,9 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
 import com.nexio.tv.core.integration.IntegrationHostClassifier
 import com.nexio.tv.core.integration.IntegrationNetworkPermitInterceptor
+import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
+import com.nexio.tv.core.player.auth.EgressIpFingerprint
+import com.nexio.tv.core.player.auth.PlaybackAuthFingerprintHolder
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
@@ -61,6 +64,10 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Named
 import javax.inject.Singleton
 
+internal const val NEXIO_PLAYBACK_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 private object TraktHttpTrace {
     private val requestCounter = AtomicLong(0L)
     fun nextRequestId(): Long = requestCounter.incrementAndGet()
@@ -95,6 +102,20 @@ private fun OkHttpClient.Builder.disableDiskCacheForGetRequests(): OkHttpClient.
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+
+    @Provides
+    @Singleton
+    fun provideEgressIpFingerprint(
+        okHttpClient: OkHttpClient
+    ): EgressIpFingerprint = EgressIpFingerprint(
+        client = okHttpClient,
+        probeUrl = "https://api.ipify.org/"
+    ).also { PlaybackAuthFingerprintHolder.setInstance(it) }
+
+    @Provides
+    @Singleton
+    fun provideAuthRecoveryInterceptor(): AuthRecoveryInterceptor =
+        AuthRecoveryInterceptor()
 
     @Provides
     @Singleton
@@ -182,7 +203,8 @@ object NetworkModule {
         @Named("playback.callTimeoutMs") callTimeoutMs: Long,
         taggingInterceptor: com.nexio.tv.core.trace.RuntimeTraceContextRequestTaggingInterceptor,
         traceInterceptor: com.nexio.tv.core.trace.RuntimeTraceInterceptor,
-        traceEventListenerFactory: okhttp3.EventListener.Factory
+        traceEventListenerFactory: okhttp3.EventListener.Factory,
+        authRecoveryInterceptor: AuthRecoveryInterceptor
     ): OkHttpClient {
         // Shared dispatcher: maxRequestsPerHost=12 proved safe by locked-envelope work.
         val dispatcher = Dispatcher().apply {
@@ -219,6 +241,16 @@ object NetworkModule {
                 }
                 response
             }
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val request = if (original.header("User-Agent") == null) {
+                    original.newBuilder().header("User-Agent", NEXIO_PLAYBACK_USER_AGENT).build()
+                } else {
+                    original
+                }
+                chain.proceed(request)
+            }
+            .addInterceptor(authRecoveryInterceptor)
             // Trace interceptor as NETWORK interceptor so it observes the final outgoing
             // request shape — including headers added by app interceptors on derived clients.
             .addNetworkInterceptor(traceInterceptor)

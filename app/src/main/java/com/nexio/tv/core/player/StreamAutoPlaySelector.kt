@@ -3,10 +3,13 @@ package com.nexio.tv.core.player
 import android.util.Log
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.stream.StreamBingeGroupResolver
+import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
+import java.text.Normalizer
+import java.util.Locale
 
 object StreamAutoPlaySelector {
     private const val TAG = "StreamAutoPlaySelector"
@@ -45,7 +48,8 @@ object StreamAutoPlaySelector {
         source: StreamAutoPlaySource,
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
-        preferredBingeGroup: String? = null
+        preferredBingeGroup: String? = null,
+        placeholderPredicate: (Stream) -> Boolean = { false }
     ): List<Stream> {
         if (streams.isEmpty()) return emptyList()
 
@@ -63,14 +67,16 @@ object StreamAutoPlaySelector {
         if (targetBingeGroup.isNotEmpty()) {
             val bingeGroupMatch = candidateStreams.firstOrNull { stream ->
                 normalizeBingeGroup(StreamBingeGroupResolver.resolve(stream)) == targetBingeGroup &&
-                    stream.getStreamUrl() != null
+                    stream.getStreamUrl() != null &&
+                    !placeholderPredicate(stream)
             }
             if (bingeGroupMatch != null) return listOf(bingeGroupMatch)
         }
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> emptyList()
-            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.filter { it.getStreamUrl() != null }
+            StreamAutoPlayMode.FIRST_STREAM ->
+                candidateStreams.filter { it.getStreamUrl() != null && !placeholderPredicate(it) }
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
  
@@ -110,6 +116,8 @@ object StreamAutoPlaySelector {
                         return@filter false
                     }
 
+                    if (placeholderPredicate(stream)) return@filter false
+
                     true
                 }
 
@@ -127,6 +135,7 @@ object StreamAutoPlaySelector {
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
         preferredBingeGroup: String? = null,
+        placeholderPredicate: (Stream) -> Boolean = { false },
         probeUrlWorks: suspend (String) -> Boolean = { true }
     ): Stream? {
         val candidates = candidateAutoPlayStreams(
@@ -136,7 +145,8 @@ object StreamAutoPlaySelector {
             source = source,
             installedAddonNames = installedAddonNames,
             selectedAddons = selectedAddons,
-            preferredBingeGroup = preferredBingeGroup
+            preferredBingeGroup = preferredBingeGroup,
+            placeholderPredicate = placeholderPredicate
         )
         if (candidates.isEmpty()) return null
         if (mode != StreamAutoPlayMode.REGEX_MATCH) {
@@ -149,5 +159,44 @@ object StreamAutoPlaySelector {
             if (probeUrlWorks(resolved)) return stream
         }
         return null
+    }
+
+    fun filterCandidatesByContentTitle(
+        contentName: String?,
+        streams: List<StreamCardModel>
+    ): List<StreamCardModel> {
+        if (contentName.isNullOrBlank()) return streams
+        return streams.filterNot { stream ->
+            shouldRejectForContentTitle(
+                contentName = contentName,
+                parsedTitle = stream.parsed.title
+            )
+        }
+    }
+
+    fun shouldRejectForContentTitle(
+        contentName: String?,
+        parsedTitle: String?
+    ): Boolean {
+        if (contentName.isNullOrBlank()) return false
+        if (parsedTitle.isNullOrBlank()) return false
+        val expected = titleTokens(contentName)
+        val candidate = titleTokens(parsedTitle)
+        if (expected.isEmpty() || candidate.isEmpty()) return false
+        val expectedIsSubset = candidate.containsAll(expected)
+        val candidateIsSubset = expected.containsAll(candidate)
+        return !(expectedIsSubset || candidateIsSubset)
+    }
+
+    private fun titleTokens(value: String): Set<String> {
+        val folded = Normalizer.normalize(value, Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+        return folded
+            .lowercase(Locale.US)
+            .replace("'", "")
+            .replace("’", "")
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.isNotBlank() }
+            .toSet()
     }
 }

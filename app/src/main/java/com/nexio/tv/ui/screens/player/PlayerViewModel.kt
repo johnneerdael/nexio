@@ -8,6 +8,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.playback.PlaybackSessionRegistry
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.player.auth.AuthRecoveryInterceptor
+import com.nexio.tv.core.player.auth.EgressIpFingerprint
 import com.nexio.tv.core.player.PlaybackActivityTracker
 import com.nexio.tv.data.integration.playback.OpenSubtitlesHashIntegrationProvider
 import com.nexio.tv.data.integration.playback.PlaybackPreflightIntegrationProvider
@@ -60,6 +62,8 @@ class PlayerViewModel @Inject constructor(
     private val playbackPreflightIntegrationProvider: PlaybackPreflightIntegrationProvider,
     private val profileManager: ProfileManager,
     private val playbackSessionRegistry: PlaybackSessionRegistry,
+    private val egressIpFingerprint: EgressIpFingerprint,
+    private val authRecoveryInterceptor: AuthRecoveryInterceptor,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var playbackRegistrationToken: String? = null
@@ -98,6 +102,8 @@ class PlayerViewModel @Inject constructor(
             openSubtitlesHashIntegrationProvider = openSubtitlesHashIntegrationProvider,
             playbackPreflightIntegrationProvider = playbackPreflightIntegrationProvider,
             playbackOwnerContext = ownerContext,
+            egressIpFingerprint = egressIpFingerprint,
+            authRecoveryInterceptor = authRecoveryInterceptor,
             savedStateHandle = savedStateHandle,
             scope = viewModelScope
         )

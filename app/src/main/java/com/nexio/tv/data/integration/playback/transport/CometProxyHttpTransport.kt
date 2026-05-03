@@ -4,8 +4,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
+internal data class CometProxyHttpResult(
+    val code: Int,
+    val location: String?,
+    val contentType: String?
+)
+
 internal interface CometProxyHttpTransport {
-    fun execute(url: String, headers: Map<String, String>?): String?
+    fun execute(url: String, headers: Map<String, String>?): CometProxyHttpResult
 }
 
 internal class OkHttpCometProxyHttpTransport(
@@ -17,7 +23,7 @@ internal class OkHttpCometProxyHttpTransport(
         .callTimeout(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         .build()
 ) : CometProxyHttpTransport {
-    override fun execute(url: String, headers: Map<String, String>?): String? {
+    override fun execute(url: String, headers: Map<String, String>?): CometProxyHttpResult {
         val requestBuilder = Request.Builder()
             .url(url)
             .get()
@@ -30,12 +36,11 @@ internal class OkHttpCometProxyHttpTransport(
         }
 
         okHttpClient.newCall(requestBuilder.build()).execute().use { response ->
-            val location = response.header("Location")
-            return when {
-                response.code in 300..399 && !location.isNullOrBlank() -> location
-                response.code in 200..299 -> url
-                else -> null
-            }
+            return CometProxyHttpResult(
+                code = response.code,
+                location = response.header("Location"),
+                contentType = response.header("Content-Type")
+            )
         }
     }
 
