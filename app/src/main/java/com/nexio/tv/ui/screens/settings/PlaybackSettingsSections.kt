@@ -176,6 +176,7 @@ internal fun PlaybackSettingsSections(
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
+    onSetBurnInProtectionEnabled: (Boolean) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
@@ -487,6 +488,7 @@ internal fun PlaybackSettingsSections(
                 onSetSubtitleVerticalOffset = onSetSubtitleVerticalOffset,
                 onSetSubtitleBold = onSetSubtitleBold,
                 onSetSubtitleOutlineEnabled = onSetSubtitleOutlineEnabled,
+                onSetBurnInProtectionEnabled = onSetBurnInProtectionEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.SUBTITLES },
                 enabled = !isExternalPlayer
             )

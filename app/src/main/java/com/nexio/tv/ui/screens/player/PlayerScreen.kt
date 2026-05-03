@@ -97,6 +97,9 @@ import androidx.media3.common.text.Cue
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
+import com.nexio.tv.core.player.BurnInProtectionState
+import com.nexio.tv.core.player.SUBTITLE_MAX_ALPHA
+import com.nexio.tv.core.player.SUBTITLE_OFF_WHITE_ARGB
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Card
@@ -125,7 +128,8 @@ internal const val EXTERNAL_SUBTITLE_OVERLAY_TAG = "external-subtitle-overlay"
 
 internal fun applySubtitleStyle(
     subtitleView: SubtitleView,
-    subtitleStyle: com.nexio.tv.data.local.SubtitleStyleSettings
+    subtitleStyle: com.nexio.tv.data.local.SubtitleStyleSettings,
+    burnInProtection: BurnInProtectionState,
 ) {
     val baseFontSize = 24f
     val scaledFontSize = baseFontSize * (subtitleStyle.size / 100f)
@@ -143,9 +147,15 @@ internal fun applySubtitleStyle(
         CaptionStyleCompat.EDGE_TYPE_NONE
     }
 
+    val foregroundColor = if (burnInProtection.enabled) {
+        SUBTITLE_OFF_WHITE_ARGB
+    } else {
+        android.graphics.Color.WHITE
+    }
+
     subtitleView.setStyle(
         CaptionStyleCompat(
-            subtitleStyle.textColor,
+            foregroundColor,
             subtitleStyle.backgroundColor,
             android.graphics.Color.TRANSPARENT,
             edgeType,
@@ -154,11 +164,14 @@ internal fun applySubtitleStyle(
         )
     )
     subtitleView.setApplyEmbeddedStyles(false)
+    subtitleView.alpha = if (burnInProtection.enabled) SUBTITLE_MAX_ALPHA else 1.0f
+    subtitleView.translationX = burnInProtection.horizontalOffsetPx
 
-    val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
+    val effectivePercent = subtitleStyle.verticalOffset + burnInProtection.verticalDeltaPercent
+    val bottomPaddingFraction = (0.06f + (effectivePercent / 250f)).coerceIn(0f, 0.4f)
     subtitleView.setBottomPaddingFraction(bottomPaddingFraction)
     subtitleView.post {
-        val extraPadding = (subtitleView.height * (subtitleStyle.verticalOffset / 400f))
+        val extraPadding = (subtitleView.height * (effectivePercent / 400f))
             .toInt()
             .coerceAtLeast(0)
         subtitleView.setPadding(
@@ -538,6 +551,7 @@ fun PlayerScreen(
                 renderState = PlayerSurfaceRenderState(
                     resizeMode = uiState.resizeMode,
                     subtitleStyle = uiState.subtitleStyle,
+                    burnInProtection = uiState.burnInProtection,
                     keepScreenOn = uiState.isPlaying || uiState.isBuffering,
                     overlayCues = if (uiState.useAssSsaRenderOverlay) {
                         emptyList()

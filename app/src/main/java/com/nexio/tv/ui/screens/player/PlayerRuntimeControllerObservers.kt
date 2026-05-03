@@ -7,6 +7,7 @@ import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.FfmpegStreamMetadataProbe
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
+import com.nexio.tv.core.player.BurnInProtectionState
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
@@ -252,7 +253,12 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     loadingOverlayEnabled = settings.loadingOverlayEnabled,
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
-                    osdClockEnabled = settings.osdClockEnabled
+                    osdClockEnabled = settings.osdClockEnabled,
+                    burnInProtection = if (settings.burnInProtection.enabled) {
+                        state.burnInProtection.copy(enabled = true)
+                    } else {
+                        BurnInProtectionState.DISABLED
+                    }
                 )
             }
             bufferLogsEnabled = settings.enableBufferLogs

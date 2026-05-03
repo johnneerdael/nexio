@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.text.Cue
+import com.nexio.tv.core.player.BurnInProtectionState
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,6 +88,30 @@ class PlayerVideoSurfaceStateTest {
         assertFalse(plan.updateResizeMode)
         assertFalse(plan.updateSubtitleStyle)
         assertTrue(plan.updateOverlay)
+        assertFalse(plan.updateKeepScreenOn)
+    }
+
+    @Test
+    fun `mutation plan updates subtitle style when burn in state changes`() {
+        val previous = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = SubtitleStyleSettings(),
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = false
+        )
+        val current = previous.copy(
+            burnInProtection = BurnInProtectionState(
+                enabled = true,
+                verticalDeltaPercent = 1.5f,
+                horizontalOffsetPx = 3f
+            )
+        )
+
+        val plan = buildPlayerViewMutationPlan(previous = previous, current = current)
+
+        assertFalse(plan.updateResizeMode)
+        assertTrue(plan.updateSubtitleStyle)
+        assertFalse(plan.updateOverlay)
         assertFalse(plan.updateKeepScreenOn)
     }
 
