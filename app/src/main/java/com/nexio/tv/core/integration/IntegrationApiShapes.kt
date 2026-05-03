@@ -10,6 +10,7 @@ object AddonApiShapes {
 
 object CollectorApiShapes {
     const val SHADOW_AUTOPLAY_UPLOAD = "shadow_collector.autoplay_upload"
+    const val DEVICE_CAPABILITY_REPORT_UPLOAD = "shadow_collector.device_capability_report_upload"
 }
 
 object CustomImdbApiShapes {

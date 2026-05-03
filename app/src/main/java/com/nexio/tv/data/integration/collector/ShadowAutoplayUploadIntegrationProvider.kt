@@ -49,4 +49,38 @@ class ShadowAutoplayUploadIntegrationProvider @Inject constructor(
             }
         )
     )
+
+    suspend fun uploadDeviceCapabilityReport(
+        baseUrl: String,
+        token: String,
+        envelopeJson: String
+    ): IntegrationCallResult<Unit> = runtime.call(
+        IntegrationCallSpec(
+            provider = IntegrationProvider.SHADOW_COLLECTOR,
+            workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
+            apiShapeId = CollectorApiShapes.DEVICE_CAPABILITY_REPORT_UPLOAD,
+            operationKey = "shadowCollector.deviceCapability.uploadReport",
+            call = {
+                runCatching {
+                    transport.uploadDeviceCapabilityReport(
+                        baseUrl = baseUrl,
+                        token = token,
+                        envelopeJson = envelopeJson
+                    )
+                }.fold(
+                    onSuccess = { result ->
+                        if (result.isSuccessful) {
+                            IntegrationCallResult.Success(Unit)
+                        } else {
+                            IntegrationCallResult.HttpError(result.statusCode)
+                        }
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        IntegrationCallResult.NetworkError(error)
+                    }
+                )
+            }
+        )
+    )
 }

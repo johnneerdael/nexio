@@ -125,6 +125,7 @@ import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilityReportUploader
 import com.nexio.tv.data.repository.device.DeviceCapabilityRepository
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TrackingProgressService
@@ -173,6 +174,7 @@ import androidx.compose.ui.res.stringResource
 import com.nexio.tv.core.search.AndroidTvNativeSearchIntent
 import com.nexio.tv.R
 import com.nexio.tv.DrawerItem
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 
 val LocalSidebarExpanded = compositionLocalOf { false }
@@ -269,6 +271,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var deviceCapabilityRepository: DeviceCapabilityRepository
+
+    @Inject
+    lateinit var deviceCapabilityReportUploader: DeviceCapabilityReportUploader
 
     @Inject
     lateinit var profileManager: com.nexio.tv.core.profile.ProfileManager
@@ -1203,6 +1208,15 @@ class MainActivity : ComponentActivity() {
                     .onFailure { error ->
                         Log.w("MainActivity", "Deferred idle screensaver refresh failed", error)
                     }
+            }
+            launch(Dispatchers.IO) {
+                try {
+                    deviceCapabilityReportUploader.submitOnceIfEnabled()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    Log.w("MainActivity", "Deferred device capability report failed", error)
+                }
             }
             processDeferredStartupWorkCompleted = true
             shouldRunDeferredStartupWorkThisStart = false

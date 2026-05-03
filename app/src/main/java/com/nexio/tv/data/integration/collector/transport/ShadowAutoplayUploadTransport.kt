@@ -35,6 +35,20 @@ class ShadowAutoplayUploadTransport @Inject constructor(
 
         return okHttpClient.newCall(request).awaitShadowUploadResponse()
     }
+
+    suspend fun uploadDeviceCapabilityReport(
+        baseUrl: String,
+        token: String,
+        envelopeJson: String
+    ): ShadowAutoplayUploadTransportResult {
+        val request = Request.Builder()
+            .url("$baseUrl/api/v1/device-capability-reports")
+            .header("Authorization", "Bearer $token")
+            .post(envelopeJson.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        return okHttpClient.newCall(request).awaitShadowUploadResponse()
+    }
 }
 
 private suspend fun Call.awaitShadowUploadResponse(): ShadowAutoplayUploadTransportResult =
