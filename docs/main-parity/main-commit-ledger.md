@@ -35,6 +35,7 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 | --- | --- | --- | --- |
 | `330f8fbfc` | `PORTED` | this slice | FFmpeg startup probe now uses Comet addon-host context and drops proxy-only headers after resolving to the CDN URL. |
 | `bacd1e39b` | `PORTED` | `814212217`, `6c659246e` | Continue Watching now preserves stable playback context and addon origin through shared route builders/player args. |
+| `7f728d94b` | `PORTED` | this slice | Aio strict parser now has parity guards proving video hash/size survive into preserved metadata for subtitle exact matching. |
 | `2ee707f96` | `PORTED` | this slice | Kitsu browser JSON:API headers are centralized on the shared Kitsu Retrofit/OkHttp clients used by runtime-backed Kitsu providers. |
 | `46d9b3bd8` | `PORTED` | `0d39ff67d` | Resolver wait budget parity is centralized in the autoplay resolver path. |
 | `aac4096d4` | `PORTED` | `c9133cebd` | Audio fallback scoring parity is centralized in `StreamAutoPlaySelector`. |
