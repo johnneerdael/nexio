@@ -62,6 +62,7 @@ class HyperHdrFlatBufferClient(
     private var output: DataOutputStream? = null
     private val outbox = Channel<Outbound>(Channel.CONFLATED)
     private var writerJob: Job? = null
+    private var readerJob: Job? = null
 
     /** Owned exclusively by the writer coroutine; safe to reuse without synchronization. */
     private val builder = FlatBufferBuilder(64 * 1024)
@@ -81,6 +82,21 @@ class HyperHdrFlatBufferClient(
                 output = DataOutputStream(sock.getOutputStream())
                 writeOutbound(Outbound.Register)   // Synchronous Register
                 writerJob = scope.launch { for (msg in outbox) writeOutbound(msg) }
+                // Background reader: detect server-side disconnect (EOF or error → ERROR state).
+                readerJob = scope.launch(Dispatchers.IO) {
+                    try {
+                        val input = sock.getInputStream()
+                        val buf = ByteArray(256)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break   // EOF — server closed connection
+                        }
+                    } catch (_: Exception) { /* socket closed */ }
+                    if (_state.value == ConnectionState.CONNECTED) {
+                        _state.value = ConnectionState.ERROR
+                        runCatching { socket?.close() }
+                    }
+                }
                 _state.value = ConnectionState.CONNECTED
             } catch (e: Throwable) {
                 _state.value = ConnectionState.ERROR
@@ -154,6 +170,7 @@ class HyperHdrFlatBufferClient(
 
     override fun close() {
         writerJob?.cancel(); writerJob = null
+        readerJob?.cancel(); readerJob = null
         outbox.close()
         scope.cancel()
         runCatching { socket?.close() }
