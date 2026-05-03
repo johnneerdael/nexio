@@ -40,7 +40,7 @@ class TraceMetadataEventsTest {
     }
 
     @Test
-    fun `no emission when sessionId returns null`() {
+    fun `emits logcat only envelope when sessionId returns null`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { null })
         events.emitFirstPaint(
@@ -53,7 +53,8 @@ class TraceMetadataEventsTest {
             fieldsUsed = emptyList(),
             profileHash = null
         )
-        assertTrue("must not emit when no active session", sink.events.isEmpty())
+        assertEquals(1, sink.events.size)
+        assertEquals("logcat-only", sink.events.single().traceSessionId)
     }
 
     @Test

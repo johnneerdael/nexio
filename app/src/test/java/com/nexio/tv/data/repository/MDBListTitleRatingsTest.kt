@@ -24,6 +24,7 @@ import io.mockk.slot
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -211,6 +212,80 @@ class MDBListTitleRatingsTest {
 
         assertEquals(8.8f, enriched.imdbRating ?: 0f, 0.0f)
         assertEquals(TitleRatingSource.IMDB, enriched.ratingSource)
+    }
+
+    @Test
+    fun `getRatingsForMeta does not bridge tvdb primary id through tmdb`() = runTest {
+        val api = mockk<MDBListApi>()
+        val settings = mockk<MDBListSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>()
+        val repository = MDBListRepository(
+            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
+            settingsDataStore = settings,
+            tmdbService = tmdbService
+        )
+
+        every { settings.settings } returns flowOf(
+            MDBListSettings(
+                enabled = true,
+                apiKey = "mdb-key",
+                showTrakt = false,
+                showImdb = true,
+                showTmdb = false,
+                showLetterboxd = false,
+                showTomatoes = false,
+                showAudience = false,
+                showMetacritic = false
+            )
+        )
+
+        val result = repository.getRatingsForMeta(
+            meta = stubMeta("tvdb:355567", ContentType.SERIES),
+            fallbackItemId = "tvdb:355567",
+            fallbackItemType = "series"
+        )
+
+        assertNull(result)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbService.tmdbToImdb(any(), any()) }
+        coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `getRatingsForMeta does not bridge kitsu primary id through tmdb`() = runTest {
+        val api = mockk<MDBListApi>()
+        val settings = mockk<MDBListSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>()
+        val repository = MDBListRepository(
+            integrationProvider = MDBListIntegrationProvider(passThroughTestRuntime(), api),
+            settingsDataStore = settings,
+            tmdbService = tmdbService
+        )
+
+        every { settings.settings } returns flowOf(
+            MDBListSettings(
+                enabled = true,
+                apiKey = "mdb-key",
+                showTrakt = false,
+                showImdb = true,
+                showTmdb = false,
+                showLetterboxd = false,
+                showTomatoes = false,
+                showAudience = false,
+                showMetacritic = false
+            )
+        )
+
+        val result = repository.getRatingsForMeta(
+            meta = stubMeta("kitsu:12", ContentType.SERIES),
+            fallbackItemId = "kitsu:12",
+            fallbackItemType = "series"
+        )
+
+        assertNull(result)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbService.tmdbToImdb(any(), any()) }
+        coVerify(exactly = 0) { api.getRating(any(), any(), any(), any()) }
     }
 
     private fun stubMeta(id: String, type: ContentType): Meta {

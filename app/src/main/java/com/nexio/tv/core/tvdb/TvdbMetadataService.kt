@@ -481,6 +481,14 @@ class TvdbMetadataService @Inject constructor(
         val countries = listOfNotNull(country.trimmed(), originalCountry.trimmed()).distinct()
         val originalNetworkName = originalNetwork?.name.trimmed()
         val latestNetworkName = latestNetwork?.name.trimmed()
+        val episodeMetadata = episodes.orEmpty()
+            .map { episode -> episode.toEpisodeMetadata() }
+            .mapNotNull { metadata ->
+                val seasonNumber = metadata.seasonNumber ?: return@mapNotNull null
+                val episodeNumber = metadata.episodeNumber ?: return@mapNotNull null
+                (seasonNumber to episodeNumber) to metadata
+            }
+            .toMap()
 
         if (
             title == null && description == null && genres.isEmpty() && poster == null &&
@@ -519,7 +527,8 @@ class TvdbMetadataService @Inject constructor(
             seasonOrderContext = seasonOrderContext,
             castMembers = advancedMetadata?.castMembers.orEmpty(),
             productionCompanies = advancedMetadata?.productionCompanies.orEmpty(),
-            networks = advancedMetadata?.networks.orEmpty()
+            networks = advancedMetadata?.networks.orEmpty(),
+            episodeMetadata = episodeMetadata
         )
     }
 

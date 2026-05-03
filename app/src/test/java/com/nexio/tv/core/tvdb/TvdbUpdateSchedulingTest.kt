@@ -4,12 +4,14 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
+import com.nexio.tv.data.integration.tvdb.TvdbIntegrationProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -24,6 +26,19 @@ import javax.inject.Provider
  * - Worker retry storm prevention
  */
 class TvdbUpdateSchedulingTest {
+
+    @Test
+    fun `catchUpUpdates is not wrapped in tvdb runtime lane`() {
+        val constructorParameterTypes = TvdbUpdateCoordinator::class.java
+            .declaredConstructors
+            .flatMap { constructor -> constructor.parameterTypes.toList() }
+            .toList()
+
+        assertFalse(
+            "TVDB maintenance coordinates runtime-covered child calls and must not hold the single TVDB runtime lane",
+            constructorParameterTypes.contains(TvdbIntegrationProvider::class.java)
+        )
+    }
 
     @Test
     fun `schedulePeriodicUpdates enqueues unique network constrained work`() {

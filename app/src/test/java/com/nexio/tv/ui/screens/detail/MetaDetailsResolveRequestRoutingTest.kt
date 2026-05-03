@@ -15,6 +15,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.metadata.router.MetadataRouteFailure
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -237,6 +238,57 @@ class MetaDetailsResolveRequestRoutingTest {
             val state = viewModel.uiState.value
             assertNotNull("error should be set when no addon origin is available", state.error)
             assertFalse("isLoading should be false after error state is emitted", state.isLoading)
+        }
+
+    @Test
+    fun `canonical tvdb series with no addon videos populates episode videos from tvdb enrichment`() =
+        runTest(dispatcher) {
+            val facade = mockk<MetadataRouterFacade>(relaxed = true)
+
+            coEvery { facade.resolveRequest(any<MetadataRequest>()) } returns buildTvdbResolutionResult()
+            coEvery { facade.fetchTvEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = TvMetadataEnrichment(
+                    seriesTvdbId = 355567,
+                    episodeMetadata = mapOf(
+                        (1 to 1) to TvEpisodeMetadata(
+                            providerEpisodeId = "tvdb:9001",
+                            seasonNumber = 1,
+                            episodeNumber = 1,
+                            title = "The Name of the Game",
+                            overview = "Canonical TVDB episode overview",
+                            thumbnail = "https://art.example/s1e1.jpg",
+                            airDate = "2019-07-26",
+                            runtimeMinutes = 61
+                        )
+                    )
+                )
+            )
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = emptyMap()
+            )
+
+            val viewModel = buildMetaDetailsViewModel(
+                meta = buildMinimalSeriesMeta(),
+                itemId = "tvdb:355567",
+                itemType = "series",
+                addonBaseUrl = null,
+                metadataRouterFacade = facade
+            )
+
+            advanceUntilIdle()
+
+            val videos = viewModel.uiState.value.meta?.videos.orEmpty()
+            assertEquals(1, videos.size)
+            assertEquals("tvdb:355567:1:1", videos.single().id)
+            assertEquals("The Name of the Game", videos.single().title)
+            assertEquals(1, videos.single().season)
+            assertEquals(1, videos.single().episode)
+            assertEquals(listOf(1), viewModel.uiState.value.seasons)
+            assertEquals("The Name of the Game", viewModel.uiState.value.episodesForSeason.single().title)
         }
 
     // ── helpers ──────────────────────────────────────────────────────────────────

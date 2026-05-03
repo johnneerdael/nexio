@@ -36,7 +36,7 @@ class TraceMetadataEvents(
         fieldsUsed: List<String>,
         profileHash: String?
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -72,7 +72,7 @@ class TraceMetadataEvents(
          *  received a route whose ID has an unrecognised scheme (e.g. spotify:, netflix-id-format). */
         reason: String? = null
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         val basePayload = mapOf(
             "sourceId" to sourceId,
             "targetProvider" to targetProvider,
@@ -103,7 +103,7 @@ class TraceMetadataEvents(
         depth: String,
         steps: List<Map<String, Any?>>
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -128,7 +128,7 @@ class TraceMetadataEvents(
         scheduled: List<String>,
         skipped: Map<String, String>
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -147,7 +147,7 @@ class TraceMetadataEvents(
     }
 
     fun emitNormalizerWarning(contentId: String, reason: String) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -173,7 +173,7 @@ class TraceMetadataEvents(
         ownershipRule: String,
         rejectedCandidates: List<Map<String, Any?>>
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -207,7 +207,7 @@ class TraceMetadataEvents(
         targetIdRequiresIdentityResolution: Boolean,
         targetIds: Map<String, String>
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -236,7 +236,7 @@ class TraceMetadataEvents(
         bundle: StableIdBundle,
         trigger: StableIdResolutionTrigger
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -274,7 +274,7 @@ class TraceMetadataEvents(
         operation: String,
         reason: String
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -418,7 +418,7 @@ class TraceMetadataEvents(
          *  silently collapsed to the English fallback. Surfaces in trace bundles for diagnostics. */
         localeCollapsedToFallback: Boolean = false
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -447,7 +447,7 @@ class TraceMetadataEvents(
         eventType: String,
         payload: Map<String, Any?>
     ) {
-        val sid = sessionId() ?: return
+        val sid = traceSessionIdForEmission()
         sink.emit(
             TraceEventEnvelope(
                 traceSessionId = sid,
@@ -463,7 +463,10 @@ class TraceMetadataEvents(
 
     private fun optionalTraceValue(value: String?): String = value ?: OPTIONAL_NONE
 
+    private fun traceSessionIdForEmission(): String = sessionId() ?: LOGCAT_ONLY_TRACE_SESSION_ID
+
     private companion object {
+        const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
         const val OPTIONAL_NONE = "none"
     }
 }

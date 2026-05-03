@@ -88,6 +88,58 @@ class LogcatRuntimeTraceSink(
             "contentId" to payload["contentId"],
             "reason" to payload["reason"]
         )
+        "metadata.stable_id_bundle" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "itemType" to payload["itemType"],
+            "status" to payload["status"],
+            "trigger" to payload["trigger"],
+            "tmdbMovieId" to payload["tmdbMovieId"],
+            "tvdbSeriesId" to payload["tvdbSeriesId"],
+            "kitsuAnimeId" to payload["kitsuAnimeId"],
+            "imdbId" to payload["imdbId"],
+            "networkExecuted" to payload["networkExecuted"]
+        )
+        "home.hydration_started" -> linkedMapOf(
+            "railId" to payload["railId"],
+            "itemKey" to payload["itemKey"],
+            "firstPaintSource" to payload["firstPaintSource"],
+            "trigger" to payload["trigger"],
+            "priority" to payload["priority"],
+            "workClass" to payload["workClass"]
+        )
+        "home.hydration_overlay_written" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "canonicalProvider" to payload["canonicalProvider"],
+            "canonicalId" to payload["canonicalId"],
+            "imdbId" to payload["imdbId"],
+            "displayHash" to payload["displayHash"]
+        )
+        "home.hydration_applied" -> linkedMapOf(
+            "railId" to payload["railId"],
+            "itemKey" to payload["itemKey"],
+            "firstPaintSource" to payload["firstPaintSource"],
+            "canonicalProvider" to payload["canonicalProvider"],
+            "canonicalId" to payload["canonicalId"],
+            "imdbId" to payload["imdbId"],
+            "trigger" to payload["trigger"],
+            "priority" to payload["priority"],
+            "workClass" to payload["workClass"],
+            "changedFields" to payload["changedFields"],
+            "rowOrderChanged" to payload["rowOrderChanged"],
+            "focusChanged" to payload["focusChanged"],
+            "networkExecuted" to payload["networkExecuted"],
+            "cacheDecision" to payload["cacheDecision"]
+        )
+        "home.hydration_ignored" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "reason" to payload["reason"],
+            "trigger" to payload["trigger"]
+        )
+        "home.hydration_failed_using_preview" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "reason" to payload["reason"],
+            "trigger" to payload["trigger"]
+        )
         "runtime.operation_start" -> linkedMapOf(
             "provider" to payload["provider"],
             "operationKey" to payload["operationKey"],
