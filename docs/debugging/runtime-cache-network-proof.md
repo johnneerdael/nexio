@@ -42,12 +42,12 @@ Start a runtime trace session in the app with `INCLUDE_HTTP_SUMMARY`, reproduce 
 
 ```bash
 ANDROID_SERIAL=192.168.50.98:5555 adb root
-ANDROID_SERIAL=192.168.50.98:5555 adb shell ls -t /data/data/com.nexio.tv/files/traces
-ANDROID_SERIAL=192.168.50.98:5555 adb pull /data/data/com.nexio.tv/files/traces/<session-id>/trace-events.jsonl ./trace-events.jsonl
+ANDROID_SERIAL=192.168.50.98:5555 adb shell ls -t /data/data/com.nexio.tv.profileable/files/traces
+ANDROID_SERIAL=192.168.50.98:5555 adb pull /data/data/com.nexio.tv.profileable/files/traces/<session-id>/trace-events.jsonl ./trace-events.jsonl
 scripts/trace-cache-proof.py ./trace-events.jsonl
 ```
 
-The `ls -t` command lists newest sessions first. Use the session id that matches the just-stopped trace session.
+The `ls -t` command lists newest sessions first. Use the session id that matches the just-stopped trace session. Stable package traces live under `/data/data/com.nexio.tv/files/traces` when intentionally testing the stable package; this workflow targets the profileable build.
 
 ## Kitsu One Piece Example
 
