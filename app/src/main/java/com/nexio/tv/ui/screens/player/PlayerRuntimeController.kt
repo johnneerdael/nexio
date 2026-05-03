@@ -118,6 +118,7 @@ class PlayerRuntimeController(
     internal val poster: String? = navigationArgs.poster
     internal val backdrop: String? = navigationArgs.backdrop
     internal val logo: String? = navigationArgs.logo
+    internal val addonBaseUrl: String? = navigationArgs.addonBaseUrl
     internal val videoId: String? = navigationArgs.videoId
     internal val initialSeason: Int? = navigationArgs.initialSeason
     internal val initialEpisode: Int? = navigationArgs.initialEpisode
@@ -448,6 +449,7 @@ internal fun PlayerNavigationArgs.toRouteResumeProgress(): WatchProgress? {
         position = resumePositionMs ?: 0L,
         duration = resumeDurationMs ?: 0L,
         lastWatched = resumeLastWatchedMs ?: 0L,
+        addonBaseUrl = addonBaseUrl,
         progressPercent = resumeProgressPercent,
         source = resumeSource ?: WatchProgress.SOURCE_LOCAL
     )

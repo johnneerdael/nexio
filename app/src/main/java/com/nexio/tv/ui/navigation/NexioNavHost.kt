@@ -441,6 +441,11 @@ fun NexioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("addonBaseUrl") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) { backStackEntry ->
@@ -523,7 +528,8 @@ fun NexioNavHost(
                                 resumeDurationMs = playbackInfo.resumeDurationMs,
                                 resumeProgressPercent = playbackInfo.resumeProgressPercent,
                                 resumeLastWatchedMs = playbackInfo.resumeLastWatchedMs,
-                                resumeSource = playbackInfo.resumeSource
+                                resumeSource = playbackInfo.resumeSource,
+                                addonBaseUrl = playbackInfo.addonBaseUrl
                             )
                         )
                     }
@@ -565,7 +571,8 @@ fun NexioNavHost(
                                 resumeDurationMs = playbackInfo.resumeDurationMs,
                                 resumeProgressPercent = playbackInfo.resumeProgressPercent,
                                 resumeLastWatchedMs = playbackInfo.resumeLastWatchedMs,
-                                resumeSource = playbackInfo.resumeSource
+                                resumeSource = playbackInfo.resumeSource,
+                                addonBaseUrl = playbackInfo.addonBaseUrl
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -743,6 +750,11 @@ fun NexioNavHost(
                     defaultValue = null
                 },
                 navArgument("resumeSource") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("addonBaseUrl") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
@@ -1001,7 +1013,8 @@ fun NexioNavHost(
                                 filename = entry.playbackFilename,
                                 videoSize = entry.playbackSizeBytes,
                                 headers = entry.playbackHeaders,
-                                launchSource = PlayerLaunchSource.LIBRARY_DIRECT
+                                launchSource = PlayerLaunchSource.LIBRARY_DIRECT,
+                                addonBaseUrl = entry.addonBaseUrl
                             )
                         )
                     } else {
@@ -1214,7 +1227,8 @@ internal fun buildManualSelectionStreamRoute(
     resumeDurationMs: Long? = null,
     resumeProgressPercent: Float? = null,
     resumeLastWatchedMs: Long? = null,
-    resumeSource: String? = null
+    resumeSource: String? = null,
+    addonBaseUrl: String? = null
 ): String {
     return Screen.Stream.createRoute(
         videoId = videoId,
@@ -1239,7 +1253,8 @@ internal fun buildManualSelectionStreamRoute(
         resumeDurationMs = resumeDurationMs,
         resumeProgressPercent = resumeProgressPercent,
         resumeLastWatchedMs = resumeLastWatchedMs,
-        resumeSource = resumeSource
+        resumeSource = resumeSource,
+        addonBaseUrl = addonBaseUrl
     )
 }
 
@@ -1272,7 +1287,8 @@ internal fun buildContinueWatchingStreamRoute(
             resumeDurationMs = item.progress.duration.takeUnless { startFromBeginning },
             resumeProgressPercent = item.progress.progressPercent.takeUnless { startFromBeginning },
             resumeLastWatchedMs = item.progress.lastWatched.takeUnless { startFromBeginning },
-            resumeSource = item.progress.source.takeUnless { startFromBeginning }
+            resumeSource = item.progress.source.takeUnless { startFromBeginning },
+            addonBaseUrl = item.progress.addonBaseUrl
         )
 
         is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
@@ -1336,7 +1352,8 @@ internal fun buildContinueWatchingManualSelectionStreamRoute(
             resumeDurationMs = item.progress.duration,
             resumeProgressPercent = item.progress.progressPercent,
             resumeLastWatchedMs = item.progress.lastWatched,
-            resumeSource = item.progress.source
+            resumeSource = item.progress.source,
+            addonBaseUrl = item.progress.addonBaseUrl
         )
 
         is ContinueWatchingItem.NextUp -> buildManualSelectionStreamRoute(

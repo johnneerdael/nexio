@@ -6,6 +6,8 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
 import kotlinx.coroutines.test.runTest
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -117,6 +119,48 @@ class StreamRuntimeRoutingTest {
         assertTrue(route.contains("resumeDurationMs=9091000"))
         assertTrue(route.contains("resumeProgressPercent=12.5"))
         assertTrue(route.contains("resumeLastWatchedMs=42"))
+    }
+
+    @Test
+    fun `continue watching in progress route preserves stable ids addon context and resume args`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = WatchProgress(
+                    contentId = "tt0239195",
+                    contentType = "series",
+                    name = "Survivor",
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    videoId = "tt0239195:5:10",
+                    season = 5,
+                    episode = 10,
+                    episodeTitle = "Survivor Auction",
+                    position = 1_234_000L,
+                    duration = 2_468_000L,
+                    lastWatched = 98_765L,
+                    addonBaseUrl = "https://addon.example.com/manifest.json",
+                    progressPercent = 50.0f,
+                    source = WatchProgress.SOURCE_TRAKT_PLAYBACK
+                )
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        val args = decodedStreamRouteArgs(route)
+
+        assertEquals("tt0239195", args.getValue("contentId"))
+        assertEquals("tt0239195:5:10", args.getValue("videoId"))
+        assertEquals("series", args.getValue("contentType"))
+        assertEquals("5", args.getValue("season"))
+        assertEquals("10", args.getValue("episode"))
+        assertEquals("Survivor", args.getValue("contentName"))
+        assertEquals("https://addon.example.com/manifest.json", args.getValue("addonBaseUrl"))
+        assertEquals("1234000", args.getValue("resumePositionMs"))
+        assertEquals("2468000", args.getValue("resumeDurationMs"))
+        assertEquals("50.0", args.getValue("resumeProgressPercent"))
+        assertEquals("98765", args.getValue("resumeLastWatchedMs"))
+        assertEquals(WatchProgress.SOURCE_TRAKT_PLAYBACK, args.getValue("resumeSource"))
     }
 
     @Test
@@ -262,5 +306,27 @@ class StreamRuntimeRoutingTest {
             thumbnail = null,
             lastWatched = 42L
         )
+    }
+
+    private fun decodedStreamRouteArgs(route: String): Map<String, String> {
+        val path = route.substringBefore("?")
+        val pathParts = path.split("/")
+        val queryArgs = route.substringAfter("?", "")
+            .split("&")
+            .filter { it.isNotBlank() }
+            .associate { pair ->
+                val key = pair.substringBefore("=")
+                val value = pair.substringAfter("=", "")
+                key to decode(value)
+            }
+        return queryArgs + mapOf(
+            "videoId" to decode(pathParts[1]),
+            "contentType" to decode(pathParts[2]),
+            "title" to decode(pathParts[3])
+        )
+    }
+
+    private fun decode(value: String): String {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8.name())
     }
 }
