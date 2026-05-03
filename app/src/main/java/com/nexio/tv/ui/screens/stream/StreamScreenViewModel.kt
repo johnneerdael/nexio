@@ -127,6 +127,7 @@ class StreamScreenViewModel @Inject constructor(
     private val year: String? = savedStateHandle.getOptionalString("year")
     private val contentId: String? = savedStateHandle.getOptionalString("contentId")
     private val contentName: String? = savedStateHandle.getOptionalString("contentName")
+    private val sourceAddonBaseUrl: String? = savedStateHandle.getOptionalString("addonBaseUrl")
     private val resumePositionMs: Long? = savedStateHandle.get<String>("resumePositionMs")?.toLongOrNull()
     private val resumeDurationMs: Long? = savedStateHandle.get<String>("resumeDurationMs")?.toLongOrNull()
     private val resumeProgressPercent: Float? = savedStateHandle.get<String>("resumeProgressPercent")?.toFloatOrNull()
@@ -327,32 +328,33 @@ class StreamScreenViewModel @Inject constructor(
                             updateUiStateIfChanged {
                                 it.copy(
                                     autoPlayPlaybackInfo = StreamPlaybackInfo(
-                                    url = cached.url,
-                                    title = title,
-                                    streamName = cached.streamName,
-                                    year = year,
-                                    isExternal = false,
-                                    isTorrent = false,
-                                    infoHash = null,
-                                    ytId = null,
-                                    headers = cached.headers,
-                                    contentId = contentId ?: videoId.substringBefore(":"),
-                                    contentType = contentType,
-                                    contentName = contentName ?: title,
-                                    originalLanguage = originalLanguage,
-                                    poster = poster,
-                                    backdrop = backdrop,
-                                    logo = logo,
-                                    videoId = videoId,
-                                    season = season,
-                                    episode = episode,
-                                    episodeTitle = episodeName,
-                                    bingeGroup = cached.bingeGroup,
-                                    rememberedAudioLanguage = cached.rememberedAudioLanguage,
-                                    rememberedAudioName = cached.rememberedAudioName,
-                                    filename = cached.filename,
-                                    videoHash = cached.videoHash,
-                                    videoSize = cached.videoSize
+                                        url = cached.url,
+                                        title = title,
+                                        streamName = cached.streamName,
+                                        year = year,
+                                        isExternal = false,
+                                        isTorrent = false,
+                                        infoHash = null,
+                                        ytId = null,
+                                        headers = cached.headers,
+                                        contentId = contentId ?: videoId.substringBefore(":"),
+                                        contentType = contentType,
+                                        contentName = contentName ?: title,
+                                        originalLanguage = originalLanguage,
+                                        poster = poster,
+                                        backdrop = backdrop,
+                                        logo = logo,
+                                        videoId = videoId,
+                                        season = season,
+                                        episode = episode,
+                                        episodeTitle = episodeName,
+                                        bingeGroup = cached.bingeGroup,
+                                        rememberedAudioLanguage = cached.rememberedAudioLanguage,
+                                        rememberedAudioName = cached.rememberedAudioName,
+                                        filename = cached.filename,
+                                        videoHash = cached.videoHash,
+                                        videoSize = cached.videoSize,
+                                        addonBaseUrl = sourceAddonBaseUrl
                                     )
                                 )
                             }
@@ -843,9 +845,7 @@ class StreamScreenViewModel @Inject constructor(
     // for context.
     private suspend fun getEmbeddedStreamsFromMeta(installedAddons: List<Addon>): AddonStreams? {
         val metaId = contentId?.takeIf { it.isNotBlank() } ?: return null
-        val metaAddons = installedAddons.filter { addon ->
-            addon.resources.any { it.name == "meta" }
-        }
+        val metaAddons = orderedMetaAddons(installedAddons)
         if (metaAddons.isEmpty()) return null
         for (addon in metaAddons) {
             val result = metaRepository.hydrateAddonOriginItem(
@@ -861,7 +861,8 @@ class StreamScreenViewModel @Inject constructor(
                 stream.copy(
                     name = stream.name ?: stream.title ?: stream.description ?: EMBEDDED_STREAM_FALLBACK_NAME,
                     addonName = EMBEDDED_STREAM_GROUP_NAME,
-                    addonLogo = null
+                    addonLogo = null,
+                    addonBaseUrl = stream.addonBaseUrl ?: addon.baseUrl
                 )
             }
 
@@ -898,8 +899,7 @@ class StreamScreenViewModel @Inject constructor(
         if (metaId.isBlank() || contentType.isBlank()) return
 
         viewModelScope.launch {
-            val metaAddons = addonRepository.getInstalledAddons().first()
-                .filter { addon -> addon.resources.any { it.name == "meta" } }
+            val metaAddons = orderedMetaAddons(addonRepository.getInstalledAddons().first())
             var meta: Meta? = null
             for (addon in metaAddons) {
                 val result = metaRepository.hydrateAddonOriginItem(
@@ -1029,7 +1029,7 @@ class StreamScreenViewModel @Inject constructor(
             resumeProgressPercent = resumeProgressPercent,
             resumeLastWatchedMs = resumeLastWatchedMs,
             resumeSource = resumeSource,
-            addonBaseUrl = stream.addonBaseUrl
+            addonBaseUrl = stream.addonBaseUrl ?: sourceAddonBaseUrl
         )
 
         val url = playbackInfo.url
@@ -1240,7 +1240,7 @@ class StreamScreenViewModel @Inject constructor(
                 val normalized = tag.lowercase()
                 normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
             },
-            addonBaseUrl = stream.addonBaseUrl,
+            addonBaseUrl = stream.addonBaseUrl ?: sourceAddonBaseUrl,
             autoPlayFallbackCandidates = selectAutoplayFallbackCandidates(
                 selectedKey = selectedKey,
                 fallbackCandidates = fallbackCandidates
@@ -1261,7 +1261,7 @@ class StreamScreenViewModel @Inject constructor(
                             val normalized = tag.lowercase()
                             normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
                         },
-                        addonBaseUrl = candidate.stream.addonBaseUrl
+                        addonBaseUrl = candidate.stream.addonBaseUrl ?: sourceAddonBaseUrl
                     )
                 }
         )
@@ -1301,6 +1301,16 @@ class StreamScreenViewModel @Inject constructor(
             runtimeMinutes = runtime ?: _uiState.value.runtime,
             originalLanguage = originalLanguage
         )
+    }
+
+    private fun orderedMetaAddons(installedAddons: List<Addon>): List<Addon> {
+        val metaAddons = installedAddons.filter { addon ->
+            addon.resources.any { it.name == "meta" }
+        }
+        val source = sourceAddonBaseUrl?.trim()?.takeIf { it.isNotBlank() } ?: return metaAddons
+        return metaAddons.sortedBy { addon ->
+            if (addon.baseUrl.trim().equals(source, ignoreCase = true)) 0 else 1
+        }
     }
 
     private fun buildShadowRequestContext(requestId: String): ShadowRequestContext {
