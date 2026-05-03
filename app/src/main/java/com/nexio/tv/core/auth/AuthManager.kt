@@ -1,9 +1,12 @@
 package com.nexio.tv.core.auth
 
 import android.util.Log
+import com.nexio.tv.data.integration.supabase.transport.DurableDeviceSessionExchangeException
+import com.nexio.tv.data.integration.supabase.transport.DurableDeviceSessionTransport
 import com.nexio.tv.data.integration.supabase.transport.TvLoginExchangeTransport
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
+import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import com.nexio.tv.data.local.DurableDeviceCredentialStore
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
@@ -12,6 +15,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -28,11 +32,14 @@ import javax.inject.Singleton
 
 private const val TAG = "AuthManager"
 
+private class AuthoritativeDurableCredentialRejectionException(message: String) : IllegalStateException(message)
+
 @Singleton
 class AuthManager @Inject constructor(
     private val auth: Auth,
     private val postgrest: Postgrest,
     private val tvLoginExchangeTransport: TvLoginExchangeTransport,
+    private val durableDeviceSessionTransport: DurableDeviceSessionTransport,
     private val authPresenceDataStore: AuthPresenceDataStore,
     private val appOnboardingDataStore: AppOnboardingDataStore,
     private val durableDeviceCredentialStore: DurableDeviceCredentialStore
@@ -75,45 +82,60 @@ class AuthManager @Inject constructor(
                         }
                         val session = auth.currentSessionOrNull()
                         val hasRefreshToken = session?.refreshToken?.isNotBlank() == true
-                        if (hasRefreshToken) {
-                            scope.launch {
-                                try {
-                                    auth.refreshCurrentSession()
-                                } catch (e: Exception) {
-                                    // Only sign the user out if the refresh token was
-                                    // *authoritatively* rejected by the server. Transient
-                                    // failures (network down, DNS warm-up after an upgrade,
-                                    // 5xx, timeouts) must NOT clear the session — the SDK
-                                    // or the next sync attempt will retry.
-                                    if (e.isAuthoritativeRefreshRejection()) {
-                                        Log.w(TAG, "Refresh token rejected; signing out", e)
-                                        transitionToSignedOut()
-                                    } else {
-                                        Log.w(
-                                            TAG,
-                                            "Transient session refresh failure; keeping current auth state",
-                                            e
-                                        )
+                        val returning = isReturningUser()
+                        val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                        when (
+                            resolveNotAuthenticatedStartupAction(
+                                hasRefreshToken = hasRefreshToken,
+                                isReturningUser = returning,
+                                hasDurableCredential = hasDurableCredential
+                            )
+                        ) {
+                            NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION -> {
+                                scope.launch {
+                                    try {
+                                        auth.refreshCurrentSession()
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        // Only sign the user out if the refresh token was
+                                        // *authoritatively* rejected by the server. Transient
+                                        // failures (network down, DNS warm-up after an upgrade,
+                                        // 5xx, timeouts) must NOT clear the session — the SDK
+                                        // or the next sync attempt will retry.
+                                        when (
+                                            resolveRefreshFailureAction(
+                                                refreshError = e,
+                                                hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                                            )
+                                        ) {
+                                            RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY -> {
+                                                Log.w(TAG, "Refresh token rejected; attempting durable recovery", e)
+                                                attemptSilentSessionRecovery(ignoreCachedRefreshToken = true)
+                                            }
+                                            RefreshFailureAction.TRANSITION_SIGNED_OUT -> {
+                                                Log.w(TAG, "Refresh token rejected; signing out", e)
+                                                transitionToSignedOut()
+                                            }
+                                            RefreshFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                                                Log.w(
+                                                    TAG,
+                                                    "Transient session refresh failure; keeping current auth state",
+                                                    e
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        } else {
-                            // No Supabase session in memory. Distinguish a genuine "never
-                            // logged in / explicitly signed out" from a transient storage
-                            // miss on cold start (post-upgrade, SDK-storage race, OEM
-                            // backup-restore blip). If our own marker — or the onboarding
-                            // flag for users who signed in before the marker existed —
-                            // says we *were* authenticated last run, enter silent
-                            // recovery instead of flipping to SignedOut (which would mint
-                            // a spurious QR re-auth prompt for a valid session).
-                            val returning = isReturningUser()
-                            if (returning) {
+                            NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY -> {
                                 Log.w(
                                     TAG,
-                                    "Supabase reports no session but returning-user signal is set; keeping state and retrying"
+                                    "Supabase reports no session but recovery signal is set; keeping state and retrying"
                                 )
                                 scope.launch { attemptSilentSessionRecovery() }
-                            } else {
+                            }
+                            NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT -> {
                                 transitionToSignedOut()
                             }
                         }
@@ -159,28 +181,91 @@ class AuthManager @Inject constructor(
         return readHasCompletedOnboardingQr()
     }
 
-    private suspend fun attemptSilentSessionRecovery() {
+    private suspend fun attemptSilentSessionRecovery(ignoreCachedRefreshToken: Boolean = false) {
         // Give the SDK's own storage layer a few chances to hydrate the session
         // before we commit to any SignedOut transition. Each iteration re-checks
         // init, user, and session. If the user re-appears, Supabase will emit
         // Authenticated on its own and we'll pick it up in the collector.
+        var shouldAttemptDurableAfterRefreshRejection = ignoreCachedRefreshToken
         repeat(3) { attempt ->
+            if (shouldAttemptDurableAfterRefreshRejection) return@repeat
             delay(500L * (attempt + 1))
             try {
                 auth.awaitInitialization()
                 if (auth.currentUserOrNull() != null) return
                 val session = auth.currentSessionOrNull()
-                if (session?.refreshToken?.isNotBlank() == true) {
-                    auth.refreshCurrentSession()
-                    return
+                when (
+                    resolveJwtExpiryRecoveryAction(
+                        hasRefreshToken = session?.refreshToken?.isNotBlank() == true,
+                        credential = durableDeviceCredentialStore.snapshot(),
+                        ignoreCachedRefreshToken = shouldAttemptDurableAfterRefreshRejection
+                    )
+                ) {
+                    JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION -> {
+                        auth.refreshCurrentSession()
+                        return
+                    }
+                    JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY -> {
+                        shouldAttemptDurableAfterRefreshRejection = true
+                    }
+                    JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> Unit
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e.isAuthoritativeRefreshRejection()) {
-                    Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
-                    transitionToSignedOut()
-                    return
+                when (
+                    resolveRefreshFailureAction(
+                        refreshError = e,
+                        hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                    )
+                ) {
+                    RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY -> {
+                        Log.w(TAG, "Authoritative rejection during silent recovery; attempting durable recovery", e)
+                        shouldAttemptDurableAfterRefreshRejection = true
+                    }
+                    RefreshFailureAction.TRANSITION_SIGNED_OUT -> {
+                        Log.w(TAG, "Authoritative rejection during silent recovery; signing out", e)
+                        transitionToSignedOut()
+                        return
+                    }
+                    RefreshFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                        Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
+                    }
                 }
-                Log.w(TAG, "Silent session recovery attempt failed; will retry", e)
+            }
+        }
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (
+            shouldAttemptDurableSessionRecovery(
+                hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
+                credential = credential,
+                ignoreCachedRefreshToken = shouldAttemptDurableAfterRefreshRejection
+            )
+        ) {
+            try {
+                if (restoreSupabaseSessionFromDurableCredential(credential)) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                when (
+                    resolveDurableRecoveryFailureAction(
+                        isAuthoritativeRejection = e is AuthoritativeDurableCredentialRejectionException
+                    )
+                ) {
+                    DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                        Log.w(
+                            TAG,
+                            "Durable credential was authoritatively rejected during silent recovery; clearing credential",
+                            e
+                        )
+                        durableDeviceCredentialStore.clear()
+                        transitionToSessionLost()
+                        return
+                    }
+                    DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                        Log.w(TAG, "Durable credential session recovery failed", e)
+                    }
+                }
             }
         }
         Log.w(
@@ -367,6 +452,11 @@ class AuthManager @Inject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
         }
+        try {
+            durableDeviceCredentialStore.clear()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear durable credential on sign-out", e)
+        }
     }
 
     fun clearEffectiveUserIdCache() {
@@ -376,18 +466,102 @@ class AuthManager @Inject constructor(
 
     suspend fun refreshSessionIfJwtExpired(error: Throwable): Boolean {
         if (!error.isJwtExpiredError()) return false
+        val credential = durableDeviceCredentialStore.snapshot()
         val hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true
-        if (!hasRefreshToken) {
-            Log.w(TAG, "JWT expired but no refresh token available; cannot refresh session")
-            return false
+        return when (
+            resolveJwtExpiryRecoveryAction(
+                hasRefreshToken = hasRefreshToken,
+                credential = credential
+            )
+        ) {
+            JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION -> {
+                try {
+                    Log.w(TAG, "JWT expired; refreshing Supabase session and retrying request")
+                    auth.refreshCurrentSession()
+                    true
+                } catch (refreshError: CancellationException) {
+                    throw refreshError
+                } catch (refreshError: Exception) {
+                    when (
+                        resolveRefreshFailureAction(
+                            refreshError = refreshError,
+                            hasDurableCredential = credential.isComplete
+                        )
+                    ) {
+                        RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY -> {
+                            Log.w(
+                                TAG,
+                                "Refresh token was authoritatively rejected after JWT expiry; restoring from durable credential",
+                                refreshError
+                            )
+                            attemptDurableSessionRecoveryAfterJwtExpiry(credential)
+                        }
+                        RefreshFailureAction.TRANSITION_SIGNED_OUT,
+                        RefreshFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                            Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
+                            false
+                        }
+                    }
+                }
+            }
+            JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY -> {
+                Log.w(TAG, "JWT expired; restoring Supabase session from durable credential")
+                attemptDurableSessionRecoveryAfterJwtExpiry(credential)
+            }
+            JwtExpiryRecoveryAction.NO_RECOVERY_PATH -> {
+                Log.w(TAG, "JWT expired but no refresh token or durable credential available; cannot refresh session")
+                false
+            }
         }
+    }
+
+    private suspend fun attemptDurableSessionRecoveryAfterJwtExpiry(
+        credential: DurableDeviceCredentialSnapshot
+    ): Boolean {
         return try {
-            Log.w(TAG, "JWT expired; refreshing Supabase session and retrying request")
-            auth.refreshCurrentSession()
-            true
-        } catch (refreshError: Exception) {
-            Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
+            restoreSupabaseSessionFromDurableCredential(credential)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            when (
+                resolveDurableRecoveryFailureAction(
+                    isAuthoritativeRejection = e is AuthoritativeDurableCredentialRejectionException
+                )
+            ) {
+                DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                    Log.w(
+                        TAG,
+                        "Durable credential was authoritatively rejected after JWT expiry; clearing credential",
+                        e
+                    )
+                    durableDeviceCredentialStore.clear()
+                    transitionToSessionLost()
+                }
+                DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
+                    Log.e(TAG, "Failed to restore Supabase session from durable credential after JWT expiry", e)
+                }
+            }
             false
+        }
+    }
+
+    private suspend fun restoreSupabaseSessionFromDurableCredential(
+        credential: DurableDeviceCredentialSnapshot? = null
+    ): Boolean {
+        val resolvedCredential = credential ?: durableDeviceCredentialStore.snapshot()
+        if (!resolvedCredential.isComplete) return false
+        try {
+            val result = durableDeviceSessionTransport.exchangeSession(
+                devicePublicId = resolvedCredential.devicePublicId.orEmpty(),
+                deviceSecret = resolvedCredential.deviceSecret.orEmpty()
+            )
+            auth.importAuthToken(result.accessToken, result.refreshToken)
+            return true
+        } catch (e: DurableDeviceSessionExchangeException) {
+            if (e.statusCode == 401) {
+                throw AuthoritativeDurableCredentialRejectionException(e.message.orEmpty())
+            }
+            throw e
         }
     }
 
@@ -491,6 +665,104 @@ internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): Au
     // real-account auth method.
     val normalizedEmail = email?.trim()?.takeIf { it.isNotBlank() } ?: return AuthState.SignedOut
     return AuthState.FullAccount(userId = normalizedUserId, email = normalizedEmail)
+}
+
+internal enum class NotAuthenticatedStartupAction {
+    REFRESH_LIVE_SESSION,
+    ATTEMPT_RETURNING_USER_RECOVERY,
+    TRANSITION_SIGNED_OUT
+}
+
+internal enum class JwtExpiryRecoveryAction {
+    ATTEMPT_DURABLE_RECOVERY,
+    REFRESH_LIVE_SESSION,
+    NO_RECOVERY_PATH
+}
+
+internal enum class AuthoritativeRefreshRejectionAction {
+    ATTEMPT_DURABLE_RECOVERY,
+    TRANSITION_SIGNED_OUT
+}
+
+internal enum class DurableRecoveryFailureAction {
+    KEEP_CURRENT_AUTH_STATE,
+    CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
+}
+
+internal enum class RefreshFailureAction {
+    ATTEMPT_DURABLE_RECOVERY,
+    TRANSITION_SIGNED_OUT,
+    KEEP_CURRENT_AUTH_STATE
+}
+
+internal fun resolveNotAuthenticatedStartupAction(
+    hasRefreshToken: Boolean,
+    isReturningUser: Boolean,
+    hasDurableCredential: Boolean
+): NotAuthenticatedStartupAction {
+    if (hasRefreshToken) return NotAuthenticatedStartupAction.REFRESH_LIVE_SESSION
+    if (hasDurableCredential) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
+    if (isReturningUser) return NotAuthenticatedStartupAction.ATTEMPT_RETURNING_USER_RECOVERY
+    return NotAuthenticatedStartupAction.TRANSITION_SIGNED_OUT
+}
+
+internal fun resolveJwtExpiryRecoveryAction(
+    hasRefreshToken: Boolean,
+    credential: DurableDeviceCredentialSnapshot,
+    ignoreCachedRefreshToken: Boolean = false
+): JwtExpiryRecoveryAction {
+    if (hasRefreshToken && !ignoreCachedRefreshToken) return JwtExpiryRecoveryAction.REFRESH_LIVE_SESSION
+    if (credential.isComplete) return JwtExpiryRecoveryAction.ATTEMPT_DURABLE_RECOVERY
+    return JwtExpiryRecoveryAction.NO_RECOVERY_PATH
+}
+
+internal fun resolveAuthoritativeRefreshRejectionAction(
+    hasDurableCredential: Boolean
+): AuthoritativeRefreshRejectionAction {
+    return if (hasDurableCredential) {
+        AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY
+    } else {
+        AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT
+    }
+}
+
+internal fun resolveDurableRecoveryFailureAction(
+    isAuthoritativeRejection: Boolean
+): DurableRecoveryFailureAction {
+    return if (isAuthoritativeRejection) {
+        DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
+    } else {
+        DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE
+    }
+}
+
+internal fun resolveRefreshFailureAction(
+    refreshError: Throwable,
+    hasDurableCredential: Boolean
+): RefreshFailureAction {
+    if (!refreshError.isAuthoritativeRefreshRejection()) {
+        return RefreshFailureAction.KEEP_CURRENT_AUTH_STATE
+    }
+
+    return when (
+        resolveAuthoritativeRefreshRejectionAction(
+            hasDurableCredential = hasDurableCredential
+        )
+    ) {
+        AuthoritativeRefreshRejectionAction.ATTEMPT_DURABLE_RECOVERY ->
+            RefreshFailureAction.ATTEMPT_DURABLE_RECOVERY
+        AuthoritativeRefreshRejectionAction.TRANSITION_SIGNED_OUT ->
+            RefreshFailureAction.TRANSITION_SIGNED_OUT
+    }
+}
+
+internal fun shouldAttemptDurableSessionRecovery(
+    hasRefreshToken: Boolean,
+    credential: DurableDeviceCredentialSnapshot,
+    ignoreCachedRefreshToken: Boolean
+): Boolean {
+    if (!credential.isComplete) return false
+    return !hasRefreshToken || ignoreCachedRefreshToken
 }
 
 private fun Throwable.isJwtExpiredError(): Boolean {

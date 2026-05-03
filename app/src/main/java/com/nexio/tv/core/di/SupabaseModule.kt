@@ -27,7 +27,9 @@ object SupabaseModule {
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY
         ) {
             install(Auth) {
-                alwaysAutoRefresh = true
+                // Route renewals through AuthManager so durable credential
+                // recovery/revoke remains the single session authority.
+                alwaysAutoRefresh = false
                 autoLoadFromStorage = true
                 autoSaveToStorage = true
                 enableLifecycleCallbacks = false
