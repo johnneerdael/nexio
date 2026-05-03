@@ -33,7 +33,7 @@ class HyperHdrFlatBufferReconnector(
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var loop: Job? = null
+    @Volatile private var loop: Job? = null
 
     @Volatile private var current: HyperHdrFlatBufferClient? = null
 

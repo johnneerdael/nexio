@@ -766,7 +766,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             // ===== HyperHDR ambilight state (scoped to this player init) =====
             var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
-            var hyperHdrFbClient: HyperHdrFlatBufferReconnector? = null
+            var hyperHdrFbReconnector: HyperHdrFlatBufferReconnector? = null
             var hyperHdrCurrentMode: CaptureMode? = null
 
             // Live-update the local cfg snapshot when the user changes Settings mid-session.
@@ -781,15 +781,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 if (!cfg.isUsable) return
 
                 // Stop any prior session before starting a new one.
-                hyperHdrFbClient?.close()
-                hyperHdrFbClient = null
+                hyperHdrFbReconnector?.close()
+                hyperHdrFbReconnector = null
 
                 val reconnector = HyperHdrFlatBufferReconnector(
                     host = cfg.host, port = cfg.port, priority = cfg.priority,
                     origin = "Nexio-HyperHDR",
                 )
                 reconnector.start()
-                hyperHdrFbClient = reconnector
+                hyperHdrFbReconnector = reconnector
+                Log.d("HyperHdrIntegration", "Reconnector started for ${cfg.host}:${cfg.port}, awaiting connect")
 
                 // Best-effort JSON HDR mode signal — failure is non-fatal (FlatBuffer reconnects independently).
                 runCatching {
@@ -811,8 +812,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             fun stopHyperHdrCapture() {
                 val player = _exoPlayer ?: return
                 player.setVideoEffects(emptyList())
-                hyperHdrFbClient?.close()
-                hyperHdrFbClient = null
+                hyperHdrFbReconnector?.close()
+                hyperHdrFbReconnector = null
                 hyperHdrCurrentMode = null
             }
 
@@ -994,7 +995,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         // ===== HyperHDR ambilight =====
                         if (!hyperHdrCfg.isUsable) {
                             // Still tear down if we somehow had a session running.
-                            if (hyperHdrFbClient != null) stopHyperHdrCapture()
+                            if (hyperHdrFbReconnector != null) stopHyperHdrCapture()
                         } else if (isPlaying) {
                             scope.launch {
                                 val cfg = hyperHdrCfg
