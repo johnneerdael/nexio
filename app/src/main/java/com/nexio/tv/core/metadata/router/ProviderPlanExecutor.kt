@@ -25,6 +25,10 @@ class ProviderPlanExecutor @Inject constructor() {
             return ProviderExecutionPlan(route = route, depth = depth, steps = emptyList())
         }
 
+        objectEntitySteps(route, depth)?.let { steps ->
+            return ProviderExecutionPlan(route = route, depth = depth, steps = steps)
+        }
+
         val steps = when (route.provider) {
             MetadataPrimaryProvider.TMDB -> tmdbSteps(route, depth)
             MetadataPrimaryProvider.TVDB -> tvdbSteps(route, depth)
@@ -50,6 +54,25 @@ class ProviderPlanExecutor @Inject constructor() {
         }
 
         return ProviderExecutionPlan(route = route, depth = depth, steps = steps)
+    }
+
+    private fun objectEntitySteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep>? {
+        if (depth != MetadataDepth.DETAIL_SECONDARY) return null
+        val parts = route.parentId.split(":")
+        if (parts.size < 3) return null
+        val provider = parts[0].lowercase()
+        val kind = parts[1].lowercase()
+        return when {
+            provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && kind == "person" ->
+                listOf(step(TmdbApiShapes.PERSON_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+            provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && kind == "company" ->
+                listOf(step(TmdbApiShapes.COMPANY_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+            provider == "tmdb" && route.provider == MetadataPrimaryProvider.TMDB && (kind == "network" || kind == "org") ->
+                listOf(step(TmdbApiShapes.NETWORK_DETAIL, MetadataPrimaryProvider.TMDB, ProviderPlanRole.SECONDARY))
+            provider == "tvdb" && route.provider == MetadataPrimaryProvider.TVDB && kind == "person" ->
+                listOf(step(TvdbApiShapes.PERSON_EXTENDED, MetadataPrimaryProvider.TVDB, ProviderPlanRole.SECONDARY))
+            else -> null
+        }
     }
 
     private fun tmdbSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {

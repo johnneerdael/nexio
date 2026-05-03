@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.cast
 import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.tvdb.TvdbPersonService
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PersonDetail
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -43,7 +44,9 @@ class CastDetailViewModelTvdbMigrationTest {
         val tvdbService = mockk<TvdbPersonService>(relaxed = true)
         coEvery {
             facade.fetchPersonDetail(
-                metadataRequest = match { it.contentId == "tvdb:person:287" },
+                metadataRequest = match {
+                    it.contentId == "tvdb:person:287" && it.contentType == ContentType.SERIES
+                },
                 personId = 287,
                 preferCrewCredits = any()
             )
@@ -65,7 +68,9 @@ class CastDetailViewModelTvdbMigrationTest {
 
         coVerify(exactly = 1) {
             facade.fetchPersonDetail(
-                metadataRequest = match { it.contentId == "tvdb:person:287" },
+                metadataRequest = match {
+                    it.contentId == "tvdb:person:287" && it.contentType == ContentType.SERIES
+                },
                 personId = 287,
                 preferCrewCredits = false
             )

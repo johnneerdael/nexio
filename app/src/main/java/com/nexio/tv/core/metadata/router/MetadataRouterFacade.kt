@@ -543,7 +543,7 @@ class MetadataRouterFacade(
      * that `metadata.route_decision` and `metadata.field_selected` trace events fire,
      * then delegates the exact-name search to [MetadataSecondaryRepository].
      *
-     * The Kitsu-bridge actor hydration path (see `hydrateKitsuNavigationTargetsAsync`)
+     * The secondary navigation-target hydration path
      * uses this to resolve TMDB person ids for actors that arrived via Kitsu metadata.
      * The [metadataRequest] is supplied by the caller for trace observability — there
      * is no canonical content-id for a "person by exact name" query.
@@ -565,8 +565,8 @@ class MetadataRouterFacade(
      * that `metadata.route_decision` and `metadata.field_selected` trace events fire,
      * then delegates the exact-name search to [MetadataSecondaryRepository].
      *
-     * Used by the Kitsu-bridge production-company hydration path to resolve TMDB
-     * company ids for studios that arrived via Kitsu metadata.
+     * Used by the secondary navigation-target hydration path to resolve TMDB
+     * company ids for organizations that arrived from non-TMDB metadata.
      */
     suspend fun findCompanyIdByExactName(
         metadataRequest: MetadataRequest,

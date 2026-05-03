@@ -50,10 +50,15 @@ class CastDetailViewModel @Inject constructor(
                 } else {
                     "tmdb:person:"
                 }
+                val requestContentType = if (provider.equals("tvdb", ignoreCase = true)) {
+                    ContentType.SERIES
+                } else {
+                    ContentType.MOVIE
+                }
                 val detail = metadataRouterFacade.fetchPersonDetail(
                     metadataRequest = MetadataRequest(
                         contentId = "$contentIdPrefix$personId",
-                        contentType = ContentType.MOVIE,  // sentinel; person-by-id has no canonical content type
+                        contentType = requestContentType,  // sentinel; person-by-id has no canonical content type
                         sourceContext = MetadataSourceContext(),
                         language = "eng",
                         depth = MetadataDepth.DETAIL_SECONDARY

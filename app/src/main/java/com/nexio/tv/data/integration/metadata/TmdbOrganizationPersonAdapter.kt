@@ -74,6 +74,7 @@ class TmdbOrganizationPersonAdapter @Inject constructor(
             TmdbApiShapes.COMPANY_DETAIL,
             TmdbApiShapes.NETWORK_DETAIL -> {
                 val orgId = MetadataProviderTargetIds.tmdbInt(route.targetIds[MetadataPrimaryProvider.TMDB])
+                    ?: route.parentId.substringAfterLast(':').toIntOrNull()
                     ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
                 organizationCandidate(step = step, orgId = orgId)
             }
@@ -95,6 +96,7 @@ class TmdbOrganizationPersonAdapter @Inject constructor(
         field: ResolvedField
     ): ProviderStepResult {
         val personId = MetadataProviderTargetIds.tmdbInt(route.targetIds[MetadataPrimaryProvider.TMDB])
+            ?: route.parentId.substringAfterLast(':').toIntOrNull()
             ?: return ProviderStepResult(step = step, candidate = emptyCandidate(this.provider))
         return personCandidate(
             personId = personId,

@@ -246,6 +246,28 @@ internal fun buildTmdbLocalizedCandidate(
             source?.logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
             source?.rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             source?.runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.genres?.takeIf { it.isNotEmpty() }?.let { put(ResolvedField.GENRES, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.releaseInfo?.let { put(ResolvedField.RELEASE_DATE, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.ageRating?.let { put(ResolvedField.AGE_RATING, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.countries?.takeIf { it.isNotEmpty() }?.let { put(ResolvedField.COUNTRIES, FieldValue(it, FieldOwner.PRIMARY)) }
+            source?.language?.let { put(ResolvedField.LANGUAGE, FieldValue(it, FieldOwner.PRIMARY)) }
+            val people = buildList {
+                source?.directorMembers?.let(::addAll)
+                source?.writerMembers?.let(::addAll)
+                source?.castMembers?.let(::addAll)
+            }.distinctBy { member ->
+                member.tmdbId?.toString() ?: "${member.name.lowercase()}|${member.character.orEmpty().lowercase()}"
+            }
+            if (people.isNotEmpty()) {
+                put(ResolvedField.CAST, FieldValue(people, FieldOwner.PRIMARY))
+            }
+            val organizations = buildList {
+                source?.productionCompanies?.let(::addAll)
+                source?.networks?.let(::addAll)
+            }
+            if (organizations.isNotEmpty()) {
+                put(ResolvedField.ORGANIZATION_LIST, FieldValue(organizations, FieldOwner.PRIMARY))
+            }
         },
         localization = buildMap {
             title?.let { put(ResolvedField.TITLE, it.toMetadataTrace()) }

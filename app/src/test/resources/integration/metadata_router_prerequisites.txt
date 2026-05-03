@@ -10,9 +10,13 @@ tmdb.movie.recommendations
 tmdb.tv.recommendations
 tmdb.movie.reviews
 tmdb.tv.reviews
+tmdb.person.detail
+tmdb.company.detail
+tmdb.network.detail
 tvdb.login
 tvdb.remoteid.lookup
 tvdb.series.extended
+tvdb.person.extended
 tvdb.series.translation
 tvdb.series.episodes.season_type
 tvdb.series.episodes.language
