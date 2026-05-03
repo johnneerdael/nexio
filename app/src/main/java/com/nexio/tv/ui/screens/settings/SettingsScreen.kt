@@ -91,7 +91,8 @@ private enum class IntegrationSettingsSection {
     AnimeSkip,
     SubtitleTranslation,
     PosterRatings,
-    OpenSubtitles
+    OpenSubtitles,
+    HyperHdr
 }
 
 internal enum class SettingsSectionDestination {
@@ -228,6 +229,7 @@ fun SettingsScreen(
     val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
     val integrationPosterRatingsFocusRequester = remember { FocusRequester() }
     val integrationOpenSubtitlesFocusRequester = remember { FocusRequester() }
+    val integrationHyperHdrFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
@@ -422,6 +424,7 @@ fun SettingsScreen(
                             subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
                             posterRatingsFocusRequester = integrationPosterRatingsFocusRequester,
                             openSubtitlesFocusRequester = integrationOpenSubtitlesFocusRequester,
+                            hyperHdrFocusRequester = integrationHyperHdrFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
                         )
                         SettingsCategory.ABOUT -> AboutSettingsContent(
@@ -657,6 +660,7 @@ private fun IntegrationSettingsContent(
     subtitleTranslationFocusRequester: FocusRequester,
     posterRatingsFocusRequester: FocusRequester,
     openSubtitlesFocusRequester: FocusRequester,
+    hyperHdrFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
@@ -671,7 +675,8 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
             IntegrationSettingsSection.PosterRatings,
-            IntegrationSettingsSection.OpenSubtitles
+            IntegrationSettingsSection.OpenSubtitles,
+            IntegrationSettingsSection.HyperHdr
         )
     }
     LaunchedEffect(isPrimaryProfile, selectedSection) {
@@ -699,6 +704,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
             IntegrationSettingsSection.PosterRatings -> posterRatingsFocusRequester
             IntegrationSettingsSection.OpenSubtitles -> openSubtitlesFocusRequester
+            IntegrationSettingsSection.HyperHdr -> hyperHdrFocusRequester
         }
         runCatching { requester.requestFocus() }
     }
@@ -818,6 +824,13 @@ private fun IntegrationSettingsContent(
                                     onClick = { onSelectSection(IntegrationSettingsSection.OpenSubtitles) }
                                 )
                             }
+                            item(key = "integration_hub_hyperhdr") {
+                                SettingsActionRow(
+                                    title = "HyperHDR",
+                                    subtitle = "Configure HyperHDR LED ambilight integration",
+                                    onClick = { onSelectSection(IntegrationSettingsSection.HyperHdr) }
+                                )
+                            }
                         }
                     }
                 }
@@ -900,6 +913,10 @@ private fun IntegrationSettingsContent(
             OpenSubtitlesSettingsContent(
                 initialFocusRequester = openSubtitlesFocusRequester
             )
+        }
+
+        IntegrationSettingsSection.HyperHdr -> {
+            com.nexio.tv.integrations.hyperhdr.ui.HyperHdrSettingsContent()
         }
     }
 }

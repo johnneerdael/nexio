@@ -37,6 +37,7 @@ import com.nexio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nexio.tv.ui.screens.settings.SettingsScreen
 import com.nexio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nexio.tv.ui.screens.settings.TraktScreen
+import com.nexio.tv.ui.screens.settings.HyperHdrSettingsScreen
 import com.nexio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nexio.tv.ui.screens.stream.StreamScreen
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
@@ -1038,6 +1039,10 @@ fun NexioNavHost(
             TraktScreen(
                 onBackPress = { navController.popBackStack() }
             )
+        }
+
+        composable(Screen.HyperHdrSettings.route) {
+            HyperHdrSettingsScreen()
         }
 
         composable(Screen.TmdbSettings.route) {
