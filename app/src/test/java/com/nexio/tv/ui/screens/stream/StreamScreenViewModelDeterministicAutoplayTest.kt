@@ -468,6 +468,44 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     @Test
+    fun `series 1080p x265 small encodes can satisfy early finish`() {
+        val decision = deterministicAutoplayEarlyFinishDecision(
+            winners = listOf(
+                remuxWinner(
+                    streamKey = "rd",
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    averageBitrateMbps = 2.0,
+                    filename = "Show.S05E10.1080p.x265.mkv",
+                    resolution = "1080p",
+                    releaseType = "small_encode"
+                ),
+                remuxWinner(
+                    streamKey = "pm",
+                    provider = DebridBenchmarkProvider.PREMIUMIZE,
+                    averageBitrateMbps = 2.1,
+                    filename = "Show.S05E10.1080p.HEVC.x265.mkv",
+                    resolution = "1080p",
+                    releaseType = "small_encode"
+                ),
+                remuxWinner(
+                    streamKey = "rd-2",
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    averageBitrateMbps = 2.2,
+                    filename = "Show.S05E10.1080p.x265.Group.mkv",
+                    resolution = "1080p",
+                    releaseType = "small_encode"
+                )
+            ),
+            request = movieRequest().copy(contentType = "series")
+        )
+
+        assertEquals(true, decision.triggered)
+        assertEquals("webdl_or_x265_small", decision.releaseType)
+        assertEquals(3, decision.matchingCount)
+        assertEquals(mapOf("real_debrid" to 2, "premiumize" to 1), decision.providerBuckets)
+    }
+
+    @Test
     fun `only scorer eligible winners count toward early finish`() {
         val eligibleWinners = listOf(
             remuxWinner("rd", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Eligible.One.mkv"),
@@ -566,6 +604,39 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         )
 
         assertEquals("secondary", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
+    }
+
+    @Test
+    fun `deterministic autoplay candidate selection skips unresolved primary and tries next ranked winner`() = runBlocking {
+        val cards = listOf(
+            scenarioCard("primary", providerId = "RD"),
+            scenarioCard("secondary", providerId = "PM"),
+            scenarioCard("tertiary", providerId = "RD")
+        )
+        val event = autoplayDecisionEvent(
+            winners = listOf(
+                remuxWinner("primary", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Primary.2160p.REMUX.mkv"),
+                remuxWinner("secondary", DebridBenchmarkProvider.PREMIUMIZE, 55.0, "Secondary.2160p.REMUX.mkv"),
+                remuxWinner("tertiary", DebridBenchmarkProvider.REAL_DEBRID, 50.0, "Tertiary.2160p.REMUX.mkv")
+            ),
+            selected = remuxWinner("primary", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Primary.2160p.REMUX.mkv")
+        )
+        val visitedResolve = mutableListOf<String>()
+
+        val selected = selectDeterministicAutoplayCandidate(
+            event = event,
+            eligibleStreams = cards,
+            maxCandidates = 3,
+            isPlayable = { true },
+            isResolveReady = { item ->
+                val key = item.stream.wrappedOriginalStreamKey.orEmpty()
+                visitedResolve += key
+                key != "primary"
+            }
+        )
+
+        assertEquals("secondary", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
+        assertEquals(listOf("primary", "secondary"), visitedResolve)
     }
 
     @Test
@@ -855,8 +926,11 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         streamKey: String,
         provider: DebridBenchmarkProvider,
         averageBitrateMbps: Double,
-        filename: String
+        filename: String,
+        resolution: String = "2160p",
+        releaseType: String = "remux"
     ): ShadowStreamDecision {
+        val resolutionTier = if (resolution.equals("2160p", ignoreCase = true)) "uhd_2160" else "fhd_1080"
         return ShadowStreamDecision(
             streamKey = streamKey,
             parsed = ShadowParsedStreamFacts(filename = filename),
@@ -868,12 +942,12 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             suitabilityRatio = 5.0,
             requiredMbps = averageBitrateMbps,
             safeBudgetMbps = 500.0,
-            resolution = "2160p",
+            resolution = resolution,
             hdrTags = emptyList(),
             audioTags = emptyList(),
             breakdown = ShadowDecisionBreakdown(
                 averageBitrateMbps = averageBitrateMbps,
-                releaseType = "remux",
+                releaseType = releaseType,
                 lowQuality4k = false,
                 realismRatio = 1.0,
                 content = ShadowContentScoreBreakdown(
@@ -886,8 +960,8 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                     synergyPoints = 0,
                     penaltyPoints = 0,
                     lowQuality4kPenalty = 0,
-                    resolutionTier = "uhd_2160",
-                    releaseTypeTier = "remux",
+                    resolutionTier = resolutionTier,
+                    releaseTypeTier = releaseType,
                     codecTier = "hevc_hw",
                     hdrTier = "sdr",
                     audioTier = "other",

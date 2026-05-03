@@ -80,6 +80,7 @@ private const val DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT = 3
 private const val AUTOPLAY_MIN_CANDIDATE_POOL = 5
 private const val AUTOPLAY_MIN_QUALITY_SCORE = 10
 private const val AUTOPLAY_EARLY_FINISH_FALLBACK_MS = 15_000L
+internal const val AUTOPLAY_RESOLVE_BUDGET_MS = 4_000L
 private const val MAX_FALLBACK_CANDIDATES = 5
 private const val DETERMINISTIC_AUTOPLAY_BLOCKED_RELEASE_MARKER = "1winstudio"
 @HiltViewModel
@@ -400,7 +401,17 @@ class StreamScreenViewModel @Inject constructor(
                                 regexPattern = playerSettings.streamAutoPlayRegex,
                                 source = playerSettings.streamAutoPlaySource,
                                 installedAddonNames = installedAddonOrder.toSet(),
-                                selectedAddons = playerSettings.streamAutoPlaySelectedAddons
+                                selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                placeholderPredicate = if (playerSettings.skipPlaceholderStreamsEnabled) {
+                                    { stream ->
+                                        val url = stream.getStreamUrl()
+                                        !url.isNullOrBlank() &&
+                                            CometProxyUrlResolver.lastResolutionFor(url) ==
+                                            com.nexio.tv.core.player.ProxyResolution.Placeholder
+                                    }
+                                } else {
+                                    { false }
+                                }
                             )
                         }
                         val organizedStreams = StreamPresentationEngine.organize(
@@ -1107,6 +1118,27 @@ class StreamScreenViewModel @Inject constructor(
         return result.playbackInfo
     }
 
+    private fun prewarmTopAutoplayCandidatesForResolveBudget(
+        event: ShadowAutoPlayDecisionEvent,
+        eligibleStreams: List<StreamCardModel>
+    ) {
+        event.winners
+            .asSequence()
+            .mapNotNull { decision ->
+                eligibleStreams.firstOrNull { it.matchesShadowStreamKey(decision.streamKey) }
+            }
+            .take(DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT)
+            .forEach { item ->
+                val url = item.stream.getStreamUrl() ?: return@forEach
+                val addonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(item.stream.addonBaseUrl)
+                CometProxyUrlResolver.prewarm(
+                    url,
+                    item.stream.behaviorHints?.proxyHeaders?.request,
+                    addonHost
+                )
+            }
+    }
+
     private fun prewarmCometProxyCandidates(playbackInfo: StreamPlaybackInfo) {
         val primaryAddonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(playbackInfo.addonBaseUrl)
         playbackInfo.url?.let {
@@ -1157,6 +1189,9 @@ class StreamScreenViewModel @Inject constructor(
         if (autoPlayFirstScoringAtMs == 0L && event.winners.isNotEmpty()) {
             autoPlayFirstScoringAtMs = System.currentTimeMillis()
         }
+
+        prewarmTopAutoplayCandidatesForResolveBudget(event = event, eligibleStreams = eligibleStreams)
+
         val earlyFinishFallbackElapsed = if (autoPlayFirstScoringAtMs > 0L) {
             System.currentTimeMillis() - autoPlayFirstScoringAtMs
         } else {
@@ -1178,6 +1213,7 @@ class StreamScreenViewModel @Inject constructor(
                     "reason=${earlyFinishDecision.reason} count=${earlyFinishDecision.matchingCount} " +
                     "resolution=${earlyFinishDecision.resolution} releaseType=${earlyFinishDecision.releaseType} " +
                     "hasRemux=${earlyFinishDecision.hasRemux} " +
+                    "providerBuckets=${earlyFinishDecision.providerBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
                     "fallbackElapsedMs=$earlyFinishFallbackElapsed fallbackReached=$earlyFinishFallbackReached"
             )
         }
@@ -1185,6 +1221,7 @@ class StreamScreenViewModel @Inject constructor(
             return null
         }
 
+        val resolveBudgetDeadlineMs = System.currentTimeMillis() + AUTOPLAY_RESOLVE_BUDGET_MS
         val selectedCandidate = selectDeterministicAutoplayCandidate(
             event = event,
             eligibleStreams = eligibleStreams,
@@ -1200,7 +1237,10 @@ class StreamScreenViewModel @Inject constructor(
                     )
                 }
                 playable
-            }
+            },
+            isResolveReady = resolveReadyPredicateWithDeadline(
+                deadlineEpochMs = resolveBudgetDeadlineMs
+            )
         ) ?: return null
 
         return buildStreamPlaybackInfo(
@@ -1548,7 +1588,8 @@ internal suspend fun selectDeterministicAutoplayCandidate(
     event: ShadowAutoPlayDecisionEvent,
     eligibleStreams: List<StreamCardModel>,
     maxCandidates: Int = DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT,
-    isPlayable: suspend (StreamCardModel) -> Boolean
+    isPlayable: suspend (StreamCardModel) -> Boolean,
+    isResolveReady: suspend (StreamCardModel) -> Boolean = { true }
 ): DeterministicAutoplayCandidateSelection? {
     val allowedCandidates = event.winners
         .mapNotNull { decision ->
@@ -1562,6 +1603,7 @@ internal suspend fun selectDeterministicAutoplayCandidate(
 
     for (candidate in candidates) {
         if (!isPlayable(candidate)) continue
+        if (!isResolveReady(candidate)) continue
         return DeterministicAutoplayCandidateSelection(
             selectedItem = candidate,
             fallbackCandidateItems = allowedCandidates
@@ -1569,6 +1611,69 @@ internal suspend fun selectDeterministicAutoplayCandidate(
     }
 
     return null
+}
+
+internal fun resolveReadyPredicateWithDeadline(
+    deadlineEpochMs: Long,
+    nowMs: () -> Long = { System.currentTimeMillis() },
+    pollSleepMs: Long = 50L
+): suspend (StreamCardModel) -> Boolean = predicate@{ candidate ->
+    val streamKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
+    val url = candidate.stream.getStreamUrl()
+        ?: run {
+            Log.i(TAG, "AUTOPLAY_RESOLVE_CANDIDATE_VISITED stream=$streamKey verdict=no_url waitedMs=0 outcome=skipped")
+            return@predicate false
+        }
+    val startedAtMs = nowMs()
+    val initialVerdict = CometProxyUrlResolver.lastResolutionFor(url)
+    val isProxyEligible = CometProxyUrlResolver.isCometProxy(
+        url,
+        candidate.stream.addonBaseUrl?.let { CometProxyUrlResolver.hostOfAddonBaseUrl(it) }
+    )
+    Log.i(
+        TAG,
+        "AUTOPLAY_RESOLVE_CANDIDATE_VISITED stream=$streamKey " +
+            "verdict=${initialVerdict?.let { it::class.simpleName } ?: "null"} " +
+            "isProxyEligible=$isProxyEligible " +
+            "budgetRemainingMs=${(deadlineEpochMs - startedAtMs).coerceAtLeast(0)}"
+    )
+    while (true) {
+        when (val verdict = CometProxyUrlResolver.lastResolutionFor(url)) {
+            is com.nexio.tv.core.player.ProxyResolution.Redirected,
+            com.nexio.tv.core.player.ProxyResolution.NotEligible -> {
+                Log.i(
+                    TAG,
+                    "AUTOPLAY_RESOLVE_CANDIDATE_READY stream=$streamKey " +
+                        "verdict=${verdict::class.simpleName} waitedMs=${nowMs() - startedAtMs}"
+                )
+                return@predicate true
+            }
+            com.nexio.tv.core.player.ProxyResolution.Placeholder,
+            com.nexio.tv.core.player.ProxyResolution.ResolveFailed -> {
+                Log.i(
+                    TAG,
+                    "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=$streamKey " +
+                        "reason=resolver_terminal_non_redirected verdict=${verdict::class.simpleName} " +
+                        "waitedMs=${nowMs() - startedAtMs}"
+                )
+                return@predicate false
+            }
+            null -> {
+                if (nowMs() >= deadlineEpochMs) {
+                    Log.i(
+                        TAG,
+                        "AUTOPLAY_RESOLVE_CANDIDATE_SKIPPED stream=$streamKey " +
+                            "reason=resolve_budget_exhausted isProxyEligible=$isProxyEligible " +
+                            "waitedMs=${nowMs() - startedAtMs}"
+                    )
+                    return@predicate false
+                }
+                delay(pollSleepMs)
+            }
+        }
+    }
+    @Suppress("UNREACHABLE_CODE")
+    false
 }
 
 private fun StreamCardModel.matchesShadowStreamKey(streamKey: String?): Boolean {
@@ -1623,14 +1728,20 @@ internal data class DeterministicEarlyFinishDecision(
     val matchingCount: Int,
     val resolution: String,
     val releaseType: String,
-    val hasRemux: Boolean
+    val hasRemux: Boolean,
+    val providerBuckets: Map<String, Int> = emptyMap()
 )
+
+private fun isX265TaggedFilename(filename: String?): Boolean {
+    return filename?.contains("x265", ignoreCase = true) == true
+}
 
 internal fun deterministicAutoplayEarlyFinishDecision(
     winners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>,
     request: ShadowRequestContext
 ): DeterministicEarlyFinishDecision {
     val countedWinners = winners.distinctBy(::deterministicEarlyFinishCountKey)
+    val providerBuckets = countedWinners.groupingBy { it.provider.storageKey }.eachCount()
     if (countedWinners.isEmpty()) {
         return DeterministicEarlyFinishDecision(
             triggered = false,
@@ -1638,7 +1749,8 @@ internal fun deterministicAutoplayEarlyFinishDecision(
             matchingCount = 0,
             resolution = "none",
             releaseType = "none",
-            hasRemux = false
+            hasRemux = false,
+            providerBuckets = providerBuckets
         )
     }
     val has4k = countedWinners.any { it.resolution.equals("2160p", ignoreCase = true) }
@@ -1677,7 +1789,8 @@ internal fun deterministicAutoplayEarlyFinishDecision(
                 matchingCount = remuxCount,
                 resolution = targetResolution,
                 releaseType = "remux",
-                hasRemux = hasRemux
+                hasRemux = hasRemux,
+                providerBuckets = providerBuckets
             )
         }
         val localHasRemux = countedWinners.any {
@@ -1685,14 +1798,26 @@ internal fun deterministicAutoplayEarlyFinishDecision(
                 it.breakdown.releaseType == "remux"
         }
         val webdlCount = countMatching(targetResolution, "webdl", webdlThreshold)
-        if (!localHasRemux && webdlCount >= 3) {
+        val x265SmallEncodeCount = if (!is4k && !movie) {
+            countedWinners.count { candidate ->
+                candidate.resolution.equals(targetResolution, ignoreCase = true) &&
+                    candidate.breakdown.releaseType == "small_encode" &&
+                    candidate.breakdown.averageBitrateMbps >= 1.0 &&
+                    isX265TaggedFilename(candidate.parsed.filename)
+            }
+        } else {
+            0
+        }
+        val combinedCount = webdlCount + x265SmallEncodeCount
+        if (!localHasRemux && combinedCount >= 3) {
             return DeterministicEarlyFinishDecision(
                 triggered = true,
                 reason = "threshold_met",
-                matchingCount = webdlCount,
+                matchingCount = combinedCount,
                 resolution = targetResolution,
-                releaseType = "webdl",
-                hasRemux = hasRemux
+                releaseType = if (x265SmallEncodeCount > 0) "webdl_or_x265_small" else "webdl",
+                hasRemux = hasRemux,
+                providerBuckets = providerBuckets
             )
         }
         return null
@@ -1710,7 +1835,8 @@ internal fun deterministicAutoplayEarlyFinishDecision(
         matchingCount = 0,
         resolution = resolution,
         releaseType = if (hasRemux) "remux" else "webdl",
-        hasRemux = hasRemux
+        hasRemux = hasRemux,
+        providerBuckets = providerBuckets
     )
 }
 
