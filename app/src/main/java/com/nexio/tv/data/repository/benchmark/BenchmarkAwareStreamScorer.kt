@@ -579,7 +579,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         )
         val hdrTier = hdrPolicy.effectiveHdrTier
         val hdrSupportTier = hdrPolicy.hdrSupportTier
-        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, device)
+        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, releaseType, device)
         val audioTier = audioDecision.effectiveTier
         val audioSupportTier = audioDecision.supportStatus
         val codecPoints = config.contentRewards.codec.getValue(codecTier)
@@ -963,9 +963,10 @@ private fun ShadowContentScoreBreakdown.total(): Int {
 
 private fun resolveAudioScoringDecision(
     tags: List<String>,
+    releaseType: ShadowReleaseType,
     device: DeviceCapabilitySnapshot?
 ): ShadowAudioScoringDecision {
-    val candidates = detectAudioTierCandidates(tags)
+    val candidates = detectAudioTierCandidates(tags, releaseType)
     if (candidates.isEmpty()) {
         return ShadowAudioScoringDecision(
             effectiveTier = ShadowAudioTier.OTHER,
@@ -990,7 +991,10 @@ private fun resolveAudioScoringDecision(
     )
 }
 
-private fun detectAudioTierCandidates(tags: List<String>): List<ShadowAudioTier> {
+private fun detectAudioTierCandidates(
+    tags: List<String>,
+    releaseType: ShadowReleaseType
+): List<ShadowAudioTier> {
     val normalized = tags.map { it.lowercase(Locale.US) }
     val hasAtmos = normalized.any { it.contains("atmos") }
     val hasTrueHd = normalized.any { it.contains("truehd") }
@@ -999,24 +1003,42 @@ private fun detectAudioTierCandidates(tags: List<String>): List<ShadowAudioTier>
     val hasDdp = normalized.any { it.contains("dd+") || it.contains("eac3") || it.contains("ddp") }
     val hasAc3 = normalized.any { it == "dd" || it.contains("ac3") }
     val hasDts = normalized.any { it == "dts" }
+    val isLosslessReleaseType = releaseType == ShadowReleaseType.REMUX ||
+        releaseType == ShadowReleaseType.BLURAY_ENCODE
 
     return buildList {
-        if (hasAtmos && hasTrueHd) {
-            add(ShadowAudioTier.TRUEHD_ATMOS)
+        when {
+            hasAtmos && hasTrueHd -> {
+                add(ShadowAudioTier.TRUEHD_ATMOS)
+                add(ShadowAudioTier.TRUEHD)
+            }
+            hasAtmos && hasDdp -> {
+                add(ShadowAudioTier.DDP_ATMOS)
+                add(ShadowAudioTier.DDP)
+            }
+            hasAtmos && isLosslessReleaseType -> {
+                add(ShadowAudioTier.TRUEHD_ATMOS)
+                add(ShadowAudioTier.TRUEHD)
+            }
+            hasAtmos -> {
+                add(ShadowAudioTier.DDP_ATMOS)
+                add(ShadowAudioTier.DDP)
+            }
         }
-        if (hasAtmos && hasDdp) {
-            add(ShadowAudioTier.DDP_ATMOS)
+
+        if (hasDtsX) {
+            add(ShadowAudioTier.DTSX)
+            add(ShadowAudioTier.DTSHD)
+            add(ShadowAudioTier.DTS)
+        } else if (hasDtsHd) {
+            add(ShadowAudioTier.DTSHD)
+            add(ShadowAudioTier.DTS)
         }
-        if (hasAtmos && !hasTrueHd && !hasDdp) {
-            add(ShadowAudioTier.DDP_ATMOS)
-            add(ShadowAudioTier.TRUEHD_ATMOS)
-        }
-        if (hasDtsX) add(ShadowAudioTier.DTSX)
-        if (hasTrueHd) add(ShadowAudioTier.TRUEHD)
-        if (hasDtsHd) add(ShadowAudioTier.DTSHD)
-        if (hasDdp) add(ShadowAudioTier.DDP)
+
+        if (hasTrueHd && !hasAtmos) add(ShadowAudioTier.TRUEHD)
+        if (hasDdp && !hasAtmos) add(ShadowAudioTier.DDP)
         if (hasAc3) add(ShadowAudioTier.AC3)
-        if (hasDts) add(ShadowAudioTier.DTS)
+        if (hasDts && !hasDtsHd && !hasDtsX) add(ShadowAudioTier.DTS)
     }.distinct()
 }
 
@@ -1026,11 +1048,11 @@ private fun audioTierSupported(
 ): Boolean {
     val output = device?.audioOutput ?: return true
     return when (tier) {
-        ShadowAudioTier.TRUEHD_ATMOS -> output.truehd.passthroughLikely
+        ShadowAudioTier.TRUEHD_ATMOS -> output.atmos.passthroughLikely
         ShadowAudioTier.DTSX -> output.dtsx.passthroughLikely
         ShadowAudioTier.TRUEHD -> output.truehd.passthroughLikely
         ShadowAudioTier.DTSHD -> output.dtshd.passthroughLikely
-        ShadowAudioTier.DDP_ATMOS -> output.atmos.passthroughLikely || output.eac3.passthroughLikely
+        ShadowAudioTier.DDP_ATMOS -> output.atmos.passthroughLikely
         ShadowAudioTier.DDP -> output.eac3.passthroughLikely
         ShadowAudioTier.AC3 -> output.ac3.passthroughLikely
         ShadowAudioTier.DTS -> output.dts.passthroughLikely
