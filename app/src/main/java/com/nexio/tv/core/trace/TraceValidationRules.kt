@@ -55,6 +55,31 @@ object TraceValidationRules {
         }
     }
 
+    val SuppressedStaleCacheHitSuppressesNetwork: TraceValidationRule = object : TraceValidationRule {
+        override val id = "SuppressedStaleCacheHitSuppressesNetwork"
+        override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> {
+            val failures = mutableListOf<TraceValidationFailure>()
+            val suppressedStaleHitOps = mutableSetOf<String>()
+            events.forEach { e ->
+                val p = map(e)
+                when (e.eventType) {
+                    "runtime.cache_decision" -> {
+                        if (p["decision"] == "STALE_HIT" && p["networkSuppressed"] == true) {
+                            (p["runtimeOperationId"] as? String)?.let { suppressedStaleHitOps += it }
+                        }
+                    }
+                    "http.request" -> {
+                        val opId = p["runtimeOperationId"] as? String
+                        if (opId != null && opId in suppressedStaleHitOps) {
+                            failures += fail(this, e, "http.request issued for op=$opId after suppressed stale cache STALE_HIT")
+                        }
+                    }
+                }
+            }
+            return failures
+        }
+    }
+
     val RuntimeCallHasApiShapeId: TraceValidationRule = object : TraceValidationRule {
         override val id = "RuntimeCallHasApiShapeId"
         override fun apply(events: List<TraceEventEnvelope<*>>): List<TraceValidationFailure> =
@@ -405,6 +430,7 @@ object TraceValidationRules {
         PreviewMustNotRouteOrNetwork,
         RouteDecisionUsedInputs,
         FreshCacheHitSuppressesNetwork,
+        SuppressedStaleCacheHitSuppressesNetwork,
         RuntimeCallHasApiShapeId,
         NetworkCallHasRuntimeOperationId,
         ProfileBoundCallHasProfileHash,

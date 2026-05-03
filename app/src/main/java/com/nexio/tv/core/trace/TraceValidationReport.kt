@@ -24,6 +24,17 @@ data class TraceValidationWarning(
     }
 }
 
+data class TraceCacheProofEntry(
+    val runtimeOperationId: String,
+    val provider: String?,
+    val apiShapeId: String?,
+    val operationKey: String?,
+    val cacheKey: String?,
+    val cacheDecision: String?,
+    val networkSuppressed: Boolean?,
+    val httpRequestCount: Long
+)
+
 data class TraceValidationReport(
     val verdict: TraceVerdict,
     val failures: List<TraceValidationFailure>,
@@ -33,5 +44,6 @@ data class TraceValidationReport(
     val cacheHits: Long,
     val cacheMisses: Long,
     val staleHits: Long,
-    val routeDecisions: Long
+    val routeDecisions: Long,
+    val cacheProofs: List<TraceCacheProofEntry> = emptyList()
 )

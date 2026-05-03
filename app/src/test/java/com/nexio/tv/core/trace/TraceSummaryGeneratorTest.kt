@@ -33,6 +33,22 @@ class TraceSummaryGeneratorTest {
             routeDecisions = 0L
         )
 
+    private fun reportWithCacheProof() =
+        report().copy(
+            cacheProofs = listOf(
+                TraceCacheProofEntry(
+                    runtimeOperationId = "op_kitsu_1",
+                    provider = "KITSU",
+                    apiShapeId = "kitsu.anime.detail",
+                    operationKey = "anime:1",
+                    cacheKey = "metadata:KITSU:kitsu.anime.detail:1",
+                    cacheDecision = "HIT",
+                    networkSuppressed = true,
+                    httpRequestCount = 0L
+                )
+            )
+        )
+
     @Test
     fun `JSON includes verdict counters and per-provider counts`() {
         val events = listOf(
@@ -53,6 +69,27 @@ class TraceSummaryGeneratorTest {
         assertTrue("title in MD", md.contains("# Runtime Trace Summary"))
         assertTrue("counters section", md.contains("## Counters"))
         assertTrue("providers section", md.contains("## Providers"))
+    }
+
+    @Test
+    fun `JSON includes cache proofs`() {
+        val json = generator.toJson(reportWithCacheProof(), emptyList())
+        assertTrue("cache proofs in JSON: $json", json.contains("\"cacheProofs\""))
+        assertTrue("runtime operation id in JSON: $json", json.contains("\"runtimeOperationId\":\"op_kitsu_1\""))
+        assertTrue("http request count in JSON: $json", json.contains("\"httpRequestCount\":0"))
+    }
+
+    @Test
+    fun `Markdown includes cache proof section`() {
+        val md = generator.toMarkdown(reportWithCacheProof(), emptyList())
+        assertTrue("cache proof section in MD: $md", md.contains("## Cache Proof"))
+        assertTrue("provider in MD: $md", md.contains("KITSU"))
+        assertTrue("api shape in MD: $md", md.contains("kitsu.anime.detail"))
+        assertTrue("operation key in MD: $md", md.contains("anime:1"))
+        assertTrue("decision in MD: $md", md.contains("HIT"))
+        assertTrue("network suppressed in MD: $md", md.contains("networkSuppressed=true"))
+        assertTrue("http requests in MD: $md", md.contains("httpRequests=0"))
+        assertTrue("cache key in MD: $md", md.contains("metadata:KITSU:kitsu.anime.detail:1"))
     }
 
     @Test

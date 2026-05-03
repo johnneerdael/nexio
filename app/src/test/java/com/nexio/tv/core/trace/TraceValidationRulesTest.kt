@@ -64,6 +64,34 @@ class TraceValidationRulesTest {
     }
 
     @Test
+    fun `SuppressedStaleCacheHitSuppressesNetwork fires when http_request follows suppressed STALE_HIT for same op`() {
+        val rule = TraceValidationRules.SuppressedStaleCacheHitSuppressesNetwork
+        val events = listOf(
+            envelope("runtime.cache_decision", 1L, mapOf(
+                "decision" to "STALE_HIT",
+                "networkSuppressed" to true,
+                "runtimeOperationId" to "op_1"
+            )),
+            envelope("http.request", 2L, mapOf("runtimeOperationId" to "op_1"))
+        )
+        assertFires(rule, events)
+    }
+
+    @Test
+    fun `SuppressedStaleCacheHitSuppressesNetwork is silent when stale hit did not suppress network`() {
+        val rule = TraceValidationRules.SuppressedStaleCacheHitSuppressesNetwork
+        val events = listOf(
+            envelope("runtime.cache_decision", 1L, mapOf(
+                "decision" to "STALE_HIT",
+                "networkSuppressed" to false,
+                "runtimeOperationId" to "op_1"
+            )),
+            envelope("http.request", 2L, mapOf("runtimeOperationId" to "op_1"))
+        )
+        assertSilent(rule, events)
+    }
+
+    @Test
     fun `RuntimeCallHasApiShapeId fires when operation_start lacks apiShapeId`() {
         val rule = TraceValidationRules.RuntimeCallHasApiShapeId
         assertFires(rule, listOf(envelope("runtime.operation_start", 1L, mapOf("apiShapeId" to ""))))
@@ -210,7 +238,7 @@ class TraceValidationRulesTest {
 
     @Test
     fun `ALL contains exactly 20 rules`() {
-        assertEquals(20, TraceValidationRules.ALL.size)
+        assertEquals(21, TraceValidationRules.ALL.size)
     }
 
     // ——— F2-I-05: EXPIRED_MISS shape ——————————————————————————————————————
