@@ -20,6 +20,9 @@ class TvLoginExchangeTransportTest {
                     {
                       "access_token": "new-access-token",
                       "refresh_token": "new-refresh-token",
+                      "device_public_id": "device-public-id",
+                      "device_secret": "device-secret",
+                      "display_name": "Living Room TV",
                       "token_type": "bearer",
                       "expires_in": 3600
                     }
@@ -51,6 +54,8 @@ class TvLoginExchangeTransportTest {
         )
         assertEquals("new-access-token", result.accessToken)
         assertEquals("new-refresh-token", result.refreshToken)
+        assertEquals("device-public-id", result.devicePublicId)
+        assertEquals("device-secret", result.deviceSecret)
 
         server.shutdown()
     }
@@ -66,6 +71,9 @@ class TvLoginExchangeTransportTest {
                     {
                       "access_token": "new-access-token",
                       "refresh_token": "new-refresh-token",
+                      "device_public_id": "device-public-id",
+                      "device_secret": "device-secret",
+                      "display_name": "Living Room TV",
                       "token_type": "bearer",
                       "expires_in": 3600
                     }
@@ -90,6 +98,8 @@ class TvLoginExchangeTransportTest {
         assertEquals("/functions/v1/tv-logins-exchange", request.path)
         assertEquals("new-access-token", result.accessToken)
         assertEquals("new-refresh-token", result.refreshToken)
+        assertEquals("device-public-id", result.devicePublicId)
+        assertEquals("device-secret", result.deviceSecret)
 
         server.shutdown()
     }
