@@ -207,7 +207,9 @@ class BenchmarkAwareScoringHarnessTest {
                 dtsSupported = false,
                 dtsPassthrough = false,
                 dtshdSupported = false,
-                dtshdPassthrough = false
+                dtshdPassthrough = false,
+                atmosSupported = false,
+                atmosPassthrough = false
             )
         )
 
@@ -216,6 +218,82 @@ class BenchmarkAwareScoringHarnessTest {
             "unsupported",
             event.winners.first { it.streamKey == "truehd|RD" }.breakdown.content.audioSupportTier
         )
+    }
+
+    @Test
+    fun `webdl atmos without container tag falls back to ddp when atmos passthrough is absent`() {
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = shadowRequest("webdl-atmos"),
+            streams = listOf(
+                BenchmarkAwareScoringScenarioStream(
+                    streamKey = "webdl-atmos",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "WEB-DL",
+                    encode = "HEVC",
+                    sizeBytes = 12L * 1024L * 1024L * 1024L,
+                    durationMs = 120L * 60_000L,
+                    visualTags = emptyList(),
+                    audioTags = listOf("Atmos")
+                ).toStreamCardModel()
+            ),
+            manualBitrateCap = 200.0,
+            device = deviceSnapshot(
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false,
+                atmosSupported = false,
+                atmosPassthrough = false
+            )
+        )
+
+        assertEquals("ddp", event.selected?.breakdown?.content?.audioTier)
+        assertEquals("supported", event.selected?.breakdown?.content?.audioSupportTier)
+    }
+
+    @Test
+    fun `remux atmos without container tag falls back to truehd not ddp`() {
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = shadowRequest("remux-atmos"),
+            streams = listOf(
+                BenchmarkAwareScoringScenarioStream(
+                    streamKey = "remux-atmos",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = 12L * 1024L * 1024L * 1024L,
+                    durationMs = 120L * 60_000L,
+                    visualTags = emptyList(),
+                    audioTags = listOf("Atmos")
+                ).toStreamCardModel()
+            ),
+            manualBitrateCap = 200.0,
+            device = deviceSnapshot(
+                truehdSupported = true,
+                truehdPassthrough = true,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false,
+                atmosSupported = false,
+                atmosPassthrough = false
+            )
+        )
+
+        assertEquals("truehd", event.selected?.breakdown?.content?.audioTier)
+        assertEquals("supported", event.selected?.breakdown?.content?.audioSupportTier)
     }
 
     @Test
@@ -520,6 +598,18 @@ class BenchmarkAwareScoringHarnessTest {
                 dtshd = AudioEncodingSupport(dtshdSupported, dtshdPassthrough)
             ),
             capturedAtMs = 40L
+        )
+    }
+
+    private fun shadowRequest(requestId: String): ShadowRequestContext {
+        return ShadowRequestContext(
+            requestId = requestId,
+            videoId = "tt123",
+            contentType = "movie",
+            title = "Example",
+            season = null,
+            episode = null,
+            runtimeMinutes = 120
         )
     }
 
