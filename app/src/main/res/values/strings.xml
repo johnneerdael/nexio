@@ -695,16 +695,10 @@
     <string name="tmdb_catalogs_enabled_count">%1$d enabled</string>
     <string name="tmdb_adult_content_title">Enable adult content</string>
     <string name="tmdb_adult_content_subtitle">Include adult titles in TMDB search and TMDB catalogs.</string>
-    <string name="tmdb_digital_release_filter_title">Digital releases only</string>
-    <string name="tmdb_digital_release_filter_subtitle">Hide unreleased movies from the latest releases catalog.</string>
     <string name="tmdb_catalog_trending_movies">Trending Movies</string>
     <string name="tmdb_catalog_trending_movies_subtitle">Movies with high current activity on TMDB.</string>
     <string name="tmdb_catalog_trending_series">Trending Series</string>
     <string name="tmdb_catalog_trending_series_subtitle">Series with high current activity on TMDB.</string>
-    <string name="tmdb_catalog_latest_releases_movies">Latest Releases Movies</string>
-    <string name="tmdb_catalog_latest_releases_movies_subtitle">Recently released movies from TMDB.</string>
-    <string name="tmdb_catalog_latest_releases_series">Latest Releases Series</string>
-    <string name="tmdb_catalog_latest_releases_series_subtitle">Recently released series from TMDB.</string>
     <string name="tmdb_catalog_popular_movies">Popular Movies</string>
     <string name="tmdb_catalog_popular_movies_subtitle">Movies with high long-term popularity on TMDB.</string>
     <string name="tmdb_catalog_popular_series">Popular Series</string>
