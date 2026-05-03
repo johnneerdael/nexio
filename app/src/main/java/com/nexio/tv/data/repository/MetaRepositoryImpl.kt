@@ -76,8 +76,16 @@ class MetaRepositoryImpl @Inject constructor(
 
         emit(NetworkResult.Loading)
 
+        val addonManifest = findInstalledAddonForBaseUrl(addonBaseUrl)
         for (candidateType in typeCandidates) {
             for (candidateId in idCandidates) {
+                if (addonManifest != null && !addonManifest.supportsMetaType(candidateType, candidateId)) {
+                    Log.d(
+                        TAG,
+                        "Skipping meta fetch addonId=${addonManifest.id} type=$candidateType id=$candidateId reason=unsupported_id_prefix"
+                    )
+                    continue
+                }
                 val url = buildMetaUrl(addonBaseUrl, candidateType, candidateId)
                 when (
                     val result = addonMetaIntegrationProvider.getMeta(
@@ -157,6 +165,13 @@ class MetaRepositoryImpl @Inject constructor(
 
         for (candidateType in typeCandidates) {
             for (candidateId in idCandidates) {
+                if (!addon.supportsMetaType(candidateType, candidateId)) {
+                    Log.d(
+                        TAG,
+                        "Skipping hydrateAddonOriginItem addonId=${addon.id} type=$candidateType id=$candidateId reason=unsupported_id_prefix"
+                    )
+                    continue
+                }
                 val url = buildMetaUrl(addon.baseUrl, candidateType, candidateId)
                 Log.d(
                     TAG,
@@ -252,17 +267,41 @@ class MetaRepositoryImpl @Inject constructor(
         return buildAddonRequestUrl(baseUrl, "meta/$encodedType/$encodedId.json")
     }
 
-    private fun Addon.supportsMetaType(type: String): Boolean {
+    private suspend fun findInstalledAddonForBaseUrl(addonBaseUrl: String): Addon? {
+        val target = addonBaseUrl.normalizedBaseUrl()
+        if (target.isBlank()) return null
+        val cached = runCatching { addonRepository.getCachedInstalledAddons() }.getOrDefault(emptyList())
+        cached.firstOrNull { it.baseUrl.normalizedBaseUrl() == target }?.let { return it }
+        return runCatching {
+            addonRepository.getInstalledAddons().first()
+                .firstOrNull { it.baseUrl.normalizedBaseUrl() == target }
+        }.getOrNull()
+    }
+
+    private fun String.normalizedBaseUrl(): String =
+        trim().trimEnd('/')
+
+    private fun Addon.supportsMetaType(type: String, id: String): Boolean {
         val target = type.trim()
         if (target.isBlank()) return false
         return resources.any { resource ->
-            resource.name == "meta" && resource.supportsType(target)
+            resource.name == "meta" && resource.supportsType(target) && resource.matchesId(id)
         }
     }
 
     private fun AddonResource.supportsType(type: String): Boolean {
         if (types.isEmpty()) return true
         return types.any { it.equals(type, ignoreCase = true) }
+    }
+
+    private fun AddonResource.matchesId(id: String): Boolean {
+        val prefixes = idPrefixes
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+        if (prefixes.isNullOrEmpty()) return true
+        val target = id.trim()
+        if (target.isBlank()) return true
+        return prefixes.any { prefix -> target.startsWith(prefix, ignoreCase = true) }
     }
 
     private fun inferCanonicalType(type: String, id: String): String {

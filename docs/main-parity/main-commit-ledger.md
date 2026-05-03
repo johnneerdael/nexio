@@ -29,6 +29,16 @@ Note: the planning-time main-only count includes all main-only commits. The ledg
 | `14917f00b` | TVDB localization | `PORT` | TVDB runtime provider and adapter | Fetch English fallback translation. |
 | `2306180d1` | TVDB cache | `PORT` | metadata disk cache schema/runtime cache keys | Invalidate untranslated episode cache entries. |
 
+## Port Progress
+
+| Main Commit | Status On This Branch | Branch Commit | Notes |
+| --- | --- | --- | --- |
+| `bacd1e39b` | `PORTED` | `814212217`, `6c659246e` | Continue Watching now preserves stable playback context and addon origin through shared route builders/player args. |
+| `46d9b3bd8` | `PORTED` | `0d39ff67d` | Resolver wait budget parity is centralized in the autoplay resolver path. |
+| `aac4096d4` | `PORTED` | `c9133cebd` | Audio fallback scoring parity is centralized in `StreamAutoPlaySelector`. |
+| `1419bb608`, `14917f00b`, `2306180d1` | `PORTED` | `e3b1492e5` | TVDB localization and cache schema invalidation are in the shared runtime provider/service path. |
+| `5723e649c` | `PARTIALLY_PORTED` | this slice | Addon meta `idPrefixes` filtering is ported in `MetaRepositoryImpl`; screen-side canonical fallback is intentionally not copied because this branch routes detail through `MetadataRouterFacade`, and the diacritic title guard is already covered in `StreamAutoPlaySelector`. |
+
 ## Full Ledger
 
 Generated from `/tmp/main-parity-commits.tsv` using `git log --reverse --no-merges --format='%H%x09%ad%x09%s' --date=short HEAD..main`. The command returned `256` commits in this worktree.
