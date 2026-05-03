@@ -1,6 +1,8 @@
 package com.nexio.tv.core.auth
 
 import android.util.Log
+import com.nexio.tv.data.integration.supabase.transport.DurableDeviceCredentialSelfServiceException
+import com.nexio.tv.data.integration.supabase.transport.DurableDeviceCredentialSelfServiceTransport
 import com.nexio.tv.data.integration.supabase.transport.DurableDeviceSessionExchangeException
 import com.nexio.tv.data.integration.supabase.transport.DurableDeviceSessionTransport
 import com.nexio.tv.data.integration.supabase.transport.TvLoginExchangeTransport
@@ -40,11 +42,14 @@ class AuthManager @Inject constructor(
     private val postgrest: Postgrest,
     private val tvLoginExchangeTransport: TvLoginExchangeTransport,
     private val durableDeviceSessionTransport: DurableDeviceSessionTransport,
+    private val durableDeviceCredentialSelfServiceTransport: DurableDeviceCredentialSelfServiceTransport,
     private val authPresenceDataStore: AuthPresenceDataStore,
     private val appOnboardingDataStore: AppOnboardingDataStore,
     private val durableDeviceCredentialStore: DurableDeviceCredentialStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile
+    private var localSignOutInProgress = false
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -55,16 +60,23 @@ class AuthManager @Inject constructor(
     private var cachedEffectiveUserSourceUserId: String? = null
 
     init {
+        retryPendingDurableCredentialRevoke()
         observeSessionStatus()
     }
 
     private fun observeSessionStatus() {
         scope.launch {
             auth.sessionStatus.collect { status ->
+                retryPendingDurableCredentialRevoke()
                 when (status) {
                     is SessionStatus.Authenticated -> {
                         val user = auth.currentUserOrNull()
                         if (user != null) {
+                            val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                            if (hasDurableCredential) {
+                                enforceDurableCredentialStillActive()
+                                if (_authState.value is AuthState.SessionLost) return@collect
+                            }
                             publishAuthenticatedUser(user.id, user.email)
                         } else if (isReturningUser()) {
                             // Session says Authenticated but user hasn't been
@@ -74,6 +86,10 @@ class AuthManager @Inject constructor(
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
+                        if (shouldSuppressRecoveryForLocalSignOut(localSignOutInProgress)) {
+                            transitionToSignedOut(clearPresenceMarker = false)
+                            return@collect
+                        }
                         auth.awaitInitialization()
                         val restoredUser = auth.currentUserOrNull()
                         if (restoredUser != null) {
@@ -141,7 +157,7 @@ class AuthManager @Inject constructor(
                         }
                     }
                     is SessionStatus.Initializing -> {
-                        _sessionUserId.value = auth.currentUserOrNull()?.id
+                        _sessionUserId.value = sessionUserIdWhileSessionUnavailable()
                         _authState.value = AuthState.Loading
                     }
                     else -> { /* NetworkError etc. — keep current state */ }
@@ -235,6 +251,10 @@ class AuthManager @Inject constructor(
             }
         }
         val credential = durableDeviceCredentialStore.snapshot()
+        if (credential.isComplete) {
+            enforceDurableCredentialStillActive()
+            if (_authState.value is AuthState.SessionLost) return
+        }
         if (
             shouldAttemptDurableSessionRecovery(
                 hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true,
@@ -255,11 +275,10 @@ class AuthManager @Inject constructor(
                     DurableRecoveryFailureAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
                         Log.w(
                             TAG,
-                            "Durable credential was authoritatively rejected during silent recovery; clearing credential",
+                            "Durable credential was authoritatively rejected during silent recovery; clearing local auth state",
                             e
                         )
-                        durableDeviceCredentialStore.clear()
-                        transitionToSessionLost()
+                        clearLocalAuthStateAfterAuthoritativeDurableRejection()
                         return
                     }
                     DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
@@ -285,16 +304,18 @@ class AuthManager @Inject constructor(
         // them as returning.
     }
 
-    private fun transitionToSignedOut() {
+    private fun transitionToSignedOut(clearPresenceMarker: Boolean = true) {
         _sessionUserId.value = null
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         _authState.value = AuthState.SignedOut
-        scope.launch {
-            try {
-                authPresenceDataStore.clear()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clear auth presence marker", e)
+        if (clearPresenceMarker) {
+            scope.launch {
+                try {
+                    authPresenceDataStore.clear()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to clear auth presence marker", e)
+                }
             }
         }
     }
@@ -440,22 +461,41 @@ class AuthManager @Inject constructor(
     }
 
     suspend fun signOut() {
-        try {
-            auth.signOut()
-        } catch (e: Exception) {
-            Log.e(TAG, "Sign out failed", e)
-        }
+        localSignOutInProgress = true
+        transitionToSignedOut(clearPresenceMarker = false)
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
         try {
-            authPresenceDataStore.clear()
+            handleManualSignOut(
+                clearPresenceMarker = {
+                    authPresenceDataStore.clear()
+                },
+                prepareDurableCredentialRevoke = {
+                    prepareDurableCredentialRevokeForLogout()
+                },
+                revokeDurableCredential = {
+                    revokePendingDurableCredentialIfPresent()
+                },
+                clearDurableCredential = {
+                    durableDeviceCredentialStore.clear()
+                },
+                clearSupabaseSession = {
+                    try {
+                        auth.signOut()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Remote Supabase sign-out failed; clearing local session", e)
+                        auth.clearSession()
+                    }
+                }
+            )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to clear auth presence marker on sign-out", e)
-        }
-        try {
-            durableDeviceCredentialStore.clear()
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to clear durable credential on sign-out", e)
+            Log.e(TAG, "Sign out failed", e)
+        } finally {
+            localSignOutInProgress = false
         }
     }
 
@@ -534,8 +574,7 @@ class AuthManager @Inject constructor(
                         "Durable credential was authoritatively rejected after JWT expiry; clearing credential",
                         e
                     )
-                    durableDeviceCredentialStore.clear()
-                    transitionToSessionLost()
+                    clearLocalAuthStateAfterAuthoritativeDurableRejection()
                 }
                 DurableRecoveryFailureAction.KEEP_CURRENT_AUTH_STATE -> {
                     Log.e(TAG, "Failed to restore Supabase session from durable credential after JWT expiry", e)
@@ -558,10 +597,93 @@ class AuthManager @Inject constructor(
             auth.importAuthToken(result.accessToken, result.refreshToken)
             return true
         } catch (e: DurableDeviceSessionExchangeException) {
-            if (e.statusCode == 401) {
+            if (e.statusCode == 401 || e.statusCode == 403) {
                 throw AuthoritativeDurableCredentialRejectionException(e.message.orEmpty())
             }
             throw e
+        }
+    }
+
+    private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection() {
+        durableDeviceCredentialStore.clear()
+        auth.clearSession()
+        transitionToSessionLost()
+    }
+
+    private suspend fun enforceDurableCredentialStillActive() {
+        when (
+            resolveDurableCredentialStatusAction(validateDurableCredentialStillActive())
+        ) {
+            DurableCredentialStatusAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST -> {
+                Log.w(TAG, "Durable credential is revoked; clearing local auth state")
+                clearLocalAuthStateAfterAuthoritativeDurableRejection()
+            }
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE -> Unit
+        }
+    }
+
+    private fun retryPendingDurableCredentialRevoke() {
+        scope.launch {
+            try {
+                revokePendingDurableCredentialIfPresent()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Pending durable credential revoke retry failed", e)
+            }
+        }
+    }
+
+    private suspend fun prepareDurableCredentialRevokeForLogout() {
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (!credential.isComplete) return
+        durableDeviceCredentialStore.savePendingRevoke(
+            devicePublicId = credential.devicePublicId.orEmpty(),
+            deviceSecret = credential.deviceSecret.orEmpty()
+        )
+    }
+
+    private suspend fun revokePendingDurableCredentialIfPresent() {
+        val pending = durableDeviceCredentialStore.pendingRevokeSnapshot()
+        if (!pending.isComplete) return
+
+        val response = durableDeviceCredentialSelfServiceTransport.revoke(
+            devicePublicId = pending.devicePublicId.orEmpty(),
+            deviceSecret = pending.deviceSecret.orEmpty()
+        )
+        if (response.revoked || response.status.equals("revoked", ignoreCase = true)) {
+            durableDeviceCredentialStore.clearPendingRevoke()
+        }
+    }
+
+    private suspend fun validateDurableCredentialStillActive(): DurableCredentialRemoteStatus {
+        val credential = durableDeviceCredentialStore.snapshot()
+        if (!credential.isComplete) return DurableCredentialRemoteStatus.UNKNOWN
+
+        return try {
+            val response = durableDeviceCredentialSelfServiceTransport.status(
+                devicePublicId = credential.devicePublicId.orEmpty(),
+                deviceSecret = credential.deviceSecret.orEmpty()
+            )
+            when {
+                response.revoked || response.status.equals("revoked", ignoreCase = true) ->
+                    DurableCredentialRemoteStatus.REVOKED
+                response.active || response.status.equals("active", ignoreCase = true) ->
+                    DurableCredentialRemoteStatus.ACTIVE
+                else -> DurableCredentialRemoteStatus.UNKNOWN
+            }
+        } catch (e: DurableDeviceCredentialSelfServiceException) {
+            if (e.statusCode == 401 || e.statusCode == 403) {
+                DurableCredentialRemoteStatus.REVOKED
+            } else {
+                Log.w(TAG, "Durable credential status check failed; keeping current auth state", e)
+                DurableCredentialRemoteStatus.UNKNOWN
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Durable credential status check failed; keeping current auth state", e)
+            DurableCredentialRemoteStatus.UNKNOWN
         }
     }
 
@@ -695,6 +817,29 @@ internal enum class RefreshFailureAction {
     KEEP_CURRENT_AUTH_STATE
 }
 
+internal enum class DurableCredentialRemoteStatus {
+    ACTIVE,
+    REVOKED,
+    UNKNOWN
+}
+
+internal enum class DurableCredentialStatusAction {
+    KEEP_CURRENT_AUTH_STATE,
+    CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
+}
+
+internal fun resolveDurableCredentialStatusAction(
+    status: DurableCredentialRemoteStatus
+): DurableCredentialStatusAction {
+    return when (status) {
+        DurableCredentialRemoteStatus.REVOKED ->
+            DurableCredentialStatusAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST
+        DurableCredentialRemoteStatus.ACTIVE,
+        DurableCredentialRemoteStatus.UNKNOWN ->
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE
+    }
+}
+
 internal fun resolveNotAuthenticatedStartupAction(
     hasRefreshToken: Boolean,
     isReturningUser: Boolean,
@@ -763,6 +908,50 @@ internal fun shouldAttemptDurableSessionRecovery(
 ): Boolean {
     if (!credential.isComplete) return false
     return !hasRefreshToken || ignoreCachedRefreshToken
+}
+
+internal fun sessionUserIdWhileSessionUnavailable(): String? = null
+
+internal fun shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress: Boolean): Boolean =
+    isLocalSignOutInProgress
+
+internal suspend fun handleManualSignOut(
+    clearPresenceMarker: suspend () -> Unit,
+    prepareDurableCredentialRevoke: suspend () -> Unit,
+    revokeDurableCredential: suspend () -> Unit,
+    clearDurableCredential: suspend () -> Unit,
+    clearSupabaseSession: suspend () -> Unit
+) {
+    try {
+        clearPresenceMarker()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing auth presence marker on sign-out", clearError)
+    }
+    try {
+        prepareDurableCredentialRevoke()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed preparing durable device credential revoke on sign-out", clearError)
+        return
+    }
+    try {
+        revokeDurableCredential()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed revoking durable device credential on sign-out", clearError)
+    }
+    try {
+        clearDurableCredential()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing durable device credential on sign-out", clearError)
+    }
+    clearSupabaseSession()
 }
 
 private fun Throwable.isJwtExpiredError(): Boolean {

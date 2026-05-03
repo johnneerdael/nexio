@@ -2,6 +2,8 @@ package com.nexio.tv.core.auth
 
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -134,6 +136,22 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `revoked durable credential status forces session lost while outages keep current state`() {
+        assertEquals(
+            DurableCredentialStatusAction.CLEAR_DURABLE_CREDENTIAL_AND_TRANSITION_SESSION_LOST,
+            resolveDurableCredentialStatusAction(DurableCredentialRemoteStatus.REVOKED)
+        )
+        assertEquals(
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE,
+            resolveDurableCredentialStatusAction(DurableCredentialRemoteStatus.ACTIVE)
+        )
+        assertEquals(
+            DurableCredentialStatusAction.KEEP_CURRENT_AUTH_STATE,
+            resolveDurableCredentialStatusAction(DurableCredentialRemoteStatus.UNKNOWN)
+        )
+    }
+
+    @Test
     fun `durable session recovery waits for cached refresh unless explicitly ignored`() {
         assertFalse(
             shouldAttemptDurableSessionRecovery(
@@ -149,6 +167,79 @@ class DurableDeviceAuthRecoveryPolicyTest {
                 ignoreCachedRefreshToken = true
             )
         )
+    }
+
+    @Test
+    fun `manual sign out prepares pending revoke before remote revoke and local clear`() = runTest {
+        val events = mutableListOf<String>()
+
+        handleManualSignOut(
+            clearPresenceMarker = { events += "clear-presence" },
+            prepareDurableCredentialRevoke = { events += "prepare-pending-revoke" },
+            revokeDurableCredential = { events += "revoke-durable-remote" },
+            clearDurableCredential = { events += "clear-durable-local" },
+            clearSupabaseSession = { events += "clear-supabase-session" }
+        )
+
+        assertEquals(
+            listOf(
+                "clear-presence",
+                "prepare-pending-revoke",
+                "revoke-durable-remote",
+                "clear-durable-local",
+                "clear-supabase-session"
+            ),
+            events
+        )
+    }
+
+    @Test
+    fun `manual sign out keeps durable credential when pending revoke cannot be prepared`() = runTest {
+        val events = mutableListOf<String>()
+
+        handleManualSignOut(
+            clearPresenceMarker = { events += "clear-presence" },
+            prepareDurableCredentialRevoke = {
+                events += "prepare-pending-revoke"
+                error("failed to persist pending revoke")
+            },
+            revokeDurableCredential = { events += "revoke-durable-remote" },
+            clearDurableCredential = { events += "clear-durable-local" },
+            clearSupabaseSession = { events += "clear-supabase-session" }
+        )
+
+        assertEquals(
+            listOf(
+                "clear-presence",
+                "prepare-pending-revoke"
+            ),
+            events
+        )
+    }
+
+    @Test
+    fun `manual sign out preserves cancellation`() = runTest {
+        var cancelled = false
+
+        try {
+            handleManualSignOut(
+                clearPresenceMarker = { throw CancellationException("cancelled") },
+                prepareDurableCredentialRevoke = {},
+                revokeDurableCredential = {},
+                clearDurableCredential = {},
+                clearSupabaseSession = {}
+            )
+        } catch (e: CancellationException) {
+            cancelled = true
+        }
+
+        assertTrue(cancelled)
+    }
+
+    @Test
+    fun `local sign out suppresses recovery branching`() {
+        assertTrue(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = true))
+        assertFalse(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = false))
     }
 
     private fun completeCredential() = DurableDeviceCredentialSnapshot(
