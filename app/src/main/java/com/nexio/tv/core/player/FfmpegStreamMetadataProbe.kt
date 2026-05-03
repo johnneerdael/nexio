@@ -51,9 +51,11 @@ object FfmpegStreamMetadataProbe {
     private const val ANALYZE_DURATION_US = 10_000
     private const val READ_WRITE_TIMEOUT_US = 5_000_000
 
-    // The bundled FFmpeg network probe path is shared with DV/AFR probing and is not safe to
-    // enter concurrently on every Android build.
-    private val nativeProbeLock = Any()
+    // Protects the in-memory probe cache (LinkedHashMap is not thread-safe) and testing-hook
+    // mutations of [backend]. The native ffprobe call is intentionally not held under this lock:
+    // fallback candidate probing and ASS/SSA detection need to run concurrently instead of queuing
+    // behind one long network probe.
+    private val cacheLock = Any()
     private val cache = object : LinkedHashMap<ProbeKey, FfmpegStreamMetadataProbeResult>(
         MAX_CACHE_ENTRIES,
         0.75f,
@@ -75,14 +77,14 @@ object FfmpegStreamMetadataProbe {
     }
 
     internal fun setBackendForTesting(testBackend: FfmpegStreamMetadataBackend) {
-        synchronized(nativeProbeLock) {
+        synchronized(cacheLock) {
             backend = testBackend
             cache.clear()
         }
     }
 
     internal fun resetForTesting() {
-        synchronized(nativeProbeLock) {
+        synchronized(cacheLock) {
             backend = DefaultFfmpegStreamMetadataBackend
             cache.clear()
         }
@@ -130,43 +132,44 @@ object FfmpegStreamMetadataProbe {
         }
         return runCatching {
             val key = ProbeKey(url = probeUrl, requestHeadersBlob = headerBlob)
-            synchronized(nativeProbeLock) {
-                cache[key]?.let { cached ->
-                    if (diagnosticsEnabled) {
-                        Log.i(
-                            TAG,
-                            "FFMPEG_PROBE_CACHE_HIT elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                                "url=$probeUrl streams=${cached.streams.size}"
-                        )
-                    }
-                    return cached
-                }
-                val rawJson = backend.probeStreamMetadataJson(probeUrl, headerBlob)
-                if (diagnosticsEnabled) {
-                    logChunked(
-                        prefix = "FFMPEG_PROBE_RAW_RESPONSE elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$probeUrl bytes=${rawJson?.length ?: 0}",
-                        value = rawJson ?: "<null>"
-                    )
-                }
-                val parsed = rawJson?.let(::parse)
-                if (parsed == null || parsed.streams.isEmpty()) {
-                    Log.w(
-                        TAG,
-                        "FFmpeg stream metadata probe returned no streams " +
-                            "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$probeUrl"
-                    )
-                    return null
-                }
+            val cached = synchronized(cacheLock) { cache[key] }
+            if (cached != null) {
                 if (diagnosticsEnabled) {
                     Log.i(
                         TAG,
-                        "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
-                            "url=$probeUrl streams=${parsed.streams.size}"
+                        "FFMPEG_PROBE_CACHE_HIT elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                            "url=$probeUrl streams=${cached.streams.size}"
                     )
                 }
-                parsed.also { cache[key] = it }
+                return@runCatching cached
             }
+
+            val rawJson = backend.probeStreamMetadataJson(probeUrl, headerBlob)
+            if (diagnosticsEnabled) {
+                logChunked(
+                    prefix = "FFMPEG_PROBE_RAW_RESPONSE elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                        "url=$probeUrl bytes=${rawJson?.length ?: 0}",
+                    value = rawJson ?: "<null>"
+                )
+            }
+            val parsed = rawJson?.let(::parse)
+            if (parsed == null || parsed.streams.isEmpty()) {
+                Log.w(
+                    TAG,
+                    "FFmpeg stream metadata probe returned no streams " +
+                        "elapsedMs=${System.currentTimeMillis() - startedAtMs} url=$probeUrl"
+                )
+                return@runCatching null
+            }
+            if (diagnosticsEnabled) {
+                Log.i(
+                    TAG,
+                    "FFMPEG_PROBE_PARSED elapsedMs=${System.currentTimeMillis() - startedAtMs} " +
+                        "url=$probeUrl streams=${parsed.streams.size}"
+                )
+            }
+            synchronized(cacheLock) { cache[key] = parsed }
+            parsed
         }.getOrElse { error ->
             Log.w(
                 TAG,
