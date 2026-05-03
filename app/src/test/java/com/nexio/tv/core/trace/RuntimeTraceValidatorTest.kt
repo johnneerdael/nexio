@@ -54,4 +54,30 @@ class RuntimeTraceValidatorTest {
         assertEquals(1L, report.staleHits)
         assertEquals(1L, report.routeDecisions)
     }
+
+    @Test
+    fun `cache proofs include KITSU hit with zero http requests`() {
+        val report = validator.validate(sequenceOf(
+            envelope("runtime.cache_decision", 1L, mapOf(
+                "runtimeOperationId" to "op_kitsu_1",
+                "provider" to "KITSU",
+                "apiShapeId" to "kitsu.anime.detail",
+                "operationKey" to "anime:1",
+                "cacheKey" to "metadata:KITSU:kitsu.anime.detail:1",
+                "decision" to "HIT",
+                "networkSuppressed" to true
+            ))
+        ))
+
+        assertEquals(1, report.cacheProofs.size)
+        val proof = report.cacheProofs.single()
+        assertEquals("op_kitsu_1", proof.runtimeOperationId)
+        assertEquals("KITSU", proof.provider)
+        assertEquals("kitsu.anime.detail", proof.apiShapeId)
+        assertEquals("anime:1", proof.operationKey)
+        assertEquals("metadata:KITSU:kitsu.anime.detail:1", proof.cacheKey)
+        assertEquals("HIT", proof.cacheDecision)
+        assertEquals(true, proof.networkSuppressed)
+        assertEquals(0L, proof.httpRequestCount)
+    }
 }

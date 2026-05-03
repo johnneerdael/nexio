@@ -15,7 +15,8 @@ class TraceSummaryGenerator(private val gson: Gson) {
         val failures: List<TraceValidationFailure>,
         val warnings: List<TraceValidationWarning>,
         val providerCounts: Map<String, Long>,
-        val topSlowOps: List<SlowOpEntry>
+        val topSlowOps: List<SlowOpEntry>,
+        val cacheProofs: List<TraceCacheProofEntry>
     )
 
     private data class SlowOpEntry(val provider: String?, val apiShapeId: String?, val durationMs: Long)
@@ -32,7 +33,8 @@ class TraceSummaryGenerator(private val gson: Gson) {
             failures = report.failures,
             warnings = report.warnings,
             providerCounts = providerCounts(events),
-            topSlowOps = topSlowOps(events)
+            topSlowOps = topSlowOps(events),
+            cacheProofs = report.cacheProofs
         )
         return gson.toJson(summary)
     }
@@ -52,6 +54,21 @@ class TraceSummaryGenerator(private val gson: Gson) {
         appendLine()
         appendLine("## Providers")
         providerCounts(events).forEach { (p, n) -> appendLine("- $p: $n calls") }
+        appendLine()
+        appendLine("## Cache Proof")
+        if (report.cacheProofs.isEmpty()) {
+            appendLine("- None")
+        } else {
+            report.cacheProofs.forEach {
+                appendLine(
+                    "- ${it.provider ?: "?"} / ${it.apiShapeId ?: "?"} / ${it.operationKey ?: "?"}: " +
+                        "decision=${it.cacheDecision ?: "?"}, " +
+                        "networkSuppressed=${it.networkSuppressed}, " +
+                        "httpRequests=${it.httpRequestCount}, " +
+                        "cacheKey=${it.cacheKey ?: "?"}"
+                )
+            }
+        }
         appendLine()
         if (report.failures.isNotEmpty()) {
             appendLine("## Failures")
