@@ -4,6 +4,7 @@ package com.nexio.tv.integrations.hyperhdr.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +25,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
+import com.nexio.tv.integrations.hyperhdr.data.HdrMode
 
 @Composable
 fun HyperHdrSettingsContent(
@@ -34,12 +36,15 @@ fun HyperHdrSettingsContent(
 
     var hostField by remember(cfg.host) { mutableStateOf(TextFieldValue(cfg.host)) }
     var portField by remember(cfg.port) { mutableStateOf(TextFieldValue(cfg.port.toString())) }
-    var prioField by remember(cfg.priority) { mutableStateOf(TextFieldValue(cfg.priority.toString())) }
+    var jsonPortField by remember(cfg.jsonPort) {
+        mutableStateOf(TextFieldValue(cfg.jsonPort.toString()))
+    }
+    var prioField by remember(cfg.priority) {
+        mutableStateOf(TextFieldValue(cfg.priority.toString()))
+    }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("HyperHDR ambilight", style = MaterialTheme.typography.headlineSmall)
@@ -69,6 +74,16 @@ fun HyperHdrSettingsContent(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        Text("JSON-RPC port (default 19444)")
+        BasicTextField(
+            value = jsonPortField,
+            onValueChange = {
+                jsonPortField = it
+                it.text.toIntOrNull()?.let { p -> viewModel.setJsonPort(p) }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
         Text("Priority (0–255, default 100)")
         BasicTextField(
             value = prioField,
@@ -79,16 +94,36 @@ fun HyperHdrSettingsContent(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        Text("HDR mode")
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            HdrModeRadio("Auto (detect from source)", cfg.hdrMode == HdrMode.Auto) {
+                viewModel.setHdrMode(HdrMode.Auto)
+            }
+            Spacer(Modifier.height(4.dp))
+            HdrModeRadio("Force SDR", cfg.hdrMode == HdrMode.ForceSdr) {
+                viewModel.setHdrMode(HdrMode.ForceSdr)
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
         Button(onClick = { viewModel.testConnection() }) { Text("Test connection") }
         Text(
             text = when (val r = testResult) {
                 HyperHdrSettingsViewModel.TestResult.Idle -> ""
                 HyperHdrSettingsViewModel.TestResult.Testing -> "Testing…"
-                HyperHdrSettingsViewModel.TestResult.Success -> "✔ Connected and registered"
+                is HyperHdrSettingsViewModel.TestResult.Success ->
+                    "✔ Connected to ${r.hostname}" +
+                        (r.instanceName?.let { " · $it" } ?: "")
                 is HyperHdrSettingsViewModel.TestResult.Failed -> "✘ ${r.message}"
             },
             style = MaterialTheme.typography.bodyMedium,
         )
+    }
+}
+
+@Composable
+private fun HdrModeRadio(label: String, selected: Boolean, onClick: () -> Unit) {
+    Button(onClick = onClick) {
+        Text(if (selected) "• $label" else "  $label")
     }
 }

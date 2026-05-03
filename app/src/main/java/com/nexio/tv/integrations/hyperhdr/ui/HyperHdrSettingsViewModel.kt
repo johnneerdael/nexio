@@ -2,9 +2,11 @@ package com.nexio.tv.integrations.hyperhdr.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.integrations.hyperhdr.data.HdrMode
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
+import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,14 +30,27 @@ class HyperHdrSettingsViewModel @Inject constructor(
     sealed interface TestResult {
         data object Idle : TestResult
         data object Testing : TestResult
-        data object Success : TestResult
+        data class Success(val hostname: String, val instanceName: String?) : TestResult
         data class Failed(val message: String) : TestResult
     }
 
-    fun setEnabled(value: Boolean) = viewModelScope.launch { store.update { it.copy(enabled = value) } }
-    fun setHost(value: String) = viewModelScope.launch { store.update { it.copy(host = value.trim()) } }
-    fun setPort(value: Int) = viewModelScope.launch { store.update { it.copy(port = value.coerceIn(1, 65535)) } }
-    fun setPriority(value: Int) = viewModelScope.launch { store.update { it.copy(priority = value.coerceIn(0, 255)) } }
+    fun setEnabled(value: Boolean) =
+        viewModelScope.launch { store.update { it.copy(enabled = value) } }
+
+    fun setHost(value: String) =
+        viewModelScope.launch { store.update { it.copy(host = value.trim()) } }
+
+    fun setPort(value: Int) =
+        viewModelScope.launch { store.update { it.copy(port = value.coerceIn(1, 65535)) } }
+
+    fun setJsonPort(value: Int) =
+        viewModelScope.launch { store.update { it.copy(jsonPort = value.coerceIn(1, 65535)) } }
+
+    fun setPriority(value: Int) =
+        viewModelScope.launch { store.update { it.copy(priority = value.coerceIn(0, 255)) } }
+
+    fun setHdrMode(value: HdrMode) =
+        viewModelScope.launch { store.update { it.copy(hdrMode = value) } }
 
     fun testConnection() = viewModelScope.launch {
         val cfg = config.value
@@ -43,12 +58,28 @@ class HyperHdrSettingsViewModel @Inject constructor(
             _testResult.value = TestResult.Failed("Host cannot be empty"); return@launch
         }
         _testResult.value = TestResult.Testing
-        val client = HyperHdrFlatBufferClient(host = cfg.host, port = cfg.port, priority = cfg.priority)
-        val outcome = runCatching { client.connect() }
-        client.close()
-        _testResult.value = outcome.fold(
-            onSuccess = { TestResult.Success },
-            onFailure = { TestResult.Failed(it.message ?: "Connection failed") },
+
+        // Test 1: FlatBuffer port — open + register + close.
+        val fbClient = HyperHdrFlatBufferClient(
+            host = cfg.host, port = cfg.port, priority = cfg.priority,
+        )
+        val fbOutcome = runCatching { fbClient.connect() }
+        fbClient.close()
+        if (fbOutcome.isFailure) {
+            _testResult.value = TestResult.Failed(
+                "FlatBuffer port ${cfg.port} unreachable: ${fbOutcome.exceptionOrNull()?.message}"
+            )
+            return@launch
+        }
+
+        // Test 2: JSON port — fetch serverInfo.
+        val jsonClient = HyperHdrJsonApiClient(host = cfg.host, port = cfg.jsonPort)
+        val jsonOutcome = runCatching { jsonClient.serverInfo() }
+        _testResult.value = jsonOutcome.fold(
+            onSuccess = { TestResult.Success(it.hostname, it.instanceName) },
+            onFailure = {
+                TestResult.Failed("JSON port ${cfg.jsonPort} unreachable: ${it.message}")
+            },
         )
     }
 }
