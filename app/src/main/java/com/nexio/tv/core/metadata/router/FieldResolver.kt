@@ -1,5 +1,8 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
@@ -253,13 +256,22 @@ class FieldResolver @Inject constructor(
         }
 
         @Suppress("UNCHECKED_CAST")
+        val posterRef = fields[ResolvedField.POSTER] as? ArtworkDisplayRef
+        val backdropRef = fields[ResolvedField.BACKDROP] as? ArtworkDisplayRef
+        val logoRef = fields[ResolvedField.LOGO] as? ArtworkDisplayRef
+        val artworkBundle = ArtworkBundle(
+            poster = posterRef,
+            backdrop = backdropRef,
+            logo = logoRef
+        )
+
         return ResolvedMetadataDocument(
             canonicalId = fields[ResolvedField.CANONICAL_ID] as? String,
             title = fields[ResolvedField.TITLE] as? String,
             overview = fields[ResolvedField.OVERVIEW] as? String,
-            poster = fields[ResolvedField.POSTER] as? String,
-            backdrop = fields[ResolvedField.BACKDROP] as? String,
-            logo = fields[ResolvedField.LOGO] as? String,
+            poster = artworkString(fields[ResolvedField.POSTER], posterRef),
+            backdrop = artworkString(fields[ResolvedField.BACKDROP], backdropRef),
+            logo = artworkString(fields[ResolvedField.LOGO], logoRef),
             rating = fields[ResolvedField.RATING],
             runtimeMinutes = fields[ResolvedField.RUNTIME] as? Int,
             genres = (fields[ResolvedField.GENRES] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
@@ -303,9 +315,13 @@ class FieldResolver @Inject constructor(
             localization = localization,
             sourceRoles = sourceRoles,
             sourceProviders = sourceProviders,
-            rejectedCandidatesByField = rejectedByField.mapValues { it.value.toList() }
+            rejectedCandidatesByField = rejectedByField.mapValues { it.value.toList() },
+            artwork = artworkBundle
         )
     }
+
+    private fun artworkString(fieldValue: Any?, ref: ArtworkDisplayRef?): String? =
+        ref.toLegacyArtworkString() ?: fieldValue as? String
 
     private fun SourceRole?.isPreviewRole(): Boolean =
         this == SourceRole.RAIL_PREVIEW || this == SourceRole.ADDON_PREVIEW

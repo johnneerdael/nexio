@@ -1,5 +1,6 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ProviderIds
@@ -179,7 +180,8 @@ data class ResolvedMetadataDocument(
     val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),
     val sourceRoles: Map<ResolvedField, SourceRole> = emptyMap(),
     val sourceProviders: Map<ResolvedField, String> = emptyMap(),
-    val rejectedCandidatesByField: Map<ResolvedField, List<Map<String, Any?>>> = emptyMap()
+    val rejectedCandidatesByField: Map<ResolvedField, List<Map<String, Any?>>> = emptyMap(),
+    val artwork: ArtworkBundle = ArtworkBundle()
 )
 
 data class ResolverSchedule(
