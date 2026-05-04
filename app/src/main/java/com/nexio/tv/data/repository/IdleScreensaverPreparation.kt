@@ -145,7 +145,7 @@ private fun MetadataResolutionResult.toScreensaverMeta(preview: MetaPreview): Me
         awards = null,
         language = null,
         links = emptyList(),
-        trailerYtIds = emptyList(),
+        trailerYtIds = preview.trailerYtIds,
         posterProviderTag = display.posterProviderTag
     )
 }

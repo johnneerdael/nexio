@@ -120,6 +120,20 @@ class IdleScreensaverResolveRequestTest {
         assertNull(result)
     }
 
+    @Test
+    fun `fetchIdleScreensaverMeta carries preview trailer YouTube ids through to returned Meta`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        coEvery { facade.resolveRequest(any()) } returns successResult()
+        val previewWithTrailers = samplePreview.copy(
+            trailerYtIds = listOf("dQw4w9WgXcQ", "oHg5SJYRHA0")
+        )
+
+        val result = fetchIdleScreensaverMeta(previewWithTrailers, facade)
+
+        assertNotNull(result)
+        assertEquals(listOf("dQw4w9WgXcQ", "oHg5SJYRHA0"), result!!.trailerYtIds)
+    }
+
     private fun successResult() = MetadataResolutionResult(
         route = MetadataRoute(
             provider = MetadataPrimaryProvider.TVDB,
