@@ -1,0 +1,76 @@
+package com.nexio.tv.core.artwork
+
+interface ArtworkDecisionCache {
+    fun get(key: ArtworkDecisionKey): ArtworkDecision?
+    fun put(decision: ArtworkDecision)
+    fun linkPreviewToCanonical(
+        previewKey: ArtworkDecisionKey,
+        canonicalKey: ArtworkDecisionKey
+    )
+    fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision?
+    fun invalidateBySettingsHash(settingsHash: String)
+    fun invalidateByCredentialHash(credentialHash: String)
+    fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>)
+}
+
+class InMemoryArtworkDecisionCache : ArtworkDecisionCache {
+    private val decisions = mutableMapOf<ArtworkDecisionKey, ArtworkDecision>()
+    private val previewToCanonical = mutableMapOf<ArtworkDecisionKey, ArtworkDecisionKey>()
+
+    @Synchronized
+    override fun get(key: ArtworkDecisionKey): ArtworkDecision? =
+        decisions[key]
+
+    @Synchronized
+    override fun put(decision: ArtworkDecision) {
+        decisions[decision.decisionKey] = decision
+    }
+
+    @Synchronized
+    override fun linkPreviewToCanonical(
+        previewKey: ArtworkDecisionKey,
+        canonicalKey: ArtworkDecisionKey
+    ) {
+        previewToCanonical[previewKey] = canonicalKey
+    }
+
+    @Synchronized
+    override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? =
+        previewToCanonical[previewKey]?.let { canonicalKey -> decisions[canonicalKey] }
+
+    @Synchronized
+    override fun invalidateBySettingsHash(settingsHash: String) {
+        invalidateMatching { decision -> decision.settingsHash == settingsHash }
+    }
+
+    @Synchronized
+    override fun invalidateByCredentialHash(credentialHash: String) {
+        invalidateMatching { decision -> decision.credentialHash == credentialHash }
+    }
+
+    @Synchronized
+    override fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>) {
+        invalidateMatching { decision ->
+            decision.settingsHash in settingsHashes ||
+                decision.credentialHash in credentialHashes
+        }
+    }
+
+    private fun invalidateMatching(matches: (ArtworkDecision) -> Boolean) {
+        val deletedKeys = decisions.values
+            .filter(matches)
+            .mapTo(mutableSetOf()) { decision -> decision.decisionKey }
+
+        if (deletedKeys.isEmpty()) return
+
+        deletedKeys.forEach { key -> decisions.remove(key) }
+
+        val links = previewToCanonical.iterator()
+        while (links.hasNext()) {
+            val (previewKey, canonicalKey) = links.next()
+            if (previewKey in deletedKeys || canonicalKey in deletedKeys) {
+                links.remove()
+            }
+        }
+    }
+}
