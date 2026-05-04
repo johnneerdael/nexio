@@ -212,11 +212,6 @@ class TraktIntegrationProvider @Inject constructor(
         return IntegrationCallResult.Success(value)
     }
 
-    private companion object {
-        const val WATCHED_SNAPSHOT_TTL_MS: Long = 24L * 60L * 60L * 1000L              // 24h
-        const val WATCHED_SNAPSHOT_STALE_GRACE_MS: Long = 7L * 24L * 60L * 60L * 1000L // 7d grace
-    }
-
     suspend fun getWatchedShows(
         extended: String? = null
     ): IntegrationCallResult<List<TraktWatchedShowItemDto>> =
@@ -1351,5 +1346,10 @@ class TraktIntegrationProvider @Inject constructor(
     private fun credentialHash(session: TrackingAuthSession): String {
         require(session.provider == TrackingProvider.TRAKT) { "Expected TRAKT session, got ${session.provider}" }
         return session.credentialHash?.takeIf { it.isNotBlank() } ?: "trakt:profile:${session.profileId}"
+    }
+
+    private companion object {
+        const val WATCHED_SNAPSHOT_TTL_MS: Long = 24L * 60L * 60L * 1000L              // 24h
+        const val WATCHED_SNAPSHOT_STALE_GRACE_MS: Long = 7L * 24L * 60L * 60L * 1000L // 7d grace
     }
 }
