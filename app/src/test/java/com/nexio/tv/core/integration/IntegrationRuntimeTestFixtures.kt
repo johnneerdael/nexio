@@ -39,6 +39,10 @@ class ByteArrayIntegrationCacheStore : IntegrationCacheStore {
 
     override suspend fun deleteOwnedMedia(mediaKey: String): Int = 0
 
+    override suspend fun delete(spec: IntegrationSpec<*>): Boolean {
+        return blobs.remove(spec.requiredCacheKey) != null
+    }
+
     fun contains(cacheKey: String): Boolean = blobs.containsKey(cacheKey)
 }
 

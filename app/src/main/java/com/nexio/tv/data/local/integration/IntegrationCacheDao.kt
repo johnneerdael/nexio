@@ -19,6 +19,9 @@ abstract class IntegrationCacheDao {
     @Query("DELETE FROM integration_cache WHERE ownerToken = :mediaKey")
     abstract suspend fun deleteByMediaKey(mediaKey: String): Int
 
+    @Query("DELETE FROM integration_cache WHERE cacheKey = :cacheKey")
+    abstract suspend fun deleteByCacheKey(cacheKey: String): Int
+
     /**
      * F-D-02 atomic write: caller writes blob bytes to {tmpFile} first, then this transaction
      * renames the .tmp into place and upserts the cache row. The Room @Transaction guarantees
