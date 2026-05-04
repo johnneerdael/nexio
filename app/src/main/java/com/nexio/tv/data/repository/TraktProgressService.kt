@@ -1372,6 +1372,40 @@ class TraktProgressService @Inject constructor(
         return deriveNextUpFromWatchedShows(watchedShows = watchedShows, hiddenProgress = hiddenProgress)
     }
 
+    @VisibleForTesting
+    internal suspend fun testOnlyDeriveNextUpCandidates(): List<NextUpEntry> {
+        val watchedShows = getWatchedShowsSnapshot(forceRefresh = false)
+        val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = false)
+        return watchedShows.values
+            .asSequence()
+            .distinctBy { it.canonicalContentId }
+            .filter { showInfo ->
+                val entryAliases = showInfo.aliasContentIds + showInfo.canonicalContentId
+                val anyHiddenMatch = entryAliases.any {
+                    it in hiddenProgress.hiddenShowIds || it in hiddenProgress.droppedShowIds
+                }
+                !anyHiddenMatch
+            }
+            .sortedByDescending { it.lastWatchedAtMs }
+            .map { showInfo ->
+                NextUpEntry(
+                    contentId = showInfo.canonicalContentId,
+                    contentType = "series",
+                    name = showInfo.name,
+                    season = 0,
+                    episode = 0,
+                    episodeTitle = null,
+                    videoId = showInfo.canonicalContentId,
+                    firstAired = null,
+                    firstAiredMs = 0L,
+                    activityAtMs = showInfo.lastWatchedAtMs,
+                    traktShowId = showInfo.traktShowId,
+                    traktEpisodeId = null
+                )
+            }
+            .toList()
+    }
+
     private fun mapWatchedShowItem(item: TraktWatchedShowItemDto): WatchedShowIndexEntry? {
         val show = item.show ?: return null
         val ids = show.ids ?: return null
@@ -1734,7 +1768,7 @@ class TraktProgressService @Inject constructor(
                 ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val season = nextEpisode.season ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             val episode = nextEpisode.number ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
-            val canonicalId = canonicalLookupKey(candidate.contentId)
+            val canonicalId = normalizeContentId(toTraktIds(parseContentIds(candidate.contentId)), kind = MediaKind.SHOW)
             if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(candidate.contentId, season)) ||
                 hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(canonicalId, season))
             ) {
