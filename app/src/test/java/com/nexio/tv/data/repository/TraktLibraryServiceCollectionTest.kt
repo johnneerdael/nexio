@@ -7,8 +7,15 @@ import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionShowItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionWriteCountsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
@@ -100,5 +107,81 @@ class TraktLibraryServiceCollectionTest {
         // Both kinds invalidated before re-fetch.
         coVerify { traktIntegrationProvider.invalidateCollectionSnapshot(TraktCollectionKind.MOVIES) }
         coVerify { traktIntegrationProvider.invalidateCollectionSnapshot(TraktCollectionKind.SHOWS) }
+    }
+
+    @Test
+    fun addToCollection_optimistically_marks_item_in_membership_then_confirms() = runBlocking {
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.addToCollection(any()) } returns
+            IntegrationCallResult.Success(TraktCollectionAddResponseDto(
+                added = TraktCollectionWriteCountsDto(movies = 1)
+            ))
+        service.refreshCollection()
+
+        service.addToCollection(
+            contentId = "tt0372784",
+            contentType = "movie"
+        )
+
+        assertEquals(true, service.isInCollection("tt0372784").first())
+    }
+
+    @Test
+    fun addToCollection_rolls_back_membership_on_network_failure() = runBlocking {
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.addToCollection(any()) } returns IntegrationCallResult.Missing
+        service.refreshCollection()
+
+        runCatching {
+            service.addToCollection(contentId = "tt0372784", contentType = "movie")
+        }
+
+        assertEquals(false, service.isInCollection("tt0372784").first())
+    }
+
+    @Test
+    fun removeFromCollection_optimistically_clears_membership_then_confirms() = runBlocking {
+        val item = TraktCollectionMovieItemDto(
+            movie = TraktMovieDto(
+                title = "Batman Begins", year = 2005,
+                ids = TraktIdsDto(trakt = 6, slug = "batman-begins-2005", imdb = "tt0372784", tmdb = 272)
+            )
+        )
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns
+            IntegrationCallResult.Success(listOf(item))
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.removeFromCollection(any()) } returns
+            IntegrationCallResult.Success(TraktCollectionRemoveResponseDto(
+                deleted = TraktCollectionWriteCountsDto(movies = 1)
+            ))
+        service.refreshCollection()
+
+        assertEquals(true, service.isInCollection("tt0372784").first())
+
+        service.removeFromCollection(contentId = "tt0372784", contentType = "movie")
+
+        assertEquals(false, service.isInCollection("tt0372784").first())
+    }
+
+    @Test
+    fun removeFromCollection_rolls_back_on_failure() = runBlocking {
+        val item = TraktCollectionMovieItemDto(
+            movie = TraktMovieDto(
+                ids = TraktIdsDto(trakt = 6, slug = "batman-begins-2005", imdb = "tt0372784", tmdb = 272)
+            )
+        )
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns
+            IntegrationCallResult.Success(listOf(item))
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.removeFromCollection(any()) } returns IntegrationCallResult.Missing
+        service.refreshCollection()
+
+        runCatching {
+            service.removeFromCollection(contentId = "tt0372784", contentType = "movie")
+        }
+
+        assertEquals(true, service.isInCollection("tt0372784").first())  // restored
     }
 }
