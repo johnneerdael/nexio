@@ -746,18 +746,30 @@ class MetaDetailsViewModel @Inject constructor(
             .distinct()
             .singleOrNull()
         var enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false)
-        val blockedForMandatoryKitsuEpisodes = shouldBlockKitsuSeriesReadyState(enrichment)
-        if (blockedForMandatoryKitsuEpisodes) {
-            val episodeHydratedMeta = applyTvEpisodeEnrichment(
-                targetMeta = enrichment.meta,
-                tvEnrichment = enrichment.tvEnrichment,
-                tmdbContentType = enrichment.tmdbContentType,
-                tvdbLanguage = enrichment.tvdbLanguage,
-                settings = enrichment.settings,
-                isTvContent = enrichment.isTvContent
+        val blockedForMandatoryEpisodes = shouldBlockSeriesReadyStateForMandatoryEpisodes(enrichment)
+        if (blockedForMandatoryEpisodes) {
+            Log.i(
+                TAG,
+                "detail.episode_enrichment_required_before_ready metaId=${enrichment.meta.id} " +
+                    "provider=${if (enrichment.isAnimeDetail) "KITSU" else "TVDB"} videos=${enrichment.meta.videos.size}"
             )
-            if (episodeHydratedMeta.videos.isEmpty()) {
-                Log.w(TAG, "Kitsu series detail blocked without episode metadata for ${enrichment.meta.id}")
+            val episodeHydratedMeta = try {
+                applyTvEpisodeEnrichment(
+                    targetMeta = enrichment.meta,
+                    tvEnrichment = enrichment.tvEnrichment,
+                    tmdbContentType = enrichment.tmdbContentType,
+                    tvdbLanguage = enrichment.tvdbLanguage,
+                    settings = enrichment.settings,
+                    isTvContent = enrichment.isTvContent
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Mandatory episode metadata failed for ${enrichment.meta.id}: ${error.message}", error)
+                enrichment.meta.takeIf(::hasEpisodeRows)
+            }
+            if (episodeHydratedMeta == null || episodeHydratedMeta.videos.isEmpty()) {
+                Log.w(TAG, "Series detail blocked without episode metadata for ${enrichment.meta.id}")
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -766,6 +778,11 @@ class MetaDetailsViewModel @Inject constructor(
                 }
                 return
             }
+            Log.i(
+                TAG,
+                "detail.episode_enrichment_ready_before_render metaId=${enrichment.meta.id} " +
+                    "videos=${episodeHydratedMeta.videos.size}"
+            )
             enrichment = enrichment.copy(meta = episodeHydratedMeta)
         }
         applyMeta(enrichment.meta)
@@ -799,18 +816,20 @@ class MetaDetailsViewModel @Inject constructor(
             loadMoreLikeThisAsync(meta)
             loadReviewsAsync(meta)
         }
-        if (!blockedForMandatoryKitsuEpisodes) {
+        if (!blockedForMandatoryEpisodes) {
             loadEpisodeMetadataAsync(enrichment)
         }
         loadEpisodeRatingsAsync(enrichment.meta)
         loadMDBListRatings(enrichment.meta)
     }
 
-    private fun shouldBlockKitsuSeriesReadyState(enrichment: DetailMetadataEnrichment): Boolean =
-        enrichment.isAnimeDetail &&
-            enrichment.isTvContent &&
+    private fun shouldBlockSeriesReadyStateForMandatoryEpisodes(enrichment: DetailMetadataEnrichment): Boolean =
+        enrichment.isTvContent &&
             enrichment.settings.useEpisodes &&
-            enrichment.meta.videos.isEmpty()
+            !hasEpisodeRows(enrichment.meta)
+
+    private fun hasEpisodeRows(meta: Meta): Boolean =
+        meta.videos.any { it.season != null && it.episode != null }
 
     private fun loadEpisodeMetadataAsync(enrichment: DetailMetadataEnrichment) {
         episodeMetadataJob?.cancel()
