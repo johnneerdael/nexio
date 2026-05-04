@@ -24,17 +24,47 @@ class PremiumizeService @Inject constructor(
     private val premiumizeIntegrationProvider: PremiumizeIntegrationProvider,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore
 ) {
+    private val accountStateLock = Any()
+    private var accountStateGeneration = 0L
     private val _accountState = MutableStateFlow(PremiumizeAccountState())
     val accountState: StateFlow<PremiumizeAccountState> = _accountState.asStateFlow()
 
     fun observeAccountState(): Flow<PremiumizeAccountState> = accountState
+
+    fun clearLocalAccountState() {
+        replaceAccountState(PremiumizeAccountState())
+    }
+
+    private fun replaceAccountState(state: PremiumizeAccountState) {
+        synchronized(accountStateLock) {
+            accountStateGeneration += 1L
+            _accountState.value = state
+        }
+    }
+
+    private fun currentAccountStateGeneration(): Long =
+        synchronized(accountStateLock) { accountStateGeneration }
+
+    private fun replaceRefreshedAccountState(
+        observedGeneration: Long,
+        observedApiKey: String,
+        currentApiKey: String,
+        state: PremiumizeAccountState
+    ) {
+        synchronized(accountStateLock) {
+            if (accountStateGeneration != observedGeneration || currentApiKey != observedApiKey) {
+                return
+            }
+            _accountState.value = state
+        }
+    }
 
     suspend fun validateAndSaveApiKey(rawValue: String): Result<PremiumizeAccountState> {
         val apiKey = rawValue.trim()
         if (apiKey.isBlank()) {
             premiumizeSettingsDataStore.setApiKey("")
             val cleared = PremiumizeAccountState()
-            _accountState.value = cleared
+            replaceAccountState(cleared)
             return Result.success(cleared)
         }
 
@@ -51,7 +81,7 @@ class PremiumizeService @Inject constructor(
                         premiumUntil = body.premiumUntil,
                         isConnected = true
                     )
-                    _accountState.value = state
+                    replaceAccountState(state)
                     Result.success(state)
                 }
             }
@@ -69,27 +99,39 @@ class PremiumizeService @Inject constructor(
     suspend fun refreshAccountState() {
         val apiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
         if (apiKey.isBlank()) {
-            _accountState.value = PremiumizeAccountState()
+            replaceAccountState(PremiumizeAccountState())
             return
         }
+        val observedGeneration = currentAccountStateGeneration()
 
         val result = premiumizeIntegrationProvider.fetchAccountInfo(apiKey)
+        val currentApiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
         if (result is IntegrationCallResult.Success &&
             result.value.status.equals("success", ignoreCase = true)
         ) {
-            _accountState.value = PremiumizeAccountState(
-                apiKey = apiKey,
-                customerId = result.value.customerId,
-                premiumUntil = result.value.premiumUntil,
-                isConnected = true
+            replaceRefreshedAccountState(
+                observedGeneration = observedGeneration,
+                observedApiKey = apiKey,
+                currentApiKey = currentApiKey,
+                state = PremiumizeAccountState(
+                    apiKey = apiKey,
+                    customerId = result.value.customerId,
+                    premiumUntil = result.value.premiumUntil,
+                    isConnected = true
+                )
             )
             return
         }
 
-        _accountState.value = PremiumizeAccountState(
-            apiKey = apiKey,
-            isConnected = false,
-            errorMessage = "Premiumize authentication failed"
+        replaceRefreshedAccountState(
+            observedGeneration = observedGeneration,
+            observedApiKey = apiKey,
+            currentApiKey = currentApiKey,
+            state = PremiumizeAccountState(
+                apiKey = apiKey,
+                isConnected = false,
+                errorMessage = "Premiumize authentication failed"
+            )
         )
     }
 }
