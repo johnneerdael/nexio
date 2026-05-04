@@ -399,12 +399,18 @@ class TraktProgressService @Inject constructor(
     }
 
     /**
-     * Returns a recent `/sync/last_activities` response. Deduplication is now handled by the
+     * Returns a recent `/sync/last_activities` response. Deduplication is handled by the
      * runtime cache (CacheFirst, 5-min TTL) inside [traktIntegrationProvider.getLastActivities].
-     * [maxAgeMs] is vestigial — callers that need fresher-than-5-min data must invalidate first.
+     *
+     * [maxAgeMs] == 0L is the forced-refresh signal: invalidate the runtime cache first so
+     * the next read goes to the wire. Any other value is advisory and ignored — the runtime
+     * cache TTL is fixed at 5 minutes. The `hasActivityChanged()` polling path relies on
+     * the 0L contract to pick up new Trakt activity within its own polling cadence.
      */
-    @Suppress("UNUSED_PARAMETER")
     suspend fun getRecentActivities(maxAgeMs: Long = 10_000L): TraktLastActivitiesResponseDto? {
+        if (maxAgeMs == 0L) {
+            traktIntegrationProvider.invalidateLastActivities()
+        }
         return when (val result = traktIntegrationProvider.getLastActivities()) {
             is IntegrationCallResult.Success -> result.value
             else -> null
