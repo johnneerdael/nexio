@@ -31,6 +31,8 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
+import com.nexio.tv.data.repository.EpisodeMappingEntry
+import com.nexio.tv.data.repository.TraktEpisodeMappingService
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
@@ -46,6 +48,7 @@ import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,6 +82,7 @@ class PlayerRuntimeController(
     internal val playbackOwnerContext: PlaybackOwnerContext,
     internal val egressIpFingerprint: EgressIpFingerprint,
     internal val authRecoveryInterceptor: AuthRecoveryInterceptor,
+    internal val traktEpisodeMappingService: TraktEpisodeMappingService,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -381,6 +385,9 @@ class PlayerRuntimeController(
     internal var lastLoggedAudioTrackSignature: String? = null
     internal var episodeStreamsJob: Job? = null
     internal var episodeStreamsCacheRequestKey: String? = null
+    internal var currentTraktEpisodeMapping: List<EpisodeMappingEntry>? = null
+    internal var currentTraktEpisodeMappingKey: String? = null
+    internal var playbackPreparationJob: Job? = null
     internal val streamCacheKey: String? by lazy {
         val type = contentType?.lowercase()
         val vid = currentVideoId
@@ -389,7 +396,10 @@ class PlayerRuntimeController(
 
     init {
         playbackIdleGateState.onPlayerSessionStarted()
-        refreshScrobbleItem()
+        playbackPreparationJob = scope.launch {
+            warmTraktEpisodeMappingForCurrentPlayback()
+            refreshScrobbleItem()
+        }
         mediaSourceFactory.warmupVodCacheAsync()
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode, navigationArgs.toRouteResumeProgress())
