@@ -31,7 +31,7 @@ class HyperHdrConfigDataStore @Inject constructor(
             enabled = prefs[Keys.ENABLED] ?: false,
             host = prefs[Keys.HOST] ?: "",
             port = prefs[Keys.PORT] ?: 19400,
-            jsonPort = prefs[Keys.JSON_PORT] ?: 19444,
+            jsonPort = prefs[Keys.JSON_PORT] ?: 8090,
             priority = prefs[Keys.PRIORITY] ?: 100,
             hdrMode = prefs[Keys.HDR_MODE]?.let {
                 runCatching { HdrMode.valueOf(it) }.getOrDefault(HdrMode.Auto)
@@ -46,7 +46,7 @@ class HyperHdrConfigDataStore @Inject constructor(
                 enabled = prefs[Keys.ENABLED] ?: false,
                 host = prefs[Keys.HOST] ?: "",
                 port = prefs[Keys.PORT] ?: 19400,
-                jsonPort = prefs[Keys.JSON_PORT] ?: 19444,
+                jsonPort = prefs[Keys.JSON_PORT] ?: 8090,
                 priority = prefs[Keys.PRIORITY] ?: 100,
                 hdrMode = prefs[Keys.HDR_MODE]?.let {
                     runCatching { HdrMode.valueOf(it) }.getOrDefault(HdrMode.Auto)

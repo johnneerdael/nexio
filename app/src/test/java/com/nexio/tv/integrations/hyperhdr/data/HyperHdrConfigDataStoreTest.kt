@@ -48,10 +48,10 @@ class HyperHdrConfigDataStoreTest {
     }
 
     @Test
-    fun `default config has Auto hdrMode and 19444 jsonPort`() = runTest {
+    fun `default config has Auto hdrMode and 8090 jsonPort`() = runTest {
         val cfg = store.config.first()
         assertThat(cfg.hdrMode).isEqualTo(HdrMode.Auto)
-        assertThat(cfg.jsonPort).isEqualTo(19444)
+        assertThat(cfg.jsonPort).isEqualTo(8090)
     }
 
     @Test
