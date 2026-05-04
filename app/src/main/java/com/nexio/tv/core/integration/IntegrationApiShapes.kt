@@ -185,6 +185,10 @@ object TraktApiShapes {
     const val RECOMMENDATION_HIDE = "trakt.recommendation.hide"
     const val HIDDEN_ITEMS = "trakt.hidden_items"
     // Collection & watchlist
+    const val COLLECTION_MOVIES = "trakt.collection.movies"
+    const val COLLECTION_SHOWS = "trakt.collection.shows"
+    const val COLLECTION_ADD = "trakt.collection.add"
+    const val COLLECTION_REMOVE = "trakt.collection.remove"
     const val WATCHLIST_MOVIES = "trakt.watchlist.movies"
     const val WATCHLIST_SHOWS = "trakt.watchlist.shows"
     const val WATCHLIST_ADD = "trakt.watchlist.add"
