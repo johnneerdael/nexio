@@ -49,6 +49,7 @@ import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
+import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.data.repository.AirDateGate
 import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.parseContentIds
@@ -187,6 +188,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
+    private val traktLibraryService: TraktLibraryService,
     private val watchProgressRepository: WatchProgressRepository,
     private val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
     private val addonRepository: AddonRepository,
@@ -240,6 +242,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeInstalledAddons()
         observeMetaViewSettings()
         observeLibraryState()
+        observeCollection()
         observeWatchProgress()
         observeWatchedEpisodes()
         observeMovieWatched()
@@ -436,6 +439,21 @@ class MetaDetailsViewModel @Inject constructor(
                 .collectLatest { inWatchlist ->
                     _uiState.update { state ->
                         if (state.isInWatchlist == inWatchlist) state else state.copy(isInWatchlist = inWatchlist)
+                    }
+                }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeCollection() {
+        viewModelScope.launch {
+            effectiveContentId.flatMapLatest { contentId ->
+                traktLibraryService.isInCollection(contentId)
+            }
+                .distinctUntilChanged()
+                .collectLatest { inCollection ->
+                    _uiState.update { state ->
+                        if (state.isInCollection == inCollection) state else state.copy(isInCollection = inCollection)
                     }
                 }
         }
@@ -2308,6 +2326,36 @@ class MetaDetailsViewModel @Inject constructor(
                 if (error is CancellationException) throw error
                 showMessage(
                     message = error.message ?: "Failed to update library",
+                    isError = true
+                )
+            }
+        }
+    }
+
+    fun toggleCollection() {
+        val meta = _uiState.value.meta ?: return
+        viewModelScope.launch {
+            val wasInCollection = _uiState.value.isInCollection
+            runCatching {
+                if (wasInCollection) {
+                    traktLibraryService.removeFromCollection(
+                        contentId = effectiveContentId.value,
+                        contentType = itemType
+                    )
+                } else {
+                    traktLibraryService.addToCollection(
+                        contentId = effectiveContentId.value,
+                        contentType = itemType
+                    )
+                }
+                showMessage(
+                    if (wasInCollection) "Removed from Trakt Collection"
+                    else "Added to Trakt Collection"
+                )
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                showMessage(
+                    message = error.message ?: "Failed to update collection",
                     isError = true
                 )
             }

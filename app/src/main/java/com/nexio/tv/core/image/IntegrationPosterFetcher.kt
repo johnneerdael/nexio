@@ -9,7 +9,10 @@ import coil.fetch.SourceResult
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.data.integration.posters.RpdbIntegrationProvider
 import com.nexio.tv.data.integration.posters.TopPostersIntegrationProvider
+import com.nexio.tv.data.integration.posters.transport.PosterTransport
 import java.io.File
+import java.net.URI
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import okio.Buffer
@@ -18,14 +21,11 @@ class IntegrationPosterFetcher(
     private val request: PosterIntegrationRequest,
     private val options: coil.request.Options,
     private val rpdbProvider: RpdbIntegrationProvider,
-    private val topPostersProvider: TopPostersIntegrationProvider
+    private val topPostersProvider: TopPostersIntegrationProvider,
+    private val fallbackTransport: PosterTransport
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? {
-        val bytes = when (request.provider) {
-            IntegrationProvider.RPDB -> rpdbProvider.fetchPoster(request)
-            IntegrationProvider.TOP_POSTERS -> topPostersProvider.fetchPoster(request)
-            else -> null
-        } ?: return null
+        val bytes = premiumBytes() ?: fallbackBytes() ?: return null
         val file = File.createTempFile("integration-poster-", ".img")
         file.writeBytes(bytes)
         val source = createImageSource(bytes, file)
@@ -34,6 +34,34 @@ class IntegrationPosterFetcher(
             mimeType = request.mimeType ?: "image/jpeg",
             dataSource = DataSource.DISK
         )
+    }
+
+    private suspend fun premiumBytes(): ByteArray? =
+        when (request.provider) {
+            IntegrationProvider.RPDB -> rpdbProvider.fetchPoster(request)
+            IntegrationProvider.TOP_POSTERS -> topPostersProvider.fetchPoster(request)
+            else -> null
+    }
+
+    private fun fallbackBytes(): ByteArray? {
+        val fallbackUrl = request.fallbackUrl?.trim()?.takeIf(::isSafeFallbackUrl) ?: return null
+        val result = runCatching { fallbackTransport.execute(fallbackUrl) }.getOrNull() ?: return null
+        return result.body?.takeIf { result.isSuccessful }
+    }
+
+    private fun isSafeFallbackUrl(url: String): Boolean {
+        val trimmed = url.trim()
+        if (trimmed.startsWith("integration-poster://", ignoreCase = true)) return false
+
+        val uri = runCatching { URI(trimmed) }.getOrNull() ?: return false
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
+        if (scheme != "http" && scheme != "https") return false
+
+        val host = uri.host
+            ?.trimEnd('.')
+            ?.lowercase(Locale.ROOT)
+            ?: return false
+        return host != "api.ratingposterdb.com" && host != "api.top-posters.com"
     }
 
     private fun createImageSource(bytes: ByteArray, file: File): ImageSource {
@@ -45,7 +73,8 @@ class IntegrationPosterFetcher(
     @Singleton
     class Factory @Inject constructor(
         private val rpdbProvider: RpdbIntegrationProvider,
-        private val topPostersProvider: TopPostersIntegrationProvider
+        private val topPostersProvider: TopPostersIntegrationProvider,
+        private val fallbackTransport: PosterTransport
     ) : Fetcher.Factory<String> {
         override fun create(
             data: String,
@@ -57,7 +86,8 @@ class IntegrationPosterFetcher(
                 request = request,
                 options = options,
                 rpdbProvider = rpdbProvider,
-                topPostersProvider = topPostersProvider
+                topPostersProvider = topPostersProvider,
+                fallbackTransport = fallbackTransport
             )
         }
     }

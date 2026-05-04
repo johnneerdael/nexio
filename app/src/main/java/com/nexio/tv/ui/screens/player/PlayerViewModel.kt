@@ -22,6 +22,7 @@ import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SubtitleTranslationService
+import com.nexio.tv.data.repository.TraktEpisodeMappingService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
@@ -67,6 +68,7 @@ class PlayerViewModel @Inject constructor(
     private val egressIpFingerprint: EgressIpFingerprint,
     private val authRecoveryInterceptor: AuthRecoveryInterceptor,
     private val hyperHdrSessionStateHolder: HyperHdrSessionStateHolder,
+    private val traktEpisodeMappingService: TraktEpisodeMappingService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var playbackRegistrationToken: String? = null
@@ -107,6 +109,7 @@ class PlayerViewModel @Inject constructor(
             playbackOwnerContext = ownerContext,
             egressIpFingerprint = egressIpFingerprint,
             authRecoveryInterceptor = authRecoveryInterceptor,
+            traktEpisodeMappingService = traktEpisodeMappingService,
             savedStateHandle = savedStateHandle,
             scope = viewModelScope
         )

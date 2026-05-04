@@ -178,7 +178,8 @@ data class ResolvedMetadataDocument(
     val ignoredOverwrites: List<IgnoredFieldOverwrite>,
     val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),
     val sourceRoles: Map<ResolvedField, SourceRole> = emptyMap(),
-    val sourceProviders: Map<ResolvedField, String> = emptyMap()
+    val sourceProviders: Map<ResolvedField, String> = emptyMap(),
+    val rejectedCandidatesByField: Map<ResolvedField, List<Map<String, Any?>>> = emptyMap()
 )
 
 data class ResolverSchedule(

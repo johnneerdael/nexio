@@ -581,18 +581,60 @@ class MetadataExecutionAuditGoldenTest {
         val topposters = bundle.reports.single { it.scenario.name == "premium-artwork-topposters" }.items.single()
         val rpdb = bundle.reports.single { it.scenario.name == "premium-artwork-rpdb" }.items.single()
 
-        // Fallback (b): the poster is owned by the addon preview candidate (sourceProvider = addonId = "netflix")
-        // because the primary stub step omits poster (deterministicFields is empty → only CANONICAL_ID is set),
-        // leaving the ADDON_PREVIEW poster from the fixture as the winner. The ARTWORK adapter cannot override
-        // ADDON_PREVIEW via FieldResolver (canReplaceRailPreview requires RAIL_PREVIEW, not ADDON_PREVIEW).
-        // selectedProvider therefore reflects the addon source, not the artwork provider.
-        assertEquals("netflix", topposters.selectedFields.single { it.field == "poster" }.selectedProvider)
-        assertEquals("netflix", rpdb.selectedFields.single { it.field == "poster" }.selectedProvider)
+        val toppostersPoster = topposters.selectedFields.single { it.field == "poster" }
+        val rpdbPoster = rpdb.selectedFields.single { it.field == "poster" }
+        assertEquals("TOP_POSTERS", toppostersPoster.selectedProvider)
+        assertEquals("ARTWORK", toppostersPoster.sourceRole)
+        assertEquals("premium artwork may override poster only", toppostersPoster.ownershipRule)
+        assertTrue(
+            "topposters rejected candidates: ${toppostersPoster.rejectedCandidates}",
+            toppostersPoster.rejectedCandidates.any { rejected ->
+                rejected.provider == "TMDB" &&
+                    rejected.sourceRole == "ADDON_PREVIEW" &&
+                    rejected.reason == "premium artwork provider has precedence"
+            }
+        )
+        assertEquals("RPDB", rpdbPoster.selectedProvider)
+        assertEquals("ARTWORK", rpdbPoster.sourceRole)
+        assertEquals("premium artwork may override poster only", rpdbPoster.ownershipRule)
+        assertTrue(
+            "rpdb rejected candidates: ${rpdbPoster.rejectedCandidates}",
+            rpdbPoster.rejectedCandidates.any { rejected ->
+                rejected.provider == "TMDB" &&
+                    rejected.sourceRole == "ADDON_PREVIEW" &&
+                    rejected.reason == "premium artwork provider has precedence"
+            }
+        )
         assertTrue(topposters.runtimeCalls.any { it.apiShapeId == "topposters.poster_template" })
         assertTrue(rpdb.runtimeCalls.any { it.apiShapeId == "rpdb.poster_template" })
         assertTrue((topposters.cacheDecisions + rpdb.cacheDecisions).any { it.apiShapeId == "tmdb.movie.core" && it.decision == CacheDecision.HIT })
         assertTrue((topposters.runtimeCalls + rpdb.runtimeCalls).none {
             it.apiShapeId == "tmdb.movie.core" && it.executedNetwork
+        })
+    }
+
+    @Test
+    fun `premium artwork report does not synthesize poster rejected candidates without resolver evidence`() = runTest {
+        val report = MetadataAuditRunner.default().runCatalogFixture(
+            fixtureName = "netflix_movie_nfx.json",
+            fixtureJson = fixture("metadata/addons/netflix_movie_nfx.json"),
+            scenario = MetadataAuditScenario(
+                name = "premium-artwork-unknown",
+                depth = MetadataDepth.DETAIL_CORE,
+                visibleItemIds = setOf("tt16431404"),
+                premiumArtworkProvider = "UNKNOWN_POSTER_PROVIDER",
+                cacheMode = AuditCacheMode.WARM_FRESH
+            )
+        )
+
+        val poster = report.items.single().selectedFields.single { it.field == "poster" }
+
+        assertEquals("netflix", poster.selectedProvider)
+        assertEquals("ADDON_PREVIEW", poster.sourceRole)
+        assertTrue(poster.rejectedCandidates.none { rejected ->
+            rejected.provider == "TMDB" &&
+                rejected.sourceRole == "ADDON_PREVIEW" &&
+                rejected.reason == "premium artwork provider has precedence"
         })
     }
 

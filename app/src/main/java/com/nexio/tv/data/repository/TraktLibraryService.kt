@@ -12,11 +12,20 @@ import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.trakt.TraktCollectionKind
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddShowDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveShowDto
 import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.normalizeContentId
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.data.repository.parseIsoToMillis
 import com.nexio.tv.data.repository.toTraktIds
+import com.nexio.tv.data.repository.traktIdLookupKeys
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
@@ -58,6 +67,9 @@ import kotlinx.coroutines.sync.withPermit
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+class IntegrationMutationFailedException(message: String) : Exception(message)
+class TraktListLimitException(message: String) : Exception(message)
 
 @Singleton
 class TraktLibraryService @Inject constructor(
@@ -102,6 +114,7 @@ class TraktLibraryService @Inject constructor(
     private val hasCacheState = MutableStateFlow(false)
     private val refreshingState = MutableStateFlow(false)
     private val refreshMutex = Mutex()
+    private val collectionMembership = MutableStateFlow<Set<String>>(emptySet())
     private val metadataMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private var lastRefreshMs: Long = 0L
@@ -1222,6 +1235,9 @@ class TraktLibraryService @Inject constructor(
     }
 
     private fun restoreSnapshotForProfile(profileId: Int) {
+        // Collection is not persisted; reset the in-memory projection on every profile switch
+        // to match the profile-isolation guarantee that the rest of this service provides.
+        collectionMembership.value = emptySet()
         val persisted = snapshotStore.read(profileId)
         if (persisted == null) {
             logDebug("restore found no persisted snapshot profile=$profileId")
@@ -1229,6 +1245,11 @@ class TraktLibraryService @Inject constructor(
             return
         }
         restorePersistedState(persisted)
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun testOnlyRestoreSnapshotForProfile(profileId: Int) {
+        restoreSnapshotForProfile(profileId)
     }
 
     private fun persistedMetadataForProfile(profileId: Int): Map<String, LibraryMetadata> {
@@ -1325,6 +1346,7 @@ class TraktLibraryService @Inject constructor(
         )
         snapshotState.value = Snapshot()
         metadataState.value = emptyMap()
+        collectionMembership.value = emptySet()
         lastRefreshMs = 0L
         hasCacheState.value = false
     }
@@ -1346,6 +1368,102 @@ class TraktLibraryService @Inject constructor(
     }
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    suspend fun refreshCollection(force: Boolean = false) {
+        if (force) {
+            traktIntegrationProvider.invalidateCollectionSnapshot(TraktCollectionKind.MOVIES)
+            traktIntegrationProvider.invalidateCollectionSnapshot(TraktCollectionKind.SHOWS)
+        }
+        val movies = (traktIntegrationProvider.getCollectionMovies() as? IntegrationCallResult.Success)?.value.orEmpty()
+        val shows = (traktIntegrationProvider.getCollectionShows() as? IntegrationCallResult.Success)?.value.orEmpty()
+        val keys = buildSet<String> {
+            movies.forEach { item -> addAll(traktIdLookupKeys(item.movie?.ids, MediaKind.MOVIE)) }
+            shows.forEach { item -> addAll(traktIdLookupKeys(item.show?.ids, MediaKind.SHOW)) }
+        }
+        collectionMembership.value = keys
+    }
+
+    fun isInCollection(contentId: String): Flow<Boolean> {
+        val rawKey = contentId.trim()
+        val canonicalKey = canonicalLookupKey(rawKey)
+        return collectionMembership
+            .map { keys -> keys.contains(rawKey) || keys.contains(canonicalKey) }
+            .distinctUntilChanged()
+    }
+
+    private fun canonicalLookupKey(contentId: String): String {
+        val parsed = parseContentIds(contentId)
+        val canonical = normalizeContentId(toTraktIds(parsed))
+        return if (canonical.isNotBlank()) canonical else contentId.trim()
+    }
+
+    private fun kindOf(contentType: String): MediaKind =
+        if (contentType.equals("movie", ignoreCase = true)) MediaKind.MOVIE else MediaKind.SHOW
+
+    suspend fun addToCollection(contentId: String, contentType: String) {
+        val ids = toTraktIds(parseContentIds(contentId))
+        val previous = collectionMembership.value
+        collectionMembership.value = previous + traktIdLookupKeys(ids, kindOf(contentType))
+        val result = if (contentType.equals("movie", ignoreCase = true)) {
+            traktIntegrationProvider.addToCollection(TraktCollectionAddRequestDto(
+                movies = listOf(TraktCollectionAddMovieDto(ids = ids))
+            ))
+        } else {
+            traktIntegrationProvider.addToCollection(TraktCollectionAddRequestDto(
+                shows = listOf(TraktCollectionAddShowDto(ids = ids))
+            ))
+        }
+        when (result) {
+            is IntegrationCallResult.Success -> {
+                // Confirmed; nothing further to do.
+            }
+            is IntegrationCallResult.HttpError -> {
+                collectionMembership.value = previous  // rollback
+                if (result.statusCode == 420) {
+                    throw TraktListLimitException("Trakt list limit reached. Upgrade required.")
+                } else {
+                    throw IntegrationMutationFailedException("addToCollection failed: $result")
+                }
+            }
+            else -> {
+                collectionMembership.value = previous  // rollback
+                throw IntegrationMutationFailedException("addToCollection failed: $result")
+            }
+        }
+    }
+
+    suspend fun removeFromCollection(contentId: String, contentType: String) {
+        val ids = toTraktIds(parseContentIds(contentId))
+        val previous = collectionMembership.value
+        val keysToRemove = traktIdLookupKeys(ids, kindOf(contentType)).toSet()
+        collectionMembership.value = previous - keysToRemove
+        val result = if (contentType.equals("movie", ignoreCase = true)) {
+            traktIntegrationProvider.removeFromCollection(TraktCollectionRemoveRequestDto(
+                movies = listOf(TraktCollectionRemoveMovieDto(ids = ids))
+            ))
+        } else {
+            traktIntegrationProvider.removeFromCollection(TraktCollectionRemoveRequestDto(
+                shows = listOf(TraktCollectionRemoveShowDto(ids = ids))
+            ))
+        }
+        when (result) {
+            is IntegrationCallResult.Success -> {
+                // Confirmed; nothing further to do.
+            }
+            is IntegrationCallResult.HttpError -> {
+                collectionMembership.value = previous  // rollback
+                if (result.statusCode == 420) {
+                    throw TraktListLimitException("Trakt list limit reached. Upgrade required.")
+                } else {
+                    throw IntegrationMutationFailedException("removeFromCollection failed: $result")
+                }
+            }
+            else -> {
+                collectionMembership.value = previous  // rollback
+                throw IntegrationMutationFailedException("removeFromCollection failed: $result")
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "TraktLibraryService"

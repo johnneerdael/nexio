@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.settings
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.imageLoader
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.profile.ProfileManager
@@ -70,8 +69,14 @@ class PosterRatingsSettingsViewModel @Inject constructor(
 
     fun onEvent(event: PosterRatingsSettingsEvent) {
         when (event) {
-            is PosterRatingsSettingsEvent.ToggleRpdb -> update { dataStore.setRpdbEnabled(event.enabled) }
-            is PosterRatingsSettingsEvent.ToggleTopPosters -> update { dataStore.setTopPostersEnabled(event.enabled) }
+            is PosterRatingsSettingsEvent.ToggleRpdb -> update {
+                dataStore.setRpdbEnabled(event.enabled)
+                invalidateArtworkDisplayState()
+            }
+            is PosterRatingsSettingsEvent.ToggleTopPosters -> update {
+                dataStore.setTopPostersEnabled(event.enabled)
+                invalidateArtworkDisplayState()
+            }
             is PosterRatingsSettingsEvent.InvalidatePosterCache -> invalidatePosterCache()
         }
     }
@@ -79,25 +84,20 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     private fun invalidatePosterCache() {
         viewModelScope.launch {
             _posterCacheInvalidating.value = true
-            withContext(Dispatchers.IO) {
-                // Clear metadata caches that store poster URLs
-                metadataDiskCacheStore.clearAll()
-                val profileId = profileManager.activeProfileId.value
-                integrationOwnershipService.syncRails(
-                    RailKeyFactory.homeCatalogNamespace(profileId),
-                    emptyList()
-                )
-                homeCatalogSnapshotStore.clear(profileId = profileId)
-                metaRepository.clearCache()
-                catalogRepository.clearCache()
-
-                // Clear Coil image pixel caches
-                val imageLoader = appContext.imageLoader
-                imageLoader.memoryCache?.clear()
-                imageLoader.diskCache?.clear()
-            }
+            invalidateArtworkDisplayState()
             _posterCacheInvalidating.value = false
             _posterCacheInvalidated.value = true
+        }
+    }
+
+    private suspend fun invalidateArtworkDisplayState() {
+        withContext(Dispatchers.IO) {
+            val profileId = profileManager.activeProfileId.value
+            integrationOwnershipService.syncRails(
+                RailKeyFactory.homeCatalogNamespace(profileId),
+                emptyList()
+            )
+            homeCatalogSnapshotStore.clear(profileId = profileId)
         }
     }
 
@@ -106,6 +106,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         if (trimmed.isBlank()) {
             viewModelScope.launch {
                 dataStore.setRpdbApiKey("")
+                invalidateArtworkDisplayState()
                 onSuccess()
             }
             return
@@ -116,6 +117,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
             _validatingRpdb.value = false
             if (valid) {
                 dataStore.setRpdbApiKey(trimmed)
+                invalidateArtworkDisplayState()
                 onSuccess()
             } else {
                 _validationError.tryEmit(PosterRatingsProviderType.RPDB)
@@ -128,6 +130,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         if (trimmed.isBlank()) {
             viewModelScope.launch {
                 dataStore.setTopPostersApiKey("")
+                invalidateArtworkDisplayState()
                 onSuccess()
             }
             return
@@ -138,6 +141,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
             _validatingTopPosters.value = false
             if (valid) {
                 dataStore.setTopPostersApiKey(trimmed)
+                invalidateArtworkDisplayState()
                 onSuccess()
             } else {
                 _validationError.tryEmit(PosterRatingsProviderType.TOP_POSTERS)

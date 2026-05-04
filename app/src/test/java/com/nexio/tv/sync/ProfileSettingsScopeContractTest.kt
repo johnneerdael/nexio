@@ -122,7 +122,6 @@ class ProfileSettingsScopeContractTest {
             "TvdbSettingsDataStore",
             "TvdbTokenStore",
             "WatchProgressPreferences",
-            "WatchedItemsPreferences",
             "UpdatePreferences",
             "profile_cleanup_state"
         )
@@ -183,8 +182,7 @@ class ProfileSettingsScopeContractTest {
             "AppLocaleResolver",
             "SearchHistoryDataStore",
             "LibraryPreferences",
-            "WatchProgressPreferences",
-            "WatchedItemsPreferences"
+            "WatchProgressPreferences"
         ).forEach { store ->
             assertEquals("$store should be profile-local", "`profile-local`", rows[store]?.get(2))
         }
