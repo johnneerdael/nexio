@@ -124,6 +124,30 @@ class ArtworkAssetRepositoryTest {
         assertTrue(loadedSources.single() is ArtworkSource.RemoteUrl)
     }
 
+    @Test
+    fun `remote preview fresh cache hit does not require raw source material or loader`() = runTest {
+        val runtime = RecordingIntegrationRuntime(successValue = "cached".toByteArray())
+        var loaderCalled = false
+        val repository = ArtworkAssetRepository(
+            runtime = runtime,
+            diskCache = ArtworkAssetDiskCache(temp.root),
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
+            byteLoader = ArtworkByteLoader { _, _ ->
+                loaderCalled = true
+                IntegrationLoadResult.NetworkError(IllegalStateException("loader should not run"))
+            }
+        )
+
+        val result = repository.getOrFetch(remotePreviewDecision())
+
+        assertNotNull(result)
+        assertEquals(false, loaderCalled)
+        assertEquals(false, result!!.networkExecuted)
+        assertEquals("HIT", result.cacheDecision)
+        assertArrayEquals("cached".toByteArray(), result.localFile.readBytes())
+        assertEquals("artwork-asset:RAIL_PREVIEW:poster:urlHash:hash:variant:none:imageLang:en:policy:1", runtime.lastSpec!!.cacheKey)
+    }
+
     private class RecordingIntegrationRuntime(
         private val successValue: ByteArray
     ) : IntegrationRuntime {

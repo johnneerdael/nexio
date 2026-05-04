@@ -28,10 +28,17 @@ class ArtworkSourceMaterializer(
         }
 
         val sourceHash = candidate.sourceHash ?: return null
-        val rawSource = remoteSourcesByHash[sourceHash] ?: return null
         val provider = candidate.provider ?: ArtworkProviderId.AddonPreview
+        val rawSource = remoteSourcesByHash[sourceHash]
         return MaterializedArtworkSource(
-            source = ArtworkSource.RemoteUrl.of(rawSource, sourceHash),
+            source = if (rawSource != null) {
+                ArtworkSource.RemoteUrl.of(rawSource, sourceHash)
+            } else {
+                UnavailableRemoteArtworkSource(
+                    normalizedUrlHash = sourceHash,
+                    redactedUrlForTrace = candidate.redactedSourceForTrace
+                )
+            },
             assetKey = ArtworkCacheKeys.assetKeyForRemoteUrl(
                 provider = provider,
                 imageType = decision.imageType,
@@ -77,3 +84,14 @@ data class MaterializedArtworkSource(
     val apiShapeId: String,
     val sourceHash: String
 )
+
+data class UnavailableRemoteArtworkSource(
+    val normalizedUrlHash: String,
+    val redactedUrlForTrace: String?
+) : ArtworkSource {
+    init {
+        require(normalizedUrlHash.isNotBlank()) {
+            "UnavailableRemoteArtworkSource normalizedUrlHash must not be blank"
+        }
+    }
+}
