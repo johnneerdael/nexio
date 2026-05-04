@@ -162,13 +162,38 @@ class TraktIntegrationProvider @Inject constructor(
             traktApi.getUserSettings(authorization = authorization)
         }
 
-    suspend fun getLastActivities(): IntegrationCallResult<TraktLastActivitiesResponseDto> =
-        executeAuthorizedBackgroundCall(
+    suspend fun getLastActivities(): IntegrationCallResult<TraktLastActivitiesResponseDto> {
+        val session = traktAuthService.accountScopedSession()
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.LAST_ACTIVITIES,
-            operationKey = "trakt.last_activities",
-            request = { authorization -> traktApi.getLastActivities(authorization) },
-            mapSuccess = { response -> response.body().toCallResult() }
+            operationKey = accountOperationKey(session, "trakt.last_activities"),
+            cacheKey = accountCacheKey(session, "trakt:sync:last_activities"),
+            codec = gsonCodec<TraktLastActivitiesResponseDto>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = LAST_ACTIVITIES_TTL_MS,
+                staleAfterExpiryMs = LAST_ACTIVITIES_STALE_GRACE_MS
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = {
+                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
+                    traktApi.getLastActivities(authorization = authorization)
+                } ?: return@IntegrationSpec IntegrationLoadResult.HttpError(401, reason = "auth_missing")
+                if (!response.isSuccessful) {
+                    return@IntegrationSpec IntegrationLoadResult.HttpError(
+                        statusCode = response.code(),
+                        retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                        reason = "trakt_last_activities_failed"
+                    )
+                }
+                IntegrationLoadResult.Success(response.body() ?: TraktLastActivitiesResponseDto())
+            }
         )
+        val value = runtime.get(spec).valueOrNull() ?: return IntegrationCallResult.Missing
+        return IntegrationCallResult.Success(value)
+    }
 
     suspend fun getUserStats(id: String): IntegrationCallResult<TraktUserStatsResponseDto> =
         executeAuthorizedBackgroundCall(
@@ -1407,5 +1432,7 @@ class TraktIntegrationProvider @Inject constructor(
     private companion object {
         const val WATCHED_SNAPSHOT_TTL_MS: Long = 24L * 60L * 60L * 1000L              // 24h
         const val WATCHED_SNAPSHOT_STALE_GRACE_MS: Long = 7L * 24L * 60L * 60L * 1000L // 7d grace
+        const val LAST_ACTIVITIES_TTL_MS: Long = 5L * 60L * 1000L                      // 5min
+        const val LAST_ACTIVITIES_STALE_GRACE_MS: Long = 60L * 60L * 1000L             // 1h grace
     }
 }
