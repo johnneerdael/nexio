@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.integration.passThroughTestRuntime
+import com.nexio.tv.core.integration.ByteArrayIntegrationCacheStore
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -162,7 +163,8 @@ class TraktProgressResolveRequestTest {
             traktIntegrationProvider = TraktIntegrationProvider(
                 runtime = passThroughTestRuntime(),
                 traktApi = mockk<TraktApi>(relaxed = true),
-                traktAuthService = traktAuthService
+                traktAuthService = traktAuthService,
+                cacheStore = ByteArrayIntegrationCacheStore()
             ),
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
             metadataRouterFacade = facade
