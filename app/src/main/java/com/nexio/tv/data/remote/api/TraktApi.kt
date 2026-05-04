@@ -34,6 +34,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowProgressResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonWithEpisodesDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
@@ -192,6 +193,13 @@ interface TraktApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 100
     ): Response<List<TraktHiddenItemDto>>
+
+    @GET("shows/{id}/seasons")
+    suspend fun getShowSeasons(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Query("extended") extended: String? = "episodes"
+    ): Response<List<TraktShowSeasonWithEpisodesDto>>
 
     @GET("shows/{id}/seasons/{season}")
     suspend fun getSeasonEpisodes(

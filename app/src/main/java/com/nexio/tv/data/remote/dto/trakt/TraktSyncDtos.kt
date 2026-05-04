@@ -97,6 +97,14 @@ data class TraktSeasonDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class TraktShowSeasonWithEpisodesDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null,
+    @Json(name = "episodes") val episodes: List<TraktEpisodeSummaryDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class TraktUserEpisodeHistoryItemDto(
     @Json(name = "id") val id: Long? = null,
     @Json(name = "watched_at") val watchedAt: String? = null,
