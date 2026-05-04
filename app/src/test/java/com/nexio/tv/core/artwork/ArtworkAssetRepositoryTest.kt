@@ -46,6 +46,8 @@ class ArtworkAssetRepositoryTest {
         assertEquals(ArtworkApiShapes.RPDB_POSTER_TEMPLATE, runtime.lastSpec!!.apiShapeId)
         assertEquals(ByteArrayIntegrationCodec, runtime.lastSpec!!.codec)
         assertTrue(runtime.lastSpec!!.cachePolicy is IntegrationCachePolicy.CacheFirst)
+        assertEquals(ArtworkApiShapes.RPDB_POSTER_TEMPLATE, result.runtimeApiShapeId)
+        assertEquals("HIT", result.cacheDecision)
         assertEquals(false, result.networkExecuted)
     }
 
@@ -68,7 +70,28 @@ class ArtworkAssetRepositoryTest {
         assertNotNull(result)
         assertTrue(loaderCalled)
         assertArrayEquals("loaded".toByteArray(), result!!.localFile.readBytes())
+        assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
         assertEquals(true, result.networkExecuted)
+    }
+
+    @Test
+    fun `repository marks stale result as network executed when loader was invoked`() = runTest {
+        val runtime = StaleAfterLoadingIntegrationRuntime("stale".toByteArray())
+        val repository = ArtworkAssetRepository(
+            runtime = runtime,
+            diskCache = ArtworkAssetDiskCache(temp.root),
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("network-attempt".toByteArray())
+            }
+        )
+
+        val result = repository.getOrFetch(rpdbTemplateDecision())
+
+        assertNotNull(result)
+        assertEquals(true, result!!.networkExecuted)
+        assertEquals("STALE_HIT", result.cacheDecision)
+        assertArrayEquals("stale".toByteArray(), result.localFile.readBytes())
     }
 
     @Test
@@ -93,6 +116,8 @@ class ArtworkAssetRepositoryTest {
         assertNotNull(result)
         assertArrayEquals("preview".toByteArray(), result!!.localFile.readBytes())
         assertEquals(ArtworkApiShapes.RAIL_PREVIEW_IMAGE_FETCH, runtime.lastSpec!!.apiShapeId)
+        assertEquals(ArtworkApiShapes.RAIL_PREVIEW_IMAGE_FETCH, result.runtimeApiShapeId)
+        assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
         assertEquals("artwork-asset:RAIL_PREVIEW:poster:urlHash:hash:variant:none:imageLang:en:policy:1", runtime.lastSpec!!.cacheKey)
         assertEquals("https://image.tmdb.org/t/p/w500/<redacted>", decision.selectedCandidate.redactedSourceForTrace)
         assertTrue(loadedSources.single() is ArtworkSource.RemoteUrl)
@@ -132,6 +157,25 @@ class ArtworkAssetRepositoryTest {
                 is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(loaded.value as T)
                 else -> IntegrationFetchResult.Missing
             }
+        }
+
+        override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =
+            error("not used")
+
+        override suspend fun <T> open(spec: IntegrationStreamSpec<T>): IntegrationStreamHandle<T>? =
+            error("not used")
+    }
+
+    private class StaleAfterLoadingIntegrationRuntime(
+        private val staleValue: ByteArray
+    ) : IntegrationRuntime {
+        @Suppress("UNCHECKED_CAST")
+        override suspend fun <T> get(
+            spec: IntegrationSpec<T>,
+            options: IntegrationFetchOptions
+        ): IntegrationFetchResult<T> {
+            spec.load()
+            return IntegrationFetchResult.Stale(staleValue as T)
         }
 
         override suspend fun <T> call(spec: IntegrationCallSpec<T>): IntegrationCallResult<T> =

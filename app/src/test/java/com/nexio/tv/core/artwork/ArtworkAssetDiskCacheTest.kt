@@ -22,10 +22,24 @@ class ArtworkAssetDiskCacheTest {
         val written = cache.write(record, "image-bytes".toByteArray())
         val existing = cache.getExistingFile(assetKey)
 
-        assertTrue(written.exists())
-        assertEquals(written, existing)
+        assertTrue(written.file.exists())
+        assertEquals(written.file, existing)
         assertEquals("artwork-assets/RPDB/poster/artwork-asset_RPDB_poster_imdb_tt0137523.bin", record.relativePath)
-        assertArrayEquals("image-bytes".toByteArray(), written.readBytes())
+        assertArrayEquals("image-bytes".toByteArray(), written.file.readBytes())
+    }
+
+    @Test
+    fun `write overrides unsafe record path with canonical asset key path`() {
+        val cache = ArtworkAssetDiskCache(temp.root)
+        val assetKey = ArtworkAssetKey("artwork-asset:RPDB:poster:imdb:tt0137523")
+        val unsafeRecord = record(assetKey).copy(relativePath = "../../bad.img")
+
+        val written = cache.write(unsafeRecord, "safe-bytes".toByteArray())
+
+        assertEquals(cache.relativePathFor(assetKey), written.record.relativePath)
+        assertTrue(written.file.canonicalPath.startsWith(temp.root.canonicalPath))
+        assertArrayEquals("safe-bytes".toByteArray(), written.file.readBytes())
+        assertNull(File(temp.root, "../../bad.img").takeIf { it.exists() })
     }
 
     @Test

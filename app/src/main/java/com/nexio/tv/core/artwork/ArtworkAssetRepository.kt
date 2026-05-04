@@ -28,6 +28,8 @@ data class ArtworkAssetResult(
     val localFile: File,
     val record: ArtworkAssetRecord,
     val runtimeResult: IntegrationFetchResult<ByteArray>,
+    val runtimeApiShapeId: String,
+    val cacheDecision: String,
     val networkExecuted: Boolean
 )
 
@@ -42,6 +44,7 @@ class ArtworkAssetRepository(
         val materialized = sourceMaterializer.materialize(decision) ?: return null
         val apiShapeId = materialized.apiShapeId
         val runtimeProvider = materialized.runtimeProvider
+        var loaderInvoked = false
         val result = runtime.get(
             IntegrationSpec(
                 provider = runtimeProvider,
@@ -56,7 +59,10 @@ class ArtworkAssetRepository(
                 ),
                 workClass = IntegrationWorkClass.BACKGROUND_HYDRATION,
                 scope = IntegrationScope.GlobalEnglishImage,
-                load = { byteLoader.load(materialized.source, decision) }
+                load = {
+                    loaderInvoked = true
+                    byteLoader.load(materialized.source, decision)
+                }
             )
         )
 
@@ -70,13 +76,15 @@ class ArtworkAssetRepository(
             byteCount = bytes.size.toLong(),
             fetchedAtMs = nowMs()
         )
-        val file = diskCache.write(record, bytes)
+        val write = diskCache.write(record, bytes)
         return ArtworkAssetResult(
             assetKey = materialized.assetKey,
-            localFile = file,
-            record = record,
+            localFile = write.file,
+            record = write.record,
             runtimeResult = result,
-            networkExecuted = result is IntegrationFetchResult.Updated
+            runtimeApiShapeId = apiShapeId,
+            cacheDecision = result.cacheDecision(),
+            networkExecuted = loaderInvoked
         )
     }
 
@@ -89,5 +97,13 @@ class ArtworkAssetRepository(
             is IntegrationFetchResult.Updated -> value
             is IntegrationFetchResult.Stale -> value
             IntegrationFetchResult.Missing -> null
+        }
+
+    private fun IntegrationFetchResult<ByteArray>.cacheDecision(): String =
+        when (this) {
+            is IntegrationFetchResult.Fresh -> "HIT"
+            is IntegrationFetchResult.Updated -> "MISS_THEN_NETWORK"
+            is IntegrationFetchResult.Stale -> "STALE_HIT"
+            IntegrationFetchResult.Missing -> "MISS_NETWORK_SUPPRESSED"
         }
 }
