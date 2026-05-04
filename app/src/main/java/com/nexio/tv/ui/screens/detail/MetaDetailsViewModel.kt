@@ -819,8 +819,8 @@ class MetaDetailsViewModel @Inject constructor(
         if (!blockedForMandatoryEpisodes) {
             loadEpisodeMetadataAsync(enrichment)
         }
-        loadEpisodeRatingsAsync(enrichment.meta)
-        loadMDBListRatings(enrichment.meta)
+        loadEpisodeRatingsAsync(enrichment.meta, enrichment.tvEnrichment)
+        loadMDBListRatings(enrichment.meta, enrichment.tvEnrichment)
     }
 
     private fun shouldBlockSeriesReadyStateForMandatoryEpisodes(enrichment: DetailMetadataEnrichment): Boolean =
@@ -1271,11 +1271,12 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadMDBListRatings(meta: Meta) {
+    private suspend fun loadMDBListRatings(meta: Meta, tvEnrichment: TvMetadataEnrichment?) {
+        val ratingsFallbackItemId = resolveRatingsFallbackItemId(meta, tvEnrichment)
         val ratingsResult = runCatching {
             mdbListRepository.getRatingsForMeta(
                 meta = meta,
-                fallbackItemId = itemId,
+                fallbackItemId = ratingsFallbackItemId,
                 fallbackItemType = itemType
             )
         }.getOrElse {
@@ -1291,10 +1292,11 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private fun loadEpisodeRatingsAsync(meta: Meta) {
+    private fun loadEpisodeRatingsAsync(meta: Meta, tvEnrichment: TvMetadataEnrichment?) {
         episodeRatingsJob?.cancel()
         val isSeries = isSeriesDetailMeta(meta)
         val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct().sorted()
+        val ratingsFallbackItemId = resolveRatingsFallbackItemId(meta, tvEnrichment)
 
         _uiState.update { state ->
             if (state.meta == null || state.meta.id != meta.id) {
@@ -1323,7 +1325,7 @@ class MetaDetailsViewModel @Inject constructor(
             try {
                 val ratings = episodeRatingsSelectionRepository.getEpisodeRatings(
                     meta = meta,
-                    fallbackItemId = itemId,
+                    fallbackItemId = ratingsFallbackItemId,
                     fallbackItemType = itemType,
                     episodesBySeason = episodesBySeason
                 )
@@ -1620,9 +1622,10 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
+        val ratingsFallbackItemId = resolveRatingsFallbackItemId(updated, tvEnrichment)
         updated = titleRatingOverrideRepository.enrichMeta(
             meta = updated,
-            fallbackItemId = itemId,
+            fallbackItemId = ratingsFallbackItemId,
             fallbackItemType = itemType
         )
 
@@ -1649,6 +1652,22 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
         return result(updated).copy(animeRelated = animeRelated)
+    }
+
+    private fun resolveRatingsFallbackItemId(meta: Meta, tvEnrichment: TvMetadataEnrichment?): String {
+        return extractImdbIdForRatings(meta.id)
+            ?: extractImdbIdForRatings(itemId)
+            ?: tvEnrichment?.remoteIds
+                ?.entries
+                ?.firstOrNull { (source, _) -> source.equals("imdb", ignoreCase = true) }
+                ?.value
+                ?.firstNotNullOfOrNull(::extractImdbIdForRatings)
+            ?: itemId
+    }
+
+    private fun extractImdbIdForRatings(rawId: String?): String? {
+        if (rawId.isNullOrBlank()) return null
+        return Regex("tt\\d+").find(rawId)?.value
     }
 
     private fun hydrateSecondaryNavigationTargetsAsync(meta: Meta) {

@@ -14,6 +14,7 @@ import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.remote.api.KitsuImage
+import com.nexio.tv.data.remote.api.TvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 
@@ -46,6 +47,9 @@ internal fun TvMetadataEnrichment?.toMetadataCandidate(provider: MetadataPrimary
             rating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtimeMinutes?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
             averageRuntimeMinutes?.let { putIfAbsent(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            if (remoteIds.isNotEmpty()) {
+                put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
         }
     )
 
@@ -60,6 +64,10 @@ internal fun TvdbSeriesExtendedRecord?.toMetadataCandidate(provider: MetadataPri
             image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
             score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            val remoteIds = remoteIds.toRemoteIdsMap(id)
+            if (remoteIds.isNotEmpty()) {
+                put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
         }
     )
 
@@ -176,12 +184,34 @@ internal fun buildTvdbCoreLocalizedCandidate(
             extended?.image?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.score?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             extended?.averageRuntime?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
+            val remoteIds = extended?.remoteIds.toRemoteIdsMap(extended?.id)
+            if (remoteIds.isNotEmpty()) {
+                put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
         },
         localization = buildMap {
             title?.let { put(ResolvedField.TITLE, it.toMetadataTrace()) }
             overview?.let { put(ResolvedField.OVERVIEW, it.toMetadataTrace()) }
         }
     )
+}
+
+private fun List<TvdbRemoteId>?.toRemoteIdsMap(tvdbId: Int?): Map<String, Set<String>> {
+    val grouped = mutableMapOf<String, MutableSet<String>>()
+    tvdbId?.let { grouped.getOrPut("tvdb") { linkedSetOf() } += it.toString() }
+    orEmpty().forEach { remoteId ->
+        val source = remoteId.sourceName
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: return@forEach
+        val id = remoteId.id
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: return@forEach
+        grouped.getOrPut(source) { linkedSetOf() } += id
+    }
+    return grouped.mapValues { (_, ids) -> ids.toSet() }
 }
 
 internal fun buildTmdbLocalizedCandidate(

@@ -102,7 +102,7 @@ class OkHttpCustomImdbClient @Inject constructor(
             parsed.episodes.mapNotNull { episode ->
                 val seasonNumber = episode.seasonNumber ?: return@mapNotNull null
                 val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
-                val averageRating = episode.averageRating?.takeIf { it > 0.0 } ?: return@mapNotNull null
+                val averageRating = episode.averageRating?.takeIf(::isValidImdbAverageRating) ?: return@mapNotNull null
                 (seasonNumber to episodeNumber) to averageRating
             }.toMap()
         }
@@ -142,7 +142,7 @@ class OkHttpCustomImdbClient @Inject constructor(
                 ?: return@executeWithRateLimitRetry emptyMap()
             parsed.results.mapNotNull { rating ->
                 val tconst = rating.tconst.trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val value = rating.averageRating?.takeIf { it > 0.0 } ?: return@mapNotNull null
+                val value = rating.averageRating?.takeIf(::isValidImdbAverageRating) ?: return@mapNotNull null
                 tconst to value
             }.toMap()
         }
@@ -187,6 +187,10 @@ class OkHttpCustomImdbClient @Inject constructor(
         } else {
             1_000L
         }
+    }
+
+    private fun isValidImdbAverageRating(value: Double): Boolean {
+        return value > 0.0 && value <= 10.0
     }
 }
 
