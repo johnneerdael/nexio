@@ -6,7 +6,8 @@ import java.time.Instant
 internal data class ParsedContentIds(
     val trakt: Int? = null,
     val imdb: String? = null,
-    val tmdb: Int? = null
+    val tmdb: Int? = null,
+    val tvdb: Int? = null
 )
 
 internal fun parseContentIds(contentId: String?): ParsedContentIds {
@@ -19,6 +20,10 @@ internal fun parseContentIds(contentId: String?): ParsedContentIds {
 
     if (raw.startsWith("tmdb:", ignoreCase = true)) {
         return ParsedContentIds(tmdb = raw.substringAfter(':').toIntOrNull())
+    }
+
+    if (raw.startsWith("tvdb:", ignoreCase = true)) {
+        return ParsedContentIds(tvdb = raw.substringAfter(':').toIntOrNull())
     }
 
     if (raw.startsWith("trakt:", ignoreCase = true)) {
@@ -40,6 +45,9 @@ internal fun normalizeContentId(ids: TraktIdsDto?, fallback: String? = null): St
     val tmdb = ids?.tmdb
     if (tmdb != null) return "tmdb:$tmdb"
 
+    val tvdb = ids?.tvdb
+    if (tvdb != null) return "tvdb:$tvdb"
+
     val trakt = ids?.trakt
     if (trakt != null) return "trakt:$trakt"
 
@@ -51,6 +59,7 @@ internal fun toTraktPathId(contentId: String): String {
     return when {
         !parsed.imdb.isNullOrBlank() -> parsed.imdb
         parsed.tmdb != null -> "tmdb:${parsed.tmdb}"
+        parsed.tvdb != null -> "tvdb:${parsed.tvdb}"
         parsed.trakt != null -> parsed.trakt.toString()
         else -> contentId
     }
@@ -71,7 +80,8 @@ internal fun toTraktIds(ids: ParsedContentIds): TraktIdsDto {
     return TraktIdsDto(
         trakt = ids.trakt,
         imdb = ids.imdb,
-        tmdb = ids.tmdb
+        tmdb = ids.tmdb,
+        tvdb = ids.tvdb
     )
 }
 
