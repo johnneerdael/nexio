@@ -1,6 +1,9 @@
 package com.nexio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 
 @Immutable
 data class Meta(
@@ -33,10 +36,21 @@ data class Meta(
     val trailerYtIds: List<String> = emptyList(),
     val tvdbSeasonOrderContext: TvdbSeasonOrderContext? = null,
     val posterProviderTag: String? = null,
-    val localReleaseInfo: String? = null
+    val localReleaseInfo: String? = null,
+    @Transient
+    val artwork: ArtworkBundle? = null
 ) {
     val apiType: String
         get() = type.toApiString(rawType)
+
+    val displayPoster: String?
+        get() = artwork?.poster.toLegacyArtworkString() ?: poster
+
+    val displayBackground: String?
+        get() = artwork?.backdrop.toLegacyArtworkString() ?: background
+
+    val displayLogo: String?
+        get() = artwork?.logo.toLegacyArtworkString() ?: logo
 }
 
 @Immutable
@@ -112,8 +126,13 @@ data class Video(
     val overview: String?,
     val runtime: Int? = null, // episode runtime in minutes
     val tvdbEpisodeOrder: TvdbEpisodeOrder? = null,
-    val localReleaseInfo: String? = null
-)
+    val localReleaseInfo: String? = null,
+    @Transient
+    val thumbnailArtwork: ArtworkDisplayRef? = null
+) {
+    val displayThumbnail: String?
+        get() = thumbnailArtwork.toLegacyArtworkString() ?: thumbnail
+}
 
 @Immutable
 data class MetaLink(

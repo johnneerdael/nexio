@@ -18,6 +18,7 @@ data class HomeDisplayMetadata(
     val poster: String? = null,
     val posterProviderTag: String? = null,
     val backdrop: String? = null,
+    @Transient
     val artwork: ArtworkBundle? = null
 ) {
     val displayPoster: String?
@@ -43,7 +44,8 @@ fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
         tomatoesRating = tomatoesRating,
         poster = poster,
         posterProviderTag = posterProviderTag,
-        backdrop = background
+        backdrop = background,
+        artwork = artwork
     )
 }
 
@@ -60,7 +62,8 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
         tomatoesRating = null,
         poster = poster,
         posterProviderTag = posterProviderTag,
-        backdrop = background
+        backdrop = background,
+        artwork = artwork
     )
 }
 
@@ -77,7 +80,8 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         tomatoesRating = tomatoesRating ?: base.tomatoesRating,
         poster = displayPoster ?: base.poster,
         posterProviderTag = posterProviderTag ?: base.posterProviderTag,
-        background = displayBackdrop ?: base.background
+        background = displayBackdrop ?: base.background,
+        artwork = mergeAppliedArtwork(base)
     )
 }
 
@@ -107,6 +111,22 @@ private fun HomeDisplayMetadata.mergeFallbackArtwork(fallback: HomeDisplayMetada
         backdrop = artwork?.backdrop ?: fallbackArtwork.backdrop.takeIf { displayBackdrop == null },
         logo = artwork?.logo ?: fallbackArtwork.logo.takeIf { displayLogo == null },
         thumbnail = artwork?.thumbnail ?: fallbackArtwork.thumbnail
+    )
+    return merged.takeUnless {
+        it.poster == null &&
+            it.backdrop == null &&
+            it.logo == null &&
+            it.thumbnail == null
+    }
+}
+
+private fun HomeDisplayMetadata.mergeAppliedArtwork(base: MetaPreview): ArtworkBundle? {
+    val baseArtwork = base.artwork ?: return artwork
+    val merged = ArtworkBundle(
+        poster = artwork?.poster ?: baseArtwork.poster.takeIf { displayPoster == null },
+        backdrop = artwork?.backdrop ?: baseArtwork.backdrop.takeIf { displayBackdrop == null },
+        logo = artwork?.logo ?: baseArtwork.logo.takeIf { displayLogo == null },
+        thumbnail = artwork?.thumbnail ?: baseArtwork.thumbnail
     )
     return merged.takeUnless {
         it.poster == null &&
