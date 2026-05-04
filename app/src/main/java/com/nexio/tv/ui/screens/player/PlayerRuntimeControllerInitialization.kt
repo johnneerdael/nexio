@@ -763,9 +763,44 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             var hyperHdrFbReconnector: HyperHdrFlatBufferReconnector? = null
             var hyperHdrStateCollectJob: kotlinx.coroutines.Job? = null
             var hyperHdrCurrentMode: CaptureMode? = null
+            // Cached result of HyperHdrJsonApiClient.serverInfo().supportsP010 keyed by
+            // "host:jsonPort". Probed lazily by detectHyperHdrCaptureMode on first need.
+            // Cleared in stopHyperHdrCapture so a new session against a different server
+            // re-probes. Stays per-session (matches the lifecycle of hyperHdrCurrentMode).
+            var hyperHdrServerP010Cache: Pair<String, Boolean>? = null
 
             scope.launch {
                 hyperHdrStore.config.collect { hyperHdrCfg = it }
+            }
+
+            suspend fun detectHyperHdrCaptureMode(
+                cfg: HyperHdrConfig,
+                colorInfo: androidx.media3.common.ColorInfo?
+            ): CaptureMode {
+                val cacheKey = "${cfg.host}:${cfg.jsonPort}"
+                val cached = hyperHdrServerP010Cache
+                val serverSupportsP010 = if (cached != null && cached.first == cacheKey) {
+                    cached.second
+                } else {
+                    val probed = runCatching {
+                        HyperHdrJsonApiClient(
+                            host = cfg.host,
+                            port = cfg.jsonPort,
+                            token = cfg.jsonToken.ifBlank { null }
+                        ).serverInfo().supportsP010
+                    }.onFailure {
+                        Log.w("HyperHdrIntegration", "JSON serverinfo failed; using SDR capture", it)
+                    }.getOrDefault(false)
+                    hyperHdrServerP010Cache = cacheKey to probed
+                    probed
+                }
+
+                return FormatDetector.detect(
+                    colorInfo,
+                    cfg.hdrMode,
+                    deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor,
+                    serverSupportsP010 = serverSupportsP010
+                )
             }
 
             suspend fun startHyperHdrCapture(targetMode: CaptureMode) {
@@ -824,6 +859,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 hyperHdrFbReconnector?.close()
                 hyperHdrFbReconnector = null
                 hyperHdrCurrentMode = null
+                hyperHdrServerP010Cache = null
                 hyperHdrSessionStateHolder.update(HyperHdrSessionState.Idle)
             }
 
@@ -1001,11 +1037,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             scope.launch {
                                 val cfg = hyperHdrCfg
                                 val colorInfo = _exoPlayer?.videoFormat?.colorInfo
-                                val mode = FormatDetector.detect(
-                                    colorInfo,
-                                    cfg.hdrMode,
-                                    deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor
-                                )
+                                val mode = detectHyperHdrCaptureMode(cfg, colorInfo)
                                 startHyperHdrCapture(mode)
                             }
                         } else {
@@ -1040,14 +1072,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
                     override fun onTracksChanged(tracks: Tracks) {
                         if (hyperHdrCfg.isUsable && _exoPlayer?.isPlaying == true) {
-                            val colorInfo = _exoPlayer?.videoFormat?.colorInfo
-                            val newMode = FormatDetector.detect(
-                                colorInfo,
-                                hyperHdrCfg.hdrMode,
-                                deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor
-                            )
-                            if (newMode != hyperHdrCurrentMode) {
-                                scope.launch { startHyperHdrCapture(newMode) }
+                            scope.launch {
+                                val cfg = hyperHdrCfg
+                                val colorInfo = _exoPlayer?.videoFormat?.colorInfo
+                                val newMode = detectHyperHdrCaptureMode(cfg, colorInfo)
+                                if (newMode != hyperHdrCurrentMode) {
+                                    startHyperHdrCapture(newMode)
+                                }
                             }
                         }
 
