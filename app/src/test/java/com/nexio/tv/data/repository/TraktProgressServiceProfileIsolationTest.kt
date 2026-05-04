@@ -107,8 +107,11 @@ class TraktProgressServiceProfileIsolationTest {
         activeProfileId.set(2)
         service.requestEventDrivenRefresh()
 
-        // ASSERT: the underlying gated action was invoked exactly twice (once per profile).
-        assertEquals(2, service.testOnlyEventDrivenRefreshFiringCount())
+        // Each profile's per-profile counter must reflect exactly one firing — proving the
+        // throttle is not shared across profiles. Querying the per-profile counter (rather
+        // than a singleton total) keeps all observable test state inside TraktProgressRuntimeState.
+        assertEquals(1, service.testOnlyEventDrivenRefreshFiringCount(profileId = 1))
+        assertEquals(1, service.testOnlyEventDrivenRefreshFiringCount(profileId = 2))
     }
 
     private fun sampleResolvedEpisodeInfo() =
