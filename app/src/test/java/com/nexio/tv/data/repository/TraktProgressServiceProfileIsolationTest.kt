@@ -39,10 +39,13 @@ class TraktProgressServiceProfileIsolationTest {
             all = "2026-05-04T10:05:00Z",
             episodes = TraktLastActivitiesMediaDto(watchedAt = "2026-05-04T10:00:00Z")
         )
-        coEvery { traktIntegrationProvider.getLastActivities() } returnsMany listOf(
-            IntegrationCallResult.Success(profile1Activities),
-            IntegrationCallResult.Success(profile2Activities)
-        )
+        // Dispatch by active profile so every call returns the correct body regardless of order.
+        // The runtime cache (CacheFirst) lives inside getLastActivities(); the mock bypasses it,
+        // so each getRecentActivities() call maps 1-to-1 with a getLastActivities() call here.
+        coEvery { traktIntegrationProvider.getLastActivities() } answers {
+            if (activeProfileId.get() == 1) IntegrationCallResult.Success(profile1Activities)
+            else IntegrationCallResult.Success(profile2Activities)
+        }
 
         activeProfileId.set(1)
         val first = service.getRecentActivities(maxAgeMs = 60_000L)
@@ -57,7 +60,8 @@ class TraktProgressServiceProfileIsolationTest {
         assertEquals("2026-05-04T10:00:00Z", second?.episodes?.watchedAt)
         assertEquals("2026-05-04T09:00:00Z", third?.episodes?.watchedAt)
         assertEquals("2026-05-04T10:00:00Z", fourth?.episodes?.watchedAt)
-        coVerify(exactly = 2) { traktIntegrationProvider.getLastActivities() }
+        // No in-memory cache: each getRecentActivities() delegates directly → 4 provider calls.
+        coVerify(exactly = 4) { traktIntegrationProvider.getLastActivities() }
     }
 
     @Test
