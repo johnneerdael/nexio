@@ -96,7 +96,19 @@ data class NextUpInfo(
     val imdbRating: Float? = null,
     val genres: List<String> = emptyList(),
     val releaseInfo: String? = null
-)
+) {
+    val displayPoster: String?
+        get() = displayMetadata?.displayPoster ?: poster
+
+    val displayBackdrop: String?
+        get() = displayMetadata?.displayBackdrop ?: backdrop
+
+    val displayLogo: String?
+        get() = displayMetadata?.displayLogo ?: logo
+
+    val displayThumbnail: String?
+        get() = displayMetadata?.displayThumbnail ?: thumbnail
+}
 
 @Immutable
 sealed class GridItem {

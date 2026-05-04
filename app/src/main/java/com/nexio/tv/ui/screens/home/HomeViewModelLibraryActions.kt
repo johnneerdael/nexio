@@ -293,9 +293,9 @@ private fun buildCompletedMovieProgress(item: MetaPreview): WatchProgress {
         contentId = item.id,
         contentType = item.apiType,
         name = item.name,
-        poster = item.poster,
-        backdrop = item.background,
-        logo = item.logo,
+        poster = item.displayPoster,
+        backdrop = item.displayBackground,
+        logo = item.displayLogo,
         videoId = item.id,
         season = null,
         episode = null,
@@ -321,10 +321,10 @@ private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntry
         traktId = parsedIds.trakt,
         imdbId = parsedIds.imdb,
         tmdbId = parsedIds.tmdb,
-        poster = poster,
+        poster = displayPoster,
         posterShape = posterShape,
-        background = background,
-        logo = logo,
+        background = displayBackground,
+        logo = displayLogo,
         description = description,
         releaseInfo = releaseInfo,
         imdbRating = imdbRating,
@@ -352,9 +352,10 @@ private fun ContinueWatchingItem.toLibraryEntryInput(): LibraryEntryInput {
             itemType = progress.contentType
             title = progress.name
             year = Regex("(\\d{4})").find(progress.name)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            poster = progress.poster
-            background = progress.backdrop
-            logo = progress.logo
+            val displayMetadata = displayMetadata()
+            poster = displayMetadata.displayPoster
+            background = displayMetadata.displayBackdrop
+            logo = displayMetadata.displayLogo
             description = progress.episodeTitle
             releaseInfo = null
             genres = emptyList()
@@ -362,13 +363,14 @@ private fun ContinueWatchingItem.toLibraryEntryInput(): LibraryEntryInput {
 
         is ContinueWatchingItem.NextUp -> {
             val info = info
+            val displayMetadata = displayMetadata()
             itemId = info.contentId
             itemType = info.contentType
             title = info.name
             year = Regex("(\\d{4})").find(info.releaseInfo ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
-            poster = info.poster ?: info.thumbnail
-            background = info.backdrop ?: info.thumbnail
-            logo = info.logo
+            poster = displayMetadata.displayPoster
+            background = displayMetadata.displayBackdrop
+            logo = displayMetadata.displayLogo
             description = info.episodeDescription ?: info.episodeTitle
             releaseInfo = info.releaseInfo ?: info.released
             genres = info.genres

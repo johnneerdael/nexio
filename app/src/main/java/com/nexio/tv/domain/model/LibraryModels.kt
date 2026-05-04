@@ -28,6 +28,15 @@ data class LibraryEntry(
     val playbackFilename: String? = null,
     val playbackSizeBytes: Long? = null
 ) {
+    val displayPoster: String?
+        get() = toMetaPreview().displayPoster
+
+    val displayBackground: String?
+        get() = toMetaPreview().displayBackground
+
+    val displayLogo: String?
+        get() = toMetaPreview().displayLogo
+
     fun toMetaPreview(): MetaPreview {
         return MetaPreview(
             id = id,

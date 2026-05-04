@@ -186,15 +186,17 @@ private fun HeroCarouselSlide(
     }
     val requestHeightPx = remember(density) { with(density) { 400.dp.roundToPx() } }
     val logoRequestHeightPx = remember(density) { with(density) { 80.dp.roundToPx() } }
-    val backgroundModel = remember(context, item.background, requestWidthPx, requestHeightPx) {
+    val displayBackground = item.displayBackground
+    val displayLogo = item.displayLogo
+    val backgroundModel = remember(context, displayBackground, requestWidthPx, requestHeightPx) {
         ImageRequest.Builder(context)
-            .data(item.background)
+            .data(displayBackground)
             .crossfade(false)
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
     }
-    val logoModel = remember(context, item.logo, requestWidthPx, logoRequestHeightPx) {
-        item.logo?.let {
+    val logoModel = remember(context, displayLogo, requestWidthPx, logoRequestHeightPx) {
+        displayLogo?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
@@ -202,8 +204,8 @@ private fun HeroCarouselSlide(
                 .build()
         }
     }
-    var logoLoadFailed by remember(item.logo) { mutableStateOf(false) }
-    val showLogo = !item.logo.isNullOrBlank() && !logoLoadFailed
+    var logoLoadFailed by remember(displayLogo) { mutableStateOf(false) }
+    val showLogo = !displayLogo.isNullOrBlank() && !logoLoadFailed
 
     val bgColor = NexioColors.Background
     val bottomGradient = remember(bgColor) {

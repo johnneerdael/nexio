@@ -143,16 +143,17 @@ fun GridContentCard(
                     .clip(cardShape)
             ) {
                 val context = LocalContext.current
-                val imageModel = remember(item.poster, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
+                val displayPoster = item.displayPoster
+                val imageModel = remember(displayPoster, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
                     ImageRequest.Builder(context)
-                        .data(item.poster)
+                        .data(displayPoster)
                         .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
-                        .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}")
-                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, item.poster))
+                        .memoryCacheKey("${displayPoster}_${requestWidthPx}x${requestHeightPx}")
+                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, displayPoster))
                         .build()
                 }
-                if (item.poster.isNullOrBlank()) {
+                if (displayPoster.isNullOrBlank()) {
                     MonochromePosterPlaceholder()
                 } else {
                     AsyncImage(

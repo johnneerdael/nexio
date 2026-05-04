@@ -202,13 +202,15 @@ fun ContentCard(
         val requestHeightPx = remember(baseCardHeight, density) {
             with(density) { baseCardHeight.roundToPx() }
         }
+        val displayPoster = item.displayPoster
+        val displayBackground = item.displayBackground
         val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-            item.background ?: item.poster
+            displayBackground ?: displayPoster
         } else {
-            item.poster
+            displayPoster
         }
         val imageModel = remember(imageUrl, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
-            val isBackdrop = focusedPosterBackdropExpandEnabled && imageUrl == item.background
+            val isBackdrop = focusedPosterBackdropExpandEnabled && imageUrl == displayBackground
             val diskKey = if (isBackdrop) {
                 ArtworkImageCacheKeys.backdrop(item.id)
             } else {
@@ -225,8 +227,9 @@ fun ContentCard(
         val logoRequestHeightPx = remember(density) {
             with(density) { 48.dp.roundToPx() }
         }
-        val logoModel = remember(item.logo, requestWidthPx, logoRequestHeightPx, item.id) {
-            item.logo?.let { logoUrl ->
+        val displayLogo = item.displayLogo
+        val logoModel = remember(displayLogo, requestWidthPx, logoRequestHeightPx, item.id) {
+            displayLogo?.let { logoUrl ->
                 ImageRequest.Builder(context)
                     .data(logoUrl)
                     .crossfade(false)
@@ -236,8 +239,8 @@ fun ContentCard(
                     .build()
             }
         }
-        var logoLoadFailed by remember(item.logo) { mutableStateOf(false) }
-        val showExpandedLogo = !item.logo.isNullOrBlank() && !logoLoadFailed
+        var logoLoadFailed by remember(displayLogo) { mutableStateOf(false) }
+        val showExpandedLogo = !displayLogo.isNullOrBlank() && !logoLoadFailed
         LaunchedEffect(isBackdropExpanded, isFocused, trailerPreviewUrl, trailerPreviewExternalUrl) {
             if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
             if (!isBackdropExpanded || !isFocused) return@LaunchedEffect

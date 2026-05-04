@@ -18,6 +18,7 @@ data class HomeDisplayMetadata(
     val poster: String? = null,
     val posterProviderTag: String? = null,
     val backdrop: String? = null,
+    val thumbnail: String? = null,
     @Transient
     val artwork: ArtworkBundle? = null
 ) {
@@ -29,6 +30,9 @@ data class HomeDisplayMetadata(
 
     val displayLogo: String?
         get() = artwork?.logo.toLegacyArtworkString() ?: logo
+
+    val displayThumbnail: String?
+        get() = artwork?.thumbnail.toLegacyArtworkString() ?: thumbnail
 }
 
 fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
@@ -45,6 +49,7 @@ fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
         poster = poster,
         posterProviderTag = posterProviderTag,
         backdrop = background,
+        thumbnail = artwork?.thumbnail.toLegacyArtworkString(),
         artwork = artwork
     )
 }
@@ -63,6 +68,7 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
         poster = poster,
         posterProviderTag = posterProviderTag,
         backdrop = background,
+        thumbnail = artwork?.thumbnail.toLegacyArtworkString(),
         artwork = artwork
     )
 }
@@ -100,6 +106,7 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         poster = poster ?: fallback.poster,
         posterProviderTag = posterProviderTag ?: fallback.posterProviderTag,
         backdrop = backdrop ?: fallback.backdrop,
+        thumbnail = thumbnail ?: fallback.thumbnail,
         artwork = mergeFallbackArtwork(fallback)
     )
 }
@@ -110,7 +117,7 @@ private fun HomeDisplayMetadata.mergeFallbackArtwork(fallback: HomeDisplayMetada
         poster = artwork?.poster ?: fallbackArtwork.poster.takeIf { displayPoster == null },
         backdrop = artwork?.backdrop ?: fallbackArtwork.backdrop.takeIf { displayBackdrop == null },
         logo = artwork?.logo ?: fallbackArtwork.logo.takeIf { displayLogo == null },
-        thumbnail = artwork?.thumbnail ?: fallbackArtwork.thumbnail
+        thumbnail = artwork?.thumbnail ?: fallbackArtwork.thumbnail.takeIf { displayThumbnail == null }
     )
     return merged.takeUnless {
         it.poster == null &&
@@ -126,7 +133,7 @@ private fun HomeDisplayMetadata.mergeAppliedArtwork(base: MetaPreview): ArtworkB
         poster = artwork?.poster ?: baseArtwork.poster.takeIf { displayPoster == null },
         backdrop = artwork?.backdrop ?: baseArtwork.backdrop.takeIf { displayBackdrop == null },
         logo = artwork?.logo ?: baseArtwork.logo.takeIf { displayLogo == null },
-        thumbnail = artwork?.thumbnail ?: baseArtwork.thumbnail
+        thumbnail = artwork?.thumbnail ?: baseArtwork.thumbnail.takeIf { displayThumbnail == null }
     )
     return merged.takeUnless {
         it.poster == null &&

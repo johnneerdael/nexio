@@ -580,7 +580,7 @@ fun HomeScreen(
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(pendingPosterTrailer.item.background ?: pendingPosterTrailer.item.poster)
+                    .data(pendingPosterTrailer.item.displayBackground ?: pendingPosterTrailer.item.displayPoster)
                     .crossfade(true)
                     .build(),
                 contentDescription = null,

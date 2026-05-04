@@ -1658,7 +1658,7 @@ class MetaDetailsViewModel @Inject constructor(
                     type = ContentType.SERIES,
                     rawType = "anime",
                     name = item.title,
-                    poster = item.poster,
+                    poster = item.displayPoster,
                     posterShape = PosterShape.POSTER,
                     background = null,
                     logo = null,

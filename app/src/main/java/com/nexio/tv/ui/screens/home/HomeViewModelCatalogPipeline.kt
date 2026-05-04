@@ -3778,7 +3778,7 @@ private fun MDBListCustomCatalog.toCatalogRow(): CatalogRow? {
 
 internal fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPreview {
     val info = nextUp.info
-    val displayMetadata = info.displayMetadata
+    val displayMetadata = nextUp.displayMetadata()
     val episodeSuffix = buildString {
         append("S")
         append(info.season)
@@ -3793,16 +3793,16 @@ internal fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPrevi
         id = info.contentId,
         type = ContentType.SERIES,
         rawType = info.contentType,
-        name = "${displayMetadata?.title ?: info.name} • $episodeSuffix",
-        poster = displayMetadata?.displayPoster ?: info.poster ?: info.thumbnail,
+        name = "${displayMetadata.title ?: info.name} • $episodeSuffix",
+        poster = displayMetadata.displayPoster,
         posterShape = PosterShape.LANDSCAPE,
-        background = displayMetadata?.displayBackdrop ?: info.backdrop ?: info.thumbnail,
-        logo = displayMetadata?.displayLogo ?: info.logo,
-        description = info.episodeDescription ?: displayMetadata?.description,
-        releaseInfo = displayMetadata?.releaseInfo ?: info.releaseInfo ?: info.released,
-        imdbRating = info.imdbRating ?: displayMetadata?.imdbRating,
-        tomatoesRating = displayMetadata?.tomatoesRating,
-        genres = info.genres.ifEmpty { displayMetadata?.genres.orEmpty() }
+        background = displayMetadata.displayBackdrop,
+        logo = displayMetadata.displayLogo,
+        description = info.episodeDescription ?: displayMetadata.description,
+        releaseInfo = displayMetadata.releaseInfo ?: info.releaseInfo ?: info.released,
+        imdbRating = info.imdbRating ?: displayMetadata.imdbRating,
+        tomatoesRating = displayMetadata.tomatoesRating,
+        genres = info.genres.ifEmpty { displayMetadata.genres }
     )
 }
 
