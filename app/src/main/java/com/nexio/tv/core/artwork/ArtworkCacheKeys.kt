@@ -91,7 +91,7 @@ object ArtworkCacheKeys {
                 "credential",
                 template.credentialHash.safeOptionalPart(),
                 "imageLang",
-                template.imageLanguage.safeRequiredPart("imageLanguage"),
+                IMAGE_LANGUAGE,
                 "policy",
                 template.policyVersion.toString()
             ).flattenParts()

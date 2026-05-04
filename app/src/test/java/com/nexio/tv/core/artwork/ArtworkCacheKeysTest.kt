@@ -76,4 +76,27 @@ class ArtworkCacheKeysTest {
             key.value
         )
     }
+
+    @Test
+    fun `provider template asset key always uses english image language`() {
+        val key = ArtworkCacheKeys.assetKeyForProviderTemplate(
+            PersistedProviderTemplate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                imageType = ArtworkType.POSTER,
+                idType = "imdb",
+                mediaId = "tt0137523",
+                providerPathHash = "pathhash",
+                settingsHash = "settingshash",
+                credentialHash = "credentialhash",
+                imageLanguage = "fr",
+                policyVersion = 1
+            )
+        )
+
+        assertFalse(key.value.contains("imageLang:fr"))
+        assertEquals(
+            "artwork-asset:RPDB:poster:imdb:tt0137523:settings:settingshash:credential:credentialhash:imageLang:en:policy:1",
+            key.value
+        )
+    }
 }
