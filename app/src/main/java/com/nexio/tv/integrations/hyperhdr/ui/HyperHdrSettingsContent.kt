@@ -45,6 +45,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.integrations.hyperhdr.data.HdrMode
+import com.nexio.tv.integrations.hyperhdr.discovery.DiscoveredServer
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.screens.settings.SettingsActionRow
 import com.nexio.tv.ui.screens.settings.SettingsDetailHeader
@@ -66,6 +67,7 @@ fun HyperHdrSettingsContent(
     var showPriorityDialog by remember { mutableStateOf(false) }
     var showHdrModeDialog by remember { mutableStateOf(false) }
     var showTokenDialog by remember { mutableStateOf(false) }
+    var showDiscoveryDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -99,6 +101,15 @@ fun HyperHdrSettingsContent(
                     )
                 }
 
+                item(key = "hyperhdr_discover") {
+                    SettingsActionRow(
+                        title = "Discover servers",
+                        subtitle = "Scan the local network for HyperHDR via mDNS",
+                        value = null,
+                        onClick = { showDiscoveryDialog = true }
+                    )
+                }
+
                 item(key = "hyperhdr_host") {
                     SettingsActionRow(
                         title = "Host",
@@ -120,7 +131,7 @@ fun HyperHdrSettingsContent(
                 item(key = "hyperhdr_json_port") {
                     SettingsActionRow(
                         title = "JSON-RPC port",
-                        subtitle = "Default 19444",
+                        subtitle = "HyperHDR web server port — default 8090",
                         value = cfg.jsonPort.toString(),
                         onClick = { showJsonPortDialog = true }
                     )
@@ -239,7 +250,7 @@ fun HyperHdrSettingsContent(
     if (showJsonPortDialog) {
         HyperHdrTextInputDialog(
             title = "JSON-RPC port",
-            subtitle = "Default 19444",
+            subtitle = "HyperHDR web server port — default 8090",
             initialValue = cfg.jsonPort.toString(),
             keyboardNumeric = true,
             onSave = { it.toIntOrNull()?.let { p -> viewModel.setJsonPort(p) } },
@@ -275,6 +286,71 @@ fun HyperHdrSettingsContent(
             onSave = { viewModel.setJsonToken(it) },
             onDismiss = { showTokenDialog = false },
         )
+    }
+
+    if (showDiscoveryDialog) {
+        val servers by viewModel.discoveredServers.collectAsStateWithLifecycle()
+        HyperHdrDiscoveryDialog(
+            servers = servers,
+            onSelect = { server ->
+                viewModel.applyDiscovered(server)
+                viewModel.stopDiscovery()
+                showDiscoveryDialog = false
+            },
+            onDismiss = {
+                viewModel.stopDiscovery()
+                showDiscoveryDialog = false
+            },
+        )
+        LaunchedEffect(Unit) { viewModel.startDiscovery() }
+    }
+}
+
+@Composable
+private fun HyperHdrDiscoveryDialog(
+    servers: List<DiscoveredServer>,
+    onSelect: (DiscoveredServer) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = "Discover HyperHDR servers",
+        subtitle = "Looking for `_hyperhdr-http._tcp` on the local network. Tap a server to apply its host and ports.",
+        width = 600.dp,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (servers.isEmpty()) {
+                SettingsActionRow(
+                    title = "Scanning…",
+                    subtitle = "If nothing appears within ~10s, check that the device and HyperHDR are on the same Wi-Fi/VLAN.",
+                    value = null,
+                    enabled = false,
+                    onClick = {},
+                )
+            } else {
+                servers.forEach { server ->
+                    SettingsActionRow(
+                        title = server.name,
+                        subtitle = "${server.host}:${server.httpPort}",
+                        value = "Apply",
+                        onClick = { onSelect(server) },
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary,
+                    ),
+                ) { Text("Close") }
+            }
+        }
     }
 }
 
