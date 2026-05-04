@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.settings
 import com.nexio.tv.data.local.TheIntroDbSettings
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -33,34 +32,6 @@ class TheIntroDbSettingsViewModelTest {
     }
 
     @Test
-    fun `existing enabled settings stay enabled`() = runTest(dispatcher) {
-        val flow = MutableStateFlow(TheIntroDbSettings(enabled = true))
-        val dataStore = mockk<TheIntroDbSettingsDataStore>(relaxed = true)
-        every { dataStore.settings } returns flow
-
-        TheIntroDbSettingsViewModel(dataStore)
-        advanceUntilIdle()
-
-        coVerify(exactly = 0) { dataStore.setEnabled(any()) }
-    }
-
-    @Test
-    fun `enabling stores enabled true`() = runTest(dispatcher) {
-        val flow = MutableStateFlow(TheIntroDbSettings(enabled = false))
-        val dataStore = mockk<TheIntroDbSettingsDataStore>(relaxed = true)
-        every { dataStore.settings } returns flow
-        coEvery { dataStore.setEnabled(any()) } returns Unit
-
-        val viewModel = TheIntroDbSettingsViewModel(dataStore)
-        advanceUntilIdle()
-
-        viewModel.setEnabled(true)
-        advanceUntilIdle()
-
-        coVerify { dataStore.setEnabled(true) }
-    }
-
-    @Test
     fun `show intro toggle persists`() = runTest(dispatcher) {
         val flow = MutableStateFlow(TheIntroDbSettings())
         val dataStore = mockk<TheIntroDbSettingsDataStore>(relaxed = true)
@@ -73,6 +44,6 @@ class TheIntroDbSettingsViewModelTest {
         viewModel.setShowIntroButton(false)
         advanceUntilIdle()
 
-        coVerify { dataStore.setShowIntroButton(false) }
+        io.mockk.coVerify { dataStore.setShowIntroButton(false) }
     }
 }

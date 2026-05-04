@@ -938,8 +938,6 @@
     <string name="debrid_data_collection_qr_hash_failed">Collector-Dashboard-Token kann nicht generiert werden, da das Hashing fehlgeschlagen ist.</string>
     <string name="theintrodb_title">TheIntroDB</string>
     <string name="theintrodb_subtitle">Überspringen und \'Weiter abspielen\'-Verhalten aus TheIntroDB-Segmentdaten konfigurieren</string>
-    <string name="theintrodb_enable_title">TheIntroDB aktivieren</string>
-    <string name="theintrodb_enable_subtitle">TheIntroDB v2 als kanonischen Nicht-Anime-Wiedergabesegment-Anbieter verwenden</string>
     <string name="theintrodb_api_key_title">API-Schlüssel</string>
     <string name="theintrodb_api_key_subtitle">Erforderlicher persönlicher TheIntroDB API-Schlüssel für Wiedergabesegment-Lookups und Synchronisierung</string>
     <string name="theintrodb_show_intro_title">\'Intro überspringen\' anzeigen</string>
@@ -956,8 +954,6 @@
     <string name="theintrodb_missing_api_key">TheIntroDB API-Schlüssel ist erforderlich</string>
     <string name="theid_title">@string/theintrodb_title</string>
     <string name="theid_subtitle">@string/theintrodb_subtitle</string>
-    <string name="theid_enable_title">@string/theintrodb_enable_title</string>
-    <string name="theid_enable_subtitle">@string/theintrodb_enable_subtitle</string>
     <string name="theid_api_key_title">@string/theintrodb_api_key_title</string>
     <string name="theid_api_key_subtitle">@string/theintrodb_api_key_subtitle</string>
     <string name="theid_show_intro_title">@string/theintrodb_show_intro_title</string>

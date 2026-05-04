@@ -641,8 +641,6 @@
     <!-- TheIntroDB -->
     <string name="theintrodb_title">TheIntroDB</string>
     <string name="theintrodb_subtitle">Configure skip and Play Next behavior from TheIntroDB segment data</string>
-    <string name="theintrodb_enable_title">Enable TheIntroDB</string>
-    <string name="theintrodb_enable_subtitle">Use TheIntroDB v2 as the canonical non-anime playback segment provider</string>
     <string name="theintrodb_api_key_title">API Key</string>
     <string name="theintrodb_api_key_subtitle">Required personal TheIntroDB API key for playback segment lookups and sync</string>
     <string name="theintrodb_show_intro_title">Show Skip Intro</string>
@@ -659,8 +657,6 @@
     <string name="theintrodb_missing_api_key">TheIntroDB API key is required</string>
     <string name="theid_title">@string/theintrodb_title</string>
     <string name="theid_subtitle">@string/theintrodb_subtitle</string>
-    <string name="theid_enable_title">@string/theintrodb_enable_title</string>
-    <string name="theid_enable_subtitle">@string/theintrodb_enable_subtitle</string>
     <string name="theid_api_key_title">@string/theintrodb_api_key_title</string>
     <string name="theid_api_key_subtitle">@string/theintrodb_api_key_subtitle</string>
     <string name="theid_show_intro_title">@string/theintrodb_show_intro_title</string>

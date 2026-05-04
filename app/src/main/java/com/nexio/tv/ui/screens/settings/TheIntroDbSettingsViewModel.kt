@@ -28,10 +28,6 @@ class TheIntroDbSettingsViewModel @Inject constructor(
         }
     }
 
-    fun setEnabled(value: Boolean) {
-        viewModelScope.launch { dataStore.setEnabled(value) }
-    }
-
     fun setShowIntroButton(value: Boolean) {
         viewModelScope.launch { dataStore.setShowIntroButton(value) }
     }

@@ -938,8 +938,6 @@
     <string name="debrid_data_collection_qr_hash_failed">No se puede generar el token del panel del colector porque el hash ha fallado.</string>
     <string name="theintrodb_title">TheIntroDB</string>
     <string name="theintrodb_subtitle">Configura el comportamiento de omitir y reproducir siguiente a partir de los datos de segmento de TheIntroDB</string>
-    <string name="theintrodb_enable_title">Habilitar TheIntroDB</string>
-    <string name="theintrodb_enable_subtitle">Usa TheIntroDB v2 como proveedor canónico de segmentos de reproducción no anime</string>
     <string name="theintrodb_api_key_title">Clave API</string>
     <string name="theintrodb_api_key_subtitle">Clave API personal requerida de TheIntroDB para búsquedas de segmentos de reproducción y sincronización</string>
     <string name="theintrodb_show_intro_title">Mostrar omitir intro</string>
@@ -956,8 +954,6 @@
     <string name="theintrodb_missing_api_key">Se requiere la clave API de TheIntroDB</string>
     <string name="theid_title">@string/theintrodb_title</string>
     <string name="theid_subtitle">@string/theintrodb_subtitle</string>
-    <string name="theid_enable_title">@string/theintrodb_enable_title</string>
-    <string name="theid_enable_subtitle">@string/theintrodb_enable_subtitle</string>
     <string name="theid_api_key_title">@string/theintrodb_api_key_title</string>
     <string name="theid_api_key_subtitle">@string/theintrodb_api_key_subtitle</string>
     <string name="theid_show_intro_title">@string/theintrodb_show_intro_title</string>

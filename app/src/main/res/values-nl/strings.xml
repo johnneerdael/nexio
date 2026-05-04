@@ -944,8 +944,6 @@
     <string name="debrid_data_collection_qr_hash_failed">Collector-dashboard-token kan niet worden gegenereerd omdat hashing mislukt is.</string>
     <string name="theintrodb_title">TheIntroDB</string>
     <string name="theintrodb_subtitle">Configureer overslaan en \'Volgende afspelen\'-gedrag van TheIntroDB-segmentdata</string>
-    <string name="theintrodb_enable_title">TheIntroDB inschakelen</string>
-    <string name="theintrodb_enable_subtitle">Gebruik TheIntroDB v2 als de canonieke niet-anime-afspeelsegmentprovider</string>
     <string name="theintrodb_api_key_title">API-sleutel</string>
     <string name="theintrodb_api_key_subtitle">Vereiste persoonlijke TheIntroDB API-sleutel voor afspeelsegmentopzoekingen en synchronisatie</string>
     <string name="theintrodb_show_intro_title">Intro overslaan weergeven</string>
@@ -962,8 +960,6 @@
     <string name="theintrodb_missing_api_key">TheIntroDB API-sleutel is vereist</string>
     <string name="theid_title">@string/theintrodb_title</string>
     <string name="theid_subtitle">@string/theintrodb_subtitle</string>
-    <string name="theid_enable_title">@string/theintrodb_enable_title</string>
-    <string name="theid_enable_subtitle">@string/theintrodb_enable_subtitle</string>
     <string name="theid_api_key_title">@string/theintrodb_api_key_title</string>
     <string name="theid_api_key_subtitle">@string/theintrodb_api_key_subtitle</string>
     <string name="theid_show_intro_title">@string/theintrodb_show_intro_title</string>

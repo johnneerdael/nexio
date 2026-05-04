@@ -361,9 +361,9 @@ internal fun PlayerRuntimeController.observeSubtitleTranslationSettings() {
 internal fun PlayerRuntimeController.observeTheIntroDbSettings() {
     scope.launch {
         theIntroDbSettingsDataStore.settings.collectLatest { settings ->
-            theIntroDbEnabledSetting = settings.enabled
+            theIntroDbEnabledSetting = true
             val signature = listOf(
-                settings.enabled,
+                true,
                 settings.showIntroButton,
                 settings.showRecapButton,
                 settings.showCreditsButton,
@@ -380,7 +380,7 @@ internal fun PlayerRuntimeController.observeTheIntroDbSettings() {
             skipIntroFetchedKey = null
             skipIntervals = emptyList()
 
-            if (!skipIntroEnabled || !settings.enabled) {
+            if (!skipIntroEnabled) {
                 _uiState.update {
                     it.copy(
                         activeSkipInterval = null,
