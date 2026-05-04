@@ -30,6 +30,7 @@ data class ArtworkAssetResult(
     val runtimeResult: IntegrationFetchResult<ByteArray>,
     val runtimeApiShapeId: String,
     val cacheDecision: String,
+    val mimeType: String?,
     val networkExecuted: Boolean
 )
 
@@ -84,6 +85,7 @@ class ArtworkAssetRepository(
             runtimeResult = result,
             runtimeApiShapeId = apiShapeId,
             cacheDecision = result.cacheDecision(),
+            mimeType = write.record.mimeType,
             networkExecuted = loaderInvoked
         )
     }

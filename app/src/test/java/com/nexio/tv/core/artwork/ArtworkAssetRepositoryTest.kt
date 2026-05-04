@@ -48,6 +48,7 @@ class ArtworkAssetRepositoryTest {
         assertTrue(runtime.lastSpec!!.cachePolicy is IntegrationCachePolicy.CacheFirst)
         assertEquals(ArtworkApiShapes.RPDB_POSTER_TEMPLATE, result.runtimeApiShapeId)
         assertEquals("HIT", result.cacheDecision)
+        assertEquals(ByteArrayIntegrationCodec.mimeType, result.mimeType)
         assertEquals(false, result.networkExecuted)
     }
 
