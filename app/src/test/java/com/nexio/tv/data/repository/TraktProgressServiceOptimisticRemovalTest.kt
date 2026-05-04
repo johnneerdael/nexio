@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.integration.ByteArrayIntegrationCacheStore
 import com.nexio.tv.core.integration.passThroughTestRuntime
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
 import com.nexio.tv.data.remote.api.TraktApi
@@ -23,7 +24,8 @@ class TraktProgressServiceOptimisticRemovalTest {
             traktIntegrationProvider = TraktIntegrationProvider(
                 runtime = passThroughTestRuntime(),
                 traktApi = mockk<TraktApi>(relaxed = true),
-                traktAuthService = traktAuthService
+                traktAuthService = traktAuthService,
+                cacheStore = ByteArrayIntegrationCacheStore()
             ),
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
             metadataRouterFacade = mockk<MetadataRouterFacade>(relaxed = true)

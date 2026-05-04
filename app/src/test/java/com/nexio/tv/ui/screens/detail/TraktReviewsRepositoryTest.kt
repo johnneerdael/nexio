@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.detail
 
+import com.nexio.tv.core.integration.ByteArrayIntegrationCacheStore
 import com.nexio.tv.core.integration.RecordingIntegrationRuntime
 import com.nexio.tv.data.integration.trakt.TraktCommentsPage
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
@@ -48,7 +49,8 @@ class TraktReviewsRepositoryTest {
                 )
                 every { currentAuthSession() } returns session
                 coEvery { accountScopedSession() } returns session
-            }
+            },
+            cacheStore = ByteArrayIntegrationCacheStore()
         )
         val repository = TraktReviewsRepository(provider)
 
@@ -101,7 +103,8 @@ class TraktReviewsRepositoryTest {
                 )
                 every { currentAuthSession() } returns session
                 coEvery { accountScopedSession() } returns session
-            }
+            },
+            cacheStore = ByteArrayIntegrationCacheStore()
         )
         val repository = TraktReviewsRepository(provider)
 
