@@ -36,8 +36,7 @@ class TopPostersIntegrationProviderTest {
             provider = IntegrationProvider.TOP_POSTERS,
             cacheKey = "topposters:imdb:tt15940132:poster-default",
             apiKey = "key",
-            path = "imdb/poster/tt15940132.jpg",
-            ttlMs = 45_000L
+            path = "imdb/poster/tt15940132.jpg"
         )
         val remoteUrl = "https://api.top-posters.com/key/imdb/poster/tt15940132.jpg"
         val payload = "poster".toByteArray()
@@ -75,8 +74,8 @@ class TopPostersIntegrationProviderTest {
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
         assertEquals(
             IntegrationCachePolicy.CacheFirst(
-                ttlMs = request.ttlMs,
-                staleAfterExpiryMs = request.ttlMs
+                ttlMs = 24L * 60L * 60L * 1000L,
+                staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
             ),
             specSlot.captured.cachePolicy
         )

@@ -35,7 +35,7 @@ import retrofit2.Response
 
 class TraktIntegrationProviderRecommendationsTest {
     @Test
-    fun `last activities executes through runtime call`() = runTest {
+    fun `last activities executes through runtime cache get`() = runTest {
         val runtime = RecordingIntegrationRuntime(
             successValue = TraktLastActivitiesResponseDto()
         )
@@ -48,7 +48,8 @@ class TraktIntegrationProviderRecommendationsTest {
 
         provider.getLastActivities()
 
-        assertEquals(1, runtime.callSpecs.size)
+        // getLastActivities now routes through runtime.get (CacheFirst), not runtime.call
+        assertEquals(1, runtime.specs.size)
         coVerify(exactly = 0) {
             traktApi.getLastActivities(any())
         }

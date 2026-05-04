@@ -36,8 +36,7 @@ class RpdbIntegrationProviderTest {
             provider = IntegrationProvider.RPDB,
             cacheKey = "rpdb:imdb:tt0137523:poster-default",
             apiKey = "key",
-            path = "imdb/poster-default/tt0137523.jpg",
-            ttlMs = 45_000L
+            path = "imdb/poster-default/tt0137523.jpg"
         )
         val remoteUrl = "https://api.ratingposterdb.com/key/imdb/poster-default/tt0137523.jpg"
         val payload = "poster".toByteArray()
@@ -75,8 +74,8 @@ class RpdbIntegrationProviderTest {
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
         assertEquals(
             IntegrationCachePolicy.CacheFirst(
-                ttlMs = request.ttlMs,
-                staleAfterExpiryMs = request.ttlMs
+                ttlMs = 24L * 60L * 60L * 1000L,
+                staleAfterExpiryMs = 7L * 24L * 60L * 60L * 1000L
             ),
             specSlot.captured.cachePolicy
         )

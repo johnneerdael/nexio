@@ -44,11 +44,12 @@ class RpdbMetadataProviderAdapter @Inject constructor(
     ): ProviderStepResult {
         val activeProvider = posterResolver.getActiveProvider()
             ?.takeIf { it.provider == com.nexio.tv.domain.model.PosterRatingsProvider.RPDB }
+        val stableContentId = route.premiumPosterStableContentId()
 
-        val posterUrl = if (activeProvider != null) {
+        val posterUrl = if (activeProvider != null && stableContentId != null) {
             posterResolver.resolvePosterUrl(
                 originalPosterUrl = null,
-                contentId = route.parentId,
+                contentId = stableContentId,
                 contentType = route.mediaKind.toContentType(),
                 activeProvider = activeProvider
             )

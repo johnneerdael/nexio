@@ -31,7 +31,7 @@ class RpdbIntegrationProvider @Inject constructor(
             codec = ByteArrayIntegrationCodec,
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = request.ttlMs,
-                staleAfterExpiryMs = request.ttlMs
+                staleAfterExpiryMs = request.staleAfterExpiryMs
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             apiShapeId = PosterApiShapes.RPDB_POSTER_TEMPLATE,

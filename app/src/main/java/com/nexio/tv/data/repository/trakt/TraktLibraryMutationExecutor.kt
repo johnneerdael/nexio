@@ -1,6 +1,11 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
@@ -136,5 +141,17 @@ class TraktLibraryMutationExecutor @Inject constructor(
         body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>? {
         return traktIntegrationProvider.removeUserListItems(session = session, id = id, listId = listId, body = body)
+    }
+
+    suspend fun addToCollection(
+        body: TraktCollectionAddRequestDto
+    ): IntegrationCallResult<TraktCollectionAddResponseDto> {
+        return traktIntegrationProvider.addToCollection(body)
+    }
+
+    suspend fun removeFromCollection(
+        body: TraktCollectionRemoveRequestDto
+    ): IntegrationCallResult<TraktCollectionRemoveResponseDto> {
+        return traktIntegrationProvider.removeFromCollection(body)
     }
 }

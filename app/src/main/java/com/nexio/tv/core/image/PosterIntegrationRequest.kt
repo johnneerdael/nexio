@@ -11,7 +11,8 @@ data class PosterIntegrationRequest(
     val apiKey: String,
     val path: String,
     val fallbackUrl: String? = null,
-    val ttlMs: Long = 12L * 60L * 60L * 1000L,
+    val ttlMs: Long = DEFAULT_TTL_MS,
+    val staleAfterExpiryMs: Long = DEFAULT_STALE_AFTER_EXPIRY_MS,
     val mimeType: String? = null
 ) {
     fun toModel(): String = buildString {
@@ -30,10 +31,18 @@ data class PosterIntegrationRequest(
         }
         append("&ttlMs=")
         append(ttlMs)
+        append("&staleAfterExpiryMs=")
+        append(staleAfterExpiryMs)
         mimeType?.let {
             append("&mimeType=")
             append(encode(it))
         }
+    }
+
+    fun withFallbackUrlIfAbsent(fallbackUrl: String?): PosterIntegrationRequest {
+        val fallback = fallbackUrl?.takeIf { it.isNotBlank() } ?: return this
+        if (!this.fallbackUrl.isNullOrBlank()) return this
+        return copy(fallbackUrl = fallback)
     }
 
     companion object {
@@ -50,7 +59,8 @@ data class PosterIntegrationRequest(
             val cacheKey = params["cacheKey"] ?: return null
             val apiKey = params["apiKey"] ?: return null
             val path = params["path"] ?: return null
-            val ttlMs = params["ttlMs"]?.toLongOrNull() ?: 12L * 60L * 60L * 1000L
+            val ttlMs = params["ttlMs"]?.toLongOrNull() ?: DEFAULT_TTL_MS
+            val staleAfterExpiryMs = params["staleAfterExpiryMs"]?.toLongOrNull() ?: DEFAULT_STALE_AFTER_EXPIRY_MS
             return PosterIntegrationRequest(
                 provider = provider,
                 cacheKey = cacheKey,
@@ -58,9 +68,13 @@ data class PosterIntegrationRequest(
                 path = path,
                 fallbackUrl = params["fallbackUrl"],
                 ttlMs = ttlMs,
+                staleAfterExpiryMs = staleAfterExpiryMs,
                 mimeType = params["mimeType"]
             )
         }
+
+        private const val DEFAULT_TTL_MS = 24L * 60L * 60L * 1000L
+        private const val DEFAULT_STALE_AFTER_EXPIRY_MS = 7L * 24L * 60L * 60L * 1000L
 
         private fun encode(value: String): String =
             URLEncoder.encode(value, StandardCharsets.UTF_8.name())

@@ -38,6 +38,7 @@ data class MetaDetailsUiState(
     val librarySourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val libraryListTabs: List<LibraryListTab> = emptyList(),
     val isInWatchlist: Boolean = false,
+    val isInCollection: Boolean = false,
     val showListPicker: Boolean = false,
     val pickerMembership: Map<String, Boolean> = emptyMap(),
     val pickerPending: Boolean = false,
