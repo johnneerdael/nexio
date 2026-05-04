@@ -31,33 +31,48 @@ class TraktProgressServiceHiddenDroppedFilterTest {
 
     @Test
     fun dropped_show_canonicalised_with_show_kind_is_excluded_from_next_up() = runBlocking {
-        val show = TraktShowDto(
+        val droppedShow = TraktShowDto(
             title = "Dropped Show", year = 2020,
             ids = TraktIdsDto(trakt = 99, slug = "dropped-show", tvdb = 999, imdb = "tt9999998", tmdb = 9998)
         )
-        val watched = TraktWatchedShowItemDto(
+        val keptShow = TraktShowDto(
+            title = "Active Show", year = 2021,
+            ids = TraktIdsDto(trakt = 100, slug = "active-show", tvdb = 1000, imdb = "tt9999999", tmdb = 9999)
+        )
+        val droppedWatched = TraktWatchedShowItemDto(
             plays = 1, lastWatchedAt = "2026-05-04T10:00:00Z",
-            show = show,
+            show = droppedShow,
             seasons = listOf(TraktWatchedSeasonDto(number = 1, episodes = listOf(
                 TraktWatchedEpisodeDto(number = 1, plays = 1, lastWatchedAt = "2026-05-04T10:00:00Z")
             )))
         )
+        val keptWatched = TraktWatchedShowItemDto(
+            plays = 1, lastWatchedAt = "2026-05-04T11:00:00Z",
+            show = keptShow,
+            seasons = listOf(TraktWatchedSeasonDto(number = 1, episodes = listOf(
+                TraktWatchedEpisodeDto(number = 1, plays = 1, lastWatchedAt = "2026-05-04T11:00:00Z")
+            )))
+        )
         coEvery { traktIntegrationProvider.getWatchedShows() } returns
-            IntegrationCallResult.Success(listOf(watched))
+            IntegrationCallResult.Success(listOf(droppedWatched, keptWatched))
         coEvery {
             traktIntegrationProvider.getHiddenItems(section = "dropped", type = "show", page = any(), limit = any())
         } returns IntegrationCallResult.Success(
-            TraktPagedResponse(body = listOf(TraktHiddenItemDto(type = "show", show = show)), pageCount = 1)
+            TraktPagedResponse(body = listOf(TraktHiddenItemDto(type = "show", show = droppedShow)), pageCount = 1)
         )
         coEvery {
             traktIntegrationProvider.getHiddenItems(section = "progress_watched", type = any(), page = any(), limit = any())
         } returns IntegrationCallResult.Success(TraktPagedResponse(body = emptyList(), pageCount = 1))
 
-        val nextUp = service.testOnlyDeriveNextUp()
+        val candidates = service.testOnlyDeriveNextUpCandidates()
 
         assertTrue(
-            "dropped show must be excluded from next-up regardless of which id form the dropped set uses. Got: ${nextUp.map { it.contentId }}",
-            nextUp.none { it.contentId == "tvdb:999" || it.contentId == "tt9999998" }
+            "kept show must appear in next-up candidates (positive control). Got: ${candidates.map { it.contentId }}",
+            candidates.any { it.contentId == "tvdb:1000" || it.contentId == "tt9999999" }
+        )
+        assertTrue(
+            "dropped show must NOT appear in next-up candidates regardless of which id form the dropped set uses. Got: ${candidates.map { it.contentId }}",
+            candidates.none { it.contentId == "tvdb:999" || it.contentId == "tt9999998" }
         )
     }
 }
