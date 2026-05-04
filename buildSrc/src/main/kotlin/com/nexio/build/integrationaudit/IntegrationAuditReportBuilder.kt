@@ -402,7 +402,10 @@ fun providerDefaultHeaderPolicy(provider: String, apiShapeId: String?): String? 
         "SHADOW_COLLECTOR" -> "collector-json-v1"
         "GITHUB" -> "github-json-v1"
         "YOUTUBE_TRAILER" -> "youtube-html-v1"
-        "SUBTITLE_SOURCE_DOWNLOAD", "SUBTITLE_TRANSLATION" -> "subtitle-provider-v1"
+        "OPEN_SUBTITLES",
+        "SUBTITLE_SOURCE_DOWNLOAD",
+        "SUBTITLE_TRANSLATION",
+        "WYZIE_SUBTITLES" -> "subtitle-provider-v1"
         else -> null
     }
 
@@ -714,7 +717,7 @@ fun extractIntegrationAuditSpecs(
     expectedShapes: Map<String, Map<String, String>>
 ): List<IntegrationAuditSpecRow> {
     val constructors = listOf("IntegrationSpec", "IntegrationCallSpec", "IntegrationStreamSpec")
-    return sources.flatMap { (file, text) ->
+    val constructorRows = sources.flatMap { (file, text) ->
         constructors.flatMap { constructor ->
             Regex("""\b$constructor\s*\(""").findAll(text).mapNotNull { match ->
                 val window = extractConstructorWindow(text, match.range.first)
@@ -819,7 +822,126 @@ fun extractIntegrationAuditSpecs(
                 )
             }.toList()
         }
-    }.sortedWith(compareBy({ it.provider }, { it.sourceFile }, { it.line }))
+    }
+    val tmdbRuntimeGetRows = sources.flatMap { (file, text) ->
+        if (file.nameWithoutExtension != "TmdbIntegrationProvider") {
+            emptyList()
+        } else {
+            Regex("""\btmdbRuntimeGet\s*\(""").findAll(text).mapNotNull { match ->
+                val window = extractConstructorWindow(text, match.range.first)
+                val rawApiShapeId = extractAuditStringArgument(window, "apiShapeId")
+                if (rawApiShapeId == null || rawApiShapeId == "apiShapeId") {
+                    return@mapNotNull null
+                }
+                val apiShapeId = apiShapeConstants[rawApiShapeId]
+                    ?: Regex("""([A-Za-z0-9_]+ApiShapes\.[A-Z0-9_]+)""")
+                        .find(window)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.let(apiShapeConstants::get)
+                    ?: rawApiShapeId
+                val operationKey = extractAuditStringArgument(window, "operationKey")
+                val cacheKey = Regex("""cacheKey\s*=\s*"([^"]+)"""")
+                    .find(window)
+                    ?.groupValues
+                    ?.get(1)
+                    ?: Regex("""cacheKey\s*=\s*([^,\n]+)""")
+                        .find(window)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.trim()
+                        ?.takeUnless { it == "null" }
+                val expectedHeaderPolicyId = expectedShapes[apiShapeId]?.get("headerPolicy")
+                val headerPolicyId = providerDefaultHeaderPolicy("TMDB", apiShapeId)
+                val codec = extractAuditCodec(window)
+                val methodName = precedingFunctionName(text, match.range.first)
+                val line = text.substring(0, match.range.first).count { it == '\n' } + 1
+                val issues = buildList {
+                    if (headerPolicyId.isNullOrBlank()) add("missing header policy id")
+                    if (!expectedHeaderPolicyId.isNullOrBlank() && headerPolicyId != expectedHeaderPolicyId) {
+                        add("header policy differs from endpoint contract: actual=$headerPolicyId expected=$expectedHeaderPolicyId")
+                    }
+                    if (operationKey.isNullOrBlank()) add("missing operation key")
+                    if (cacheKey.isNullOrBlank()) add("CacheFirst without cache key")
+                    if (codec == null) add("CacheFirst without typed codec")
+                    if (codec?.contains("PassThrough", ignoreCase = true) == true) add("untyped/pass-through codec")
+                }
+                IntegrationAuditSpecRow(
+                    callId = apiShapeId,
+                    provider = "TMDB",
+                    specType = "IntegrationSpec",
+                    adapterClass = file.nameWithoutExtension,
+                    adapterMethod = methodName,
+                    sourceFile = file.normalizedRelativeTo(projectDir),
+                    line = line,
+                    apiShapeId = apiShapeId,
+                    headerPolicyId = headerPolicyId,
+                    expectedHeaderPolicyId = expectedHeaderPolicyId,
+                    operationKey = operationKey,
+                    cacheKeyTemplate = cacheKey,
+                    workClass = "USER_VISIBLE",
+                    cachePolicy = "CacheFirst",
+                    codec = codec,
+                    scope = "Global",
+                    rawClient = inferRawClient(window),
+                    verdict = if (issues.isEmpty()) "PASS" else "FAIL",
+                    issues = issues
+                )
+            }.toList()
+        }
+    }
+    val tvdbAuthenticatedRows = sources.flatMap { (file, text) ->
+        if (file.nameWithoutExtension != "TvdbIntegrationProvider") {
+            emptyList()
+        } else {
+            Regex("""\bcallAuthenticated\s*\(""").findAll(text).mapNotNull { match ->
+                val window = extractConstructorWindow(text, match.range.first)
+                val shapeMatch = Regex("""callAuthenticated\s*\(\s*([A-Za-z0-9_.]+)\s*,\s*"([^"]+)"\s*,\s*IntegrationWorkClass\.([A-Z0-9_]+)""")
+                    .find(window)
+                    ?: return@mapNotNull null
+                val apiShapeId = apiShapeConstants[shapeMatch.groupValues[1]] ?: shapeMatch.groupValues[1]
+                if (apiShapeId != "tvdb.person.extended") {
+                    return@mapNotNull null
+                }
+                val operationKey = shapeMatch.groupValues[2]
+                val workClass = shapeMatch.groupValues[3]
+                val expectedHeaderPolicyId = expectedShapes[apiShapeId]?.get("headerPolicy")
+                val headerPolicyId = providerDefaultHeaderPolicy("TVDB", apiShapeId)
+                val methodName = precedingFunctionName(text, match.range.first)
+                val line = text.substring(0, match.range.first).count { it == '\n' } + 1
+                val issues = buildList {
+                    if (headerPolicyId.isNullOrBlank()) add("missing header policy id")
+                    if (!expectedHeaderPolicyId.isNullOrBlank() && headerPolicyId != expectedHeaderPolicyId) {
+                        add("header policy differs from endpoint contract: actual=$headerPolicyId expected=$expectedHeaderPolicyId")
+                    }
+                    if (operationKey.isBlank()) add("missing operation key")
+                    if (workClass.isBlank()) add("missing work class")
+                }
+                IntegrationAuditSpecRow(
+                    callId = apiShapeId,
+                    provider = "TVDB",
+                    specType = "IntegrationCallSpec",
+                    adapterClass = file.nameWithoutExtension,
+                    adapterMethod = methodName,
+                    sourceFile = file.normalizedRelativeTo(projectDir),
+                    line = line,
+                    apiShapeId = apiShapeId,
+                    headerPolicyId = headerPolicyId,
+                    expectedHeaderPolicyId = expectedHeaderPolicyId,
+                    operationKey = operationKey,
+                    cacheKeyTemplate = null,
+                    workClass = workClass,
+                    cachePolicy = "ObserveOnlyOrMutation",
+                    codec = null,
+                    scope = "Global",
+                    rawClient = inferRawClient(window),
+                    verdict = if (issues.isEmpty()) "PASS" else "FAIL",
+                    issues = issues
+                )
+            }.toList()
+        }
+    }
+    return (constructorRows + tmdbRuntimeGetRows + tvdbAuthenticatedRows).sortedWith(compareBy({ it.provider }, { it.sourceFile }, { it.line }))
 }
 
 fun extractIntegrationAuditViolations(projectDir: File, sources: List<Pair<File, String>>): List<IntegrationAuditViolation> {
@@ -961,6 +1083,7 @@ fun buildIntegrationAuditProviderRows(
             "SHADOW_COLLECTOR" -> "Shadow"
             "SUBTITLE_SOURCE_DOWNLOAD" -> "SubtitleSourceDownload"
             "SUBTITLE_TRANSLATION" -> "SubtitleTranslation"
+            "WYZIE_SUBTITLES" -> "WyzieSubtitle"
             "CUSTOM_IMDB" -> "CustomImdb"
             "REAL_DEBRID" -> "RealDebrid"
             "EASY_DEBRID" -> "EasyDebrid"
