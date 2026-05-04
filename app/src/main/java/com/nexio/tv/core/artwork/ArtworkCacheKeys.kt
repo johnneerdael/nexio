@@ -67,10 +67,8 @@ object ArtworkCacheKeys {
             add(imageType.keyPart())
             add("urlHash")
             add(normalizedUrlHash.safeRequiredPart("normalizedUrlHash"))
-            variant?.takeIf { it.isNotBlank() }?.let {
-                add("variant")
-                add(it.safeRequiredPart("variant"))
-            }
+            add("variant")
+            add(variant.safeOptionalPart())
             add("imageLang")
             add(IMAGE_LANGUAGE)
             add("policy")

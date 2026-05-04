@@ -42,6 +42,23 @@ class ArtworkCacheKeysTest {
     }
 
     @Test
+    fun `asset key for remote url includes stable variant when variant is null`() {
+        val key = ArtworkCacheKeys.assetKeyForRemoteUrl(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            imageType = ArtworkType.POSTER,
+            normalizedUrlHash = "hashabc",
+            variant = null,
+            policyVersion = 1
+        )
+
+        assertEquals(
+            "artwork-asset:TMDB:poster:urlHash:hashabc:variant:none:imageLang:en:policy:1",
+            key.value
+        )
+        assertFalse(key.value.contains("imageLang:fr"))
+    }
+
+    @Test
     fun `normalized url hash strips known tracking params but preserves width path`() {
         val hashA = ArtworkCacheKeys.normalizedUrlHash(
             " HTTPS://Image.TMDB.org/t/p/w500/abc.jpg?utm_source=x&v=1 "
