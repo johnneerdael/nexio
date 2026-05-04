@@ -1,5 +1,12 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.FieldOwner
@@ -128,6 +135,51 @@ class HomeHydrationCoordinatorTest {
         coVerify(exactly = 0) {
             facade.resolveStableIdBundle(any<com.nexio.tv.core.metadata.router.MetadataRequest>(), any(), any())
         }
+    }
+
+    @Test
+    fun `visible hydration preserves typed artwork in written overlay fields`() = runTest {
+        val facade = mockk<MetadataRouterFacade>()
+        val store = mockk<HydratedHomeOverlayStore>(relaxed = true)
+        val ratings = mockk<TitleRatingOverrideRepository>()
+        val sink = RecordingTraceSink()
+        val overlaySlot = slot<com.nexio.tv.domain.model.HydratedHomeOverlay>()
+        val artwork = ArtworkBundle(
+            poster = ArtworkDisplayRef.RuntimeAsset(
+                decisionKey = ArtworkDecisionKey("posterDecision"),
+                assetKey = ArtworkAssetKey("posterAsset"),
+                imageType = ArtworkType.POSTER,
+                selectedProvider = null,
+                sourceRole = ArtworkSourceRole.PRIMARY,
+                trace = ArtworkTrace.empty()
+            )
+        )
+
+        coEvery { facade.resolveRequest(any()) } returns resolutionResult(
+            displayMetadata = HomeDisplayMetadata(
+                title = "Canonical title",
+                poster = "rawPoster",
+                artwork = artwork
+            )
+        )
+        coEvery { facade.resolveStableIdBundle(any<MetadataRoute>(), any(), any(), any()) } returns stableBundle("movie:550")
+        coEvery { ratings.enrichPreview(any(), any()) } answers {
+            firstArg<MetaPreview>().copy(imdbRating = 8.8f, ratingSource = TitleRatingSource.IMDB)
+        }
+        coEvery { store.upsert(capture(overlaySlot), any()) } returns Unit
+
+        coordinator(facade, store, ratings, sink).hydrate(
+            item = preview(id = "550", title = "Preview title", stableIds = ProviderIds(tmdb = "550")),
+            trigger = StableIdResolutionTrigger.VISIBLE_HOME_HYDRATION,
+            priority = HomeHydrationPriority.VISIBLE,
+            languageTag = "en-US",
+            expectedGeneration = 7L,
+            currentGeneration = { 7L },
+            onOverlayApplied = { true }
+        )
+
+        assertEquals(artwork, overlaySlot.captured.fields.artwork)
+        assertEquals("nexio-artwork://asset/posterAsset", overlaySlot.captured.fields.displayPoster)
     }
 
     @Test
@@ -548,7 +600,17 @@ class HomeHydrationCoordinatorTest {
     )
 
     private fun resolutionResult(
-        canonicalId: String? = "tmdb:550"
+        canonicalId: String? = "tmdb:550",
+        displayMetadata: HomeDisplayMetadata = HomeDisplayMetadata(
+            title = "Canonical title",
+            description = "Canonical overview",
+            poster = "poster.jpg",
+            backdrop = "backdrop.jpg",
+            imdbRating = 8.4f,
+            ratingSource = TitleRatingSource.TMDB,
+            genres = listOf("Canonical Genre"),
+            releaseInfo = "1999-10-15"
+        )
     ) = MetadataResolutionResult(
         route = MetadataRoute(
             provider = MetadataPrimaryProvider.TMDB,
@@ -582,16 +644,7 @@ class HomeHydrationCoordinatorTest {
             sourceRoles = mapOf(ResolvedField.TITLE to SourceRole.PRIMARY),
             sourceProviders = mapOf(ResolvedField.TITLE to "TMDB")
         ),
-        displayMetadata = HomeDisplayMetadata(
-            title = "Canonical title",
-            description = "Canonical overview",
-            poster = "poster.jpg",
-            backdrop = "backdrop.jpg",
-            imdbRating = 8.4f,
-            ratingSource = TitleRatingSource.TMDB,
-            genres = listOf("Canonical Genre"),
-            releaseInfo = "1999-10-15"
-        ),
+        displayMetadata = displayMetadata,
         trace = emptyList()
     )
 

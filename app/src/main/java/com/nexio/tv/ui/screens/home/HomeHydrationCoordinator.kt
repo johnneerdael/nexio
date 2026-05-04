@@ -173,7 +173,10 @@ class HomeHydrationCoordinator @Inject constructor(
             displayMetadata.applyTo(item),
             bundle
         )
-        val fields = enrichedPreview.toHomeDisplayMetadata()
+        val enrichedFields = enrichedPreview.toHomeDisplayMetadata()
+        val fields = enrichedFields.copy(
+            artwork = displayMetadata.artwork ?: enrichedFields.artwork
+        )
         val nowMs = System.currentTimeMillis()
 
         return HydratedHomeOverlay(
