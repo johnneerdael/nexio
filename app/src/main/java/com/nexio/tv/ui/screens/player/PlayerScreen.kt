@@ -117,6 +117,8 @@ import com.nexio.tv.core.player.ExternalPlayerLauncher
 import com.nexio.tv.core.player.SUBTITLE_MAX_ALPHA
 import com.nexio.tv.core.player.SUBTITLE_OFF_WHITE_ARGB
 import com.nexio.tv.data.local.SubtitleStyleSettings
+import com.nexio.tv.integrations.hyperhdr.capture.CaptureMode
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 import android.text.format.DateFormat
@@ -1192,7 +1194,7 @@ private fun PlayerControlsOverlay(
                         uiState.videoCodecName != null ||
                         uiState.audioCodecName != null ||
                         uiState.audioChannelLayout != null ||
-                        hyperHdrSessionState !is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle
+                        hyperHdrSessionState !is HyperHdrSessionState.Idle
 
                     if (hasAnyBadge) {
                         Spacer(modifier = Modifier.height(6.dp))
@@ -2108,14 +2110,14 @@ private fun QualityBadge(
 }
 
 @Composable
-private fun HyperHdrBadge(state: com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState) {
+private fun HyperHdrBadge(state: HyperHdrSessionState) {
     val text = when (state) {
-        com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle -> return
-        is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connecting -> "HyperHDR…"
-        is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Reconnecting -> "HyperHDR ⟲"
-        is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connected -> when (state.mode) {
-            com.nexio.tv.integrations.hyperhdr.capture.CaptureMode.HDR_P010 -> "HyperHDR · HDR"
-            com.nexio.tv.integrations.hyperhdr.capture.CaptureMode.SDR_NV12 -> "HyperHDR"
+        HyperHdrSessionState.Idle -> return
+        is HyperHdrSessionState.Connecting -> "HyperHDR…"
+        is HyperHdrSessionState.Reconnecting -> "HyperHDR ⟲"
+        is HyperHdrSessionState.Connected -> when (state.mode) {
+            CaptureMode.HDR_P010 -> "HyperHDR · HDR"
+            CaptureMode.SDR_NV12 -> "HyperHDR"
         }
     }
     QualityBadge(

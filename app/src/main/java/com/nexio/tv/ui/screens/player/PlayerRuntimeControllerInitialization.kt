@@ -90,8 +90,11 @@ import com.nexio.tv.integrations.hyperhdr.capture.FormatDetector
 import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
+import com.nexio.tv.integrations.hyperhdr.network.ConnectionState
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferReconnector
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionStateHolder
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
 private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
@@ -105,7 +108,7 @@ private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
 internal interface HyperHdrEntryPoint {
     fun hyperHdrConfigDataStore(): HyperHdrConfigDataStore
     fun displayColorCapability(): com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
-    fun hyperHdrSessionStateHolder(): com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionStateHolder
+    fun hyperHdrSessionStateHolder(): HyperHdrSessionStateHolder
 }
 
 internal data class StartupSubtitlePreparation(
@@ -758,19 +761,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
 
             // ===== HyperHDR ambilight capture — Player.Listener-driven session lifecycle =====
-            val hyperHdrStore = EntryPoints
+            val hyperHdrEntry = EntryPoints
                 .get(context.applicationContext, HyperHdrEntryPoint::class.java)
-                .hyperHdrConfigDataStore()
-            val hyperHdrDisplayCapability = EntryPoints
-                .get(context.applicationContext, HyperHdrEntryPoint::class.java)
-                .displayColorCapability()
-            val hyperHdrSessionStateHolder = EntryPoints
-                .get(context.applicationContext, HyperHdrEntryPoint::class.java)
-                .hyperHdrSessionStateHolder()
+            val hyperHdrStore = hyperHdrEntry.hyperHdrConfigDataStore()
+            val hyperHdrDisplayCapability = hyperHdrEntry.displayColorCapability()
+            val hyperHdrSessionStateHolder = hyperHdrEntry.hyperHdrSessionStateHolder()
 
             // ===== HyperHDR ambilight state (scoped to this player init) =====
             var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
             var hyperHdrFbReconnector: HyperHdrFlatBufferReconnector? = null
+            var hyperHdrStateCollectJob: kotlinx.coroutines.Job? = null
             var hyperHdrCurrentMode: CaptureMode? = null
 
             // Live-update the local cfg snapshot when the user changes Settings mid-session.
@@ -784,7 +784,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 val cfg = hyperHdrCfg
                 if (!cfg.isUsable) return
 
-                // Stop any prior session before starting a new one.
+                // Stop any prior session before starting a new one. Cancel the collect-loop
+                // BEFORE closing the reconnector so the old loop can't write a stray
+                // DISCONNECTED→Idle into the holder after the explicit Connecting push below.
+                hyperHdrStateCollectJob?.cancel()
+                hyperHdrStateCollectJob = null
                 hyperHdrFbReconnector?.close()
                 hyperHdrFbReconnector = null
 
@@ -796,20 +800,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 hyperHdrFbReconnector = reconnector
                 Log.d("HyperHdrIntegration", "Reconnector started for ${cfg.host}:${cfg.port}, awaiting connect")
 
-                hyperHdrSessionStateHolder.update(
-                    com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connecting(targetMode)
-                )
-                scope.launch {
+                hyperHdrSessionStateHolder.update(HyperHdrSessionState.Connecting(targetMode))
+                hyperHdrStateCollectJob = scope.launch {
                     reconnector.state.collect { connState ->
                         val sessionState = when (connState) {
-                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.CONNECTED ->
-                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connected(targetMode)
-                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.CONNECTING ->
-                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connecting(targetMode)
-                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.ERROR ->
-                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Reconnecting(targetMode)
-                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.DISCONNECTED ->
-                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle
+                            ConnectionState.CONNECTED -> HyperHdrSessionState.Connected(targetMode)
+                            ConnectionState.CONNECTING -> HyperHdrSessionState.Connecting(targetMode)
+                            ConnectionState.ERROR -> HyperHdrSessionState.Reconnecting(targetMode)
+                            ConnectionState.DISCONNECTED -> HyperHdrSessionState.Idle
                         }
                         hyperHdrSessionStateHolder.update(sessionState)
                     }
@@ -835,12 +833,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             fun stopHyperHdrCapture() {
                 val player = _exoPlayer ?: return
                 player.setVideoEffects(emptyList())
+                hyperHdrStateCollectJob?.cancel()
+                hyperHdrStateCollectJob = null
                 hyperHdrFbReconnector?.close()
                 hyperHdrFbReconnector = null
                 hyperHdrCurrentMode = null
-                hyperHdrSessionStateHolder.update(
-                    com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle
-                )
+                hyperHdrSessionStateHolder.update(HyperHdrSessionState.Idle)
             }
 
             scope.launch {
