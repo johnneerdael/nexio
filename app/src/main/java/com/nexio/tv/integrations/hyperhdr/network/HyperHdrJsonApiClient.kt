@@ -56,10 +56,13 @@ class HyperHdrJsonApiClient(
             .map { instances!!.getJSONObject(it) }
             .firstOrNull { it.optBoolean("running", false) }
             ?: instances?.optJSONObject(0)
+        val (formats, wireVersion) = parseFlatbufferBlock(info)
         ServerInfo(
             hostname = hostname,
             instanceId = firstInstance?.optInt("instance", 0) ?: 0,
             instanceName = firstInstance?.optString("friendly_name")?.takeIf { it.isNotEmpty() },
+            flatbufferFormats = formats,
+            flatbufferWireVersion = wireVersion,
         )
     }
 
@@ -77,6 +80,23 @@ class HyperHdrJsonApiClient(
                 httpCode = 200,
             )
         }
+    }
+
+    private fun parseFlatbufferBlock(info: JSONObject): Pair<Set<String>, Int?> {
+        val flatbuf = info.optJSONObject("flatbuffer") ?: return emptySet<String>() to null
+        val formatsArray = flatbuf.optJSONArray("imageFormats")
+        val formats: Set<String> = if (formatsArray != null) {
+            buildSet {
+                for (i in 0 until formatsArray.length()) {
+                    // Lenient: skip non-string entries (numbers, booleans, null) so a
+                    // malformed fork can't break the whole serverInfo response.
+                    (formatsArray.opt(i) as? String)?.let { add(it) }
+                }
+            }
+        } else emptySet()
+        val wireVersion = if (flatbuf.has("wireVersion") && !flatbuf.isNull("wireVersion"))
+            flatbuf.getInt("wireVersion") else null
+        return formats to wireVersion
     }
 
     private fun post(json: JSONObject): JSONObject {
