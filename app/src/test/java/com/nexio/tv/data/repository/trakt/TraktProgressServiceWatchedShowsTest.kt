@@ -7,6 +7,9 @@ import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.data.integration.trakt.TraktIntegrationProvider
+import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.TraktProgressService
 import io.mockk.coEvery
@@ -136,5 +139,27 @@ class TraktProgressServiceWatchedShowsTest {
             setOf(1 to 1, 1 to 2, 2 to 1, 2 to 2),
             watched.keys
         )
+    }
+
+    @Test
+    fun observeMovieWatched_matches_by_any_id_form() = runBlocking {
+        val item = TraktWatchedMovieItemDto(
+            plays = 4,
+            lastWatchedAt = "2014-10-11T17:00:54.000Z",
+            lastUpdatedAt = "2014-10-11T17:00:54.000Z",
+            movie = TraktMovieDto(
+                title = "Batman Begins",
+                year = 2005,
+                ids = TraktIdsDto(trakt = 6, slug = "batman-begins-2005", imdb = "tt0372784", tmdb = 272)
+            )
+        )
+        coEvery { traktIntegrationProvider.getWatched(type = "movies") } returns
+            IntegrationCallResult.Success(listOf(item))
+
+        assertEquals(true, service.observeMovieWatched("tt0372784").first())
+        assertEquals(true, service.observeMovieWatched("tmdb:272").first())
+        assertEquals(true, service.observeMovieWatched("trakt:6").first())
+        assertEquals(true, service.observeMovieWatched("batman-begins-2005").first())
+        assertEquals(false, service.observeMovieWatched("tt9999999").first())
     }
 }
