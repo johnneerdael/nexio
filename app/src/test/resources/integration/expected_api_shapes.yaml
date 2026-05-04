@@ -404,7 +404,7 @@ tvdb.person.extended:
   allowedWorkClasses:
     - USER_VISIBLE
   expectedRuntimePolicy:
-    default: CacheFirst
+    default: ObserveOnlyOrMutation
 
 kitsu.discovery.trending:
   provider: KITSU
@@ -505,6 +505,20 @@ kitsu.media_relationships:
   expectedRuntimePolicy:
     default: CacheFirst
 
+kitsu.anime.reviews:
+  provider: KITSU
+  headerPolicy: public-json-v1
+  method: GET
+  path: "/anime/{id}/reviews"
+  bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+  expectedQuery:
+    limit: present
+    offset: present
+
 kitsu.search.text:
   provider: KITSU
   headerPolicy: public-json-v1
@@ -599,6 +613,61 @@ trakt.show.comments:
   method: GET
   path: "/shows/{id}/comments/{sort}"
   bulkShape: paginated list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.watched:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/sync/watched/{type}"
+  bulkShape: account state
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.watched.shows:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/sync/watched/shows"
+  bulkShape: account state
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.collection.movies:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/sync/collection/movies"
+  bulkShape: account state
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.collection.shows:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/sync/collection/shows"
+  bulkShape: account state
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
+trakt.last_activities:
+  provider: TRAKT
+  headerPolicy: trakt-json-v2
+  method: GET
+  path: "/sync/last_activities"
+  bulkShape: account state
   allowedWorkClasses:
     - USER_VISIBLE
   expectedRuntimePolicy:
@@ -831,6 +900,17 @@ playback.opensubtitles_hash:
   expectedRuntimePolicy:
     default: Disabled
 
+opensubtitles.search:
+  provider: OPEN_SUBTITLES
+  headerPolicy: subtitle-provider-v1
+  method: GET
+  path: "https://rest.opensubtitles.org/search/{filters}"
+  bulkShape: subtitle list
+  allowedWorkClasses:
+    - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: CacheFirst
+
 wyzie.search:
   provider: WYZIE_SUBTITLES
   headerPolicy: subtitle-provider-v1
@@ -874,6 +954,17 @@ shadow_collector.autoplay_upload:
   bulkShape: event upload
   allowedWorkClasses:
     - USER_VISIBLE
+  expectedRuntimePolicy:
+    default: Disabled
+
+shadow_collector.device_capability_report_upload:
+  provider: SHADOW_COLLECTOR
+  headerPolicy: collector-json-v1
+  method: POST
+  path: "{baseUrl}/api/v1/device-capability-reports"
+  bulkShape: event upload
+  allowedWorkClasses:
+    - BACKGROUND_HYDRATION
   expectedRuntimePolicy:
     default: Disabled
 

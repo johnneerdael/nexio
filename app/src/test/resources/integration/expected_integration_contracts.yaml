@@ -378,6 +378,18 @@ cacheContracts:
     staleAfterExpiry: 24h
     requiresTypedCodec: true
     retention: rail-scoped
+  subtitle-search-v1:
+    cachePolicy: CacheFirst
+    ttl: 6h
+    staleAfterExpiry: 24h
+    requiresTypedCodec: true
+    retention: subtitle-search-scoped
+  account-snapshot-v1:
+    cachePolicy: CacheFirst
+    ttl: 24h
+    staleAfterExpiry: 7d
+    requiresTypedCodec: true
+    retention: user-scoped
   ratings-dynamic-v1:
     cachePolicy: CacheFirst
     ttl: 12h
@@ -1214,10 +1226,10 @@ apiShapes:
     method: GET
     path: "/people/{id}/extended"
     headerPolicy: tvdb-json-bearer-v1
-    cacheContract: primary-metadata-core-v1
+    cacheContract: disabled-no-cache-v1
     runtimePolicy:
       workClasses: [USER_VISIBLE]
-      defaultCachePolicy: CacheFirst
+      defaultCachePolicy: ObserveOnlyOrMutation
       scope: Global
       providerConcurrency: 1
       playbackBehavior: defer background work during playback
@@ -1405,6 +1417,30 @@ apiShapes:
     metadataRouterRequired: true
     method: GET
     path: "/anime/{id}/media-relationships"
+    headerPolicy: public-json-v1
+    cacheContract: primary-metadata-core-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  kitsu.anime.reviews:
+    provider: KITSU
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: true
+    method: GET
+    path: "/anime/{id}/reviews"
     headerPolicy: public-json-v1
     cacheContract: primary-metadata-core-v1
     runtimePolicy:
@@ -2078,7 +2114,7 @@ apiShapes:
     method: GET
     path: "https://rest.opensubtitles.org/search/{filters}"
     headerPolicy: subtitle-provider-v1
-    cacheContract: cache-first-v1
+    cacheContract: subtitle-search-v1
     runtimePolicy:
       workClasses: [USER_VISIBLE]
       defaultCachePolicy: CacheFirst
@@ -2225,6 +2261,30 @@ apiShapes:
     cacheContract: disabled-no-cache-v1
     runtimePolicy:
       workClasses: [USER_VISIBLE]
+      defaultCachePolicy: Disabled
+      scope: Global
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  shadow_collector.device_capability_report_upload:
+    provider: SHADOW_COLLECTOR
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: POST
+    path: "{baseUrl}/api/v1/device-capability-reports"
+    headerPolicy: collector-json-v1
+    cacheContract: disabled-no-cache-v1
+    runtimePolicy:
+      workClasses: [BACKGROUND_HYDRATION]
       defaultCachePolicy: Disabled
       scope: Global
       providerConcurrency: 1
@@ -4406,10 +4466,10 @@ apiShapes:
     method: GET
     path: "/sync/watched/{type}"
     headerPolicy: trakt-json-v2
-    cacheContract: account-state-observe-v1
+    cacheContract: account-snapshot-v1
     runtimePolicy:
       workClasses: [USER_VISIBLE]
-      defaultCachePolicy: ObserveOnly
+      defaultCachePolicy: CacheFirst
       scope: Account
       providerConcurrency: 1
       playbackBehavior: defer background work during playback
@@ -4430,10 +4490,82 @@ apiShapes:
     method: GET
     path: "/sync/watched/shows"
     headerPolicy: trakt-json-v2
-    cacheContract: account-state-observe-v1
+    cacheContract: account-snapshot-v1
     runtimePolicy:
       workClasses: [USER_VISIBLE]
-      defaultCachePolicy: ObserveOnly
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.collection.movies:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/collection/movies"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-snapshot-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.collection.shows:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/collection/shows"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-snapshot-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
+      scope: Account
+      providerConcurrency: 1
+      playbackBehavior: defer background work during playback
+    requestContract:
+      requiredQuery: {}
+      optionalQuery: {}
+      bodyCredentialFields: []
+    cacheKeyContract:
+      include: [provider, apiShapeId, accountHash, operation_inputs, schema_version]
+      forbidden: [raw Authorization token, raw API key, apiKey.hashCode]
+    responseHeaders:
+      capture: [Retry-After]
+    bestPracticeRules: [runtime-contract-baseline]
+  trakt.last_activities:
+    provider: TRAKT
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
+    metadataRouterRequired: false
+    method: GET
+    path: "/sync/last_activities"
+    headerPolicy: trakt-json-v2
+    cacheContract: account-snapshot-v1
+    runtimePolicy:
+      workClasses: [USER_VISIBLE]
+      defaultCachePolicy: CacheFirst
       scope: Account
       providerConcurrency: 1
       playbackBehavior: defer background work during playback
