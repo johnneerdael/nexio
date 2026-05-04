@@ -53,6 +53,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktTrendingShowItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserStatsResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionShowItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.TrackingAuthSession
@@ -63,6 +65,8 @@ import javax.inject.Singleton
 import retrofit2.Response
 
 enum class TraktWatchedKind { MOVIES, SHOWS }
+
+enum class TraktCollectionKind { MOVIES, SHOWS }
 
 data class TraktCommentsPage(
     val items: List<TraktCommentItemDto>,
@@ -297,6 +301,102 @@ class TraktIntegrationProvider @Inject constructor(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = apiShapeId,
             operationKey = accountOperationKey(session, "trakt.watched.invalidate.$opSuffix"),
+            cacheKey = cacheKey,
+            codec = gsonCodec<Unit>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 1L, staleAfterExpiryMs = 0L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = { IntegrationLoadResult.Success(Unit) }
+        )
+        cacheStore.delete(spec)
+    }
+
+    suspend fun getCollectionMovies(): IntegrationCallResult<List<TraktCollectionMovieItemDto>> {
+        val session = traktAuthService.accountScopedSession()
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
+            apiShapeId = TraktApiShapes.COLLECTION_MOVIES,
+            operationKey = accountOperationKey(session, "trakt.collection.movies"),
+            cacheKey = accountCacheKey(session, "trakt:sync:collection:movies"),
+            codec = gsonCodec<List<TraktCollectionMovieItemDto>>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = COLLECTION_SNAPSHOT_TTL_MS,
+                staleAfterExpiryMs = COLLECTION_SNAPSHOT_STALE_GRACE_MS
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = {
+                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
+                    traktApi.getCollectionMovies(authorization = authorization, extended = null)
+                } ?: return@IntegrationSpec IntegrationLoadResult.HttpError(401, reason = "auth_missing")
+                if (!response.isSuccessful) {
+                    return@IntegrationSpec IntegrationLoadResult.HttpError(
+                        statusCode = response.code(),
+                        retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                        reason = "trakt_collection_movies_failed"
+                    )
+                }
+                IntegrationLoadResult.Success(response.body().orEmpty())
+            }
+        )
+        val value = runtime.get(spec).valueOrNull() ?: return IntegrationCallResult.Missing
+        return IntegrationCallResult.Success(value)
+    }
+
+    suspend fun getCollectionShows(): IntegrationCallResult<List<TraktCollectionShowItemDto>> {
+        val session = traktAuthService.accountScopedSession()
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
+            apiShapeId = TraktApiShapes.COLLECTION_SHOWS,
+            operationKey = accountOperationKey(session, "trakt.collection.shows"),
+            cacheKey = accountCacheKey(session, "trakt:sync:collection:shows"),
+            codec = gsonCodec<List<TraktCollectionShowItemDto>>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = COLLECTION_SNAPSHOT_TTL_MS,
+                staleAfterExpiryMs = COLLECTION_SNAPSHOT_STALE_GRACE_MS
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = {
+                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
+                    traktApi.getCollectionShows(authorization = authorization, extended = null)
+                } ?: return@IntegrationSpec IntegrationLoadResult.HttpError(401, reason = "auth_missing")
+                if (!response.isSuccessful) {
+                    return@IntegrationSpec IntegrationLoadResult.HttpError(
+                        statusCode = response.code(),
+                        retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                        reason = "trakt_collection_shows_failed"
+                    )
+                }
+                IntegrationLoadResult.Success(response.body().orEmpty())
+            }
+        )
+        val value = runtime.get(spec).valueOrNull() ?: return IntegrationCallResult.Missing
+        return IntegrationCallResult.Success(value)
+    }
+
+    suspend fun invalidateCollectionSnapshot(kind: TraktCollectionKind) {
+        val session = traktAuthService.accountScopedSession()
+        val (apiShapeId, cacheKey, opSuffix) = when (kind) {
+            TraktCollectionKind.MOVIES -> Triple(
+                TraktApiShapes.COLLECTION_MOVIES,
+                accountCacheKey(session, "trakt:sync:collection:movies"),
+                "movies"
+            )
+            TraktCollectionKind.SHOWS -> Triple(
+                TraktApiShapes.COLLECTION_SHOWS,
+                accountCacheKey(session, "trakt:sync:collection:shows"),
+                "shows"
+            )
+        }
+        // Build a minimal spec; only the cacheKey is consulted by IntegrationCacheStore.delete(spec).
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
+            apiShapeId = apiShapeId,
+            operationKey = accountOperationKey(session, "trakt.collection.invalidate.$opSuffix"),
             cacheKey = cacheKey,
             codec = gsonCodec<Unit>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 1L, staleAfterExpiryMs = 0L),
@@ -1453,6 +1553,8 @@ class TraktIntegrationProvider @Inject constructor(
     private companion object {
         const val WATCHED_SNAPSHOT_TTL_MS: Long = 24L * 60L * 60L * 1000L              // 24h
         const val WATCHED_SNAPSHOT_STALE_GRACE_MS: Long = 7L * 24L * 60L * 60L * 1000L // 7d grace
+        const val COLLECTION_SNAPSHOT_TTL_MS: Long = 24L * 60L * 60L * 1000L          // 24h
+        const val COLLECTION_SNAPSHOT_STALE_GRACE_MS: Long = 7L * 24L * 60L * 60L * 1000L  // 7d
         const val LAST_ACTIVITIES_TTL_MS: Long = 5L * 60L * 1000L                      // 5min
         const val LAST_ACTIVITIES_STALE_GRACE_MS: Long = 60L * 60L * 1000L             // 1h grace
     }
