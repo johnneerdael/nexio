@@ -1,11 +1,20 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import org.junit.Assert.assertEquals
@@ -134,6 +143,103 @@ class HomeViewModelPresentationPipelineTest {
     }
 
     @Test
+    fun `continue watching item presentation uses display artwork projections`() {
+        val item = ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "show-a",
+                contentType = "series",
+                name = "Show A",
+                poster = "raw-poster",
+                backdrop = "raw-backdrop",
+                logo = "raw-logo",
+                videoId = "show-a:2:4",
+                season = 2,
+                episode = 4,
+                episodeTitle = "Episode 4",
+                position = 1_000L,
+                duration = 2_000L,
+                lastWatched = 1_000L
+            ),
+            displayMetadata = HomeDisplayMetadata(
+                title = "Show A",
+                artwork = ArtworkBundle(
+                    poster = testArtworkRef("poster", ArtworkType.POSTER),
+                    backdrop = testArtworkRef("backdrop", ArtworkType.BACKDROP),
+                    logo = testArtworkRef("logo", ArtworkType.LOGO)
+                )
+            )
+        )
+
+        val carouselItem = buildContinueWatchingItem(
+            item = item,
+            useLandscapePosters = false,
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
+
+        assertEquals("nexio-artwork://asset/display-poster", carouselItem.heroPreview.poster)
+        assertEquals("nexio-artwork://asset/display-backdrop", carouselItem.heroPreview.backdrop)
+        assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.logo)
+        assertEquals("nexio-artwork://asset/display-poster", carouselItem.metaPreview?.poster)
+        assertEquals("nexio-artwork://asset/display-backdrop", carouselItem.metaPreview?.background)
+        assertEquals("nexio-artwork://asset/display-logo", carouselItem.metaPreview?.logo)
+    }
+
+    @Test
+    fun `next up preview uses display artwork projections`() {
+        val item = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "show-a",
+                contentType = "series",
+                name = "Show A",
+                poster = "raw-poster",
+                backdrop = "raw-backdrop",
+                logo = "raw-logo",
+                displayMetadata = HomeDisplayMetadata(
+                    title = "Show A",
+                    artwork = ArtworkBundle(
+                        poster = testArtworkRef("poster", ArtworkType.POSTER),
+                        backdrop = testArtworkRef("backdrop", ArtworkType.BACKDROP),
+                        logo = testArtworkRef("logo", ArtworkType.LOGO)
+                    )
+                ),
+                videoId = "show-a:2:4",
+                season = 2,
+                episode = 4,
+                episodeTitle = "Episode 4",
+                thumbnail = "episode-thumbnail",
+                lastWatched = 1_000L
+            )
+        )
+
+        val preview = nextUpToMetaPreview(item)
+
+        assertEquals("nexio-artwork://asset/display-poster", preview.poster)
+        assertEquals("nexio-artwork://asset/display-backdrop", preview.background)
+        assertEquals("nexio-artwork://asset/display-logo", preview.logo)
+    }
+
+    @Test
+    fun `catalog presentation freezes display logo before raw logo`() {
+        val item = testPreview("tt123", "Movie").copy(
+            logo = "raw-logo",
+            artwork = ArtworkBundle(
+                logo = testArtworkRef("logo", ArtworkType.LOGO)
+            )
+        )
+
+        val carouselItem = buildCatalogItem(
+            item = item,
+            row = testCatalogRow(item),
+            useLandscapePosters = true,
+            occurrence = 0
+        )
+
+        assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.logo)
+        assertEquals("nexio-artwork://asset/display-logo", carouselItem.heroPreview.frozenLogoUrl)
+    }
+
+    @Test
     fun `continue watching runtime warm candidates only include episodic items missing runtime`() {
         val missingEpisode = ContinueWatchingItem.NextUp(
             NextUpInfo(
@@ -192,6 +298,17 @@ class HomeViewModelPresentationPipelineTest {
         )
 
         assertEquals(listOf(missingEpisode), candidates)
+    }
+
+    private fun testArtworkRef(label: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset {
+        return ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("decision-$label"),
+            assetKey = ArtworkAssetKey("display-$label"),
+            imageType = type,
+            selectedProvider = null,
+            sourceRole = ArtworkSourceRole.CURRENT_PREVIEW,
+            trace = ArtworkTrace.empty()
+        )
     }
 
     @Test
@@ -293,6 +410,18 @@ class HomeViewModelPresentationPipelineTest {
             imdbRating = 8.8f,
             tomatoesRating = null,
             genres = listOf("Action")
+        )
+    }
+
+    private fun testCatalogRow(item: MetaPreview): CatalogRow {
+        return CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "catalog",
+            catalogName = "Catalog",
+            type = item.type,
+            items = listOf(item)
         )
     }
 }

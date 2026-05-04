@@ -769,7 +769,7 @@ private fun ModernCarouselCard(
         imageUrl?.let {
             val diskKey = item.metaPreview?.let { meta ->
                 if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-                    ArtworkImageCacheKeys.backdrop(meta.id)
+                    ArtworkImageCacheKeys.backdrop(meta.id, it)
                 } else {
                     ArtworkImageCacheKeys.poster(meta.id, meta.posterProviderTag, it)
                 }
@@ -797,7 +797,7 @@ private fun ModernCarouselCard(
                 .data(it)
                 .crossfade(false)
                 .memoryCacheKey("${it}_${maxLogoWidthPx}x${logoHeightPx}")
-                .apply { item.metaPreview?.let { meta -> diskCacheKey(ArtworkImageCacheKeys.logo(meta.id)) } }
+                .apply { item.metaPreview?.let { meta -> diskCacheKey(ArtworkImageCacheKeys.logo(meta.id, it)) } }
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }
