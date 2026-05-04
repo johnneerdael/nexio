@@ -1235,6 +1235,9 @@ class TraktLibraryService @Inject constructor(
     }
 
     private fun restoreSnapshotForProfile(profileId: Int) {
+        // Collection is not persisted; reset the in-memory projection on every profile switch
+        // to match the profile-isolation guarantee that the rest of this service provides.
+        collectionMembership.value = emptySet()
         val persisted = snapshotStore.read(profileId)
         if (persisted == null) {
             logDebug("restore found no persisted snapshot profile=$profileId")
@@ -1242,6 +1245,11 @@ class TraktLibraryService @Inject constructor(
             return
         }
         restorePersistedState(persisted)
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun testOnlyRestoreSnapshotForProfile(profileId: Int) {
+        restoreSnapshotForProfile(profileId)
     }
 
     private fun persistedMetadataForProfile(profileId: Int): Map<String, LibraryMetadata> {
@@ -1338,6 +1346,7 @@ class TraktLibraryService @Inject constructor(
         )
         snapshotState.value = Snapshot()
         metadataState.value = emptyMap()
+        collectionMembership.value = emptySet()
         lastRefreshMs = 0L
         hasCacheState.value = false
     }
