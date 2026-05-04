@@ -62,4 +62,27 @@ class ArtworkImageCacheKeysTest {
             ArtworkImageCacheKeys.poster(itemId = "tmdb:550", providerTag = " TMDB ")
         )
     }
+
+    @Test
+    fun `internal artwork models get distinct stable disk keys`() {
+        val first = ArtworkImageCacheKeys.thumbnail(
+            itemId = "episode-1",
+            imageUrl = "nexio-artwork://asset/asset-one"
+        )
+        val second = ArtworkImageCacheKeys.thumbnail(
+            itemId = "episode-1",
+            imageUrl = "nexio-artwork://asset/asset-two"
+        )
+
+        assertEquals(
+            first,
+            ArtworkImageCacheKeys.thumbnail(
+                itemId = "episode-1",
+                imageUrl = "nexio-artwork://asset/asset-one"
+            )
+        )
+        assertFalse(first == second)
+        assertFalse(first.contains("asset-one"))
+        assertFalse(first.contains("profile", ignoreCase = true))
+    }
 }

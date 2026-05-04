@@ -508,12 +508,13 @@ private fun EpisodeCard(
             )
         )
     }
-    val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
+    val displayThumbnail = episode.displayThumbnail
+    val thumbnailRequest = remember(context, displayThumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
-            .data(episode.thumbnail)
+            .data(displayThumbnail)
             .crossfade(false)
             .size(width = thumbnailWidthPx, height = thumbnailHeightPx)
-            .diskCacheKey(ArtworkImageCacheKeys.thumbnail(episode.id))
+            .diskCacheKey(ArtworkImageCacheKeys.thumbnail(episode.id, displayThumbnail))
             .apply {
                 if (shouldBlur) {
                     transformations(com.nexio.tv.ui.util.BlurTransformation())

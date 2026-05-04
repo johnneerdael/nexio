@@ -267,7 +267,7 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         season = resolvedNext.season ?: return,
         episode = resolvedNext.episode ?: return,
         title = resolvedNext.title,
-        thumbnail = resolvedNext.thumbnail,
+        thumbnail = resolvedNext.displayThumbnail,
         overview = resolvedNext.overview,
         released = resolvedNext.released,
         hasAired = hasAired,

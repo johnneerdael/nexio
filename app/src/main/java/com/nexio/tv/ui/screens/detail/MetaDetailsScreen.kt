@@ -649,9 +649,9 @@ fun MetaDetailsScreen(
                                     meta.apiType,
                                     meta.id,
                                     meta.name,
-                                    video.thumbnail ?: meta.poster,
-                                    meta.background,
-                                    meta.logo,
+                                    video.displayThumbnail ?: meta.displayPoster,
+                                    meta.displayBackground,
+                                    meta.displayLogo,
                                     video.season,
                                     video.episode,
                                     video.title,
@@ -672,9 +672,9 @@ fun MetaDetailsScreen(
                                     meta.apiType,
                                     meta.id,
                                     meta.name,
-                                    meta.poster,
-                                    meta.background,
-                                    meta.logo,
+                                    meta.displayPoster,
+                                    meta.displayBackground,
+                                    meta.displayLogo,
                                     null,
                                     null,
                                     null,
@@ -699,9 +699,9 @@ fun MetaDetailsScreen(
                                     meta.apiType,
                                     meta.id,
                                     meta.name,
-                                    video.thumbnail ?: meta.poster,
-                                    meta.background,
-                                    meta.logo,
+                                    video.displayThumbnail ?: meta.displayPoster,
+                                    meta.displayBackground,
+                                    meta.displayLogo,
                                     video.season,
                                     video.episode,
                                     video.title,
@@ -886,7 +886,7 @@ fun MetaDetailsScreen(
             )
         ) {
             ImmediateDetailTrailerTakeoverOverlay(
-                backdropUrl = immediateTakeoverMeta.background ?: immediateTakeoverMeta.poster
+                backdropUrl = immediateTakeoverMeta.displayBackground ?: immediateTakeoverMeta.displayPoster
             )
         }
     }
@@ -1026,6 +1026,16 @@ private fun MetaDetailsContent(
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onReviewFocused: (Int) -> Unit = {}
 ) {
+    val displayPoster = meta.displayPoster
+    val displayBackground = meta.displayBackground
+    val displayLogo = meta.displayLogo
+    val displayMeta = remember(meta, displayPoster, displayBackground, displayLogo) {
+        meta.copy(
+            poster = displayPoster,
+            background = displayBackground,
+            logo = displayLogo
+        )
+    }
     val showTrailerTakeover = remember(isTrailerPlaying, isTrailerLoading, immediateTrailerTakeoverPending) {
         shouldShowDetailTrailerTakeover(
             isTrailerPlaying = isTrailerPlaying,
@@ -1642,13 +1652,13 @@ private fun MetaDetailsContent(
     }
     val backdropRequest = remember(
         localContext,
-        meta.background,
-        meta.poster,
+        displayBackground,
+        displayPoster,
         backdropWidthPx,
         backdropHeightPx
     ) {
         ImageRequest.Builder(localContext)
-            .data(meta.background ?: meta.poster)
+            .data(displayBackground ?: displayPoster)
             .crossfade(true)
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
@@ -1726,7 +1736,7 @@ private fun MetaDetailsContent(
     val heroSection: @Composable () -> Unit = {
         Box {
             HeroContentSection(
-                meta = meta,
+                meta = displayMeta,
                 nextEpisode = nextEpisode,
                 nextToWatch = nextToWatch,
                 onPlayClick = heroPlayClick,
@@ -2146,7 +2156,7 @@ private fun MetaDetailsContent(
                     )
                 } else if (immediateTrailerTakeoverPending || isTrailerLoading) {
                     ImmediateDetailTrailerTakeoverOverlay(
-                        backdropUrl = meta.background ?: meta.poster
+                        backdropUrl = displayBackground ?: displayPoster
                     )
                 }
             }

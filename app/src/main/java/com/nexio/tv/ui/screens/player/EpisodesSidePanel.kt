@@ -270,6 +270,7 @@ private fun EpisodeStreamsView(
     }
 }
 
+
 @Composable
 private fun EpisodesListView(
     uiState: PlayerUiState,
@@ -510,7 +511,7 @@ private fun EpisodeItem(
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(episode.thumbnail)
+                        .data(episode.displayThumbnail)
                         .crossfade(true)
                         .apply {
                             if (shouldBlur) {
@@ -610,4 +611,3 @@ private fun EpisodeItem(
         }
     }
 }
-

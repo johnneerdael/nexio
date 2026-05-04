@@ -377,7 +377,7 @@ internal fun buildContinueWatchingItem(
             }
             HeroPreview(
                 title = displayMetadata.title ?: item.progress.name,
-                logo = displayMetadata.logo ?: item.progress.logo,
+                logo = displayMetadata.displayLogo ?: item.progress.logo,
                 description = item.episodeDescription
                     ?: displayMetadata.description
                     ?: item.progress.episodeTitle,
@@ -388,19 +388,19 @@ internal fun buildContinueWatchingItem(
                 ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
-                poster = displayMetadata.poster ?: item.progress.poster,
-                backdrop = displayMetadata.backdrop ?: item.progress.backdrop,
+                poster = displayMetadata.displayPoster ?: item.progress.poster,
+                backdrop = displayMetadata.displayBackdrop ?: item.progress.backdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
-                        displayMetadata.backdrop,
-                        displayMetadata.poster,
+                        displayMetadata.displayBackdrop,
+                        displayMetadata.displayPoster,
                         item.progress.backdrop,
                         item.progress.poster
                     )
                 } else {
                     firstNonBlank(
-                        displayMetadata.poster,
-                        displayMetadata.backdrop,
+                        displayMetadata.displayPoster,
+                        displayMetadata.displayBackdrop,
                         item.progress.poster,
                         item.progress.backdrop
                     )
@@ -413,7 +413,7 @@ internal fun buildContinueWatchingItem(
             val episodeLabel = if (episodeTitle != null) "$episodeCode · $episodeTitle" else episodeCode
             HeroPreview(
                 title = displayMetadata.title ?: item.info.name,
-                logo = displayMetadata.logo ?: item.info.logo,
+                logo = displayMetadata.displayLogo ?: item.info.logo,
                 description = item.info.episodeDescription
                     ?: displayMetadata.description
                     ?: item.info.episodeTitle
@@ -425,20 +425,20 @@ internal fun buildContinueWatchingItem(
                 ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.info.genres.ifEmpty { displayMetadata.genres },
-                poster = displayMetadata.poster ?: item.info.poster,
-                backdrop = displayMetadata.backdrop ?: item.info.backdrop,
+                poster = displayMetadata.displayPoster ?: item.info.poster,
+                backdrop = displayMetadata.displayBackdrop ?: item.info.backdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
-                        displayMetadata.backdrop,
-                        displayMetadata.poster,
+                        displayMetadata.displayBackdrop,
+                        displayMetadata.displayPoster,
                         item.info.backdrop,
                         item.info.poster,
                         item.info.thumbnail
                     )
                 } else {
                     firstNonBlank(
-                        displayMetadata.poster,
-                        displayMetadata.backdrop,
+                        displayMetadata.displayPoster,
+                        displayMetadata.displayBackdrop,
                         item.info.poster,
                         item.info.backdrop,
                         item.info.thumbnail
@@ -453,15 +453,15 @@ internal fun buildContinueWatchingItem(
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
                     item.episodeThumbnail,
-                    displayMetadata.poster,
-                    displayMetadata.backdrop,
+                    displayMetadata.displayPoster,
+                    displayMetadata.displayBackdrop,
                     item.progress.poster,
                     item.progress.backdrop
                 )
             } else {
                 firstNonBlank(
-                    displayMetadata.backdrop,
-                    displayMetadata.poster,
+                    displayMetadata.displayBackdrop,
+                    displayMetadata.displayPoster,
                     item.progress.backdrop,
                     item.progress.poster
                 )
@@ -470,15 +470,15 @@ internal fun buildContinueWatchingItem(
             if (isSeriesType(item.progress.contentType)) {
                 firstNonBlank(
                     heroPreview.poster,
-                    displayMetadata.poster,
-                    displayMetadata.backdrop,
+                    displayMetadata.displayPoster,
+                    displayMetadata.displayBackdrop,
                     item.progress.poster,
                     item.progress.backdrop
                 )
             } else {
                 firstNonBlank(
-                    displayMetadata.poster,
-                    displayMetadata.backdrop,
+                    displayMetadata.displayPoster,
+                    displayMetadata.displayBackdrop,
                     item.progress.poster,
                     item.progress.backdrop
                 )
@@ -488,15 +488,15 @@ internal fun buildContinueWatchingItem(
             if (item.info.hasAired) {
                 firstNonBlank(
                     item.info.thumbnail,
-                    displayMetadata.poster,
-                    displayMetadata.backdrop,
+                    displayMetadata.displayPoster,
+                    displayMetadata.displayBackdrop,
                     item.info.poster,
                     item.info.backdrop
                 )
             } else {
                 firstNonBlank(
-                    displayMetadata.backdrop,
-                    displayMetadata.poster,
+                    displayMetadata.displayBackdrop,
+                    displayMetadata.displayPoster,
                     item.info.backdrop,
                     item.info.poster,
                     item.info.thumbnail
@@ -504,8 +504,8 @@ internal fun buildContinueWatchingItem(
             }
         } else {
             firstNonBlank(
-                displayMetadata.poster,
-                displayMetadata.backdrop,
+                displayMetadata.displayPoster,
+                displayMetadata.displayBackdrop,
                 item.info.poster,
                 item.info.backdrop,
                 item.info.thumbnail
@@ -548,10 +548,10 @@ internal fun continueWatchingInProgressToMetaPreview(item: ContinueWatchingItem.
         type = contentType,
         rawType = item.progress.contentType,
         name = displayMetadata.title ?: item.progress.name,
-        poster = displayMetadata.poster ?: item.progress.poster,
+        poster = displayMetadata.displayPoster ?: item.progress.poster,
         posterShape = PosterShape.LANDSCAPE,
-        background = displayMetadata.backdrop ?: item.progress.backdrop,
-        logo = displayMetadata.logo ?: item.progress.logo,
+        background = displayMetadata.displayBackdrop ?: item.progress.backdrop,
+        logo = displayMetadata.displayLogo ?: item.progress.logo,
         description = displayMetadata.description ?: item.progress.episodeTitle,
         releaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
         imdbRating = item.episodeImdbRating ?: displayMetadata.imdbRating,
@@ -569,12 +569,12 @@ internal fun buildCatalogItem(
 ): ModernCarouselItem {
     val displayMetadata = item.toFirstPaintHomeDisplayMetadata()
     val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
-        ?: firstNonBlank(item.background, displayMetadata.backdrop)
+        ?: firstNonBlank(item.background, displayMetadata.displayBackdrop)
     val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
-        ?: firstNonBlank(item.logo, displayMetadata.logo)
+        ?: firstNonBlank(displayMetadata.displayLogo, item.logo)
     val heroPreview = HeroPreview(
         title = displayMetadata.title ?: item.name,
-        logo = displayMetadata.logo ?: item.logo,
+        logo = displayMetadata.displayLogo ?: item.logo,
         description = displayMetadata.description ?: item.description,
         contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
         yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
@@ -582,12 +582,12 @@ internal fun buildCatalogItem(
         ratingSource = if (displayMetadata.imdbRating != null) displayMetadata.ratingSource.orDefault() else item.ratingSource.orDefault(),
         tomatoesText = (displayMetadata.tomatoesRating ?: item.tomatoesRating)?.let(::formatPreviewTomatoesRating),
         genres = displayMetadata.genres.ifEmpty { item.genres }.take(3),
-        poster = displayMetadata.poster ?: item.poster,
-        backdrop = displayMetadata.backdrop ?: item.background,
+        poster = displayMetadata.displayPoster ?: item.poster,
+        backdrop = displayMetadata.displayBackdrop ?: item.background,
         imageUrl = if (useLandscapePosters) {
-            firstNonBlank(displayMetadata.backdrop, displayMetadata.poster, item.background, item.poster)
+            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster, item.background, item.poster)
         } else {
-            firstNonBlank(displayMetadata.poster, displayMetadata.backdrop, item.poster, item.background)
+            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop, item.poster, item.background)
         },
         frozenBackdropUrl = frozenBackdrop,
         frozenLogoUrl = frozenLogo
@@ -598,9 +598,9 @@ internal fun buildCatalogItem(
         title = displayMetadata.title ?: item.name,
         subtitle = displayMetadata.releaseInfo ?: item.releaseInfo,
         imageUrl = if (useLandscapePosters) {
-            firstNonBlank(displayMetadata.backdrop, displayMetadata.poster, item.background, item.poster)
+            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster, item.background, item.poster)
         } else {
-            firstNonBlank(displayMetadata.poster, displayMetadata.backdrop, item.poster, item.background)
+            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop, item.poster, item.background)
         },
         heroPreview = heroPreview,
         payload = ModernPayload.Catalog(
