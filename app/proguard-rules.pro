@@ -124,6 +124,13 @@
 # on Android runtime and should not fail release shrinking.
 -dontwarn org.osgi.annotation.bundle.**
 
+# ── Compose UI: AndroidLayoutApi34 (API 34 helper) ────────────────────────────
+# Keep the API 34 text-layout helper isolated so its TextInclusionStrategy
+# synthetic lambda is not inlined onto Android <14 verifier load paths.
+-keep,allowoptimization,allowshrinking class androidx.compose.ui.text.android.AndroidLayoutApi34
+-keep,allowoptimization,allowshrinking class androidx.compose.ui.text.android.AndroidLayoutApi34$*
+-keepclassmembers class androidx.compose.ui.text.android.AndroidLayoutApi34 { *; }
+
 # ── General ────────────────────────────────────────────────────────────────────
 # Keep line numbers for crash reports
 -keepattributes SourceFile,LineNumberTable

@@ -524,22 +524,27 @@ object StreamPresentationEngine {
     private fun dedupeKeys(item: StreamCardModel): Set<String> {
         val parsed = item.parsed
         val stream = item.stream
+        val servicePrefix = parsed.serviceId
+            ?.lowercase(Locale.US)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "$it:" }
+            .orEmpty()
         val hasStrongIdentity = parsed.normalizedFilenameKey != null ||
             !stream.behaviorHints?.videoHash.isNullOrBlank() ||
             !stream.infoHash.isNullOrBlank() ||
             (parsed.sizeBytes != null && parsed.sizeBytes > 0L)
         return buildSet {
-            parsed.normalizedFilenameKey?.let { add("filename:$it") }
+            parsed.normalizedFilenameKey?.let { add("${servicePrefix}filename:$it") }
             stream.behaviorHints?.videoHash
                 ?.lowercase(Locale.US)
                 ?.takeIf { it.isNotBlank() }
-                ?.let { add("videohash:$it") }
+                ?.let { add("${servicePrefix}videohash:$it") }
             if (!stream.infoHash.isNullOrBlank()) {
-                add("hash:${stream.infoHash.lowercase(Locale.US)}:${stream.fileIdx ?: 0}")
+                add("${servicePrefix}hash:${stream.infoHash.lowercase(Locale.US)}:${stream.fileIdx ?: 0}")
             }
-            parsed.sizeBytes?.takeIf { it > 0L }?.let { add("exactbytes:$it") }
+            parsed.sizeBytes?.takeIf { it > 0L }?.let { add("${servicePrefix}exactbytes:$it") }
             if (!hasStrongIdentity) {
-                parsed.smartDetectKey?.let { add("smart:$it") }
+                parsed.smartDetectKey?.let { add("${servicePrefix}smart:$it") }
             }
         }
     }

@@ -111,8 +111,20 @@ internal object DiskSpoolStorageResolver {
     }
 
     internal fun usableSpaceForSpoolDirectory(spoolDirectory: File): Long {
+        return usableSpaceForSpoolDirectory(
+            spoolDirectory = spoolDirectory,
+            existsOf = { file -> file.exists() },
+            usableSpaceOf = { file -> file.usableSpace }
+        )
+    }
+
+    internal fun usableSpaceForSpoolDirectory(
+        spoolDirectory: File,
+        existsOf: (File) -> Boolean,
+        usableSpaceOf: (File) -> Long
+    ): Long {
         val existingPath = generateSequence(spoolDirectory) { file -> file.parentFile }
-            .firstOrNull { file -> file.exists() }
-        return (existingPath ?: spoolDirectory).usableSpace
+            .firstOrNull { file -> existsOf(file) }
+        return usableSpaceOf(existingPath ?: spoolDirectory)
     }
 }

@@ -1043,8 +1043,10 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         secondaryLanguage = state.subtitleStyle.secondaryPreferredLanguage,
         hasScannedTextTracksOnce = hasScannedTextTracksOnce,
         playerReady = backendIsReady(),
-        addonSubtitleDiscoveryPending =
-            state.isLoadingAddonSubtitles || startupSubtitlePreparationJob?.isActive == true,
+        // The startup preparation job calls this method after addon subtitles
+        // land. Treating that same job as discovery-pending self-blocks the
+        // selector and prevents the AI-translation tier from running.
+        addonSubtitleDiscoveryPending = state.isLoadingAddonSubtitles,
         aiTranslationConfigured =
             subtitleTranslationSettings.enabled && subtitleTranslationSettings.apiKey.isNotBlank(),
         startupPhase = allowStartupAiFallback,

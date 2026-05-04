@@ -360,14 +360,24 @@ object CometProxyUrlResolver {
         headers: Map<String, String>?,
         addonHost: String? = null
     ): Job? {
-        if (!isCometProxy(url, addonHost)) return null
+        if (!isCometProxy(url, addonHost)) {
+            Log.i(TAG, "PREWARM_SKIPPED url=${sanitize(url)} reason=not_proxy")
+            return null
+        }
         val now = currentTimeMs()
         synchronized(lock) {
             cache[url]?.let { entry ->
-                if (now - entry.storedAtMs <= CACHE_TTL_MS) return null
+                if (now - entry.storedAtMs <= CACHE_TTL_MS) {
+                    Log.i(TAG, "PREWARM_SKIPPED url=${sanitize(url)} reason=cache_hit")
+                    return null
+                }
             }
-            if (inFlight.containsKey(url)) return null
+            if (inFlight.containsKey(url)) {
+                Log.i(TAG, "PREWARM_SKIPPED url=${sanitize(url)} reason=in_flight")
+                return null
+            }
         }
+        Log.i(TAG, "PREWARM_FIRED url=${sanitize(url)}")
         return scope.launch { resolve(url, headers, addonHost) }
     }
 

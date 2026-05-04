@@ -4,12 +4,11 @@ import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.ui.screens.stream.AutoPlayStreamAlternative
 import com.nexio.tv.ui.screens.stream.StreamPlaybackInfo
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ProbeProfilingDiagnosticTest {
     @Test
-    fun `probe plan races primary proxy direct and resolved CDN with capped fallback fanout`() {
+    fun `probe plan uses resolved CDN primary with capped fallback fanout`() {
         val playbackInfo = playbackInfo(
             url = "https://addon.example/stream/primary.mkv",
             streamKey = "primary",
@@ -28,18 +27,16 @@ class ProbeProfilingDiagnosticTest {
 
         assertEquals(
             listOf(
-                "primary_proxy_direct",
                 "primary_resolve_cdn",
                 "fallback_0_resolve_cdn",
                 "fallback_1_resolve_cdn"
             ),
             plan.map { it.label }
         )
-        assertFalse(plan[0].routeThroughResolver)
-        assertEquals(null, plan[0].addonHost)
+        assertEquals(true, plan[0].routeThroughResolver)
+        assertEquals("addon.example", plan[0].addonHost)
         assertEquals("addon.example", plan[1].addonHost)
-        assertEquals("addon.example", plan[2].addonHost)
-        assertEquals("f2", plan[3].streamKey)
+        assertEquals("f2", plan[2].streamKey)
     }
 
     private fun fallback(streamKey: String, url: String?): AutoPlayStreamAlternative =
