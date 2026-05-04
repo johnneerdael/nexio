@@ -676,10 +676,17 @@ class TraktProgressService @Inject constructor(
             val watchedShows = getWatchedShowsSnapshot(forceRefresh = false)
             val watchedShowEntry = watchedShows[rawKey]
                 ?: watchedShows[cacheKey]
-                ?: watchedShows.values.firstOrNull { entry ->
-                    entry.aliasContentIds.any { alias ->
-                        alias == rawKey || alias == cacheKey
+                ?: run {
+                    // Use singleOrNull so that an alias matched by more than one entry
+                    // (i.e. an ambiguous alias removed from the map but still present in
+                    // aliasContentIds of both shows) correctly resolves to null rather
+                    // than silently returning whichever show happens to be iterated first.
+                    val matches = watchedShows.values.filter { entry ->
+                        entry.aliasContentIds.any { alias ->
+                            alias == rawKey || alias == cacheKey
+                        }
                     }
+                    matches.singleOrNull()
                 }
             val baseFromSnapshot: Map<Pair<Int, Int>, WatchProgress> = watchedShowEntry?.watchedEpisodes
                 ?.associateWith { (season, episode) ->
@@ -1353,12 +1360,27 @@ class TraktProgressService @Inject constructor(
             }
         }
         val entries = items.mapNotNull(::mapWatchedShowItem)
-        return buildMap<String, WatchedShowIndexEntry> {
-            entries.forEach { entry ->
-                put(entry.canonicalContentId, entry)
-                entry.aliasContentIds.forEach { alias -> put(alias, entry) }
+        val seen = mutableMapOf<String, WatchedShowIndexEntry>()
+        val ambiguous = mutableSetOf<String>()
+        // Canonical key always wins — it is unique per show by construction (TVDB id for
+        // shows, fribb canonical for anime). If the canonical itself collides, that's a
+        // genuine duplicate row from Trakt and we accept last-writer-wins.
+        entries.forEach { entry ->
+            seen[entry.canonicalContentId] = entry
+        }
+        entries.forEach { entry ->
+            entry.aliasContentIds.forEach { alias ->
+                if (alias == entry.canonicalContentId) return@forEach
+                val existing = seen[alias]
+                when {
+                    existing == null -> seen[alias] = entry
+                    existing.canonicalContentId == entry.canonicalContentId -> Unit  // same entry, no conflict
+                    else -> ambiguous.add(alias)  // two different shows want this alias
+                }
             }
         }
+        ambiguous.forEach { seen.remove(it) }
+        return seen
     }
 
     @VisibleForTesting
