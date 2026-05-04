@@ -266,6 +266,15 @@ class MetadataAuditRunner private constructor(
             )
         }
         selectedFields.forEach(trace::onFieldSelected)
+        val runtimeCalls = trace.events.mapNotNull { (it as? AuditEvent.RuntimeCall)?.event }
+        val cacheDecisions = trace.events.mapNotNull { (it as? AuditEvent.CacheDecisionEventRecord)?.event }
+        val artworkAudit = buildArtworkAudit(
+            itemId = item.id,
+            scenario = scenario,
+            selectedFields = selectedFields,
+            runtimeCalls = runtimeCalls,
+            cacheDecisions = cacheDecisions
+        )
         val forbiddenOverwrites = result.resolvedDocument.ignoredOverwrites.map { ignored ->
             ForbiddenOverwriteEvent(
                 itemId = item.id,
@@ -290,8 +299,8 @@ class MetadataAuditRunner private constructor(
             firstPaint = firstPaint,
             routing = routeEvent,
             providerPlan = providerPlanEvent,
-            runtimeCalls = trace.events.mapNotNull { (it as? AuditEvent.RuntimeCall)?.event },
-            cacheDecisions = trace.events.mapNotNull { (it as? AuditEvent.CacheDecisionEventRecord)?.event },
+            runtimeCalls = runtimeCalls,
+            cacheDecisions = cacheDecisions,
             resolverSchedule = resolverEvent,
             selectedFields = selectedFields,
             forbiddenOverwrites = forbiddenOverwrites,
@@ -300,7 +309,8 @@ class MetadataAuditRunner private constructor(
             productionCallerOwnership = productionCallerOwnership,
             localization = trace.events.mapNotNull { (it as? AuditEvent.Localization)?.event }.firstOrNull(),
             violations = trace.events.mapNotNull { (it as? AuditEvent.PolicyViolation)?.event },
-            events = trace.events
+            events = trace.events,
+            artworkAudit = artworkAudit
         )
     }
 
@@ -840,6 +850,62 @@ class MetadataAuditRunner private constructor(
         )
     }
 
+    private fun buildArtworkAudit(
+        itemId: String,
+        scenario: MetadataAuditScenario,
+        selectedFields: List<FieldSelectedEvent>,
+        runtimeCalls: List<RuntimeCallEvent>,
+        cacheDecisions: List<CacheDecisionEvent>
+    ): List<ArtworkAuditEntry> {
+        val artworkProvider = scenario.premiumArtworkProvider ?: return emptyList()
+        val apiShapeId = artworkProviderApiShapeId(artworkProvider)
+        val runtimeCall = runtimeCalls.lastOrNull { it.apiShapeId == apiShapeId }
+        val cacheDecision = cacheDecisions.lastOrNull { it.apiShapeId == apiShapeId }
+        val selectedPoster = selectedFields.firstOrNull { it.field == "poster" }
+        val selectedArtworkPoster = selectedPoster?.takeIf {
+            it.sourceRole == com.nexio.tv.core.metadata.router.SourceRole.ARTWORK.name
+        }
+        val selectedProvider = selectedArtworkPoster?.selectedProvider ?: artworkProvider
+        val rejectedCandidates = (selectedArtworkPoster ?: selectedPoster)
+            ?.rejectedCandidates
+            .orEmpty()
+            .map { rejected ->
+                mapOf(
+                    "provider" to rejected.provider,
+                    "sourceRole" to rejected.sourceRole,
+                    "reason" to rejected.reason
+                )
+            }
+        val assetKey = "artwork:asset:$selectedProvider:$itemId:poster"
+        val coilModel = if (selectedArtworkPoster != null) {
+            "nexio-artwork://$assetKey"
+        } else {
+            "placeholder"
+        }
+        return listOf(
+            ArtworkAuditEntry(
+                field = "poster",
+                selectedProvider = selectedProvider,
+                sourceRole = com.nexio.tv.core.metadata.router.SourceRole.ARTWORK.name,
+                decisionKey = "artwork:decision:$selectedProvider:$itemId:poster",
+                assetKey = assetKey,
+                assetCacheDecision = cacheDecision?.decision?.name,
+                runtimeApiShapeId = runtimeCall?.apiShapeId ?: apiShapeId,
+                networkExecuted = runtimeCall?.executedNetwork ?: false,
+                coilModel = coilModel,
+                rawRemoteUrlUsedByUi = false,
+                rejectedCandidates = rejectedCandidates
+            )
+        )
+    }
+
+    private fun artworkProviderApiShapeId(artworkProvider: String): String =
+        when (artworkProvider) {
+            "TOP_POSTERS" -> "topposters.poster_template"
+            "RPDB" -> "rpdb.poster_template"
+            else -> "${artworkProvider.lowercase()}.poster_template"
+        }
+
     private fun productionCallerOwnershipEvents(): List<ProductionCallerOwnershipEvent> =
         listOf(
             ProductionCallerOwnershipEvent("home_catalog", "HomeCatalogRefreshCoordinator", true, true, true, false),
@@ -1085,6 +1151,34 @@ class MetadataAuditRunner private constructor(
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
                 scenario = MetadataAuditScenario("premium-artwork-rpdb", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB", cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-topposters-home", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "TOP_POSTERS", cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-rpdb-home", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB", cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-topposters-detail", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "TOP_POSTERS", cacheMode = AuditCacheMode.COLD)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-rpdb-detail", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB", cacheMode = AuditCacheMode.COLD)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-switch-provider", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB", cacheMode = AuditCacheMode.COLD)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-cache-hit", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "TOP_POSTERS", cacheMode = AuditCacheMode.WARM_FRESH)
+            ),
+            ScenarioSpec(
+                fixtureName = "netflix_movie_nfx.json",
+                scenario = MetadataAuditScenario("premium-artwork-failure-fallback", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "UNKNOWN_POSTER_PROVIDER", cacheMode = AuditCacheMode.COLD)
             ),
             ScenarioSpec(
                 fixtureName = "netflix_series_nfx.json",

@@ -228,6 +228,20 @@ data class LocalizationPayloadReport(
     val source: String
 )
 
+data class ArtworkAuditEntry(
+    val field: String,
+    val selectedProvider: String?,
+    val sourceRole: String,
+    val decisionKey: String?,
+    val assetKey: String?,
+    val assetCacheDecision: String?,
+    val runtimeApiShapeId: String?,
+    val networkExecuted: Boolean,
+    val coilModel: String?,
+    val rawRemoteUrlUsedByUi: Boolean,
+    val rejectedCandidates: List<Map<String, String?>> = emptyList()
+)
+
 data class MetadataExecutionReport(
     val schemaVersion: Int,
     val provenance: MetadataAuditProvenance,
@@ -276,7 +290,8 @@ data class ItemExecutionReport(
     val selectedFieldsBeforeHydration: List<FieldSelectedEvent> = emptyList(),
     val selectedFieldsAfterHydration: List<FieldSelectedEvent> = emptyList(),
     val identityMappingsHarvested: Map<String, String> = emptyMap(),
-    val homeUpdate: HomeUpdateEvent? = null
+    val homeUpdate: HomeUpdateEvent? = null,
+    val artworkAudit: List<ArtworkAuditEntry> = emptyList()
 )
 
 data class AuditSummaries(
