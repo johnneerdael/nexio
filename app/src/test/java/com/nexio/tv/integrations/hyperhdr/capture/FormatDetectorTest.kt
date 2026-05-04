@@ -21,6 +21,7 @@ class FormatDetectorTest {
             colorInfo(C.COLOR_TRANSFER_ST2084),
             HdrMode.Auto,
             deviceComposesWideColor = true,
+            serverSupportsP010 = true,
         )
         assertThat(mode).isEqualTo(CaptureMode.HDR_P010)
     }
@@ -31,6 +32,7 @@ class FormatDetectorTest {
             colorInfo(C.COLOR_TRANSFER_HLG),
             HdrMode.Auto,
             deviceComposesWideColor = true,
+            serverSupportsP010 = true,
         )
         assertThat(mode).isEqualTo(CaptureMode.HDR_P010)
     }
@@ -41,6 +43,7 @@ class FormatDetectorTest {
             colorInfo(C.COLOR_TRANSFER_SDR, space = C.COLOR_SPACE_BT709),
             HdrMode.Auto,
             deviceComposesWideColor = true,
+            serverSupportsP010 = true,
         )
         assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
     }
@@ -51,6 +54,7 @@ class FormatDetectorTest {
             null,
             HdrMode.Auto,
             deviceComposesWideColor = true,
+            serverSupportsP010 = true,
         )
         assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
     }
@@ -61,6 +65,7 @@ class FormatDetectorTest {
             colorInfo(C.COLOR_TRANSFER_LINEAR),
             HdrMode.Auto,
             deviceComposesWideColor = true,
+            serverSupportsP010 = true,
         )
         assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
     }
@@ -72,6 +77,7 @@ class FormatDetectorTest {
                 colorInfo(transfer),
                 HdrMode.ForceSdr,
                 deviceComposesWideColor = true,
+                serverSupportsP010 = true,
             )
             assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
         }
@@ -83,6 +89,7 @@ class FormatDetectorTest {
             colorInfo(C.COLOR_TRANSFER_ST2084),
             HdrMode.Auto,
             deviceComposesWideColor = false,
+            serverSupportsP010 = true,
         )
         assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
     }
@@ -95,6 +102,29 @@ class FormatDetectorTest {
             colorInfo(C.COLOR_TRANSFER_HLG),
             HdrMode.ForceSdr,
             deviceComposesWideColor = false,
+            serverSupportsP010 = true,
+        )
+        assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
+    }
+
+    @Test
+    fun `HDR source on wide-color device yields SDR_NV12 when server lacks P010 support`() {
+        val mode = FormatDetector.detect(
+            colorInfo(C.COLOR_TRANSFER_ST2084),
+            HdrMode.Auto,
+            deviceComposesWideColor = true,
+            serverSupportsP010 = false,
+        )
+        assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
+    }
+
+    @Test
+    fun `HLG source on wide-color device yields SDR_NV12 when server lacks P010 support`() {
+        val mode = FormatDetector.detect(
+            colorInfo(C.COLOR_TRANSFER_HLG),
+            HdrMode.Auto,
+            deviceComposesWideColor = true,
+            serverSupportsP010 = false,
         )
         assertThat(mode).isEqualTo(CaptureMode.SDR_NV12)
     }
