@@ -93,6 +93,24 @@ class TraktProgressServiceProfileIsolationTest {
         assertEquals(true, profile1HasIt)
     }
 
+    @Test
+    fun event_driven_refresh_throttle_does_not_leak_across_profiles() = runBlocking {
+        val activeProfileId = AtomicInteger(1)
+        every { traktIntegrationProvider.currentTraktProfileId() } answers { activeProfileId.get() }
+
+        // Profile 1: first call fires (no prior throttle).
+        activeProfileId.set(1)
+        service.requestEventDrivenRefresh()
+        // Profile 1: second call within throttle window — suppressed.
+        service.requestEventDrivenRefresh()
+        // Profile 2: first call fires (different profile, independent throttle).
+        activeProfileId.set(2)
+        service.requestEventDrivenRefresh()
+
+        // ASSERT: the underlying gated action was invoked exactly twice (once per profile).
+        assertEquals(2, service.testOnlyEventDrivenRefreshFiringCount())
+    }
+
     private fun sampleResolvedEpisodeInfo() =
         TraktProgressService.ResolvedEpisodeInfo(videoId = "tvdb:81189:1:1", released = null)
 }

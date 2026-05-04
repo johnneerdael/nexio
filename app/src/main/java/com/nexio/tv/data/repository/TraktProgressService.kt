@@ -254,7 +254,9 @@ class TraktProgressService @Inject constructor(
         val showNextUpActivityVersion: AtomicLong = AtomicLong(0L),
         @Volatile var cachedActivities: TraktLastActivitiesResponseDto? = null,
         @Volatile var cachedActivitiesAtMs: Long = 0L,
-        val episodeInfoCache: MutableMap<String, ResolvedEpisodeInfo> = mutableMapOf()
+        val episodeInfoCache: MutableMap<String, ResolvedEpisodeInfo> = mutableMapOf(),
+        var lastEventDrivenRefreshMs: Long = 0L,
+        var eventDrivenRefreshFiringCount: Int = 0,
     ) {
         fun clear() {
             remoteProgress.value = emptyList()
@@ -293,6 +295,8 @@ class TraktProgressService @Inject constructor(
             cachedActivities = null
             cachedActivitiesAtMs = 0L
             episodeInfoCache.clear()
+            lastEventDrivenRefreshMs = 0L
+            eventDrivenRefreshFiringCount = 0
         }
     }
 
@@ -310,6 +314,8 @@ class TraktProgressService @Inject constructor(
             states[profileId]?.clear()
         }
     }
+
+    private val eventDrivenRefreshTotalFiringCount = java.util.concurrent.atomic.AtomicInteger(0)
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e(TAG, "Uncaught exception in TraktProgressService scope", throwable)
@@ -440,8 +446,9 @@ class TraktProgressService @Inject constructor(
     private val nextUpValidationBudget = 30
     private val nextUpValidationPositiveTtlMs = 10 * 60_000L
     private val nextUpValidationNegativeTtlMs = 5 * 60_000L
-    @Volatile
-    private var lastEventDrivenRefreshMs: Long = 0L
+    private var lastEventDrivenRefreshMs: Long
+        get() = runtimeState().lastEventDrivenRefreshMs
+        set(value) { runtimeState().lastEventDrivenRefreshMs = value }
 
     init {
         scope.launch {
@@ -491,9 +498,14 @@ class TraktProgressService @Inject constructor(
             return
         }
         lastEventDrivenRefreshMs = now
+        runtimeState().eventDrivenRefreshFiringCount += 1
+        eventDrivenRefreshTotalFiringCount.incrementAndGet()
         trace("requestEventDrivenRefresh: emitting signal")
         refreshSignals.emit(Unit)
     }
+
+    @VisibleForTesting
+    internal fun testOnlyEventDrivenRefreshFiringCount(): Int = eventDrivenRefreshTotalFiringCount.get()
 
     suspend fun getCachedStats(forceRefresh: Boolean = false): TraktCachedStats? {
         val now = System.currentTimeMillis()
