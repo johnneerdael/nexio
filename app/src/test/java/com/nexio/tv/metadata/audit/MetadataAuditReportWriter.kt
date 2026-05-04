@@ -48,6 +48,7 @@ class MetadataAuditReportWriter {
                 appendLine("      \"routingAfterVisible\": ${routeJson(item.routingAfterVisible, indent = "      ")},")
                 appendLine("      \"metadata.stable_id_bundle\": ${stableIdBundleJson(item.stableIdBundle)},")
                 appendLine("      \"homeUpdate\": ${homeUpdateJson(item.homeUpdate)},")
+                appendLine("      \"artworkAudit\": [${item.artworkAudit.joinToString { artworkAuditJson(it) }}],")
                 appendLine("      \"selectedFieldsBeforeHydration\": [${item.selectedFieldsBeforeHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"selectedFieldsAfterHydration\": [${item.selectedFieldsAfterHydration.joinToString { selectedFieldJson(it) }}],")
                 appendLine("      \"identityMappingsHarvested\": ${stringMapJson(item.identityMappingsHarvested)},")
@@ -101,6 +102,7 @@ class MetadataAuditReportWriter {
                     appendLine("          \"continueWatchingSnapshot\": ${continueWatchingJson(item.continueWatchingSnapshot, indent = "          ")},")
                     appendLine("          \"identityResolution\": ${identityResolutionJson(item.identityResolution)},")
                     appendLine("          \"localization\": ${localizationJson(item.localization)},")
+                    appendLine("          \"artworkAudit\": [${item.artworkAudit.joinToString { artworkAuditJson(it) }}],")
                     appendLine("          \"productionCallerOwnership\": [${item.productionCallerOwnership.joinToString { productionCallerOwnershipJson(it) }}]")
                     append("        }")
                     if (itemIndex != report.items.lastIndex) append(",")
@@ -151,6 +153,7 @@ class MetadataAuditReportWriter {
                 appendRailPreview(item)
                 appendStableIdBundle(item.stableIdBundle)
                 appendHomeUpdate(item.homeUpdate)
+                appendArtworkAudit(item.artworkAudit, heading = "### Artwork Cache Audit")
 
                 item.routing?.let { route ->
                     appendLine("### Routing")
@@ -262,6 +265,7 @@ class MetadataAuditReportWriter {
                         appendLine()
                     }
                     appendLocalization(item.localization)
+                    appendArtworkAudit(item.artworkAudit, heading = "#### Artwork Cache Audit")
                     if (item.forbiddenOverwrites.isNotEmpty()) {
                         appendLine("#### Forbidden overwrites")
                         item.forbiddenOverwrites.forEach {
@@ -366,6 +370,17 @@ class MetadataAuditReportWriter {
         appendLine()
     }
 
+    private fun StringBuilder.appendArtworkAudit(entries: List<ArtworkAuditEntry>, heading: String) {
+        if (entries.isEmpty()) return
+        appendLine(heading)
+        appendLine("| Field | Provider | Role | API shape | Cache | Network | Coil model | Raw remote URL | Rejected candidates |")
+        appendLine("|---|---|---|---|---|---:|---|---:|---|")
+        entries.forEach {
+            appendLine("| `${it.field}` | `${it.selectedProvider.orEmpty()}` | `${it.sourceRole}` | `${it.runtimeApiShapeId.orEmpty()}` | `${it.assetCacheDecision.orEmpty()}` | `${it.networkExecuted}` | `${it.coilModel.orEmpty()}` | `${it.rawRemoteUrlUsedByUi}` | `${it.rejectedCandidates.joinToString { rejected -> artworkRejectedCandidateMarkdown(rejected) }}` |")
+        }
+        appendLine()
+    }
+
     private fun StringBuilder.appendIdentityResolution(event: IdentityResolutionEvent?) {
         event ?: return
         appendLine("#### Identity resolution")
@@ -444,6 +459,9 @@ class MetadataAuditReportWriter {
     private fun selectedFieldJson(field: FieldSelectedEvent): String =
         """{"field":${jsonString(field.field)},"selectedProvider":${jsonString(field.selectedProvider)},"sourceRole":${jsonString(field.sourceRole)},"valuePreview":${jsonString(field.valuePreview.orEmpty())},"ownershipRule":${jsonString(field.ownershipRule)},"rejectedCandidates":[${field.rejectedCandidates.joinToString { rejected -> rejectedCandidateJson(rejected) }}]}"""
 
+    private fun artworkAuditJson(entry: ArtworkAuditEntry): String =
+        """{"field":${jsonString(entry.field)},"selectedProvider":${nullableStringJson(entry.selectedProvider)},"sourceRole":${jsonString(entry.sourceRole)},"decisionKey":${nullableStringJson(entry.decisionKey)},"assetKey":${nullableStringJson(entry.assetKey)},"assetCacheDecision":${nullableStringJson(entry.assetCacheDecision)},"runtimeApiShapeId":${nullableStringJson(entry.runtimeApiShapeId)},"networkExecuted":${entry.networkExecuted},"coilModel":${nullableStringJson(entry.coilModel)},"rawRemoteUrlUsedByUi":${entry.rawRemoteUrlUsedByUi},"rejectedCandidates":[${entry.rejectedCandidates.joinToString { rejected -> nullableStringMapJson(rejected) }}]}"""
+
     private fun rejectedCandidateJson(rejected: RejectedCandidateReport): String =
         buildString {
             append("""{"provider":${jsonString(rejected.provider)}""")
@@ -456,6 +474,12 @@ class MetadataAuditReportWriter {
     private fun rejectedCandidateMarkdown(rejected: RejectedCandidateReport): String {
         val source = rejected.sourceRole?.let { sourceRole -> "${rejected.provider}/$sourceRole" } ?: rejected.provider
         return "$source: ${rejected.reason}"
+    }
+
+    private fun artworkRejectedCandidateMarkdown(rejected: Map<String, String?>): String {
+        val provider = rejected["provider"].orEmpty()
+        val source = rejected["sourceRole"]?.let { sourceRole -> "$provider/$sourceRole" } ?: provider
+        return "$source: ${rejected["reason"].orEmpty()}"
     }
 
     private fun forbiddenOverwriteJson(overwrite: ForbiddenOverwriteEvent): String =

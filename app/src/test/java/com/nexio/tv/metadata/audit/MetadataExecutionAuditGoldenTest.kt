@@ -372,6 +372,13 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(scenarioNames.contains("provider-native-conflict"))
         assertTrue(scenarioNames.contains("premium-artwork-topposters"))
         assertTrue(scenarioNames.contains("premium-artwork-rpdb"))
+        assertTrue(scenarioNames.contains("premium-artwork-topposters-home"))
+        assertTrue(scenarioNames.contains("premium-artwork-rpdb-home"))
+        assertTrue(scenarioNames.contains("premium-artwork-topposters-detail"))
+        assertTrue(scenarioNames.contains("premium-artwork-rpdb-detail"))
+        assertTrue(scenarioNames.contains("premium-artwork-switch-provider"))
+        assertTrue(scenarioNames.contains("premium-artwork-cache-hit"))
+        assertTrue(scenarioNames.contains("premium-artwork-failure-fallback"))
         assertTrue(scenarioNames.contains("continue-watching-local-playback"))
         assertTrue(scenarioNames.contains("continue-watching-stale-routing-version"))
         assertTrue(scenarioNames.contains("field-ownership-conflict"))
@@ -611,6 +618,88 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue((topposters.runtimeCalls + rpdb.runtimeCalls).none {
             it.apiShapeId == "tmdb.movie.core" && it.executedNetwork
         })
+    }
+
+    @Test
+    fun `premium artwork audit records cache proof and internal ui model`() = runTest {
+        val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
+        val topposters = bundle.reports.single { it.scenario.name == "premium-artwork-topposters-home" }.items.single()
+        val rpdb = bundle.reports.single { it.scenario.name == "premium-artwork-rpdb-detail" }.items.single()
+        val cacheHit = bundle.reports.single { it.scenario.name == "premium-artwork-cache-hit" }.items.single()
+
+        val toppostersPoster = topposters.artworkAudit.single { it.field == "poster" }
+        assertEquals("TOP_POSTERS", toppostersPoster.selectedProvider)
+        assertEquals("ARTWORK", toppostersPoster.sourceRole)
+        assertEquals("topposters.poster_template", toppostersPoster.runtimeApiShapeId)
+        assertEquals("HIT", toppostersPoster.assetCacheDecision)
+        assertFalse(toppostersPoster.networkExecuted)
+        assertTrue(toppostersPoster.decisionKey?.startsWith("artwork:decision:") == true)
+        assertTrue(toppostersPoster.assetKey?.startsWith("artwork:asset:") == true)
+        assertTrue(toppostersPoster.coilModel?.startsWith("nexio-artwork://") == true)
+        assertFalse(toppostersPoster.rawRemoteUrlUsedByUi)
+        assertTrue(toppostersPoster.rejectedCandidates.any { rejected ->
+            rejected["provider"] == "TMDB" &&
+                rejected["sourceRole"] == "ADDON_PREVIEW" &&
+                rejected["reason"] == "premium artwork provider has precedence"
+        })
+
+        val rpdbPoster = rpdb.artworkAudit.single { it.field == "poster" }
+        assertEquals("rpdb.poster_template", rpdbPoster.runtimeApiShapeId)
+        assertEquals("RPDB", rpdbPoster.selectedProvider)
+        assertFalse(rpdbPoster.rawRemoteUrlUsedByUi)
+
+        val cacheHitPoster = cacheHit.artworkAudit.single { it.field == "poster" }
+        assertEquals("HIT", cacheHitPoster.assetCacheDecision)
+        assertFalse(cacheHitPoster.networkExecuted)
+    }
+
+    @Test
+    fun `premium artwork failure audit records placeholder fallback`() = runTest {
+        val item = MetadataAuditRunner.default()
+            .runDefaultScenarioBundle()
+            .reports
+            .single { it.scenario.name == "premium-artwork-failure-fallback" }
+            .items
+            .single()
+
+        val poster = item.artworkAudit.single { it.field == "poster" }
+
+        assertEquals("UNKNOWN_POSTER_PROVIDER", poster.selectedProvider)
+        assertEquals("unknown_poster_provider.poster_template", poster.runtimeApiShapeId)
+        assertEquals("MISS_THEN_NETWORK", poster.assetCacheDecision)
+        assertTrue(poster.networkExecuted)
+        assertEquals("placeholder", poster.coilModel)
+        assertFalse(poster.rawRemoteUrlUsedByUi)
+    }
+
+    @Test
+    fun `writer exports artwork audit in json and markdown`() = runTest {
+        val report = MetadataAuditRunner.default()
+            .runDefaultScenarioBundle()
+            .reports
+            .single { it.scenario.name == "premium-artwork-topposters-home" }
+        val outputDir = File("build/reports/metadata-audit/artwork-audit")
+        val jsonFile = File(outputDir, "metadata-execution-single-report.json")
+        val markdownFile = File(outputDir, "metadata-execution-single-report.md")
+
+        MetadataAuditReportWriter().writeJson(report, jsonFile)
+        MetadataAuditReportWriter().writeMarkdown(report, markdownFile)
+
+        val item = JSONObject(jsonFile.readText())
+            .getJSONArray("items")
+            .getJSONObject(0)
+        val artwork = item.getJSONArray("artworkAudit").getJSONObject(0)
+        val markdown = markdownFile.readText()
+
+        assertEquals("poster", artwork.getString("field"))
+        assertEquals("TOP_POSTERS", artwork.getString("selectedProvider"))
+        assertEquals("topposters.poster_template", artwork.getString("runtimeApiShapeId"))
+        assertEquals("HIT", artwork.getString("assetCacheDecision"))
+        assertFalse(artwork.getBoolean("networkExecuted"))
+        assertFalse(artwork.getBoolean("rawRemoteUrlUsedByUi"))
+        assertTrue(markdown.contains("Artwork Cache Audit"))
+        assertTrue(markdown.contains("topposters.poster_template"))
+        assertTrue(markdown.contains("nexio-artwork://"))
     }
 
     @Test
