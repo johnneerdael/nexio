@@ -1,7 +1,10 @@
 package com.nexio.tv.core.auth
 
 import com.nexio.tv.domain.model.AuthState
+import java.util.Base64
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,6 +52,81 @@ class AuthManagerStateTest {
         val lost: AuthState = AuthState.SessionLost
         val out: AuthState = AuthState.SignedOut
         assertTrue(lost != out)
+    }
+
+    @Test
+    fun `authenticated session publication clears session marker for non full account states`() {
+        assertEquals(
+            AuthenticatedSessionPublication(
+                authState = AuthState.SessionLost,
+                sessionUserId = null
+            ),
+            resolveAuthenticatedSessionPublication(
+                userId = "anon-uuid",
+                email = null,
+                isReturningUser = true
+            )
+        )
+        assertEquals(
+            AuthenticatedSessionPublication(
+                authState = AuthState.FullAccount("user-123", "user@example.com"),
+                sessionUserId = "user-123"
+            ),
+            resolveAuthenticatedSessionPublication(
+                userId = "user-123",
+                email = "user@example.com",
+                isReturningUser = true
+            )
+        )
+    }
+
+    @Test
+    fun `authenticatedUserFromAccessToken recovers user id and email from jwt payload`() {
+        val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
+            """{"sub":"user-123","email":"user@example.com"}""".toByteArray()
+        )
+        val token = "header.$payload.signature"
+
+        val user = authenticatedUserFromAccessToken(token)
+
+        assertEquals("user-123", user?.userId)
+        assertEquals("user@example.com", user?.email)
+    }
+
+    @Test
+    fun `authenticatedUserFromAccessToken returns null for malformed or userless payloads`() {
+        assertNull(authenticatedUserFromAccessToken(null))
+        assertNull(authenticatedUserFromAccessToken("not-a-jwt"))
+
+        val missingSubPayload = Base64.getUrlEncoder().withoutPadding().encodeToString(
+            """{"email":"user@example.com"}""".toByteArray()
+        )
+        assertNull(authenticatedUserFromAccessToken("header.$missingSubPayload.signature"))
+    }
+
+    @Test
+    fun `stale authenticated anonymous session is discarded when durable credential exists`() {
+        assertTrue(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "anon-user",
+                email = null,
+                hasDurableCredential = true
+            )
+        )
+        assertFalse(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "anon-user",
+                email = null,
+                hasDurableCredential = false
+            )
+        )
+        assertFalse(
+            shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                userId = "user-123",
+                email = "user@example.com",
+                hasDurableCredential = true
+            )
+        )
     }
 
     @Test

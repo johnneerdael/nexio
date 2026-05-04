@@ -1,6 +1,8 @@
 package com.nexio.tv.core.auth
 
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
@@ -16,6 +18,15 @@ class DurableDeviceAuthRecoveryPolicyTest {
 
         assertTrue(source.contains("alwaysAutoRefresh = false"))
         assertFalse(source.contains("alwaysAutoRefresh = true"))
+    }
+
+    @Test
+    fun `owner session imports explicitly retrieve user before persisting`() {
+        val source = File("app/src/main/java/com/nexio/tv/core/auth/AuthManager.kt").readText()
+
+        assertTrue(source.contains("retrieveUser = true"))
+        assertTrue(source.contains("autoRefresh = false"))
+        assertTrue(source.contains("importPersistedOwnerSession("))
     }
 
     @Test
@@ -170,6 +181,80 @@ class DurableDeviceAuthRecoveryPolicyTest {
     }
 
     @Test
+    fun `runtime never requests metadata-only durable credential backfill`() {
+        assertFalse(
+            shouldRequestDurableCredentialBackfill(
+                hasRefreshToken = true,
+                credential = DurableDeviceCredentialSnapshot()
+            )
+        )
+        assertFalse(
+            shouldRequestDurableCredentialBackfill(
+                hasRefreshToken = false,
+                credential = DurableDeviceCredentialSnapshot()
+            )
+        )
+        assertFalse(
+            shouldRequestDurableCredentialBackfill(
+                hasRefreshToken = true,
+                credential = completeCredential()
+            )
+        )
+    }
+
+    @Test
+    fun `authenticated session observer clears ownerless durable credential during manual account auth`() {
+        assertTrue(
+            shouldClearDurableCredentialForAuthenticatedSession(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = true
+            )
+        )
+        assertFalse(
+            shouldClearDurableCredentialForAuthenticatedSession(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = false
+            )
+        )
+    }
+
+    @Test
+    fun `authenticated session observer never binds ownerless durable credential during manual account auth`() {
+        assertFalse(
+            shouldBindDurableCredentialOwner(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = true
+            )
+        )
+        assertTrue(
+            shouldBindDurableCredentialOwner(
+                credential = DurableDeviceCredentialSnapshot(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    ownerUserId = null
+                ),
+                authenticatedUserId = "owner-b",
+                isManualAccountAuthInProgress = false
+            )
+        )
+    }
+
+    @Test
     fun `manual sign out prepares pending revoke before remote revoke and local clear`() = runTest {
         val events = mutableListOf<String>()
 
@@ -269,6 +354,59 @@ class DurableDeviceAuthRecoveryPolicyTest {
     fun `local sign out suppresses recovery branching`() {
         assertTrue(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = true))
         assertFalse(shouldSuppressRecoveryForLocalSignOut(isLocalSignOutInProgress = false))
+    }
+
+    @Test
+    fun `qr exchange saves activates then imports auth tokens`() = runTest {
+        val calls = mutableListOf<String>()
+
+        finalizeTvLoginExchange(
+            result = DurableDeviceCredentialIssueResult(
+                devicePublicId = "device-public-id",
+                deviceSecret = "device-secret",
+                accessToken = "access-token",
+                refreshToken = "refresh-token"
+            ),
+            saveCredential = { publicId, secret ->
+                calls += "save:$publicId:$secret"
+            },
+            activateCredential = { publicId, secret ->
+                calls += "activate:$publicId:$secret"
+            },
+            importAuthTokens = { accessToken, refreshToken ->
+                calls += "import:$accessToken:$refreshToken"
+            }
+        )
+
+        assertEquals(
+            listOf(
+                "save:device-public-id:device-secret",
+                "activate:device-public-id:device-secret",
+                "import:access-token:refresh-token"
+            ),
+            calls
+        )
+    }
+
+    @Test
+    fun `qr exchange does not import auth when credential save fails`() = runTest {
+        var imported = false
+
+        runCatching {
+            finalizeTvLoginExchange(
+                result = DurableDeviceCredentialIssueResult(
+                    devicePublicId = "device-public-id",
+                    deviceSecret = "device-secret",
+                    accessToken = "access-token",
+                    refreshToken = "refresh-token"
+                ),
+                saveCredential = { _, _ -> error("disk full") },
+                activateCredential = { _, _ -> imported = true },
+                importAuthTokens = { _, _ -> imported = true }
+            )
+        }
+
+        assertFalse(imported)
     }
 
     private fun completeCredential() = DurableDeviceCredentialSnapshot(
