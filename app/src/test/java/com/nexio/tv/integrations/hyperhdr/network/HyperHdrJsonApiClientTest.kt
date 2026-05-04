@@ -102,4 +102,89 @@ class HyperHdrJsonApiClientTest {
         val body = JSONObject(request.body.readUtf8())
         assertThat(body.has("token")).isFalse()
     }
+
+    @Test
+    fun `serverInfo treats missing flatbuffer block as stock - no P010 support`() = runTest {
+        server.enqueue(MockResponse().setBody("""
+            {"success":true,"command":"serverinfo","tan":1,
+             "info":{"hostname":"stock-server","instance":[{"instance":0,"running":true,"friendly_name":"i0"}]}}
+        """.trimIndent()))
+
+        val info = client.serverInfo()
+
+        assertThat(info.flatbufferFormats).isEmpty()
+        assertThat(info.flatbufferWireVersion).isNull()
+        assertThat(info.supportsP010).isFalse()
+    }
+
+    @Test
+    fun `serverInfo parses flatbuffer block from P010-capable fork`() = runTest {
+        server.enqueue(MockResponse().setBody("""
+            {"success":true,"command":"serverinfo","tan":1,
+             "info":{"hostname":"fork-server",
+                     "instance":[{"instance":0,"running":true,"friendly_name":"i0"}],
+                     "flatbuffer":{
+                       "imageFormats":["RawImage","NV12Image","P010Image"],
+                       "wireVersion":2}}}
+        """.trimIndent()))
+
+        val info = client.serverInfo()
+
+        assertThat(info.flatbufferFormats)
+            .containsExactly("RawImage", "NV12Image", "P010Image")
+        assertThat(info.flatbufferWireVersion).isEqualTo(2)
+        assertThat(info.supportsP010).isTrue()
+    }
+
+    @Test
+    fun `serverInfo tolerates flatbuffer block without wireVersion`() = runTest {
+        server.enqueue(MockResponse().setBody("""
+            {"success":true,"command":"serverinfo","tan":1,
+             "info":{"hostname":"partial",
+                     "instance":[{"instance":0,"running":true,"friendly_name":"i0"}],
+                     "flatbuffer":{"imageFormats":["RawImage","NV12Image"]}}}
+        """.trimIndent()))
+
+        val info = client.serverInfo()
+
+        assertThat(info.flatbufferFormats).containsExactly("RawImage", "NV12Image")
+        assertThat(info.flatbufferWireVersion).isNull()
+        assertThat(info.supportsP010).isFalse()
+    }
+
+    @Test
+    fun `serverInfo treats flatbuffer with imageFormats not an array as empty capabilities`() = runTest {
+        server.enqueue(MockResponse().setBody("""
+            {"success":true,"command":"serverinfo","tan":1,
+             "info":{"hostname":"malformed",
+                     "instance":[{"instance":0,"running":true,"friendly_name":"i0"}],
+                     "flatbuffer":{"imageFormats":"oops","wireVersion":2}}}
+        """.trimIndent()))
+
+        val info = client.serverInfo()
+
+        assertThat(info.flatbufferFormats).isEmpty()
+        // wireVersion still parses since it's a valid int — only the malformed
+        // imageFormats field is ignored.
+        assertThat(info.flatbufferWireVersion).isEqualTo(2)
+        assertThat(info.supportsP010).isFalse()
+    }
+
+    @Test
+    fun `serverInfo silently drops non-string entries from imageFormats`() = runTest {
+        server.enqueue(MockResponse().setBody("""
+            {"success":true,"command":"serverinfo","tan":1,
+             "info":{"hostname":"mixed",
+                     "instance":[{"instance":0,"running":true,"friendly_name":"i0"}],
+                     "flatbuffer":{
+                       "imageFormats":["RawImage", 42, null, "P010Image"],
+                       "wireVersion":2}}}
+        """.trimIndent()))
+
+        val info = client.serverInfo()
+
+        assertThat(info.flatbufferFormats).containsExactly("RawImage", "P010Image")
+        assertThat(info.flatbufferWireVersion).isEqualTo(2)
+        assertThat(info.supportsP010).isTrue()
+    }
 }
