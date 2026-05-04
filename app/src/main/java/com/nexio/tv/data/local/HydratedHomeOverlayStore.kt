@@ -89,6 +89,20 @@ class HydratedHomeOverlayStore @Inject constructor(
         incrementVersion()
     }
 
+    suspend fun clearAll() {
+        withContext(Dispatchers.IO) {
+            val sharedPreferences = prefs()
+            val overlayKeys = sharedPreferences.all.keys
+                .filter { key -> key.startsWith(OVERLAY_PREFIX) || key.startsWith(ALIAS_PREFIX) }
+            if (overlayKeys.isEmpty()) return@withContext
+
+            val editor = sharedPreferences.edit()
+            overlayKeys.forEach(editor::remove)
+            editor.apply()
+            incrementVersion()
+        }
+    }
+
     fun readForItemKeys(
         itemKeys: Set<String>,
         languageTag: String,

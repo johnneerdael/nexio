@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
 import com.nexio.tv.core.integration.ActiveRailTracker
 import com.nexio.tv.core.integration.IntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.IntegrationOwnershipService
@@ -144,6 +145,7 @@ class HomeViewModel @Inject constructor(
     internal val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
     internal val homeHydrationCoordinator: HomeHydrationCoordinator,
     internal val traceEvents: TraceMetadataEvents,
+    internal val premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier(),
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -410,8 +412,17 @@ class HomeViewModel @Inject constructor(
         observeTmdbDiscovery()
         observeAccountSyncRefresh()
         observePriorityHydration()
+        observePremiumArtworkInvalidations()
         loadContinueWatching()
         observeInstalledAddons()
+    }
+
+    private fun observePremiumArtworkInvalidations() {
+        viewModelScope.launch {
+            premiumArtworkInvalidationNotifier.events.collectLatest {
+                invalidateHydratedHomeOverlayScope()
+            }
+        }
     }
 
     private fun observeActiveHomeRails() {

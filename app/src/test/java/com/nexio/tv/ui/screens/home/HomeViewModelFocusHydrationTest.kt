@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.content.Context
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.metadata.router.MetadataDepth
@@ -356,6 +357,34 @@ class HomeViewModelFocusHydrationTest {
         viewModel.lastCatalogComputationSignature = "previous"
 
         viewModel.invalidateHydratedHomeOverlayScope()
+
+        assertTrue(observerJob.isCancelled)
+        assertNull(viewModel.hydratedHomeOverlayObserverJob)
+        assertNull(viewModel.hydratedHomeOverlayObserverSignature)
+        assertEquals(emptyMap<String, HydratedHomeOverlay>(), viewModel.hydratedHomeOverlaysByItemKey.value)
+        assertNull(viewModel.lastCatalogComputationSignature)
+        assertNotNull(viewModel.catalogUpdateJob)
+        viewModel.catalogUpdateJob?.cancel()
+    }
+
+    @Test
+    fun `premium artwork invalidation clears live hydrated overlays and schedules catalog recompute`() = runTest(testDispatcher) {
+        val notifier = PremiumArtworkInvalidationNotifier()
+        val viewModel = buildTestHomeViewModel(
+            metadataRouterFacade = mockk(relaxed = true),
+            premiumArtworkInvalidationNotifier = notifier
+        )
+        advanceUntilIdle()
+        val observerJob = Job()
+        viewModel.hydratedHomeOverlayObserverJob = observerJob
+        viewModel.hydratedHomeOverlayObserverSignature = "en|movie:tmdb:550"
+        viewModel.hydratedHomeOverlaysByItemKey.value = mapOf(
+            "movie:tmdb:550" to mockk<HydratedHomeOverlay>(relaxed = true)
+        )
+        viewModel.lastCatalogComputationSignature = "previous"
+
+        notifier.notifyInvalidated()
+        advanceUntilIdle()
 
         assertTrue(observerJob.isCancelled)
         assertNull(viewModel.hydratedHomeOverlayObserverJob)
@@ -851,7 +880,8 @@ class HomeViewModelFocusHydrationTest {
         nonPlaybackHomeWorkAllowed: Boolean = false,
         homeHydrationCoordinator: HomeHydrationCoordinator = mockk(relaxed = true),
         currentLanguageTagProvider: () -> String = { "en" },
-        traceEvents: TraceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null }
+        traceEvents: TraceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink) { null },
+        premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier = PremiumArtworkInvalidationNotifier()
     ): HomeViewModel {
         // ProviderLocalizedMetadataResolver wraps the facade under test.
         // Use a no-op TvMetadataRouter so the resolver doesn't make real network calls.
@@ -952,6 +982,7 @@ class HomeViewModelFocusHydrationTest {
             hydratedHomeOverlayStore = mockk<HydratedHomeOverlayStore>(relaxed = true),
             homeHydrationCoordinator = homeHydrationCoordinator,
             traceEvents = traceEvents,
+            premiumArtworkInvalidationNotifier = premiumArtworkInvalidationNotifier,
             appContext = mockk<Context>(relaxed = true)
         ).also(createdViewModels::add)
     }

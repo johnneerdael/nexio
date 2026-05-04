@@ -2,6 +2,8 @@ package com.nexio.tv.core.di
 
 import android.content.Context
 import androidx.room.Room
+import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.integration.DefaultIntegrationRuntime
 import com.nexio.tv.core.integration.DefaultIntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.IntegrationCacheStore
@@ -81,6 +83,10 @@ object IntegrationRuntimeModule {
     fun provideIntegrationRuntime(
         impl: DefaultIntegrationRuntime
     ): IntegrationRuntime = impl
+
+    @Provides
+    @Singleton
+    fun provideArtworkDecisionCache(): ArtworkDecisionCache = InMemoryArtworkDecisionCache()
 
     @Provides
     @Singleton
