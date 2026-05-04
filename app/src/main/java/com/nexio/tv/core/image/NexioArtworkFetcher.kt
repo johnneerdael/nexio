@@ -1,5 +1,6 @@
 package com.nexio.tv.core.image
 
+import android.net.Uri
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.decode.ImageSource
@@ -11,12 +12,10 @@ import com.nexio.tv.core.artwork.ArtworkAssetRepository
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import javax.inject.Inject
 import javax.inject.Singleton
-import okio.buffer
-import okio.source
+import okio.Path.Companion.toOkioPath
 
 class NexioArtworkFetcher(
     private val assetKey: ArtworkAssetKey?,
-    private val options: coil.request.Options,
     private val repository: ArtworkAssetRepository
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? {
@@ -31,31 +30,28 @@ class NexioArtworkFetcher(
     }
 
     private fun createImageSource(file: java.io.File): ImageSource {
-        val factory = Class.forName("coil.decode.ImageSources")
-        val create = factory.getMethod("create", okio.BufferedSource::class.java, java.io.File::class.java)
-        return create.invoke(null, file.source().buffer(), file) as ImageSource
+        return ImageSource(file = file.toOkioPath())
     }
 
     @Singleton
     class Factory @Inject constructor(
         private val repository: ArtworkAssetRepository
-    ) : Fetcher.Factory<String> {
+    ) : Fetcher.Factory<Uri> {
         override fun create(
-            data: String,
+            data: Uri,
             options: coil.request.Options,
             imageLoader: ImageLoader
         ): Fetcher? {
-            parseAssetKey(data)?.let { assetKey ->
+            val model = data.toString()
+            parseAssetKey(model)?.let { assetKey ->
                 return NexioArtworkFetcher(
                     assetKey = assetKey,
-                    options = options,
                     repository = repository
                 )
             }
-            parseDecisionKey(data)?.let {
+            parseDecisionKey(model)?.let {
                 return NexioArtworkFetcher(
                     assetKey = null,
-                    options = options,
                     repository = repository
                 )
             }

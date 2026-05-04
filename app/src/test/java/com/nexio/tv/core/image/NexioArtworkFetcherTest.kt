@@ -1,5 +1,6 @@
 package com.nexio.tv.core.image
 
+import android.net.Uri
 import coil.decode.DataSource
 import coil.fetch.SourceResult
 import com.nexio.tv.core.artwork.ArtworkAssetKey
@@ -12,17 +13,20 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class NexioArtworkFetcherTest {
     private val temp = TemporaryFolder().also { it.create() }
 
     @Test
-    fun `factory accepts asset uri`() {
+    fun `factory accepts asset uri model`() {
         val repository = mockk<ArtworkAssetRepository>(relaxed = true)
         val factory = NexioArtworkFetcher.Factory(repository)
 
         val fetcher = factory.create(
-            data = "nexio-artwork://asset/artwork-asset:RPDB:poster:imdb:tt0137523",
+            data = Uri.parse("nexio-artwork://asset/artwork-asset:RPDB:poster:imdb:tt0137523"),
             options = mockk(relaxed = true),
             imageLoader = mockk(relaxed = true)
         )
@@ -31,12 +35,12 @@ class NexioArtworkFetcherTest {
     }
 
     @Test
-    fun `factory rejects remote provider url`() {
+    fun `factory rejects remote provider uri model`() {
         val repository = mockk<ArtworkAssetRepository>(relaxed = true)
         val factory = NexioArtworkFetcher.Factory(repository)
 
         val fetcher = factory.create(
-            data = "https://image.tmdb.org/t/p/w500/abc.jpg",
+            data = Uri.parse("https://image.tmdb.org/t/p/w500/abc.jpg"),
             options = mockk(relaxed = true),
             imageLoader = mockk(relaxed = true)
         )
@@ -45,12 +49,12 @@ class NexioArtworkFetcherTest {
     }
 
     @Test
-    fun `factory rejects insecure remote provider url`() {
+    fun `factory rejects insecure remote provider uri model`() {
         val repository = mockk<ArtworkAssetRepository>(relaxed = true)
         val factory = NexioArtworkFetcher.Factory(repository)
 
         val fetcher = factory.create(
-            data = "http://image.tmdb.org/t/p/w500/abc.jpg",
+            data = Uri.parse("http://image.tmdb.org/t/p/w500/abc.jpg"),
             options = mockk(relaxed = true),
             imageLoader = mockk(relaxed = true)
         )
@@ -67,7 +71,6 @@ class NexioArtworkFetcherTest {
         every { repository.getExistingFile(assetKey) } returns file
         val fetcher = NexioArtworkFetcher(
             assetKey = assetKey,
-            options = mockk(relaxed = true),
             repository = repository
         )
 
