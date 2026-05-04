@@ -1,14 +1,18 @@
 package com.nexio.tv.integrations.hyperhdr.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
 import com.nexio.tv.integrations.hyperhdr.data.HdrMode
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
+import com.nexio.tv.integrations.hyperhdr.discovery.DiscoveredServer
+import com.nexio.tv.integrations.hyperhdr.discovery.HyperHdrMdnsDiscovery
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +25,7 @@ import javax.inject.Inject
 class HyperHdrSettingsViewModel @Inject constructor(
     private val store: HyperHdrConfigDataStore,
     private val displayCapability: DisplayColorCapability,
+    @ApplicationContext appContext: Context,
 ) : ViewModel() {
 
     val composesWideColor: Boolean = displayCapability.composesWideColor
@@ -30,6 +35,9 @@ class HyperHdrSettingsViewModel @Inject constructor(
 
     private val _testResult = MutableStateFlow<TestResult>(TestResult.Idle)
     val testResult: StateFlow<TestResult> = _testResult.asStateFlow()
+
+    private val discovery = HyperHdrMdnsDiscovery(appContext)
+    val discoveredServers: StateFlow<List<DiscoveredServer>> = discovery.servers
 
     sealed interface TestResult {
         data object Idle : TestResult
@@ -58,6 +66,25 @@ class HyperHdrSettingsViewModel @Inject constructor(
 
     fun setJsonToken(value: String) =
         viewModelScope.launch { store.update { it.copy(jsonToken = value.trim()) } }
+
+    fun startDiscovery() = runCatching { discovery.start() }
+
+    fun stopDiscovery() = runCatching { discovery.stop() }
+
+    fun applyDiscovered(server: DiscoveredServer) = viewModelScope.launch {
+        store.update {
+            it.copy(
+                host = server.host,
+                jsonPort = server.httpPort,
+                port = server.flatbufPort,
+            )
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        runCatching { discovery.stop() }
+    }
 
     fun testConnection() = viewModelScope.launch {
         val cfg = config.value
