@@ -112,7 +112,15 @@ class TraktEpisodeMappingService @Inject constructor(
                 joinDeferred = null
             }
         }
-        if (joinDeferred != null) return try { joinDeferred.await() } catch (_: Exception) { emptyList() }
+        if (joinDeferred != null) {
+            return try {
+                joinDeferred.await()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
         val deferred = ownDeferred!!
         return try {
             val episodes = fetchTraktEpisodes(showLookupId)
@@ -122,6 +130,10 @@ class TraktEpisodeMappingService @Inject constructor(
             }
             deferred.complete(episodes)
             episodes
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            cacheMutex.withLock { traktEpisodesInFlight.remove(showLookupId) }
+            deferred.completeExceptionally(e)
+            throw e
         } catch (e: Exception) {
             cacheMutex.withLock { traktEpisodesInFlight.remove(showLookupId) }
             deferred.completeExceptionally(e)
