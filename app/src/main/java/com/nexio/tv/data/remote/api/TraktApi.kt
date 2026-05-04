@@ -41,6 +41,12 @@ import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserStatsResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionShowItemDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -152,6 +158,30 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Query("extended") extended: String? = null
     ): Response<List<TraktWatchedShowItemDto>>
+
+    @GET("sync/collection/movies")
+    suspend fun getCollectionMovies(
+        @Header("Authorization") authorization: String,
+        @Query("extended") extended: String? = null
+    ): Response<List<TraktCollectionMovieItemDto>>
+
+    @GET("sync/collection/shows")
+    suspend fun getCollectionShows(
+        @Header("Authorization") authorization: String,
+        @Query("extended") extended: String? = null
+    ): Response<List<TraktCollectionShowItemDto>>
+
+    @POST("sync/collection")
+    suspend fun addToCollection(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktCollectionAddRequestDto
+    ): Response<TraktCollectionAddResponseDto>
+
+    @POST("sync/collection/remove")
+    suspend fun removeFromCollection(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktCollectionRemoveRequestDto
+    ): Response<TraktCollectionRemoveResponseDto>
 
     @GET("sync/history/episodes")
     suspend fun getEpisodeHistory(
