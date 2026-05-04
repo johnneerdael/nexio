@@ -137,9 +137,7 @@ class TmdbIntegrationProvider private constructor(
         if (credential.missing) return emptyList()
         val apiKey = credential.apiKey
         val includeAdult = preferences.includeAdult
-        val hideUnreleasedDigital = preferences.hideUnreleasedDigital
         val now = LocalDate.now()
-        val today = now.toString()
         val currentYear = now.year
         return when (catalogId) {
             TmdbCatalogIds.TRENDING_MOVIES -> fetchMediaResults(
@@ -153,33 +151,6 @@ class TmdbIntegrationProvider private constructor(
                 apiShapeId = TmdbApiShapes.TRENDING_TV,
                 operationKey = "tmdb.trending_tv",
                 call = { tmdbApi.getTrendingTv(apiKey = apiKey) }
-            )
-            TmdbCatalogIds.LATEST_RELEASES_MOVIES -> fetchMediaResults(
-                cacheKey = "tmdb:catalog:latest_releases_movies:adult=$includeAdult:date=$today:unreleased=$hideUnreleasedDigital",
-                apiShapeId = TmdbApiShapes.DISCOVER_MOVIE,
-                operationKey = "tmdb.discover_movies",
-                call = {
-                    tmdbApi.discoverMovies(
-                        apiKey = apiKey,
-                        includeAdult = includeAdult,
-                        sortBy = "release_date.desc",
-                        releaseDateLte = today,
-                        withReleaseType = if (hideUnreleasedDigital) "4" else null
-                    )
-                }
-            )
-            TmdbCatalogIds.LATEST_RELEASES_SERIES -> fetchMediaResults(
-                cacheKey = "tmdb:catalog:latest_releases_series:adult=$includeAdult:date=$today",
-                apiShapeId = TmdbApiShapes.DISCOVER_TV,
-                operationKey = "tmdb.discover_tv",
-                call = {
-                    tmdbApi.discoverTv(
-                        apiKey = apiKey,
-                        includeAdult = includeAdult,
-                        sortBy = "first_air_date.desc",
-                        firstAirDateLte = today
-                    )
-                }
             )
             TmdbCatalogIds.POPULAR_MOVIES -> fetchMediaResults(
                 cacheKey = "tmdb:catalog:popular_movies:adult=$includeAdult",
