@@ -30,6 +30,10 @@ import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.AnimeIdSource
+import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.ContentType
@@ -92,7 +96,8 @@ internal fun shouldPreferEpisodeHistoryEntry(
 class TraktProgressService @Inject constructor(
     private val traktIntegrationProvider: TraktIntegrationProvider,
     private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
-    private val metadataRouterFacade: MetadataRouterFacade
+    private val metadataRouterFacade: MetadataRouterFacade,
+    private val animeIdMappingService: AnimeIdMappingService = AnimeIdMappingService { com.nexio.tv.core.anime.AnimeIdMapAsset(schemaVersion = 0) }
 ) {
     data class NextUpEntry(
         val contentId: String,
@@ -1428,17 +1433,59 @@ class TraktProgressService @Inject constructor(
 
     private fun mapWatchedShowItem(item: TraktWatchedShowItemDto): WatchedShowIndexEntry? {
         val show = item.show ?: return null
-        val canonicalContentId = normalizeContentId(show.ids)
-        if (canonicalContentId.isBlank()) return null
+        val ids = show.ids ?: return null
+        val resetAtMs = parseIsoOptionalToMillis(item.resetAt)
+
+        val animeCanonical = resolveAnimeCanonicalIfApplicable(ids)
+        val kind = if (animeCanonical != null) MediaKind.ANIME else MediaKind.SHOW
+        val canonicalContentId = normalizeContentId(
+            ids = ids,
+            kind = kind,
+            animeCanonical = animeCanonical
+        ).takeIf { it.isNotBlank() } ?: return null
+
+        val aliasContentIds = buildSet {
+            if (animeCanonical != null) add(animeCanonical)
+            addAll(traktIdLookupKeys(ids, kind = MediaKind.SHOW))
+        }
+
+        val watchedEpisodes = item.seasons.orEmpty().flatMap { season ->
+            val seasonNumber = season.number ?: return@flatMap emptyList()
+            season.episodes.orEmpty().mapNotNull { episode ->
+                val episodeNumber = episode.number ?: return@mapNotNull null
+                val watchedAtMs = parseIsoToMillis(episode.lastWatchedAt)
+                if (resetAtMs != null && watchedAtMs < resetAtMs) return@mapNotNull null
+                seasonNumber to episodeNumber
+            }
+        }.toSet()
+
         return WatchedShowIndexEntry(
             canonicalContentId = canonicalContentId,
-            aliasContentIds = setOf(canonicalContentId),  // Task 11 expands via traktIdLookupKeys
+            aliasContentIds = aliasContentIds,
             name = show.title ?: canonicalContentId,
             lastWatchedAtMs = parseIsoToMillis(item.lastWatchedAt),
-            resetAtMs = null,                              // Task 11 parses item.resetAt
-            traktShowId = show.ids?.trakt,
-            watchedEpisodes = emptySet()                   // Task 11 maps item.seasons
+            resetAtMs = resetAtMs,
+            traktShowId = ids.trakt,
+            watchedEpisodes = watchedEpisodes
         )
+    }
+
+    private fun resolveAnimeCanonicalIfApplicable(ids: TraktIdsDto): String? {
+        val candidates = listOfNotNull(
+            ids.tvdb?.let { AnimeStremioId(AnimeIdSource.TVDB, it.toString()) },
+            ids.tmdb?.let { AnimeStremioId(AnimeIdSource.TMDB, it.toString()) },
+            ids.imdb?.takeIf { it.isNotBlank() }?.let { AnimeStremioId(AnimeIdSource.IMDB, it) }
+        )
+        for (candidate in candidates) {
+            val kitsuId = animeIdMappingService.resolveKitsuId(candidate, ContentMediaKind.SERIES)
+            if (!kitsuId.isNullOrBlank()) return "kitsu:$kitsuId"
+        }
+        return null
+    }
+
+    private fun parseIsoOptionalToMillis(value: String?): Long? {
+        if (value.isNullOrBlank()) return null
+        return runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
     }
 
     private suspend fun getHiddenProgressSnapshot(forceRefresh: Boolean): HiddenProgressSnapshot {
