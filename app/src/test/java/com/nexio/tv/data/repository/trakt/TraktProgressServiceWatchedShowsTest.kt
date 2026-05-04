@@ -12,6 +12,7 @@ import com.nexio.tv.data.repository.TraktProgressService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -95,6 +96,45 @@ class TraktProgressServiceWatchedShowsTest {
         assertEquals(
             setOf("kitsu:42", "tvdb:81189", "tmdb:1396", "tt0903747", "trakt:1", "breaking-bad"),
             anime.aliasContentIds
+        )
+    }
+
+    @Test
+    fun observeEpisodeProgress_matches_show_by_tvdb_id() = runBlocking {
+        val fixture = readFixture("trakt/sync_watched_shows_full.json")
+        coEvery { traktIntegrationProvider.getWatchedShows() } returns
+            IntegrationCallResult.Success(moshi.parseList<TraktWatchedShowItemDto>(fixture))
+
+        val watched = service.observeEpisodeProgress("tvdb:81189").first()
+        assertEquals(
+            setOf(1 to 1, 1 to 2, 2 to 1, 2 to 2),
+            watched.keys
+        )
+    }
+
+    @Test
+    fun observeEpisodeProgress_matches_show_by_imdb_id() = runBlocking {
+        val fixture = readFixture("trakt/sync_watched_shows_full.json")
+        coEvery { traktIntegrationProvider.getWatchedShows() } returns
+            IntegrationCallResult.Success(moshi.parseList<TraktWatchedShowItemDto>(fixture))
+
+        val watched = service.observeEpisodeProgress("tt0903747").first()
+        assertEquals(
+            setOf(1 to 1, 1 to 2, 2 to 1, 2 to 2),
+            watched.keys
+        )
+    }
+
+    @Test
+    fun observeEpisodeProgress_matches_show_by_tmdb_id() = runBlocking {
+        val fixture = readFixture("trakt/sync_watched_shows_full.json")
+        coEvery { traktIntegrationProvider.getWatchedShows() } returns
+            IntegrationCallResult.Success(moshi.parseList<TraktWatchedShowItemDto>(fixture))
+
+        val watched = service.observeEpisodeProgress("tmdb:1396").first()
+        assertEquals(
+            setOf(1 to 1, 1 to 2, 2 to 1, 2 to 2),
+            watched.keys
         )
     }
 }
