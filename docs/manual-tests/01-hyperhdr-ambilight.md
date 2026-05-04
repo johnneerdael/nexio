@@ -104,6 +104,57 @@ capable and the HDR Mode picker should be visible.
 16. Start a new SDR episode. Expect a fresh `videomode HDR=0` and `NV12`
     frames.
 
+## Verify mid-session reconnect
+
+17. With HDR playback running and LEDs following, kill the HyperHDR server
+    on the host machine (Ctrl-C in the journalctl terminal, or
+    `sudo systemctl stop hyperhdr`).
+18. Within 5 seconds, the player overlay's HyperHDR badge should change
+    from "HyperHDR · HDR" (or just "HyperHDR" for SDR) to
+    "HyperHDR ⟲" (the reconnecting indicator). LEDs will time out and
+    release back to HyperHDR's fallback (or stay on the last frame, depending
+    on server config).
+19. Restart HyperHDR. Within ~5 seconds the badge should return to
+    "HyperHDR · HDR" and LEDs resume following.
+20. Confirms the Reconnector is doing its job — no app interaction needed.
+
+## Verify Bearer-token auth (only relevant if HyperHDR has tokens enabled)
+
+21. In HyperHDR's Web UI, enable JSON-RPC token authentication and copy
+    the generated token.
+22. In Nexio Settings → Integrations → HyperHDR → JSON API token, paste
+    the token. Test connection should now succeed (returns "Connected to
+    {hostname}").
+23. Without the token (clear it in Settings), Test connection should
+    fail at the JSON port phase: "JSON port 19444 unreachable: …".
+    FlatBuffer port still validates fine — frame delivery doesn't require
+    a token, only the JSON videomode signal does.
+
+## Verify mDNS server picker
+
+24. With multiple HyperHDR servers on the LAN (or just one, plus the
+    Nexio device on the same subnet), open Settings → Integrations →
+    HyperHDR → Host (tap to open).
+25. The "Choose HyperHDR server" dialog should appear with
+    "Searching the network…" briefly, then populated with the discovered
+    server(s). Each entry shows hostname, IP:port, and JSON port (if
+    advertised).
+26. Pick a server. The Host, FlatBuffer port, and JSON port fields all
+    update at once. Test connection should now succeed.
+27. If you don't see your server in the list, "Enter manually" opens the
+    standard host text-input dialog as a fallback. Some networks
+    block mDNS broadcasts (corporate networks, isolated VLANs).
+
+## Verify status badge in player overlay
+
+28. Start HDR playback with HyperHDR enabled. Pause to show the player
+    overlay (or just look at the always-visible badge row).
+29. The badge row should show "HyperHDR · HDR" alongside the existing
+    quality chips (resolution, codec, audio).
+30. Switch to an SDR source. Badge changes to "HyperHDR" (no HDR suffix).
+31. Disable the HyperHDR toggle in Settings. Resume playback. The badge
+    is now absent from the row.
+
 ## Common failures
 
 - **"Test connection" fails on FlatBuffer port** — wrong host/port, or
@@ -135,6 +186,20 @@ capable and the HDR Mode picker should be visible.
   SDR-compositor source devices (e.g. AM6 → HDR TV) won't unlock the
   picker, because Nexio's capture path operates on the device's
   compositor output, not the display.
+- **Badge stuck on "HyperHDR ⟲" forever** — Reconnector can't reach the
+  server. Check that HyperHDR is actually running (`journalctl -fu hyperhdr`),
+  that the IP/port in Settings is current (DHCP can shift over time), and
+  that no firewall is blocking the FlatBuffer port. The Reconnector keeps
+  retrying every 5 seconds with backoff up to 5s; persistent failure means
+  the server is genuinely unreachable.
+- **Test connection passes but JSON videomode fails silently in playback
+  logs** — most often a missing or stale Bearer token. Re-copy the token
+  from HyperHDR's Web UI into Nexio Settings.
+- **mDNS discovery shows empty list despite HyperHDR running** — your
+  network blocks mDNS broadcasts, OR HyperHDR isn't advertising the
+  service. Verify advertisement with `avahi-browse -arv | grep hyperhdr`
+  on a Linux box on the same subnet. If avahi sees them but Nexio doesn't,
+  Android's network is on a different broadcast domain (e.g. guest VLAN).
 
 ## Reverting / disabling
 
