@@ -66,6 +66,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val heroCatalogKeysKey = stringPreferencesKey("hero_catalog_keys")
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
+    private val homeRailOrderStateKey = stringPreferencesKey("home_rail_order_state")
     private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
@@ -129,6 +130,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val disabledHomeCatalogKeys: Flow<List<String>> = profileFlow { prefs ->
         parseCatalogKeys(prefs[disabledHomeCatalogKeysKey])
+    }
+
+    val homeRailOrderStateJson: Flow<String?> = profileFlow { prefs ->
+        prefs[homeRailOrderStateKey]
     }
 
     val modernLandscapePostersEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -256,6 +261,12 @@ class LayoutPreferenceDataStore @Inject constructor(
             } else {
                 prefs[disabledHomeCatalogKeysKey] = gson.toJson(normalizedKeys)
             }
+        }
+    }
+
+    suspend fun setHomeRailOrderStateJson(json: String) {
+        store().edit { prefs ->
+            prefs[homeRailOrderStateKey] = json
         }
     }
 
