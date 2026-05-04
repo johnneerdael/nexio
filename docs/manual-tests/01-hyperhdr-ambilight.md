@@ -47,21 +47,21 @@ If the server you're testing against is **stock HyperHDR** (no `flatbuffer`
 block in `serverinfo`), Nexio must auto-downconvert HDR sources to NV12
 instead of attempting P010. To verify:
 
-1. Point Nexio at a stock HyperHDR install.
-2. Confirm the server omits the capability block:
+8. Point Nexio at a stock HyperHDR install.
+9. Confirm the server omits the capability block:
 
    ```bash
    curl -s http://<host>:8090/json-rpc \
      -H "Content-Type: application/json" \
      -d '{"command":"serverinfo","tan":1}' \
-     | python3 -m json.tool | grep flatbuffer
+     | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['info'].get('flatbuffer'), indent=2))"
    ```
 
-   Expected: no output (the `flatbuffer` key is absent in stock).
+   Expected: literal `null` (the `flatbuffer` key is absent in stock; the fork prints a JSON object with `imageFormats` and `wireVersion`).
 
-3. Start playback of an HEVC HDR10 source.
-4. On the HyperHDR server, watch the log: expect NV12 frames (not P010).
-   The status bar in Nexio should say "HyperHDR" (not "HyperHDR HDR").
+10. Start playback of an HEVC HDR10 source.
+11. On the HyperHDR server, watch the log: expect NV12 frames (not P010).
+    The status bar in Nexio should say "HyperHDR" (not "HyperHDR HDR").
 
 If you instead see attempted P010 sends and HyperHDR errors about
 "Unsupported flatbuffers image format", the `supportsP010` gate isn't
@@ -71,21 +71,21 @@ gate.
 
 ## Verify SDR auto-detection (HEVC SDR / H.264)
 
-8. Without changing HDR mode (leave on `Auto`), play an SDR source — H.264 or
-   HEVC SDR.
-9. Expect on the server:
-   - `videomode` line with `HDR=0`
-   - `Received first NV12 frame.` (NOT P010)
-10. LEDs follow with SDR-style colour. Less saturated than HDR but
+12. Without changing HDR mode (leave on `Auto`), play an SDR source — H.264 or
+    HEVC SDR.
+13. Expect on the server:
+    - `videomode` line with `HDR=0`
+    - `Received first NV12 frame.` (NOT P010)
+14. LEDs follow with SDR-style colour. Less saturated than HDR but
     correctly mapped through HyperHDR's NV12 path.
 
 ## HDR Mode override
 
-11. Switch back to an HDR source. With **Auto** mode, the LEDs should be
+15. Switch back to an HDR source. With **Auto** mode, the LEDs should be
     HDR. Pause, change **HDR mode** to **Force SDR**, resume.
-12. Expect: `videomode` line with `HDR=0`, `NV12` frames on the wire,
+16. Expect: `videomode` line with `HDR=0`, `NV12` frames on the wire,
     HyperHDR LUT switches to the SDR profile.
-13. Switch back to **Auto** when done.
+17. Switch back to **Auto** when done.
 
 ## SDR-only device behaviour (compositor without wide-color support)
 
@@ -126,12 +126,12 @@ capable and the HDR Mode picker should be visible.
 
 ## Verify clean handoff between sessions
 
-14. Start an HDR episode, let it play for ~10 seconds, hit Stop.
-15. On the server: log shows our priority being released (priority slot
+18. Start an HDR episode, let it play for ~10 seconds, hit Stop.
+19. On the server: log shows our priority being released (priority slot
     timing out within ~10s, OR HyperHDR's "next priority" source taking
     over if you have one). LEDs should reflect the fallback within a few
     seconds.
-16. Start a new SDR episode. Expect a fresh `videomode HDR=0` and `NV12`
+20. Start a new SDR episode. Expect a fresh `videomode HDR=0` and `NV12`
     frames.
 
 ## Common failures
