@@ -275,6 +275,24 @@ class FieldResolver @Inject constructor(
             originalNetwork = fields[ResolvedField.ORIGINAL_NETWORK] as? String,
             latestNetwork = fields[ResolvedField.LATEST_NETWORK] as? String,
             platformName = fields[ResolvedField.PLATFORM_NAME] as? String,
+            remoteIds = (fields[ResolvedField.REMOTE_IDS] as? Map<*, *>)
+                ?.mapNotNull { (source, ids) ->
+                    val normalizedSource = (source as? String)
+                        ?.trim()
+                        ?.lowercase()
+                        ?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val normalizedIds = when (ids) {
+                        is Set<*> -> ids
+                        is List<*> -> ids
+                        else -> emptyList<Any?>()
+                    }.mapNotNull { id ->
+                        (id as? String)?.trim()?.takeIf { it.isNotBlank() }
+                    }.toSet()
+                    normalizedSource.takeIf { normalizedIds.isNotEmpty() }?.let { it to normalizedIds }
+                }
+                ?.toMap()
+                ?: emptyMap(),
             fieldOwners = owners,
             ignoredOverwrites = ignoredOverwrites,
             localization = localization,

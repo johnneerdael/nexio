@@ -57,7 +57,8 @@ enum class ResolvedField {
     ORIGINAL_COUNTRY,
     ORIGINAL_NETWORK,
     LATEST_NETWORK,
-    PLATFORM_NAME
+    PLATFORM_NAME,
+    REMOTE_IDS
 }
 
 enum class FieldOwner {
@@ -172,6 +173,7 @@ data class ResolvedMetadataDocument(
     val originalNetwork: String? = null,
     val latestNetwork: String? = null,
     val platformName: String? = null,
+    val remoteIds: Map<String, Set<String>> = emptyMap(),
     val fieldOwners: Map<ResolvedField, FieldOwner>,
     val ignoredOverwrites: List<IgnoredFieldOverwrite>,
     val localization: Map<ResolvedField, MetadataLocalizationFieldTrace> = emptyMap(),

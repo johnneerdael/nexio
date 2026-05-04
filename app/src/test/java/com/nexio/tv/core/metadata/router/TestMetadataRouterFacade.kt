@@ -184,6 +184,9 @@ private class TestMetadataProviderAdapter(
             originalNetwork?.let { put(ResolvedField.ORIGINAL_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
             latestNetwork?.let { put(ResolvedField.LATEST_NETWORK, FieldValue(it, FieldOwner.PRIMARY)) }
             platformName?.let { put(ResolvedField.PLATFORM_NAME, FieldValue(it, FieldOwner.PRIMARY)) }
+            if (remoteIds.isNotEmpty()) {
+                put(ResolvedField.REMOTE_IDS, FieldValue(remoteIds, FieldOwner.PRIMARY))
+            }
         }
 
     private fun MetadataMediaKind.toContentType(): ContentType =

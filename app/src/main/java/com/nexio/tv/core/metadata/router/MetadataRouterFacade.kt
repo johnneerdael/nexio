@@ -890,7 +890,8 @@ class MetadataRouterFacade(
             originalCountry = originalCountry,
             originalNetwork = originalNetwork,
             latestNetwork = latestNetwork,
-            platformName = platformName
+            platformName = platformName,
+            remoteIds = remoteIds
         )
 
     private fun MetadataPrimaryProvider?.toTvProvider(): TvProvider =
