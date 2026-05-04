@@ -35,6 +35,29 @@ class TraktLastActivitiesCachingTest {
         coVerify(exactly = 1) { traktApi.getLastActivities(any()) }
     }
 
+    @Test
+    fun invalidateLastActivities_then_read_hits_wire_again() = runBlocking {
+        val first = TraktLastActivitiesResponseDto(all = "2026-05-04T10:00:00Z")
+        val second = TraktLastActivitiesResponseDto(all = "2026-05-04T10:30:00Z")
+        val fixture = byteArrayRuntimeFixture()
+
+        val traktApi = mockk<TraktApi> {
+            coEvery { getLastActivities(any()) } returnsMany listOf(
+                Response.success(first),
+                Response.success(second)
+            )
+        }
+        val provider = buildProvider(traktApi = traktApi, runtimeFixture = fixture)
+
+        val before = unwrap(provider.getLastActivities())
+        provider.invalidateLastActivities()
+        val after = unwrap(provider.getLastActivities())
+
+        assertEquals("2026-05-04T10:00:00Z", before?.all)
+        assertEquals("2026-05-04T10:30:00Z", after?.all)
+        coVerify(exactly = 2) { traktApi.getLastActivities(any()) }
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

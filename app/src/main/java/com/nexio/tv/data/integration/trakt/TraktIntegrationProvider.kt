@@ -308,6 +308,24 @@ class TraktIntegrationProvider @Inject constructor(
         cacheStore.delete(spec)
     }
 
+    suspend fun invalidateLastActivities() {
+        val session = traktAuthService.accountScopedSession()
+        // Build a minimal spec; only the cacheKey is consulted by IntegrationCacheStore.delete(spec).
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
+            apiShapeId = TraktApiShapes.LAST_ACTIVITIES,
+            operationKey = accountOperationKey(session, "trakt.last_activities.invalidate"),
+            cacheKey = accountCacheKey(session, "trakt:sync:last_activities"),
+            codec = gsonCodec<Unit>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 1L, staleAfterExpiryMs = 0L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = { IntegrationLoadResult.Success(Unit) }
+        )
+        cacheStore.delete(spec)
+    }
+
     suspend fun getHiddenItems(
         section: String,
         type: String,
