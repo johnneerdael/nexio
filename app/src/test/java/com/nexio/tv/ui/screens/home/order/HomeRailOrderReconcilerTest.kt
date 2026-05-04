@@ -67,4 +67,62 @@ class HomeRailOrderReconcilerTest {
             effective.newlyDiscoveredKeys,
         )
     }
+
+    @Test
+    fun `disabled keys set is excluded from visibleKeys`() {
+        val saved = listOf(HomeRailKey("tmdb:popular"), HomeRailKey("simkl:trending"))
+        val live = listOf(
+            publicDef("tmdb:popular", RailFamily.TMDB),
+            publicDef("simkl:trending", RailFamily.SIMKL),
+        )
+        val effective = reconciler.reconcile(
+            savedGlobalOrder = saved,
+            disabledKeys = setOf(HomeRailKey("tmdb:popular")),
+            liveDefinitions = live,
+        )
+        assertEquals(listOf(HomeRailKey("simkl:trending")), effective.visibleKeys)
+        assertEquals(setOf(HomeRailKey("tmdb:popular")), effective.disabledKeys)
+    }
+
+    @Test
+    fun `provider-disabled live definition is excluded from visibleKeys`() {
+        val saved = listOf(HomeRailKey("kitsu:trending"))
+        val live = listOf(publicDef("kitsu:trending", RailFamily.KITSU, enabled = false))
+        val effective = reconciler.reconcile(
+            savedGlobalOrder = saved,
+            disabledKeys = emptySet(),
+            liveDefinitions = live,
+        )
+        assertEquals(emptyList<HomeRailKey>(), effective.visibleKeys)
+    }
+
+    @Test
+    fun `unknown saved keys are reported and not visible but not pruned`() {
+        val saved = listOf(HomeRailKey("addon:gone:catalog"), HomeRailKey("tmdb:popular"))
+        val live = listOf(publicDef("tmdb:popular", RailFamily.TMDB))
+        val effective = reconciler.reconcile(
+            savedGlobalOrder = saved,
+            disabledKeys = emptySet(),
+            liveDefinitions = live,
+        )
+        assertEquals(listOf(HomeRailKey("tmdb:popular")), effective.visibleKeys)
+        assertEquals(listOf(HomeRailKey("addon:gone:catalog")), effective.unknownSavedKeys)
+        assertEquals(emptyList<HomeRailKey>(), effective.prunedKeys)
+    }
+
+    @Test
+    fun `pruned keys are saved keys present in live but currently disabled`() {
+        val saved = listOf(HomeRailKey("tmdb:popular"), HomeRailKey("simkl:trending"))
+        val live = listOf(
+            publicDef("tmdb:popular", RailFamily.TMDB, enabled = false),
+            publicDef("simkl:trending", RailFamily.SIMKL),
+        )
+        val effective = reconciler.reconcile(
+            savedGlobalOrder = saved,
+            disabledKeys = emptySet(),
+            liveDefinitions = live,
+        )
+        assertEquals(listOf(HomeRailKey("simkl:trending")), effective.visibleKeys)
+        assertEquals(listOf(HomeRailKey("tmdb:popular")), effective.prunedKeys)
+    }
 }
