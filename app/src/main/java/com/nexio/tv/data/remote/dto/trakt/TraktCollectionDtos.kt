@@ -121,8 +121,8 @@ data class TraktCollectionAddResponseDto(
 data class TraktCollectionRemoveRequestDto(
     @Json(name = "movies") val movies: List<TraktCollectionRemoveMovieDto>? = null,
     @Json(name = "shows") val shows: List<TraktCollectionRemoveShowDto>? = null,
-    @Json(name = "seasons") val seasons: List<TraktCollectionAddSeasonDto>? = null,
-    @Json(name = "episodes") val episodes: List<TraktCollectionAddEpisodeDto>? = null
+    @Json(name = "seasons") val seasons: List<TraktCollectionRemoveSeasonDto>? = null,
+    @Json(name = "episodes") val episodes: List<TraktCollectionRemoveEpisodeDto>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -137,7 +137,18 @@ data class TraktCollectionRemoveShowDto(
     @Json(name = "title") val title: String? = null,
     @Json(name = "year") val year: Int? = null,
     @Json(name = "ids") val ids: TraktIdsDto? = null,
-    @Json(name = "seasons") val seasons: List<TraktCollectionAddSeasonDto>? = null
+    @Json(name = "seasons") val seasons: List<TraktCollectionRemoveSeasonDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktCollectionRemoveSeasonDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "episodes") val episodes: List<TraktCollectionRemoveEpisodeDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktCollectionRemoveEpisodeDto(
+    @Json(name = "number") val number: Int? = null
 )
 
 // ── POST /sync/collection/remove response ────────────────────────────────────
@@ -156,11 +167,11 @@ data class TraktCollectionWriteCountsDto(
     @Json(name = "episodes") val episodes: Int? = null
 )
 
-// not_found includes movies, shows, seasons, episodes per apib.
+// Used by both add and remove responses; per apib includes movies, shows, seasons, episodes.
 @JsonClass(generateAdapter = true)
 data class TraktCollectionWriteNotFoundDto(
     @Json(name = "movies") val movies: List<TraktCollectionRemoveMovieDto>? = null,
     @Json(name = "shows") val shows: List<TraktCollectionRemoveShowDto>? = null,
-    @Json(name = "seasons") val seasons: List<TraktCollectionAddSeasonDto>? = null,
-    @Json(name = "episodes") val episodes: List<TraktCollectionAddEpisodeDto>? = null
+    @Json(name = "seasons") val seasons: List<TraktCollectionRemoveSeasonDto>? = null,
+    @Json(name = "episodes") val episodes: List<TraktCollectionRemoveEpisodeDto>? = null
 )
