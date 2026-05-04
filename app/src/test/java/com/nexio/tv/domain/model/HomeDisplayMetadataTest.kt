@@ -1,10 +1,113 @@
 package com.nexio.tv.domain.model
 
 import com.google.gson.Gson
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HomeDisplayMetadataTest {
+
+    @Test
+    fun `poster string is derived from typed artwork when artwork exists`() {
+        val metadata = HomeDisplayMetadata(
+            title = "Fight Club",
+            poster = "https://image.tmdb.org/raw.jpg",
+            artwork = ArtworkBundle(
+                poster = ArtworkDisplayRef.RuntimeAsset(
+                    decisionKey = ArtworkDecisionKey("decision"),
+                    assetKey = ArtworkAssetKey("asset"),
+                    imageType = ArtworkType.POSTER,
+                    selectedProvider = null,
+                    sourceRole = ArtworkSourceRole.PREMIUM,
+                    trace = ArtworkTrace.empty()
+                )
+            )
+        )
+
+        assertEquals("nexio-artwork://asset/asset", metadata.displayPoster)
+    }
+
+    @Test
+    fun `applyTo uses typed artwork projection before raw artwork strings`() {
+        val base = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "basePoster",
+            posterShape = PosterShape.POSTER,
+            background = "baseBackdrop",
+            logo = "baseLogo",
+            description = null,
+            releaseInfo = null,
+            runtime = null,
+            imdbRating = null,
+            genres = emptyList()
+        )
+        val metadata = HomeDisplayMetadata(
+            poster = "rawPoster",
+            backdrop = "rawBackdrop",
+            logo = "rawLogo",
+            artwork = ArtworkBundle(
+                poster = ArtworkDisplayRef.RuntimeAsset(
+                    decisionKey = ArtworkDecisionKey("posterDecision"),
+                    assetKey = ArtworkAssetKey("posterAsset"),
+                    imageType = ArtworkType.POSTER,
+                    selectedProvider = null,
+                    sourceRole = ArtworkSourceRole.PREMIUM,
+                    trace = ArtworkTrace.empty()
+                ),
+                backdrop = ArtworkDisplayRef.RuntimeAsset(
+                    decisionKey = ArtworkDecisionKey("backdropDecision"),
+                    assetKey = ArtworkAssetKey("backdropAsset"),
+                    imageType = ArtworkType.BACKDROP,
+                    selectedProvider = null,
+                    sourceRole = ArtworkSourceRole.PRIMARY,
+                    trace = ArtworkTrace.empty()
+                ),
+                logo = ArtworkDisplayRef.RuntimeAsset(
+                    decisionKey = ArtworkDecisionKey("logoDecision"),
+                    assetKey = ArtworkAssetKey("logoAsset"),
+                    imageType = ArtworkType.LOGO,
+                    selectedProvider = null,
+                    sourceRole = ArtworkSourceRole.PRIMARY,
+                    trace = ArtworkTrace.empty()
+                )
+            )
+        )
+
+        val applied = metadata.applyTo(base)
+
+        assertEquals("nexio-artwork://asset/posterAsset", applied.poster)
+        assertEquals("nexio-artwork://asset/backdropAsset", applied.background)
+        assertEquals("nexio-artwork://asset/logoAsset", applied.logo)
+    }
+
+    @Test
+    fun `mergeFallback preserves primary artwork bundle`() {
+        val artwork = ArtworkBundle(
+            poster = ArtworkDisplayRef.RuntimeAsset(
+                decisionKey = ArtworkDecisionKey("decision"),
+                assetKey = ArtworkAssetKey("asset"),
+                imageType = ArtworkType.POSTER,
+                selectedProvider = null,
+                sourceRole = ArtworkSourceRole.PRIMARY,
+                trace = ArtworkTrace.empty()
+            )
+        )
+
+        val merged = HomeDisplayMetadata(artwork = artwork).mergeFallback(
+            HomeDisplayMetadata(poster = "fallbackPoster")
+        )
+
+        assertEquals(artwork, merged.artwork)
+        assertEquals("nexio-artwork://asset/asset", merged.displayPoster)
+    }
 
     @Test
     fun `toHomeDisplayMetadata and applyTo preserve tomatoes rating`() {

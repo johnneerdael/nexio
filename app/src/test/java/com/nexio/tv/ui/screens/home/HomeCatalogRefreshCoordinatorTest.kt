@@ -812,6 +812,36 @@ class HomeCatalogRefreshCoordinatorTest {
         coVerify(exactly = 0) { titleRatingOverrideRepository.enrichPreview(any(), any()) }
     }
 
+    @Test
+    fun `visible prefetch skips internal artwork refs`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metadataRouterFacade = mockk<MetadataRouterFacade>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+        val logs = mutableListOf<Pair<String, String?>>()
+        val item = preview(id = "1007757", poster = "nexio-artwork://asset/posterAsset").copy(
+            background = "nexio-placeholder://backdrop",
+            logo = "nexio-artwork://asset/logoAsset"
+        )
+
+        coordinator(
+            catalogRepository = catalogRepository,
+            metadataRouterFacade = metadataRouterFacade,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).prefetchVisibleImagesOnly(
+            items = listOf(item),
+            telemetryEnabled = true,
+            onLog = { event, details -> logs += event to details }
+        )
+
+        assertTrue(logs.any { it.first == "item_image_skipped_no_urls" })
+        assertTrue(logs.any { it.first == "image_prefetch_start" && it.second?.contains("urls_total=0") == true })
+        assertTrue(logs.any { it.first == "image_prefetch_end" && it.second?.contains("fetched_urls=0") == true })
+    }
+
     private fun preview(id: String, poster: String?): MetaPreview {
         return MetaPreview(
             id = id,
