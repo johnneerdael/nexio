@@ -252,8 +252,6 @@ class TraktProgressService @Inject constructor(
         var lastManualRefreshSignalMs: Long = 0L,
         val episodeProgressActivityVersion: AtomicLong = AtomicLong(0L),
         val showNextUpActivityVersion: AtomicLong = AtomicLong(0L),
-        @Volatile var cachedActivities: TraktLastActivitiesResponseDto? = null,
-        @Volatile var cachedActivitiesAtMs: Long = 0L,
         val episodeInfoCache: MutableMap<String, ResolvedEpisodeInfo> = mutableMapOf(),
         var lastEventDrivenRefreshMs: Long = 0L,
         var eventDrivenRefreshFiringCount: Int = 0,
@@ -292,8 +290,6 @@ class TraktProgressService @Inject constructor(
             lastManualRefreshSignalMs = 0L
             episodeProgressActivityVersion.set(0L)
             showNextUpActivityVersion.set(0L)
-            cachedActivities = null
-            cachedActivitiesAtMs = 0L
             episodeInfoCache.clear()
             lastEventDrivenRefreshMs = 0L
             eventDrivenRefreshFiringCount = 0
@@ -392,12 +388,6 @@ class TraktProgressService @Inject constructor(
         set(value) { runtimeState().lastManualRefreshSignalMs = value }
     private val episodeProgressActivityVersion get() = runtimeState().episodeProgressActivityVersion
     private val showNextUpActivityVersion get() = runtimeState().showNextUpActivityVersion
-    private var cachedActivities: TraktLastActivitiesResponseDto?
-        get() = runtimeState().cachedActivities
-        set(value) { runtimeState().cachedActivities = value }
-    private var cachedActivitiesAtMs: Long
-        get() = runtimeState().cachedActivitiesAtMs
-        set(value) { runtimeState().cachedActivitiesAtMs = value }
 
     private fun runtimeState(): TraktProgressRuntimeState {
         return runtimeRegistry.stateFor(
@@ -408,24 +398,17 @@ class TraktProgressService @Inject constructor(
         )
     }
 
-    // Shared last-activities cache - avoids duplicate /sync/last_activities calls
-    // when both TraktProgressService and TraktDiscoveryService refresh in the same cycle.
     /**
-     * Returns a recent `/sync/last_activities` response, reusing a cached copy if it was
-     * fetched within [maxAgeMs]. Called by [TraktDiscoveryService] to avoid a duplicate API call.
+     * Returns a recent `/sync/last_activities` response. Deduplication is now handled by the
+     * runtime cache (CacheFirst, 5-min TTL) inside [traktIntegrationProvider.getLastActivities].
+     * [maxAgeMs] is vestigial — callers that need fresher-than-5-min data must invalidate first.
      */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun getRecentActivities(maxAgeMs: Long = 10_000L): TraktLastActivitiesResponseDto? {
-        val now = System.currentTimeMillis()
-        cachedActivities?.let { cached ->
-            if (now - cachedActivitiesAtMs < maxAgeMs) return cached
-        }
-        val body = when (val result = traktIntegrationProvider.getLastActivities()) {
+        return when (val result = traktIntegrationProvider.getLastActivities()) {
             is IntegrationCallResult.Success -> result.value
-            else -> return null
+            else -> null
         }
-        cachedActivities = body
-        cachedActivitiesAtMs = System.currentTimeMillis()
-        return body
     }
 
     private val playbackCacheTtlMs = 30_000L
