@@ -74,7 +74,7 @@ class ArtworkRouterTest {
         )
 
         assertEquals("KITSU", decision.selectedCandidate.provider?.key)
-        assertEquals("unsupported or inactive premium artwork provider", decision.rejectedCandidates.single().reason)
+        assertEquals("UNSUPPORTED_ID_TYPE", decision.rejectedCandidates.single().reason)
     }
 
     @Test
@@ -96,7 +96,32 @@ class ArtworkRouterTest {
         )
 
         assertEquals("TMDB", decision.selectedCandidate.provider?.key)
-        assertEquals("unsupported or inactive premium artwork provider", decision.rejectedCandidates.single().reason)
+        assertEquals("inactive premium artwork provider", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
+    fun `unsupported premium falls back to placeholder when no primary exists`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    providerIds = ProviderIds(kitsu = "7442")
+                ),
+                candidate(
+                    provider = ArtworkProviderId.Placeholder,
+                    role = ArtworkSourceRole.PLACEHOLDER,
+                    priority = 100,
+                    providerIds = ProviderIds(kitsu = "7442")
+                )
+            ),
+            policy = ArtworkRoutingPolicy(activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB))
+        )
+
+        assertEquals(ArtworkSourceRole.PLACEHOLDER, decision.selectedCandidate.sourceRole)
+        assertEquals("PLACEHOLDER", decision.selectedCandidate.provider?.key)
+        assertEquals("UNSUPPORTED_ID_TYPE", decision.rejectedCandidates.single().reason)
     }
 
     private fun candidate(
@@ -112,14 +137,18 @@ class ArtworkRouterTest {
             imageType = ArtworkType.POSTER,
             provider = provider,
             sourceRole = role,
-            source = ArtworkSource.ProviderTemplate(
-                provider = provider,
-                idType = "imdb",
-                mediaId = "tt0137523",
-                providerPathHash = null,
-                settingsHash = null,
-                credentialHash = null
-            ),
+            source = if (role == ArtworkSourceRole.PLACEHOLDER) {
+                ArtworkSource.Placeholder(PlaceholderType.POSTER)
+            } else {
+                ArtworkSource.ProviderTemplate(
+                    provider = provider,
+                    idType = "imdb",
+                    mediaId = "tt0137523",
+                    providerPathHash = null,
+                    settingsHash = null,
+                    credentialHash = null
+                )
+            },
             priority = priority,
             requiresRuntimeFetch = true
         )

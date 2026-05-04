@@ -19,13 +19,12 @@ class ArtworkRouter(
         require(candidates.isNotEmpty()) { "ArtworkRouter requires at least one candidate" }
 
         val rejectedBeforeSelection = candidates
-            .filter { it.sourceRole == ArtworkSourceRole.PREMIUM && !it.isActiveSupportedPremium(policy) }
-            .map { it.rejected("unsupported or inactive premium artwork provider") }
+            .mapNotNull { candidate -> candidate.unsupportedPremiumRejection(policy) }
 
         val selected = candidates
             .filterNot { it.sourceRole == ArtworkSourceRole.PREMIUM && !it.isActiveSupportedPremium(policy) }
             .minWithOrNull(candidateOrdering(policy))
-            ?: candidates.minWith(candidateOrdering(policy))
+            ?: throw IllegalArgumentException("ArtworkRouter has no selectable candidate")
 
         val selectedRank = selected.routingRank(policy)
         val rejectedAfterSelection = candidates
@@ -68,10 +67,23 @@ class ArtworkRouter(
     private fun ArtworkCandidate.isActiveSupportedPremium(policy: ArtworkRoutingPolicy): Boolean =
         provider != null &&
             provider == policy.activePremiumProvider &&
-            provider.supportsPremiumCandidate(this)
+            provider.evaluatePremiumCandidate(this).supported
 
-    private fun ArtworkProviderId.supportsPremiumCandidate(candidate: ArtworkCandidate): Boolean =
-        capabilityResolver.supports(
+    private fun ArtworkCandidate.unsupportedPremiumRejection(policy: ArtworkRoutingPolicy): RejectedArtworkCandidate? {
+        if (sourceRole != ArtworkSourceRole.PREMIUM) return null
+
+        val candidateProvider = provider
+        if (candidateProvider == null || candidateProvider != policy.activePremiumProvider) {
+            return rejected("inactive premium artwork provider")
+        }
+
+        val capability = candidateProvider.evaluatePremiumCandidate(this)
+        if (capability.supported) return null
+        return rejected(capability.reason ?: "unsupported premium artwork provider")
+    }
+
+    private fun ArtworkProviderId.evaluatePremiumCandidate(candidate: ArtworkCandidate): ArtworkProviderCapability =
+        capabilityResolver.evaluate(
             provider = this,
             imageType = candidate.imageType,
             ids = candidate.providerIds,

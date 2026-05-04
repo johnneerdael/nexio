@@ -4,6 +4,11 @@ import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.domain.model.ProviderIds
 
+data class ArtworkProviderCapability(
+    val supported: Boolean,
+    val reason: String?
+)
+
 class ArtworkProviderCapabilityResolver {
     fun supports(
         provider: ArtworkProviderId,
@@ -17,6 +22,24 @@ class ArtworkProviderCapabilityResolver {
             ids = ids,
             mediaKind = mediaKind
         ) == null
+
+    fun evaluate(
+        provider: ArtworkProviderId,
+        imageType: ArtworkType,
+        ids: ProviderIds,
+        mediaKind: MetadataMediaKind
+    ): ArtworkProviderCapability {
+        val reason = rejectionReason(
+            provider = provider,
+            imageType = imageType,
+            ids = ids,
+            mediaKind = mediaKind
+        )
+        return ArtworkProviderCapability(
+            supported = reason == null,
+            reason = reason
+        )
+    }
 
     @Suppress("UNUSED_PARAMETER")
     fun rejectionReason(
