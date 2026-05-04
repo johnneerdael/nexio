@@ -229,4 +229,24 @@ class TraktLibraryServiceCollectionTest {
         // Item should still be in collection (rollback restored).
         assertEquals(true, service.isInCollection("tt0372784").first())
     }
+
+    @Test
+    fun profile_switch_clears_collectionMembership() = runBlocking {
+        // Profile 1: stub collection has Batman Begins, refresh seeds collectionMembership.
+        val item = TraktCollectionMovieItemDto(
+            movie = TraktMovieDto(
+                ids = TraktIdsDto(trakt = 6, slug = "batman-begins-2005", imdb = "tt0372784", tmdb = 272)
+            )
+        )
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns
+            IntegrationCallResult.Success(listOf(item))
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        service.refreshCollection()
+        assertEquals(true, service.isInCollection("tt0372784").first())
+
+        // Profile switch — service must clear the in-memory collection state.
+        service.testOnlyRestoreSnapshotForProfile(profileId = 999)  // a profile id with no persisted snapshot
+
+        assertEquals(false, service.isInCollection("tt0372784").first())
+    }
 }
