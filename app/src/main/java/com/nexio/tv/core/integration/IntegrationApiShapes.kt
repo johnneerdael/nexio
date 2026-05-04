@@ -92,6 +92,14 @@ object PosterApiShapes {
     const val TOP_POSTERS_POSTER_TEMPLATE = "topposters.poster_template"
 }
 
+object ArtworkApiShapes {
+    const val GENERIC_IMAGE_FETCH = "artwork.image_fetch"
+    const val RAIL_PREVIEW_IMAGE_FETCH = "artwork.rail_preview.image_fetch"
+    const val ADDON_PREVIEW_IMAGE_FETCH = "artwork.addon_preview.image_fetch"
+    const val RPDB_POSTER_TEMPLATE = "rpdb.poster_template"
+    const val TOP_POSTERS_POSTER_TEMPLATE = "topposters.poster_template"
+}
+
 object SimklApiShapes {
     const val LAST_ACTIVITIES = "simkl.last_activities"
     const val DISCOVERY = "simkl.discovery"
