@@ -12,11 +12,14 @@ import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
+import com.nexio.tv.core.integration.IntegrationCallResult
+import com.nexio.tv.data.integration.trakt.TraktCollectionKind
 import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.normalizeContentId
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.data.repository.parseIsoToMillis
 import com.nexio.tv.data.repository.toTraktIds
+import com.nexio.tv.data.repository.traktIdLookupKeys
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
@@ -102,6 +105,7 @@ class TraktLibraryService @Inject constructor(
     private val hasCacheState = MutableStateFlow(false)
     private val refreshingState = MutableStateFlow(false)
     private val refreshMutex = Mutex()
+    private val collectionMembership = MutableStateFlow<Set<String>>(emptySet())
     private val metadataMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private var lastRefreshMs: Long = 0L
@@ -1346,6 +1350,34 @@ class TraktLibraryService @Inject constructor(
     }
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    suspend fun refreshCollection(force: Boolean = false) {
+        if (force) {
+            traktIntegrationProvider.invalidateCollectionSnapshot(TraktCollectionKind.MOVIES)
+            traktIntegrationProvider.invalidateCollectionSnapshot(TraktCollectionKind.SHOWS)
+        }
+        val movies = (traktIntegrationProvider.getCollectionMovies() as? IntegrationCallResult.Success)?.value.orEmpty()
+        val shows = (traktIntegrationProvider.getCollectionShows() as? IntegrationCallResult.Success)?.value.orEmpty()
+        val keys = buildSet<String> {
+            movies.forEach { item -> addAll(traktIdLookupKeys(item.movie?.ids, MediaKind.MOVIE)) }
+            shows.forEach { item -> addAll(traktIdLookupKeys(item.show?.ids, MediaKind.SHOW)) }
+        }
+        collectionMembership.value = keys
+    }
+
+    fun isInCollection(contentId: String): Flow<Boolean> {
+        val rawKey = contentId.trim()
+        val canonicalKey = canonicalLookupKey(rawKey)
+        return collectionMembership
+            .map { keys -> keys.contains(rawKey) || keys.contains(canonicalKey) }
+            .distinctUntilChanged()
+    }
+
+    private fun canonicalLookupKey(contentId: String): String {
+        val parsed = parseContentIds(contentId)
+        val canonical = normalizeContentId(toTraktIds(parsed))
+        return if (canonical.isNotBlank()) canonical else contentId.trim()
+    }
 
     companion object {
         private const val TAG = "TraktLibraryService"
