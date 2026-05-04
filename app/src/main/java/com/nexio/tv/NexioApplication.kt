@@ -10,9 +10,14 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.nexio.tv.core.artwork.ArtworkAssetDiskCache
+import com.nexio.tv.core.artwork.ArtworkAssetRepository
+import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.image.IntegrationPosterFetcher
 import com.nexio.tv.core.image.ImageCacheTtlWorker
+import com.nexio.tv.core.image.NexioArtworkFetcher
 import com.nexio.tv.core.integration.IntegrationPlaybackGate
+import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.core.tvdb.TvdbUpdateCoordinator
 import com.nexio.tv.core.tvdb.TvdbUpdateTrigger
@@ -31,6 +36,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var tvdbUpdateCoordinator: TvdbUpdateCoordinator
     @Inject lateinit var integrationPlaybackGate: IntegrationPlaybackGate
+    @Inject lateinit var integrationRuntime: IntegrationRuntime
     @Inject lateinit var integrationPosterFetcherFactory: IntegrationPosterFetcher.Factory
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -67,6 +73,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .components {
+                add(nexioArtworkFetcherFactory())
                 add(integrationPosterFetcherFactory)
             }
             .memoryCache {
@@ -96,4 +103,13 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
         // Home snapshots can reference older poster URLs after a cold start.
         // Let Coil's size-bounded disk cache and metadata-driven evictions decide what to drop.
     }
+
+    private fun nexioArtworkFetcherFactory(): NexioArtworkFetcher.Factory =
+        NexioArtworkFetcher.Factory(
+            ArtworkAssetRepository(
+                runtime = integrationRuntime,
+                diskCache = ArtworkAssetDiskCache(cacheDir),
+                sourceMaterializer = ArtworkSourceMaterializer(emptyMap())
+            )
+        )
 }
