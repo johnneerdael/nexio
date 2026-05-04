@@ -1086,6 +1086,7 @@ private fun PlayerControlsOverlay(
     val customSourcePainter = rememberRawSvgPainter(R.raw.ic_player_source)
     val customAspectPainter = rememberRawSvgPainter(R.raw.ic_player_aspect_ratio)
     val customEpisodesPainter = rememberRawSvgPainter(R.raw.ic_player_episodes)
+    val hyperHdrSessionState by viewModel.hyperHdrSessionState.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Single draw pass for top/bottom control gradients.
@@ -1190,7 +1191,8 @@ private fun PlayerControlsOverlay(
                         uiState.videoHdrType != null ||
                         uiState.videoCodecName != null ||
                         uiState.audioCodecName != null ||
-                        uiState.audioChannelLayout != null
+                        uiState.audioChannelLayout != null ||
+                        hyperHdrSessionState !is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle
 
                     if (hasAnyBadge) {
                         Spacer(modifier = Modifier.height(6.dp))
@@ -1236,6 +1238,8 @@ private fun PlayerControlsOverlay(
                                     textColor = Color.White.copy(alpha = 0.9f)
                                 )
                             }
+
+                            HyperHdrBadge(state = hyperHdrSessionState)
                         }
                     }
                 }
@@ -2100,6 +2104,24 @@ private fun QualityBadge(
                 shape = RoundedCornerShape(4.dp)
             )
             .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun HyperHdrBadge(state: com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState) {
+    val text = when (state) {
+        com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle -> return
+        is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connecting -> "HyperHDR…"
+        is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Reconnecting -> "HyperHDR ⟲"
+        is com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connected -> when (state.mode) {
+            com.nexio.tv.integrations.hyperhdr.capture.CaptureMode.HDR_P010 -> "HyperHDR · HDR"
+            com.nexio.tv.integrations.hyperhdr.capture.CaptureMode.SDR_NV12 -> "HyperHDR"
+        }
+    }
+    QualityBadge(
+        text = text,
+        backgroundColor = Color.White.copy(alpha = 0.15f),
+        textColor = Color.White.copy(alpha = 0.9f),
     )
 }
 

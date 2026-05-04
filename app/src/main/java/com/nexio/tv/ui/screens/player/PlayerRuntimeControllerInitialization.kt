@@ -105,6 +105,7 @@ private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
 internal interface HyperHdrEntryPoint {
     fun hyperHdrConfigDataStore(): HyperHdrConfigDataStore
     fun displayColorCapability(): com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
+    fun hyperHdrSessionStateHolder(): com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionStateHolder
 }
 
 internal data class StartupSubtitlePreparation(
@@ -763,6 +764,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val hyperHdrDisplayCapability = EntryPoints
                 .get(context.applicationContext, HyperHdrEntryPoint::class.java)
                 .displayColorCapability()
+            val hyperHdrSessionStateHolder = EntryPoints
+                .get(context.applicationContext, HyperHdrEntryPoint::class.java)
+                .hyperHdrSessionStateHolder()
 
             // ===== HyperHDR ambilight state (scoped to this player init) =====
             var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
@@ -792,6 +796,25 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 hyperHdrFbReconnector = reconnector
                 Log.d("HyperHdrIntegration", "Reconnector started for ${cfg.host}:${cfg.port}, awaiting connect")
 
+                hyperHdrSessionStateHolder.update(
+                    com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connecting(targetMode)
+                )
+                scope.launch {
+                    reconnector.state.collect { connState ->
+                        val sessionState = when (connState) {
+                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.CONNECTED ->
+                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connected(targetMode)
+                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.CONNECTING ->
+                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Connecting(targetMode)
+                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.ERROR ->
+                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Reconnecting(targetMode)
+                            com.nexio.tv.integrations.hyperhdr.network.ConnectionState.DISCONNECTED ->
+                                com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle
+                        }
+                        hyperHdrSessionStateHolder.update(sessionState)
+                    }
+                }
+
                 // Best-effort JSON HDR mode signal — failure is non-fatal (FlatBuffer reconnects independently).
                 runCatching {
                     val jsonClient = HyperHdrJsonApiClient(
@@ -815,6 +838,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 hyperHdrFbReconnector?.close()
                 hyperHdrFbReconnector = null
                 hyperHdrCurrentMode = null
+                hyperHdrSessionStateHolder.update(
+                    com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState.Idle
+                )
             }
 
             scope.launch {

@@ -53,6 +53,7 @@ class PlayerViewModel @Inject constructor(
     @Named("playback") private val playbackOkHttpClient: OkHttpClient,
     private val egressIpFingerprint: com.nexio.tv.core.player.auth.EgressIpFingerprint,
     private val authRecoveryInterceptor: com.nexio.tv.core.player.auth.AuthRecoveryInterceptor,
+    private val hyperHdrSessionStateHolder: com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -86,6 +87,9 @@ class PlayerViewModel @Inject constructor(
 
     val progressUiState: StateFlow<PlayerPlaybackProgressUiState>
         get() = controller.progressUiState
+
+    val hyperHdrSessionState: kotlinx.coroutines.flow.StateFlow<com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState> =
+        hyperHdrSessionStateHolder.state
 
     val exoPlayer: ExoPlayer?
         get() = controller.exoPlayer
