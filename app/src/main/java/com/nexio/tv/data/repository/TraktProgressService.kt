@@ -68,6 +68,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.annotation.VisibleForTesting
 
 internal fun shouldPreferEpisodeHistoryEntry(
     existing: WatchProgress,
@@ -156,10 +157,13 @@ class TraktProgressService @Inject constructor(
     )
 
     internal data class WatchedShowIndexEntry(
-        val contentId: String,
+        val canonicalContentId: String,
+        val aliasContentIds: Set<String>,
         val name: String,
         val lastWatchedAtMs: Long,
-        val traktShowId: Int? = null
+        val resetAtMs: Long?,
+        val traktShowId: Int?,
+        val watchedEpisodes: Set<Pair<Int, Int>>
     )
 
     internal data class HiddenProgressSnapshot(
@@ -1407,7 +1411,7 @@ class TraktProgressService @Inject constructor(
 
             val watchedShows = watchedShowItems
                 .mapNotNull(::mapWatchedShowItem)
-                .associateBy { it.contentId }
+                .associateBy { it.canonicalContentId }
 
             watchedShowsState.value = watchedShows
             watchedShowsUpdatedAtMs = System.currentTimeMillis()
@@ -1418,15 +1422,22 @@ class TraktProgressService @Inject constructor(
         }
     }
 
+    @VisibleForTesting
+    internal suspend fun testOnlyProjectWatchedShows(): Map<String, WatchedShowIndexEntry> =
+        getWatchedShowsSnapshot(forceRefresh = false)
+
     private fun mapWatchedShowItem(item: TraktWatchedShowItemDto): WatchedShowIndexEntry? {
         val show = item.show ?: return null
-        val contentId = normalizeContentId(show.ids)
-        if (contentId.isBlank()) return null
+        val canonicalContentId = normalizeContentId(show.ids)
+        if (canonicalContentId.isBlank()) return null
         return WatchedShowIndexEntry(
-            contentId = contentId,
-            name = show.title ?: contentId,
+            canonicalContentId = canonicalContentId,
+            aliasContentIds = setOf(canonicalContentId),  // Task 11 expands via traktIdLookupKeys
+            name = show.title ?: canonicalContentId,
             lastWatchedAtMs = parseIsoToMillis(item.lastWatchedAt),
-            traktShowId = show.ids?.trakt
+            resetAtMs = null,                              // Task 11 parses item.resetAt
+            traktShowId = show.ids?.trakt,
+            watchedEpisodes = emptySet()                   // Task 11 maps item.seasons
         )
     }
 
@@ -1588,7 +1599,7 @@ class TraktProgressService @Inject constructor(
         val entries = watchedShows.values
             .asSequence()
             .filter { showInfo ->
-                val contentId = showInfo.contentId
+                val contentId = showInfo.canonicalContentId
                 val canonicalId = canonicalLookupKey(contentId)
                 contentId !in hiddenProgress.hiddenShowIds &&
                     contentId !in hiddenProgress.droppedShowIds &&
@@ -1599,13 +1610,13 @@ class TraktProgressService @Inject constructor(
             .map { showInfo ->
                 DerivedNextUpCandidate(
                     entry = NextUpEntry(
-                        contentId = showInfo.contentId,
+                        contentId = showInfo.canonicalContentId,
                         contentType = "series",
                         name = showInfo.name,
                         season = 0,
                         episode = 0,
                         episodeTitle = null,
-                        videoId = showInfo.contentId,
+                        videoId = showInfo.canonicalContentId,
                         firstAired = null,
                         firstAiredMs = 0L,
                         activityAtMs = showInfo.lastWatchedAtMs,
