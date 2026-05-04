@@ -43,6 +43,20 @@ class ArtworkAssetDiskCacheTest {
     }
 
     @Test
+    fun `write leaves final bytes and no sibling temp files after success`() {
+        val cache = ArtworkAssetDiskCache(temp.root)
+        val assetKey = ArtworkAssetKey("artwork-asset:RPDB:poster:imdb:tt0137523")
+
+        val written = cache.write(record(assetKey), "atomic-bytes".toByteArray())
+
+        assertArrayEquals("atomic-bytes".toByteArray(), written.file.readBytes())
+        val tempSiblings = written.file.parentFile?.listFiles { file ->
+            file.isFile && file.name.endsWith(".tmp")
+        }.orEmpty()
+        assertEquals(emptyList<File>(), tempSiblings.toList())
+    }
+
+    @Test
     fun `missing asset returns null`() {
         val cache = ArtworkAssetDiskCache(temp.root)
 
