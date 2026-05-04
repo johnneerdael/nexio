@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.auth.hasLiveFullAccountSyncSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.ProfileSettingsSyncService
 import com.nexio.tv.core.sync.ProfileSyncService
@@ -22,10 +24,22 @@ internal enum class SyncStatus { IDLE, SYNCING, SUCCESS, ERROR }
 
 @HiltViewModel
 internal class SettingsViewModel @Inject constructor(
+    private val authManager: AuthManager,
     private val profileSyncService: ProfileSyncService,
     private val profileSettingsSyncService: ProfileSettingsSyncService,
     private val profileManager: ProfileManager
 ) : ViewModel() {
+    val hasLiveFullAccountSession: StateFlow<Boolean> = combine(
+        authManager.authState,
+        authManager.sessionUserId
+    ) { authState, sessionUserId ->
+        hasLiveFullAccountSyncSession(authState, sessionUserId)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)
+    )
+
     val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -47,6 +61,7 @@ internal class SettingsViewModel @Inject constructor(
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress.asStateFlow()
 
     fun triggerSyncNow() {
+        if (!hasLiveFullAccountSyncSession(authManager.authState.value, authManager.currentSessionUserId)) return
         if (_syncStatus.value == SyncStatus.SYNCING) return
         viewModelScope.launch {
             _syncStatus.value = SyncStatus.SYNCING
@@ -81,10 +96,17 @@ internal class SettingsViewModel @Inject constructor(
     fun confirmDeleteProfile() {
         val profile = _showDeleteDialog.value ?: return
         if (_deleteInProgress.value) return
+        val syncRemoteDelete = hasLiveFullAccountSyncSession(
+            authManager.authState.value,
+            authManager.currentSessionUserId
+        )
         viewModelScope.launch {
             _deleteInProgress.value = true
             try {
-                profileManager.deleteProfile(profile.id)
+                profileManager.deleteProfile(
+                    profile.id,
+                    syncRemoteDelete = syncRemoteDelete
+                )
                 _showDeleteDialog.value = null
             } finally {
                 _deleteInProgress.value = false
