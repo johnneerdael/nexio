@@ -139,6 +139,49 @@ class RailPreviewFieldResolverTest {
     }
 
     @Test
+    fun addon_preview_poster_replaced_by_premium_artwork() {
+        val preview = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            sourceProvider = "netflix",
+            sourceRole = SourceRole.ADDON_PREVIEW,
+            fields = mapOf(
+                ResolvedField.TITLE to FieldValue("Addon title", FieldOwner.PRIMARY, SourceRole.ADDON_PREVIEW),
+                ResolvedField.POSTER to FieldValue("https://addon.example/poster.jpg", FieldOwner.PRIMARY, SourceRole.ADDON_PREVIEW)
+            )
+        )
+        val primary = MetadataCandidate(
+            provider = MetadataPrimaryProvider.TMDB,
+            sourceProvider = "TMDB",
+            sourceRole = SourceRole.PRIMARY,
+            fields = mapOf(
+                ResolvedField.CANONICAL_ID to FieldValue("tmdb:123", FieldOwner.PRIMARY, SourceRole.PRIMARY),
+                ResolvedField.TITLE to FieldValue("Canonical title", FieldOwner.PRIMARY, SourceRole.PRIMARY)
+            )
+        )
+        val artwork = MetadataCandidate(
+            provider = MetadataPrimaryProvider.RPDB,
+            resolverType = ResolverType.ARTWORK,
+            sourceProvider = "RPDB",
+            sourceRole = SourceRole.ARTWORK,
+            fields = mapOf(
+                ResolvedField.POSTER to FieldValue("integration-poster://fetch?provider=RPDB", FieldOwner.ARTWORK)
+            )
+        )
+
+        val document = resolver.resolveWithPreview(
+            preview = preview,
+            primary = primary,
+            secondary = listOf(artwork)
+        )
+
+        assertEquals("Canonical title", document.title)
+        assertEquals("integration-poster://fetch?provider=RPDB", document.poster)
+        assertEquals(SourceRole.PRIMARY, document.sourceRoles[ResolvedField.TITLE])
+        assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
+        assertEquals("RPDB", document.sourceProviders[ResolvedField.POSTER])
+    }
+
+    @Test
     fun rail_preview_overview_replaced_by_primary_overview() {
         val preview = previewCandidate(
             ResolvedField.OVERVIEW to FieldValue("Preview overview", FieldOwner.PRIMARY, SourceRole.RAIL_PREVIEW)

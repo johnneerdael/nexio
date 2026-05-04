@@ -242,14 +242,27 @@ class MetadataAuditRunner private constructor(
         val selectedFields = result.resolvedDocument.fieldOwners.map { (field, owner) ->
             val winnerProvider = result.resolvedDocument.sourceProviders[field]
                 ?: (result.route?.provider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name
+            val sourceRole = result.resolvedDocument.sourceRoles[field]?.name ?: owner.name
             FieldSelectedEvent(
                 itemId = item.id,
                 field = field.name.lowercase(),
                 selectedProvider = winnerProvider,
-                sourceRole = owner.name,
+                sourceRole = sourceRole,
                 valuePreview = result.resolvedDocument.valueFor(field)?.toString(),
-                rejectedCandidates = rejectedCandidatesFor(field, scenario, result.route?.provider),
-                ownershipRule = "${field.name.lowercase()} owned by $owner"
+                rejectedCandidates = rejectedCandidatesFor(
+                    field = field,
+                    scenario = scenario,
+                    resolverRejectedCandidates = result.resolvedDocument.rejectedCandidatesByField[field].orEmpty()
+                ),
+                ownershipRule = if (
+                    field == ResolvedField.POSTER &&
+                    sourceRole == com.nexio.tv.core.metadata.router.SourceRole.ARTWORK.name &&
+                    scenario.premiumArtworkProvider != null
+                ) {
+                    "premium artwork may override poster only"
+                } else {
+                    "${field.name.lowercase()} owned by $owner"
+                }
             )
         }
         selectedFields.forEach(trace::onFieldSelected)
@@ -802,7 +815,7 @@ class MetadataAuditRunner private constructor(
     private fun rejectedCandidatesFor(
         field: ResolvedField,
         scenario: MetadataAuditScenario,
-        primaryProvider: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider?
+        resolverRejectedCandidates: List<Map<String, Any?>>
     ): List<RejectedCandidateReport> {
         val rejected = mutableListOf<RejectedCandidateReport>()
         if (field == ResolvedField.TITLE && scenario.injectSecondaryTitleOverwrite) {
@@ -811,13 +824,20 @@ class MetadataAuditRunner private constructor(
                 reason = "PRIMARY owner selected; secondary title rejected"
             )
         }
-        if (field == ResolvedField.POSTER && scenario.premiumArtworkProvider != null) {
-            rejected += RejectedCandidateReport(
-                provider = (primaryProvider ?: com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.TMDB).name,
-                reason = "Premium artwork provider has poster precedence; primary poster retained only as fallback"
-            )
-        }
+        rejected += resolverRejectedCandidates.mapNotNull(::rejectedCandidateReport)
         return rejected
+    }
+
+    private fun rejectedCandidateReport(candidate: Map<String, Any?>): RejectedCandidateReport? {
+        val provider = candidate["provider"]?.toString()
+            ?: candidate["sourceProvider"]?.toString()
+            ?: return null
+        val reason = candidate["reason"]?.toString() ?: return null
+        return RejectedCandidateReport(
+            provider = provider,
+            sourceRole = candidate["sourceRole"]?.toString(),
+            reason = reason
+        )
     }
 
     private fun productionCallerOwnershipEvents(): List<ProductionCallerOwnershipEvent> =
@@ -1616,7 +1636,9 @@ private class AuditMetadataProviderAdapter(
         deterministicFields = emptyMap()
     }
 
-    override fun supports(step: ProviderPlanStep): Boolean = true
+    override fun supports(step: ProviderPlanStep): Boolean =
+        step.apiShapeId != "rpdb.poster_template" &&
+            step.apiShapeId != "topposters.poster_template"
 
     override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult {
         val operationKey = "${step.apiShapeId}:${route.targetIds[route.provider] ?: route.parentId}:${route.language.orEmpty()}"

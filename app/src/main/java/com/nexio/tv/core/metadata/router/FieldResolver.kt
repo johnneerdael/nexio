@@ -1,5 +1,6 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import javax.inject.Inject
@@ -220,7 +221,11 @@ class FieldResolver @Inject constructor(
                 ?.firstOrNull { it["reason"] == "primary canonical field available" }
             val resolverReplacedRailPreview = rejectedByField[field]
                 ?.any { it["reason"] == "dedicated resolver field replaces rail preview" } == true
-            val rule = if (replacedPreview != null) {
+            val premiumArtworkOverride = field == ResolvedField.POSTER && rejectedByField[field]
+                ?.any { it["reason"] == "premium artwork provider has precedence" } == true
+            val rule = if (premiumArtworkOverride) {
+                "premium artwork may override poster only"
+            } else if (replacedPreview != null) {
                 "primary canonical field replaces ${previewRoleLabel(replacedPreview["sourceRole"] as? String)}"
             } else if (resolverReplacedRailPreview) {
                 "dedicated resolver field replaces rail preview"
@@ -279,7 +284,8 @@ class FieldResolver @Inject constructor(
             ignoredOverwrites = ignoredOverwrites,
             localization = localization,
             sourceRoles = sourceRoles,
-            sourceProviders = sourceProviders
+            sourceProviders = sourceProviders,
+            rejectedCandidatesByField = rejectedByField.mapValues { it.value.toList() }
         )
     }
 
@@ -331,7 +337,13 @@ class FieldResolver @Inject constructor(
                     fieldValue = fieldValue,
                     selectedOwner = fieldValue.owner
                 )
-            } else if (canReplaceRailPreview(field, sourceRoles[field], fieldValue)) {
+            } else if (canReplaceExistingField(field, sourceRoles[field], candidate, fieldValue)) {
+                val replacementReason = replacementReason(field, sourceRoles[field], candidate, fieldValue)
+                val replacementFieldValue = fieldValueForReplacement(
+                    field = field,
+                    fieldValue = fieldValue,
+                    previousValue = fields[field]
+                )
                 ignoredOverwrites += IgnoredFieldOverwrite(
                     field = field,
                     existingOwner = existingOwner,
@@ -342,8 +354,8 @@ class FieldResolver @Inject constructor(
                     mapOf(
                         "provider" to (providers[field] ?: sourceProviders[field]),
                         "sourceProvider" to sourceProviders[field],
-                        "sourceRole" to SourceRole.RAIL_PREVIEW.name,
-                        "reason" to "dedicated resolver field replaces rail preview"
+                        "sourceRole" to sourceRoles[field]?.name,
+                        "reason" to replacementReason
                     )
                 )
                 selectField(
@@ -355,8 +367,8 @@ class FieldResolver @Inject constructor(
                     localization = localization,
                     candidate = candidate,
                     field = field,
-                    fieldValue = fieldValue,
-                    selectedOwner = fieldValue.owner
+                    fieldValue = replacementFieldValue,
+                    selectedOwner = replacementFieldValue.owner
                 )
             } else {
                 ignoredOverwrites += IgnoredFieldOverwrite(
@@ -377,11 +389,25 @@ class FieldResolver @Inject constructor(
         }
     }
 
-    private fun canReplaceRailPreview(
+    private fun fieldValueForReplacement(
+        field: ResolvedField,
+        fieldValue: FieldValue,
+        previousValue: Any?
+    ): FieldValue {
+        if (field != ResolvedField.POSTER) return fieldValue
+        val fallback = previousValue as? String ?: return fieldValue
+        val model = fieldValue.value as? String ?: return fieldValue
+        val request = PosterIntegrationRequest.fromModel(model) ?: return fieldValue
+        return fieldValue.copy(value = request.withFallbackUrlIfAbsent(fallback).toModel())
+    }
+
+    private fun canReplaceExistingField(
         field: ResolvedField,
         existingSourceRole: SourceRole?,
+        candidate: MetadataCandidate,
         fieldValue: FieldValue
     ): Boolean {
+        if (canReplacePosterWithPremiumArtwork(field, candidate, fieldValue)) return true
         if (existingSourceRole != SourceRole.RAIL_PREVIEW) return false
 
         return when (field) {
@@ -391,6 +417,33 @@ class FieldResolver @Inject constructor(
             ResolvedField.RATING -> fieldValue.owner == FieldOwner.RATING
             else -> false
         }
+    }
+
+    private fun replacementReason(
+        field: ResolvedField,
+        existingSourceRole: SourceRole?,
+        candidate: MetadataCandidate,
+        fieldValue: FieldValue
+    ): String {
+        if (canReplacePosterWithPremiumArtwork(field, candidate, fieldValue)) {
+            return "premium artwork provider has precedence"
+        }
+        return if (existingSourceRole == SourceRole.RAIL_PREVIEW) {
+            "dedicated resolver field replaces rail preview"
+        } else {
+            "field already filled"
+        }
+    }
+
+    private fun canReplacePosterWithPremiumArtwork(
+        field: ResolvedField,
+        candidate: MetadataCandidate,
+        fieldValue: FieldValue
+    ): Boolean {
+        return field == ResolvedField.POSTER &&
+            fieldValue.owner == FieldOwner.ARTWORK &&
+            effectiveSourceRole(candidate, fieldValue) == SourceRole.ARTWORK &&
+            candidate.provider in premiumArtworkProviders
     }
 
     private fun selectField(
@@ -425,5 +478,12 @@ class FieldResolver @Inject constructor(
         } else {
             fieldValue.sourceRole
         }
+    }
+
+    private companion object {
+        val premiumArtworkProviders = setOf(
+            MetadataPrimaryProvider.RPDB,
+            MetadataPrimaryProvider.TOP_POSTERS
+        )
     }
 }

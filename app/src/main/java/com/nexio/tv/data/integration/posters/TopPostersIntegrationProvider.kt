@@ -33,7 +33,7 @@ class TopPostersIntegrationProvider @Inject constructor(
             codec = ByteArrayIntegrationCodec,
             cachePolicy = IntegrationCachePolicy.CacheFirst(
                 ttlMs = request.ttlMs,
-                staleAfterExpiryMs = request.ttlMs
+                staleAfterExpiryMs = request.staleAfterExpiryMs
             ),
             workClass = IntegrationWorkClass.USER_VISIBLE,
             apiShapeId = PosterApiShapes.TOP_POSTERS_POSTER_TEMPLATE,
