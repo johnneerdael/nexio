@@ -174,21 +174,48 @@ class TraktIntegrationProvider @Inject constructor(
         )
 
     suspend fun getWatched(
-        type: String,
-        extended: String? = null
-    ): IntegrationCallResult<List<TraktWatchedMovieItemDto>> =
-        executeAuthorizedBackgroundCall(
+        type: String
+    ): IntegrationCallResult<List<TraktWatchedMovieItemDto>> {
+        val session = traktAuthService.accountScopedSession()
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.WATCHED,
-            operationKey = "trakt.watched.$type",
-            request = { authorization ->
-                traktApi.getWatched(
-                    authorization = authorization,
-                    type = type,
-                    extended = extended
-                )
-            },
-            mapSuccess = { response -> IntegrationCallResult.Success(response.body().orEmpty()) }
+            operationKey = accountOperationKey(session, "trakt.watched.$type"),
+            cacheKey = accountCacheKey(session, "trakt:sync:watched:$type"),
+            codec = gsonCodec<List<TraktWatchedMovieItemDto>>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = WATCHED_SNAPSHOT_TTL_MS,
+                staleAfterExpiryMs = WATCHED_SNAPSHOT_STALE_GRACE_MS
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = {
+                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
+                    traktApi.getWatched(
+                        authorization = authorization,
+                        type = type,
+                        extended = null
+                    )
+                } ?: return@IntegrationSpec IntegrationLoadResult.HttpError(401, reason = "auth_missing")
+                if (!response.isSuccessful) {
+                    return@IntegrationSpec IntegrationLoadResult.HttpError(
+                        statusCode = response.code(),
+                        retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                        reason = "trakt_watched_${type}_failed"
+                    )
+                }
+                IntegrationLoadResult.Success(response.body().orEmpty())
+            }
         )
+        val value = runtime.get(spec).valueOrNull() ?: return IntegrationCallResult.Missing
+        return IntegrationCallResult.Success(value)
+    }
+
+    private companion object {
+        const val WATCHED_SNAPSHOT_TTL_MS: Long = 24L * 60L * 60L * 1000L              // 24h
+        const val WATCHED_SNAPSHOT_STALE_GRACE_MS: Long = 7L * 24L * 60L * 60L * 1000L // 7d grace
+    }
 
     suspend fun getWatchedShows(
         extended: String? = null
