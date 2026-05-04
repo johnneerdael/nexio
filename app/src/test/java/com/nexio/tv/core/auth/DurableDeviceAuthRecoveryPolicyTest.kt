@@ -174,6 +174,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         val events = mutableListOf<String>()
 
         handleManualSignOut(
+            resetLocalAccountState = { events += "reset-local-stock" },
             clearPresenceMarker = { events += "clear-presence" },
             prepareDurableCredentialRevoke = { events += "prepare-pending-revoke" },
             revokeDurableCredential = { events += "revoke-durable-remote" },
@@ -183,6 +184,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
 
         assertEquals(
             listOf(
+                "reset-local-stock",
                 "clear-presence",
                 "prepare-pending-revoke",
                 "revoke-durable-remote",
@@ -198,6 +200,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
         val events = mutableListOf<String>()
 
         handleManualSignOut(
+            resetLocalAccountState = { events += "reset-local-stock" },
             clearPresenceMarker = { events += "clear-presence" },
             prepareDurableCredentialRevoke = {
                 events += "prepare-pending-revoke"
@@ -210,6 +213,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
 
         assertEquals(
             listOf(
+                "reset-local-stock",
                 "clear-presence",
                 "prepare-pending-revoke"
             ),
@@ -223,6 +227,7 @@ class DurableDeviceAuthRecoveryPolicyTest {
 
         try {
             handleManualSignOut(
+                resetLocalAccountState = {},
                 clearPresenceMarker = { throw CancellationException("cancelled") },
                 prepareDurableCredentialRevoke = {},
                 revokeDurableCredential = {},
@@ -234,6 +239,30 @@ class DurableDeviceAuthRecoveryPolicyTest {
         }
 
         assertTrue(cancelled)
+    }
+
+    @Test
+    fun `authoritative durable rejection disables live sync before local stock reset writes`() = runTest {
+        val events = mutableListOf<String>()
+
+        handleAuthoritativeDurableCredentialRejection(
+            disableLiveAccountSync = { events += "disable-live-sync" },
+            resetLocalAccountState = { events += "reset-local-stock" },
+            clearDurableCredential = { events += "clear-durable" },
+            clearSupabaseSession = { events += "clear-session" },
+            transitionToReconnectState = { events += "session-lost" }
+        )
+
+        assertEquals(
+            listOf(
+                "disable-live-sync",
+                "reset-local-stock",
+                "clear-durable",
+                "clear-session",
+                "session-lost"
+            ),
+            events
+        )
     }
 
     @Test

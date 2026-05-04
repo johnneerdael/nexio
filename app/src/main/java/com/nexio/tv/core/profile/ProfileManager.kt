@@ -2,6 +2,7 @@ package com.nexio.tv.core.profile
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.auth.stockDefaultProfile
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.ProfileBoundaryEnforcer
 import com.nexio.tv.core.integration.ProfileBoundaryException
@@ -194,6 +195,19 @@ class ProfileManager(
         return true
     }
 
+    suspend fun resetToSingleDefaultProfile() {
+        val current = dataStore.profilesList.first()
+        current
+            .map { it.id }
+            .filter { it != 1 }
+            .forEach { profileId ->
+                deleteProfileDataAsync(profileId, syncRemoteDelete = false)
+            }
+
+        dataStore.replaceAllProfiles(listOf(stockDefaultProfile()))
+        setActiveProfile(1)
+    }
+
     suspend fun updateProfile(profile: UserProfile): Boolean {
         // Read latest from DataStore directly — StateFlow may lag behind DataStore writes
         val current = dataStore.profilesList.first()
@@ -202,10 +216,15 @@ class ProfileManager(
         return true
     }
 
-    private suspend fun deleteProfileDataAsync(profileId: Int) {
+    private suspend fun deleteProfileDataAsync(
+        profileId: Int,
+        syncRemoteDelete: Boolean = true
+    ) {
         if (profileId == 1) return
 
-        deleteProfileRemote(profileId)
+        if (syncRemoteDelete) {
+            deleteProfileRemote(profileId)
+        }
         factory.clearProfile(profileId)
 
         val suffixWithExtension = "_p${profileId}.preferences_pb"

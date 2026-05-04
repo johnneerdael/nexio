@@ -45,7 +45,8 @@ class AuthManager @Inject constructor(
     private val durableDeviceCredentialSelfServiceTransport: DurableDeviceCredentialSelfServiceTransport,
     private val authPresenceDataStore: AuthPresenceDataStore,
     private val appOnboardingDataStore: AppOnboardingDataStore,
-    private val durableDeviceCredentialStore: DurableDeviceCredentialStore
+    private val durableDeviceCredentialStore: DurableDeviceCredentialStore,
+    private val localAccountResetCoordinator: LocalAccountResetCoordinator
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile
@@ -467,6 +468,9 @@ class AuthManager @Inject constructor(
         cachedEffectiveUserSourceUserId = null
         try {
             handleManualSignOut(
+                resetLocalAccountState = {
+                    localAccountResetCoordinator.resetToSignedOutStockState()
+                },
                 clearPresenceMarker = {
                     authPresenceDataStore.clear()
                 },
@@ -605,9 +609,23 @@ class AuthManager @Inject constructor(
     }
 
     private suspend fun clearLocalAuthStateAfterAuthoritativeDurableRejection() {
-        durableDeviceCredentialStore.clear()
-        auth.clearSession()
-        transitionToSessionLost()
+        handleAuthoritativeDurableCredentialRejection(
+            disableLiveAccountSync = {
+                transitionToSessionLost()
+            },
+            resetLocalAccountState = {
+                localAccountResetCoordinator.resetToSignedOutStockState()
+            },
+            clearDurableCredential = {
+                durableDeviceCredentialStore.clear()
+            },
+            clearSupabaseSession = {
+                auth.clearSession()
+            },
+            transitionToReconnectState = {
+                transitionToSessionLost()
+            }
+        )
     }
 
     private suspend fun enforceDurableCredentialStillActive() {
@@ -930,12 +948,20 @@ internal fun liveFullAccountSessionUserId(
 }
 
 internal suspend fun handleManualSignOut(
+    resetLocalAccountState: suspend () -> Unit,
     clearPresenceMarker: suspend () -> Unit,
     prepareDurableCredentialRevoke: suspend () -> Unit,
     revokeDurableCredential: suspend () -> Unit,
     clearDurableCredential: suspend () -> Unit,
     clearSupabaseSession: suspend () -> Unit
 ) {
+    try {
+        resetLocalAccountState()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed resetting local account state on sign-out", clearError)
+    }
     try {
         clearPresenceMarker()
     } catch (clearError: CancellationException) {
@@ -966,6 +992,38 @@ internal suspend fun handleManualSignOut(
         Log.w(TAG, "Failed clearing durable device credential on sign-out", clearError)
     }
     clearSupabaseSession()
+}
+
+internal suspend fun handleAuthoritativeDurableCredentialRejection(
+    disableLiveAccountSync: () -> Unit,
+    resetLocalAccountState: suspend () -> Unit,
+    clearDurableCredential: suspend () -> Unit,
+    clearSupabaseSession: suspend () -> Unit,
+    transitionToReconnectState: () -> Unit
+) {
+    disableLiveAccountSync()
+    try {
+        resetLocalAccountState()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed resetting local account state after authoritative revoke", clearError)
+    }
+    try {
+        clearDurableCredential()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing durable device credential after authoritative revoke", clearError)
+    }
+    try {
+        clearSupabaseSession()
+    } catch (clearError: CancellationException) {
+        throw clearError
+    } catch (clearError: Exception) {
+        Log.w(TAG, "Failed clearing Supabase session after authoritative revoke", clearError)
+    }
+    transitionToReconnectState()
 }
 
 private fun Throwable.isJwtExpiredError(): Boolean {

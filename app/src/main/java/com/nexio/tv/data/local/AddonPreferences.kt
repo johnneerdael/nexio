@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.core.auth.stockAddonInstallConfigs
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.google.gson.Gson
@@ -158,6 +159,13 @@ class AddonPreferences @Inject constructor(
                 }
             }.distinctBy { it.url.lowercase() }
             preferences[orderedUrlsKey] = gson.toJson(normalized)
+        }
+    }
+
+    suspend fun resetToDefaultAddons() {
+        store().edit { preferences ->
+            preferences[orderedUrlsKey] = gson.toJson(stockAddonInstallConfigs())
+            preferences.remove(legacyUrlsKey)
         }
     }
 

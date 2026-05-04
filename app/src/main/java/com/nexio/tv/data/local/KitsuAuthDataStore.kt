@@ -16,7 +16,13 @@ import javax.inject.Singleton
 interface KitsuAuthStore {
     val state: Flow<KitsuAuthSnapshot>
     suspend fun save(snapshot: KitsuAuthSnapshot)
+    suspend fun saveForProfile(profileId: Int, snapshot: KitsuAuthSnapshot) {
+        save(snapshot)
+    }
     suspend fun clear()
+    suspend fun clearAuth(profileId: Int) {
+        clear()
+    }
 }
 
 @Singleton
@@ -56,7 +62,11 @@ class KitsuAuthDataStore @Inject constructor(
     }
 
     override suspend fun save(snapshot: KitsuAuthSnapshot) {
-        store().edit { preferences ->
+        saveForProfile(profileManager.activeProfileId.value, snapshot)
+    }
+
+    override suspend fun saveForProfile(profileId: Int, snapshot: KitsuAuthSnapshot) {
+        store(profileId).edit { preferences ->
             preferences[enabledKey] = snapshot.enabled
             preferences[includeNsfwKey] = snapshot.includeNsfw
             val username = snapshot.username?.trim().orEmpty()
@@ -76,5 +86,9 @@ class KitsuAuthDataStore @Inject constructor(
             preferences.remove(refreshTokenKey)
             preferences.remove(expiresAtKey)
         }
+    }
+
+    override suspend fun clearAuth(profileId: Int) {
+        saveForProfile(profileId, KitsuAuthSnapshot())
     }
 }
