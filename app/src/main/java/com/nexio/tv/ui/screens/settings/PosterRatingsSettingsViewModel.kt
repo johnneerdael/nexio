@@ -3,9 +3,12 @@ package com.nexio.tv.ui.screens.settings
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.local.HydratedHomeOverlayStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
@@ -35,8 +38,11 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     private val providerSettingsRepository: ProviderSettingsRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
+    private val hydratedHomeOverlayStore: HydratedHomeOverlayStore,
     private val profileManager: ProfileManager,
     private val integrationOwnershipService: IntegrationOwnershipService,
+    private val artworkDecisionCache: ArtworkDecisionCache,
+    private val premiumArtworkInvalidationNotifier: PremiumArtworkInvalidationNotifier,
     private val metaRepository: MetaRepository,
     private val catalogRepository: CatalogRepository
 ) : ViewModel() {
@@ -98,6 +104,9 @@ class PosterRatingsSettingsViewModel @Inject constructor(
                 emptyList()
             )
             homeCatalogSnapshotStore.clear(profileId = profileId)
+            hydratedHomeOverlayStore.clearAll()
+            artworkDecisionCache.invalidatePremiumArtworkPolicy()
+            premiumArtworkInvalidationNotifier.notifyInvalidated()
         }
     }
 

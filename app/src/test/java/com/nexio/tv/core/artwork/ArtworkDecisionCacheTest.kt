@@ -113,6 +113,53 @@ class ArtworkDecisionCacheTest {
     }
 
     @Test
+    fun `premium artwork policy invalidation removes settings or credential scoped decisions only`() {
+        val settingsScoped = decision(
+            ArtworkDecisionKey("settings-scoped"),
+            ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
+            settingsHash = "premium-settings"
+        )
+        val credentialScoped = decision(
+            ArtworkDecisionKey("credential-scoped"),
+            ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
+            credentialHash = "premium-credential"
+        )
+        val primary = decision(
+            ArtworkDecisionKey("primary"),
+            ArtworkOwnerKey.CanonicalContent("imdb:tt0137523")
+        )
+
+        cache.put(settingsScoped)
+        cache.put(credentialScoped)
+        cache.put(primary)
+        cache.invalidatePremiumArtworkPolicy()
+
+        assertNull(cache.get(settingsScoped.decisionKey))
+        assertNull(cache.get(credentialScoped.decisionKey))
+        assertEquals(primary, cache.get(primary.decisionKey))
+    }
+
+    @Test
+    fun `premium artwork policy invalidation removes links to invalidated premium canonical decisions`() {
+        val previewKey = ArtworkDecisionKey("premium-preview-link")
+        val canonicalKey = ArtworkDecisionKey("premium-canonical-link")
+        val preview = decision(previewKey, ArtworkOwnerKey.PreviewItem("row1", "payloadhash"))
+        val canonical = decision(
+            canonicalKey,
+            ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
+            settingsHash = "premium-settings"
+        )
+
+        cache.put(preview)
+        cache.put(canonical)
+        cache.linkPreviewToCanonical(previewKey, canonicalKey)
+        cache.invalidatePremiumArtworkPolicy()
+
+        assertNull(cache.getCanonicalForPreview(previewKey))
+        assertEquals(preview, cache.get(previewKey))
+    }
+
+    @Test
     fun `invalidating canonical decision removes preview link but keeps preview fallback`() {
         val previewKey = ArtworkDecisionKey("preview-link-fallback")
         val canonicalKey = ArtworkDecisionKey("canonical-link-invalidate")

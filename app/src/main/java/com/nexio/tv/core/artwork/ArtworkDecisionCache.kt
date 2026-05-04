@@ -11,6 +11,7 @@ interface ArtworkDecisionCache {
     fun invalidateBySettingsHash(settingsHash: String)
     fun invalidateByCredentialHash(credentialHash: String)
     fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>)
+    fun invalidatePremiumArtworkPolicy()
 }
 
 class InMemoryArtworkDecisionCache : ArtworkDecisionCache {
@@ -53,6 +54,13 @@ class InMemoryArtworkDecisionCache : ArtworkDecisionCache {
         invalidateMatching { decision ->
             decision.settingsHash in settingsHashes ||
                 decision.credentialHash in credentialHashes
+        }
+    }
+
+    @Synchronized
+    override fun invalidatePremiumArtworkPolicy() {
+        invalidateMatching { decision ->
+            decision.settingsHash != null || decision.credentialHash != null
         }
     }
 

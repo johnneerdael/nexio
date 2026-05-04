@@ -135,6 +135,33 @@ class HydratedHomeOverlayStoreTest {
     }
 
     @Test
+    fun `clearAll removes persisted overlays and aliases`() = runTest {
+        val store = HydratedHomeOverlayStore(mockContext(InMemorySharedPreferences()))
+        val overlay = overlay(itemKey = "movie:tmdb:550")
+        store.upsert(overlay, aliases = setOf("movie:tmdb:550", "movie:imdb:tt0137523"))
+
+        store.clearAll()
+
+        assertNull(
+            store.readByCanonicalIdentity(
+                canonicalProvider = ProviderId.TMDB,
+                canonicalId = "550",
+                contentType = ContentType.MOVIE,
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+        assertEquals(
+            emptyMap<String, HydratedHomeOverlay>(),
+            store.readForItemKeys(
+                itemKeys = setOf("movie:tmdb:550", "movie:imdb:tt0137523"),
+                languageTag = "en",
+                policyVersion = 1
+            )
+        )
+    }
+
+    @Test
     fun `aliases are scoped by language and policy`() = runTest {
         val store = HydratedHomeOverlayStore(mockContext(InMemorySharedPreferences()))
         store.upsert(
