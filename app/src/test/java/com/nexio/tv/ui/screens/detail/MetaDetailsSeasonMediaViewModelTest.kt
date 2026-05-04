@@ -1076,6 +1076,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             titleRatingOverrideRepository = titleRatingOverrideRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
+            traktLibraryService = mockk(relaxed = true),
             watchProgressRepository = effectiveWatchProgressRepository,
             continueWatchingSnapshotService = mockk(relaxed = true),
             addonRepository = addonRepository,

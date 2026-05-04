@@ -127,6 +127,7 @@ fun buildMetaDetailsViewModel(
         titleRatingOverrideRepository = titleRatingOverrideRepository,
         episodeRatingsSelectionRepository = mockk(relaxed = true),
         libraryRepository = libraryRepository,
+        traktLibraryService = mockk(relaxed = true),
         watchProgressRepository = watchProgressRepository,
         continueWatchingSnapshotService = mockk(relaxed = true),
         addonRepository = addonRepository,
