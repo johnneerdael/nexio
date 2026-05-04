@@ -1,5 +1,6 @@
 package com.nexio.tv.core.image
 
+import android.net.Uri
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.decode.ImageSource
@@ -75,13 +76,13 @@ class IntegrationPosterFetcher(
         private val rpdbProvider: RpdbIntegrationProvider,
         private val topPostersProvider: TopPostersIntegrationProvider,
         private val fallbackTransport: PosterTransport
-    ) : Fetcher.Factory<String> {
+    ) : Fetcher.Factory<Uri> {
         override fun create(
-            data: String,
+            data: Uri,
             options: coil.request.Options,
             imageLoader: ImageLoader
         ): Fetcher? {
-            val request = PosterIntegrationRequest.fromModel(data) ?: return null
+            val request = PosterIntegrationRequest.fromModel(data.toString()) ?: return null
             return IntegrationPosterFetcher(
                 request = request,
                 options = options,
