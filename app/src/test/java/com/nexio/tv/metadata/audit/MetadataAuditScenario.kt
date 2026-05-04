@@ -15,7 +15,9 @@ data class MetadataAuditScenario(
     val injectSecondaryTitleOverwrite: Boolean = false,
     val continueWatching: Boolean = false,
     val staleRoutingVersion: Boolean = false,
-    val productionCallerOwnership: Boolean = false
+    val productionCallerOwnership: Boolean = false,
+    val previousPremiumArtworkProvider: String? = null,
+    val premiumArtworkFetchFails: Boolean = false
 )
 
 enum class AuditCacheMode {

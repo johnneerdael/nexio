@@ -625,6 +625,7 @@ class MetadataExecutionAuditGoldenTest {
         val bundle = MetadataAuditRunner.default().runDefaultScenarioBundle()
         val topposters = bundle.reports.single { it.scenario.name == "premium-artwork-topposters-home" }.items.single()
         val rpdb = bundle.reports.single { it.scenario.name == "premium-artwork-rpdb-detail" }.items.single()
+        val switchedProvider = bundle.reports.single { it.scenario.name == "premium-artwork-switch-provider" }.items.single()
         val cacheHit = bundle.reports.single { it.scenario.name == "premium-artwork-cache-hit" }.items.single()
 
         val toppostersPoster = topposters.artworkAudit.single { it.field == "poster" }
@@ -648,6 +649,19 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals("RPDB", rpdbPoster.selectedProvider)
         assertFalse(rpdbPoster.rawRemoteUrlUsedByUi)
 
+        val switchedPoster = switchedProvider.artworkAudit.single { it.field == "poster" }
+        assertEquals("RPDB", switchedPoster.selectedProvider)
+        assertEquals("rpdb.poster_template", switchedPoster.runtimeApiShapeId)
+        assertEquals("MISS_THEN_NETWORK", switchedPoster.assetCacheDecision)
+        assertTrue(switchedPoster.networkExecuted)
+        assertTrue(switchedPoster.coilModel?.startsWith("nexio-artwork://asset/") == true)
+        assertFalse(switchedPoster.rawRemoteUrlUsedByUi)
+        assertTrue(switchedPoster.rejectedCandidates.any { rejected ->
+            rejected["provider"] == "TOP_POSTERS" &&
+                rejected["sourceRole"] == "ARTWORK" &&
+                rejected["reason"] == "active premium artwork provider switched to RPDB"
+        })
+
         val cacheHitPoster = cacheHit.artworkAudit.single { it.field == "poster" }
         assertEquals("HIT", cacheHitPoster.assetCacheDecision)
         assertFalse(cacheHitPoster.networkExecuted)
@@ -664,11 +678,11 @@ class MetadataExecutionAuditGoldenTest {
 
         val poster = item.artworkAudit.single { it.field == "poster" }
 
-        assertEquals("UNKNOWN_POSTER_PROVIDER", poster.selectedProvider)
-        assertEquals("unknown_poster_provider.poster_template", poster.runtimeApiShapeId)
+        assertEquals("TOP_POSTERS", poster.selectedProvider)
+        assertEquals("topposters.poster_template", poster.runtimeApiShapeId)
         assertEquals("MISS_THEN_NETWORK", poster.assetCacheDecision)
         assertTrue(poster.networkExecuted)
-        assertEquals("placeholder", poster.coilModel)
+        assertEquals("nexio-placeholder://poster", poster.coilModel)
         assertFalse(poster.rawRemoteUrlUsedByUi)
     }
 

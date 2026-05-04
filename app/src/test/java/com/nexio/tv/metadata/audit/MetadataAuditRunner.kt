@@ -118,7 +118,7 @@ class MetadataAuditRunner private constructor(
                 )
                 coEvery { posterResolver.getActiveProvider() } returns activeProvider
                 every { posterResolver.resolvePosterUrl(any(), any(), any(), any()) } returns
-                    "https://example.test/rpdb-poster.jpg"
+                    if (scenario.premiumArtworkFetchFails) null else "https://example.test/rpdb-poster.jpg"
             }
             "TOP_POSTERS" -> {
                 val activeProvider = PosterRatingsUrlResolver.ActiveProvider(
@@ -127,7 +127,7 @@ class MetadataAuditRunner private constructor(
                 )
                 coEvery { posterResolver.getActiveProvider() } returns activeProvider
                 every { posterResolver.resolvePosterUrl(any(), any(), any(), any()) } returns
-                    "https://example.test/top_posters-poster.jpg"
+                    if (scenario.premiumArtworkFetchFails) null else "https://example.test/top_posters-poster.jpg"
             }
             else -> {
                 coEvery { posterResolver.getActiveProvider() } returns null
@@ -875,12 +875,15 @@ class MetadataAuditRunner private constructor(
                     "sourceRole" to rejected.sourceRole,
                     "reason" to rejected.reason
                 )
-            }
+            } + switchedProviderRejectedCandidate(
+                previousProvider = scenario.previousPremiumArtworkProvider,
+                selectedProvider = selectedProvider
+            )
         val assetKey = "artwork:asset:$selectedProvider:$itemId:poster"
         val coilModel = if (selectedArtworkPoster != null) {
-            "nexio-artwork://$assetKey"
+            "nexio-artwork://asset/$assetKey"
         } else {
-            "placeholder"
+            "nexio-placeholder://poster"
         }
         return listOf(
             ArtworkAuditEntry(
@@ -904,6 +907,22 @@ class MetadataAuditRunner private constructor(
             "TOP_POSTERS" -> "topposters.poster_template"
             "RPDB" -> "rpdb.poster_template"
             else -> "${artworkProvider.lowercase()}.poster_template"
+        }
+
+    private fun switchedProviderRejectedCandidate(
+        previousProvider: String?,
+        selectedProvider: String
+    ): List<Map<String, String?>> =
+        if (previousProvider != null && previousProvider != selectedProvider) {
+            listOf(
+                mapOf(
+                    "provider" to previousProvider,
+                    "sourceRole" to com.nexio.tv.core.metadata.router.SourceRole.ARTWORK.name,
+                    "reason" to "active premium artwork provider switched to $selectedProvider"
+                )
+            )
+        } else {
+            emptyList()
         }
 
     private fun productionCallerOwnershipEvents(): List<ProductionCallerOwnershipEvent> =
@@ -1170,7 +1189,14 @@ class MetadataAuditRunner private constructor(
             ),
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
-                scenario = MetadataAuditScenario("premium-artwork-switch-provider", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "RPDB", cacheMode = AuditCacheMode.COLD)
+                scenario = MetadataAuditScenario(
+                    name = "premium-artwork-switch-provider",
+                    depth = MetadataDepth.DETAIL_CORE,
+                    visibleItemIds = setOf("tt16431404"),
+                    premiumArtworkProvider = "RPDB",
+                    cacheMode = AuditCacheMode.COLD,
+                    previousPremiumArtworkProvider = "TOP_POSTERS"
+                )
             ),
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
@@ -1178,7 +1204,14 @@ class MetadataAuditRunner private constructor(
             ),
             ScenarioSpec(
                 fixtureName = "netflix_movie_nfx.json",
-                scenario = MetadataAuditScenario("premium-artwork-failure-fallback", MetadataDepth.DETAIL_CORE, visibleItemIds = setOf("tt16431404"), premiumArtworkProvider = "UNKNOWN_POSTER_PROVIDER", cacheMode = AuditCacheMode.COLD)
+                scenario = MetadataAuditScenario(
+                    name = "premium-artwork-failure-fallback",
+                    depth = MetadataDepth.DETAIL_CORE,
+                    visibleItemIds = setOf("tt16431404"),
+                    premiumArtworkProvider = "TOP_POSTERS",
+                    cacheMode = AuditCacheMode.COLD,
+                    premiumArtworkFetchFails = true
+                )
             ),
             ScenarioSpec(
                 fixtureName = "netflix_series_nfx.json",
