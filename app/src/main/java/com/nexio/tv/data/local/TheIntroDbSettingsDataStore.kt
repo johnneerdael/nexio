@@ -40,7 +40,7 @@ class TheIntroDbSettingsDataStore @Inject constructor(
 
     val settings: Flow<TheIntroDbSettings> = dataStore.data.map { prefs ->
         TheIntroDbSettings(
-            enabled = prefs[enabledKey] ?: true,
+            enabled = true,
             showIntroButton = prefs[showIntroButtonKey] ?: true,
             showRecapButton = prefs[showRecapButtonKey] ?: true,
             showCreditsButton = prefs[showCreditsButtonKey] ?: true,
@@ -50,7 +50,7 @@ class TheIntroDbSettingsDataStore @Inject constructor(
 
     suspend fun setEnabled(enabled: Boolean) {
         store().edit { prefs ->
-            prefs[enabledKey] = enabled
+            prefs[enabledKey] = true
             prefs.remove(legacyApiKeyKey)
         }
     }

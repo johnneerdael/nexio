@@ -39,22 +39,13 @@ fun TheIntroDbSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "theintrodb_enabled") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.theid_enable_title),
-                        subtitle = stringResource(R.string.theid_enable_subtitle),
-                        checked = settings.enabled,
-                        onToggle = { viewModel.setEnabled(!settings.enabled) },
-                        modifier = if (initialFocusRequester != null) Modifier.focusRequester(initialFocusRequester) else Modifier
-                    )
-                }
                 item(key = "theintrodb_show_intro") {
                     SettingsToggleRow(
                         title = stringResource(R.string.theid_show_intro_title),
                         subtitle = stringResource(R.string.theid_show_intro_subtitle),
                         checked = settings.showIntroButton,
                         onToggle = { viewModel.setShowIntroButton(!settings.showIntroButton) },
-                        enabled = settings.enabled
+                        modifier = if (initialFocusRequester != null) Modifier.focusRequester(initialFocusRequester) else Modifier
                     )
                 }
                 item(key = "theintrodb_show_recap") {
@@ -62,8 +53,7 @@ fun TheIntroDbSettingsContent(
                         title = stringResource(R.string.theid_show_recap_title),
                         subtitle = stringResource(R.string.theid_show_recap_subtitle),
                         checked = settings.showRecapButton,
-                        onToggle = { viewModel.setShowRecapButton(!settings.showRecapButton) },
-                        enabled = settings.enabled
+                        onToggle = { viewModel.setShowRecapButton(!settings.showRecapButton) }
                     )
                 }
                 item(key = "theintrodb_show_credits") {
@@ -71,8 +61,7 @@ fun TheIntroDbSettingsContent(
                         title = stringResource(R.string.theid_show_credits_title),
                         subtitle = stringResource(R.string.theid_show_credits_subtitle),
                         checked = settings.showCreditsButton,
-                        onToggle = { viewModel.setShowCreditsButton(!settings.showCreditsButton) },
-                        enabled = settings.enabled
+                        onToggle = { viewModel.setShowCreditsButton(!settings.showCreditsButton) }
                     )
                 }
                 item(key = "theintrodb_show_preview") {
@@ -80,8 +69,7 @@ fun TheIntroDbSettingsContent(
                         title = stringResource(R.string.theid_show_preview_title),
                         subtitle = stringResource(R.string.theid_show_preview_subtitle),
                         checked = settings.showPreviewButton,
-                        onToggle = { viewModel.setShowPreviewButton(!settings.showPreviewButton) },
-                        enabled = settings.enabled
+                        onToggle = { viewModel.setShowPreviewButton(!settings.showPreviewButton) }
                     )
                 }
             }

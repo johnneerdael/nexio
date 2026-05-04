@@ -363,7 +363,7 @@ internal suspend fun applyAccountConfigSyncSettings(
 
     omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
 
-    theIntroDbSettingsDataStore.setEnabled(settings.integrations.theIntroDb.enabled)
+    theIntroDbSettingsDataStore.setEnabled(true)
     theIntroDbSettingsDataStore.setShowIntroButton(settings.integrations.theIntroDb.showIntroButton)
     theIntroDbSettingsDataStore.setShowRecapButton(settings.integrations.theIntroDb.showRecapButton)
     theIntroDbSettingsDataStore.setShowCreditsButton(settings.integrations.theIntroDb.showCreditsButton)

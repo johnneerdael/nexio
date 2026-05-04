@@ -938,8 +938,6 @@
     <string name="debrid_data_collection_qr_hash_failed">无法生成收集器仪表板令牌，因为哈希操作失败。</string>
     <string name="theintrodb_title">TheIntroDB</string>
     <string name="theintrodb_subtitle">从 TheIntroDB 片段数据配置跳过和播放下一集行为</string>
-    <string name="theintrodb_enable_title">启用 TheIntroDB</string>
-    <string name="theintrodb_enable_subtitle">使用 TheIntroDB v2 作为非动漫播放片段的规范提供商</string>
     <string name="theintrodb_api_key_title">API 密钥</string>
     <string name="theintrodb_api_key_subtitle">播放片段查找和同步所需的个人 TheIntroDB API 密钥</string>
     <string name="theintrodb_show_intro_title">显示跳过片头</string>
@@ -956,8 +954,6 @@
     <string name="theintrodb_missing_api_key">需要 TheIntroDB API 密钥</string>
     <string name="theid_title">@string/theintrodb_title</string>
     <string name="theid_subtitle">@string/theintrodb_subtitle</string>
-    <string name="theid_enable_title">@string/theintrodb_enable_title</string>
-    <string name="theid_enable_subtitle">@string/theintrodb_enable_subtitle</string>
     <string name="theid_api_key_title">@string/theintrodb_api_key_title</string>
     <string name="theid_api_key_subtitle">@string/theintrodb_api_key_subtitle</string>
     <string name="theid_show_intro_title">@string/theintrodb_show_intro_title</string>
