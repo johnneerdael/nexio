@@ -6,16 +6,22 @@ import com.nexio.tv.domain.model.ProviderIds
 
 @JvmInline
 value class ArtworkDecisionKey(val value: String) {
-    init { require(value.isNotBlank()) { "ArtworkDecisionKey must not be blank" } }
+    init { requireValidArtworkKey(value, "ArtworkDecisionKey") }
 }
 
 @JvmInline
 value class ArtworkAssetKey(val value: String) {
-    init { require(value.isNotBlank()) { "ArtworkAssetKey must not be blank" } }
+    init { requireValidArtworkKey(value, "ArtworkAssetKey") }
 }
 
 @JvmInline
 value class SensitiveArtworkUrl private constructor(val value: String) {
+    val redactedUrlForTrace: String
+        get() = value
+            .substringBefore("?")
+            .substringBefore("#")
+            .replaceAfterLast("/", "<redacted>", missingDelimiterValue = "<redacted>")
+
     override fun toString(): String = "<redacted-artwork-url>"
 
     companion object {
@@ -25,6 +31,16 @@ value class SensitiveArtworkUrl private constructor(val value: String) {
         }
     }
 }
+
+private fun requireValidArtworkKey(value: String, typeName: String) {
+    require(value.isNotBlank()) { "$typeName must not be blank" }
+    require(!value.containsAny('/', '?', '#')) {
+        "$typeName must not contain '/', '?', or '#'"
+    }
+}
+
+private fun String.containsAny(vararg chars: Char): Boolean =
+    chars.any { contains(it) }
 
 enum class ArtworkType { POSTER, BACKDROP, LOGO, THUMBNAIL }
 
@@ -113,13 +129,39 @@ data class ArtworkCandidate(
 )
 
 sealed interface ArtworkSource {
-    class RemoteUrl(
+    class RemoteUrl private constructor(
         val rawUrl: SensitiveArtworkUrl,
         val redactedUrlForTrace: String,
         val normalizedUrlHash: String
     ) : ArtworkSource {
+        override fun equals(other: Any?): Boolean =
+            this === other || (
+                other is RemoteUrl &&
+                    rawUrl == other.rawUrl &&
+                    redactedUrlForTrace == other.redactedUrlForTrace &&
+                    normalizedUrlHash == other.normalizedUrlHash
+                )
+
+        override fun hashCode(): Int {
+            var result = rawUrl.hashCode()
+            result = 31 * result + redactedUrlForTrace.hashCode()
+            result = 31 * result + normalizedUrlHash.hashCode()
+            return result
+        }
+
         override fun toString(): String =
             "RemoteUrl(redactedUrlForTrace=$redactedUrlForTrace, normalizedUrlHash=$normalizedUrlHash)"
+
+        companion object {
+            fun of(rawUrl: SensitiveArtworkUrl, normalizedUrlHash: String): RemoteUrl {
+                require(normalizedUrlHash.isNotBlank()) { "RemoteUrl normalizedUrlHash must not be blank" }
+                return RemoteUrl(
+                    rawUrl = rawUrl,
+                    redactedUrlForTrace = rawUrl.redactedUrlForTrace,
+                    normalizedUrlHash = normalizedUrlHash
+                )
+            }
+        }
     }
 
     data class ProviderTemplate(
