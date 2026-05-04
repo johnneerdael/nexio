@@ -109,13 +109,21 @@ object ArtworkCacheKeys {
         val authority = host?.let { normalizedAuthority(uri, it) } ?: uri.rawAuthority
         val query = normalizedQuery(uri.rawQuery)
 
-        return URI(
-            scheme,
-            authority,
-            uri.rawPath,
-            query,
-            null
-        ).toASCIIString()
+        return buildString {
+            scheme?.let {
+                append(it)
+                append(":")
+            }
+            authority?.let {
+                append("//")
+                append(it)
+            }
+            append(uri.rawPath.orEmpty())
+            query?.let {
+                append("?")
+                append(it)
+            }
+        }
     }
 
     private fun normalizedAuthority(uri: URI, host: String): String {
