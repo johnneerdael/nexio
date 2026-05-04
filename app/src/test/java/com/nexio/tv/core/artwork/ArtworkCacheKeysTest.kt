@@ -54,6 +54,18 @@ class ArtworkCacheKeysTest {
     }
 
     @Test
+    fun `normalized url preserves existing percent encoded path and query values`() {
+        val rawUrl = "https://Example.com/a%2Fb.jpg?x=a%2Fb&utm_source=t"
+        val normalizedUrl = "https://example.com/a%2Fb.jpg?x=a%2Fb"
+
+        assertEquals(normalizedUrl, ArtworkCacheKeys.normalizeUrl(rawUrl))
+        assertEquals(
+            ArtworkCacheKeys.normalizedUrlHash(normalizedUrl),
+            ArtworkCacheKeys.normalizedUrlHash(rawUrl)
+        )
+    }
+
+    @Test
     fun `cache keys never contain raw remote url or credential material`() {
         val key = ArtworkCacheKeys.assetKeyForProviderTemplate(
             PersistedProviderTemplate(
