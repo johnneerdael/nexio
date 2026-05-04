@@ -2,8 +2,11 @@ package com.nexio.tv.data.repository.trakt
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktLibraryService
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
@@ -48,6 +51,8 @@ class TraktLibraryMutationAdapter @Inject constructor(
             MUTATION_KIND_WATCHLIST_REMOVE -> executeWatchlistRemove(envelope)
             MUTATION_KIND_LIST_ADD -> executeListAdd(envelope)
             MUTATION_KIND_LIST_REMOVE -> executeListRemove(envelope)
+            MUTATION_KIND_COLLECTION_ADD -> executeCollectionAdd(envelope)
+            MUTATION_KIND_COLLECTION_REMOVE -> executeCollectionRemove(envelope)
             else -> TraktMutationExecutionResult.Failure(
                 httpStatusCode = 400,
                 reason = "Unsupported library mutation kind ${envelope.mutationKind}"
@@ -179,6 +184,26 @@ class TraktLibraryMutationAdapter @Inject constructor(
         }
     }
 
+    private suspend fun executeCollectionAdd(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+        val body = envelope.collectionAddBody()
+        return when (val result = executor.addToCollection(body)) {
+            is IntegrationCallResult.Success -> success(201)
+            is IntegrationCallResult.HttpError -> failed("Failed to add to collection (${result.statusCode})", result.statusCode)
+            is IntegrationCallResult.NetworkError -> failed("Failed to add to collection (network)")
+            is IntegrationCallResult.Missing -> failed("Failed to add to collection (auth_missing)")
+        }
+    }
+
+    private suspend fun executeCollectionRemove(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+        val body = envelope.collectionRemoveBody()
+        return when (val result = executor.removeFromCollection(body)) {
+            is IntegrationCallResult.Success -> success(200)
+            is IntegrationCallResult.HttpError -> failed("Failed to remove from collection (${result.statusCode})", result.statusCode)
+            is IntegrationCallResult.NetworkError -> failed("Failed to remove from collection (network)")
+            is IntegrationCallResult.Missing -> failed("Failed to remove from collection (auth_missing)")
+        }
+    }
+
     private fun success(code: Int?) = TraktMutationExecutionResult.Success(httpStatusCode = code)
 
     private fun failed(reason: String, code: Int? = null) = TraktMutationExecutionResult.Failure(
@@ -238,6 +263,8 @@ class TraktLibraryMutationAdapter @Inject constructor(
         const val MUTATION_KIND_WATCHLIST_REMOVE = "library.watchlist.remove"
         const val MUTATION_KIND_LIST_ADD = "library.listItems.add"
         const val MUTATION_KIND_LIST_REMOVE = "library.listItems.remove"
+        const val MUTATION_KIND_COLLECTION_ADD = "library.collection.add"
+        const val MUTATION_KIND_COLLECTION_REMOVE = "library.collection.remove"
         private val gson = Gson()
 
         fun buildCreateListEnvelope(
@@ -414,6 +441,30 @@ class TraktLibraryMutationAdapter @Inject constructor(
             return buildItemEnvelope(MUTATION_KIND_LIST_REMOVE, "library:list:$listId", body, rollbackState, listId)
         }
 
+        fun buildCollectionAddEnvelope(
+            body: TraktCollectionAddRequestDto
+        ): TraktMutationEnvelope {
+            return TraktMutationEnvelope(
+                adapterKey = ADAPTER_KEY,
+                mutationKind = MUTATION_KIND_COLLECTION_ADD,
+                priority = TraktMutationPriorityBucket.WATCHLIST,
+                collapseKey = "library:collection:add",
+                payload = JsonObject().apply { add(PAYLOAD_BODY, gson.toJsonTree(body)) }
+            )
+        }
+
+        fun buildCollectionRemoveEnvelope(
+            body: TraktCollectionRemoveRequestDto
+        ): TraktMutationEnvelope {
+            return TraktMutationEnvelope(
+                adapterKey = ADAPTER_KEY,
+                mutationKind = MUTATION_KIND_COLLECTION_REMOVE,
+                priority = TraktMutationPriorityBucket.WATCHLIST,
+                collapseKey = "library:collection:remove",
+                payload = JsonObject().apply { add(PAYLOAD_BODY, gson.toJsonTree(body)) }
+            )
+        }
+
         private fun buildItemEnvelope(
             kind: String,
             collapseKey: String,
@@ -449,6 +500,14 @@ class TraktLibraryMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.listItemsBody(): TraktListItemsMutationRequestDto {
             return gson.fromJson(payload.get(PAYLOAD_BODY), TraktListItemsMutationRequestDto::class.java)
+        }
+
+        private fun TraktMutationEnvelope.collectionAddBody(): TraktCollectionAddRequestDto {
+            return gson.fromJson(payload.get(PAYLOAD_BODY), TraktCollectionAddRequestDto::class.java)
+        }
+
+        private fun TraktMutationEnvelope.collectionRemoveBody(): TraktCollectionRemoveRequestDto {
+            return gson.fromJson(payload.get(PAYLOAD_BODY), TraktCollectionRemoveRequestDto::class.java)
         }
 
         private fun TraktMutationEnvelope.rollbackState(): TraktLibraryService.LibraryRollbackState {
