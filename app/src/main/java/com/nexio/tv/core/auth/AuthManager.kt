@@ -1,6 +1,7 @@
 package com.nexio.tv.core.auth
 
 import android.util.Log
+import com.nexio.tv.data.integration.supabase.transport.DurableDeviceCredentialActivationTransport
 import com.nexio.tv.data.integration.supabase.transport.DurableDeviceCredentialSelfServiceException
 import com.nexio.tv.data.integration.supabase.transport.DurableDeviceCredentialSelfServiceTransport
 import com.nexio.tv.data.integration.supabase.transport.DurableDeviceSessionExchangeException
@@ -10,6 +11,7 @@ import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AuthPresenceDataStore
 import com.nexio.tv.data.local.DurableDeviceCredentialSnapshot
 import com.nexio.tv.data.local.DurableDeviceCredentialStore
+import com.nexio.tv.data.remote.supabase.DurableDeviceCredentialIssueResult
 import com.nexio.tv.data.remote.supabase.TvLoginPollResult
 import com.nexio.tv.data.remote.supabase.TvLoginStartResult
 import com.nexio.tv.domain.model.AuthState
@@ -27,8 +29,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,6 +49,7 @@ class AuthManager @Inject constructor(
     private val postgrest: Postgrest,
     private val tvLoginExchangeTransport: TvLoginExchangeTransport,
     private val durableDeviceSessionTransport: DurableDeviceSessionTransport,
+    private val durableDeviceCredentialActivationTransport: DurableDeviceCredentialActivationTransport,
     private val durableDeviceCredentialSelfServiceTransport: DurableDeviceCredentialSelfServiceTransport,
     private val authPresenceDataStore: AuthPresenceDataStore,
     private val appOnboardingDataStore: AppOnboardingDataStore,
@@ -51,6 +59,8 @@ class AuthManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile
     private var localSignOutInProgress = false
+    @Volatile
+    private var manualAccountAuthInProgress = false
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -78,12 +88,49 @@ class AuthManager @Inject constructor(
                                 enforceDurableCredentialStillActive()
                                 if (_authState.value is AuthState.SessionLost) return@collect
                             }
+                            if (
+                                shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+                                    userId = user.id,
+                                    email = user.email,
+                                    hasDurableCredential = hasDurableCredential
+                                )
+                            ) {
+                                Log.w(
+                                    TAG,
+                                    "Discarding stale authenticated Supabase session in favor of durable recovery"
+                                )
+                                _sessionUserId.value = null
+                                _authState.value = AuthState.Loading
+                                try {
+                                    auth.clearSession()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed clearing stale Supabase session before durable recovery", e)
+                                    if (isReturningUser()) {
+                                        transitionToSessionLost()
+                                    } else {
+                                        transitionToSignedOut()
+                                    }
+                                }
+                                return@collect
+                            }
                             publishAuthenticatedUser(user.id, user.email)
-                        } else if (isReturningUser()) {
-                            // Session says Authenticated but user hasn't been
-                            // hydrated yet — for a returning user, treat as
-                            // recoverable and show the reconnect nudge.
-                            transitionToSessionLost()
+                        } else {
+                            val recoveredUser = authenticatedUserFromAccessToken(auth.currentAccessTokenOrNull())
+                            if (recoveredUser != null) {
+                                val hasDurableCredential = durableDeviceCredentialStore.snapshot().isComplete
+                                if (hasDurableCredential) {
+                                    enforceDurableCredentialStillActive()
+                                    if (_authState.value is AuthState.SessionLost) return@collect
+                                }
+                                publishAuthenticatedUser(recoveredUser.userId, recoveredUser.email)
+                            } else if (isReturningUser()) {
+                                // Session says Authenticated but user hasn't been
+                                // hydrated yet — for a returning user, treat as
+                                // recoverable and show the reconnect nudge.
+                                transitionToSessionLost()
+                            }
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
@@ -337,21 +384,17 @@ class AuthManager @Inject constructor(
         }
 
     private suspend fun publishAuthenticatedUser(userId: String, email: String?) {
-        _sessionUserId.value = userId
-        if (cachedEffectiveUserSourceUserId != userId) {
+        val publication = resolveAuthenticatedSessionPublication(
+            userId = userId,
+            email = email,
+            isReturningUser = isReturningUser()
+        )
+        _sessionUserId.value = publication.sessionUserId
+        if (cachedEffectiveUserSourceUserId != publication.sessionUserId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
         }
-        val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
-        val newState = if (computed !is AuthState.FullAccount && isReturningUser()) {
-            // Supabase reports "authenticated" but with no email — typically a
-            // stale anonymous session left over from a QR-pairing attempt.
-            // For a returning user, this should surface the reconnect nudge,
-            // not the fresh-install sign-in pitch.
-            AuthState.SessionLost
-        } else {
-            computed
-        }
+        val newState = publication.authState
         _authState.value = newState
         if (newState is AuthState.FullAccount) {
             scope.launch {
@@ -359,6 +402,34 @@ class AuthManager @Inject constructor(
                     authPresenceDataStore.markAuthenticated(userId)
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to persist auth presence marker", e)
+                }
+            }
+            var credential = durableDeviceCredentialStore.snapshot()
+            if (
+                shouldClearDurableCredentialForAuthenticatedSession(
+                    credential = credential,
+                    authenticatedUserId = userId,
+                    isManualAccountAuthInProgress = manualAccountAuthInProgress
+                )
+            ) {
+                try {
+                    durableDeviceCredentialStore.clear()
+                    credential = durableDeviceCredentialStore.snapshot()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed clearing stale durable credential for authenticated user $userId", e)
+                }
+            } else if (
+                shouldBindDurableCredentialOwner(
+                    credential = credential,
+                    authenticatedUserId = userId,
+                    isManualAccountAuthInProgress = manualAccountAuthInProgress
+                )
+            ) {
+                try {
+                    durableDeviceCredentialStore.bindOwnerIfMissing(userId)
+                    credential = durableDeviceCredentialStore.snapshot()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed binding durable credential owner for authenticated user $userId", e)
                 }
             }
         }
@@ -413,28 +484,36 @@ class AuthManager @Inject constructor(
     }
 
     suspend fun signUpWithEmail(email: String, password: String): Result<Unit> {
+        manualAccountAuthInProgress = true
         return try {
             auth.signUpWith(Email) {
                 this.email = email
                 this.password = password
             }
+            reconcileDurableCredentialAfterManualAccountAuth()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Sign up failed", e)
             Result.failure(e)
+        } finally {
+            manualAccountAuthInProgress = false
         }
     }
 
     suspend fun signInWithEmail(email: String, password: String): Result<Unit> {
+        manualAccountAuthInProgress = true
         return try {
             auth.signInWith(Email) {
                 this.email = email
                 this.password = password
             }
+            reconcileDurableCredentialAfterManualAccountAuth()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Sign in failed", e)
             Result.failure(e)
+        } finally {
+            manualAccountAuthInProgress = false
         }
     }
 
@@ -598,13 +677,43 @@ class AuthManager @Inject constructor(
                 devicePublicId = resolvedCredential.devicePublicId.orEmpty(),
                 deviceSecret = resolvedCredential.deviceSecret.orEmpty()
             )
-            auth.importAuthToken(result.accessToken, result.refreshToken)
+            importPersistedOwnerSession(result.accessToken, result.refreshToken)
             return true
         } catch (e: DurableDeviceSessionExchangeException) {
             if (e.statusCode == 401 || e.statusCode == 403) {
                 throw AuthoritativeDurableCredentialRejectionException(e.message.orEmpty())
             }
             throw e
+        }
+    }
+
+    private suspend fun importPersistedOwnerSession(
+        accessToken: String,
+        refreshToken: String
+    ) {
+        // Jan Auth's default importAuthToken() path skips user retrieval and can
+        // leave the persisted SDK session pointing at the anonymous QR session.
+        auth.importAuthToken(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            retrieveUser = true,
+            autoRefresh = false
+        )
+    }
+
+    private suspend fun reconcileDurableCredentialAfterManualAccountAuth() {
+        val authenticatedUserId = auth.currentUserOrNull()?.id?.trim().orEmpty()
+        if (authenticatedUserId.isBlank()) return
+
+        if (durableDeviceCredentialStore.clearIfOwnerMissingOrMismatch(authenticatedUserId)) {
+            Log.i(TAG, "Cleared stale durable credential after manual account auth for $authenticatedUserId")
+            return
+        }
+
+        try {
+            durableDeviceCredentialStore.bindOwnerIfMissing(authenticatedUserId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed binding durable credential owner after manual account auth", e)
         }
     }
 
@@ -782,10 +891,30 @@ class AuthManager @Inject constructor(
                 code = code,
                 deviceNonce = deviceNonce
             )
-            auth.importAuthToken(result.accessToken, result.refreshToken)
-            durableDeviceCredentialStore.save(
-                devicePublicId = result.devicePublicId,
-                deviceSecret = result.deviceSecret
+            finalizeTvLoginExchange(
+                result = result,
+                saveCredential = { devicePublicId, deviceSecret ->
+                    durableDeviceCredentialStore.save(
+                        devicePublicId = devicePublicId,
+                        deviceSecret = deviceSecret
+                    )
+                },
+                activateCredential = { devicePublicId, deviceSecret ->
+                    durableDeviceCredentialActivationTransport.activate(
+                        token = token,
+                        devicePublicId = devicePublicId,
+                        deviceSecret = deviceSecret
+                    )
+                },
+                importAuthTokens = { accessToken, refreshToken ->
+                    importPersistedOwnerSession(accessToken, refreshToken)
+                    authenticatedUserFromAccessToken(accessToken)?.let { authenticatedUser ->
+                        publishAuthenticatedUser(
+                            userId = authenticatedUser.userId,
+                            email = authenticatedUser.email
+                        )
+                    }
+                }
             )
             Result.success(Unit)
         } catch (e: Exception) {
@@ -793,6 +922,82 @@ class AuthManager @Inject constructor(
             Result.failure(e)
         }
     }
+}
+
+internal suspend fun finalizeTvLoginExchange(
+    result: DurableDeviceCredentialIssueResult,
+    saveCredential: suspend (String, String) -> Unit,
+    activateCredential: suspend (String, String) -> Unit,
+    importAuthTokens: suspend (String, String) -> Unit
+) {
+    saveCredential(result.devicePublicId, result.deviceSecret)
+    activateCredential(result.devicePublicId, result.deviceSecret)
+    importAuthTokens(result.accessToken, result.refreshToken)
+}
+
+internal data class AuthenticatedSessionPublication(
+    val authState: AuthState,
+    val sessionUserId: String?
+)
+
+internal data class AuthenticatedAccessTokenUser(
+    val userId: String,
+    val email: String?
+)
+
+internal fun shouldDiscardAuthenticatedSupabaseSessionForDurableRecovery(
+    userId: String,
+    email: String?,
+    hasDurableCredential: Boolean
+): Boolean {
+    if (!hasDurableCredential) return false
+    return fullAccountStateForSupabaseUser(userId, email) !is AuthState.FullAccount
+}
+
+internal fun authenticatedUserFromAccessToken(accessToken: String?): AuthenticatedAccessTokenUser? {
+    val token = accessToken?.trim().orEmpty()
+    if (token.isBlank()) return null
+
+    val parts = token.split('.')
+    if (parts.size < 2) return null
+
+    val payloadJson = runCatching {
+        val paddedPayload = parts[1]
+            .replace('-', '+')
+            .replace('_', '/')
+            .let { payload ->
+                payload + "=".repeat((4 - payload.length % 4) % 4)
+            }
+        String(Base64.getDecoder().decode(paddedPayload))
+    }.getOrNull() ?: return null
+
+    val payload = runCatching {
+        Json.parseToJsonElement(payloadJson).jsonObject
+    }.getOrNull() ?: return null
+
+    val userId = payload["sub"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    if (userId.isBlank()) return null
+
+    val email = payload["email"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+    return AuthenticatedAccessTokenUser(userId = userId, email = email)
+}
+
+internal fun resolveAuthenticatedSessionPublication(
+    userId: String,
+    email: String?,
+    isReturningUser: Boolean
+): AuthenticatedSessionPublication {
+    val computed = fullAccountStateForSupabaseUser(userId = userId, email = email)
+    val authState = if (computed !is AuthState.FullAccount && isReturningUser) {
+        AuthState.SessionLost
+    } else {
+        computed
+    }
+    val sessionUserId = (authState as? AuthState.FullAccount)?.userId
+    return AuthenticatedSessionPublication(
+        authState = authState,
+        sessionUserId = sessionUserId
+    )
 }
 
 internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {
@@ -922,10 +1127,42 @@ internal fun resolveRefreshFailureAction(
 internal fun shouldAttemptDurableSessionRecovery(
     hasRefreshToken: Boolean,
     credential: DurableDeviceCredentialSnapshot,
-    ignoreCachedRefreshToken: Boolean
+    ignoreCachedRefreshToken: Boolean = false
 ): Boolean {
     if (!credential.isComplete) return false
     return !hasRefreshToken || ignoreCachedRefreshToken
+}
+
+internal fun shouldRequestDurableCredentialBackfill(
+    hasRefreshToken: Boolean,
+    credential: DurableDeviceCredentialSnapshot
+): Boolean {
+    return false
+}
+
+internal fun shouldBindDurableCredentialOwner(
+    credential: DurableDeviceCredentialSnapshot,
+    authenticatedUserId: String,
+    isManualAccountAuthInProgress: Boolean = false
+): Boolean {
+    if (!credential.isComplete) return false
+    val normalizedAuthenticatedUserId = authenticatedUserId.trim()
+    if (normalizedAuthenticatedUserId.isBlank()) return false
+    if (isManualAccountAuthInProgress) return false
+    return credential.ownerUserId.isNullOrBlank()
+}
+
+internal fun shouldClearDurableCredentialForAuthenticatedSession(
+    credential: DurableDeviceCredentialSnapshot,
+    authenticatedUserId: String,
+    isManualAccountAuthInProgress: Boolean = false
+): Boolean {
+    if (!credential.isComplete) return false
+    val normalizedAuthenticatedUserId = authenticatedUserId.trim()
+    if (normalizedAuthenticatedUserId.isBlank()) return false
+    val normalizedOwnerUserId = credential.ownerUserId?.trim()?.takeIf { it.isNotBlank() }
+        ?: return isManualAccountAuthInProgress
+    return normalizedOwnerUserId != normalizedAuthenticatedUserId
 }
 
 internal fun sessionUserIdWhileSessionUnavailable(): String? = null
