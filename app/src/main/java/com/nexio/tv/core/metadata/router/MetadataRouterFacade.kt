@@ -1,5 +1,6 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
@@ -839,9 +840,9 @@ class MetadataRouterFacade(
         buildMap {
             title?.let { put(ResolvedField.TITLE, FieldValue(it, FieldOwner.PRIMARY)) }
             description?.let { put(ResolvedField.OVERVIEW, FieldValue(it, FieldOwner.PRIMARY)) }
-            poster?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
-            backdrop?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
-            logo?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
+            (artwork?.poster ?: poster)?.let { put(ResolvedField.POSTER, FieldValue(it, FieldOwner.PRIMARY)) }
+            (artwork?.backdrop ?: backdrop)?.let { put(ResolvedField.BACKDROP, FieldValue(it, FieldOwner.PRIMARY)) }
+            (artwork?.logo ?: logo)?.let { put(ResolvedField.LOGO, FieldValue(it, FieldOwner.PRIMARY)) }
             imdbRating?.let { put(ResolvedField.RATING, FieldValue(it, FieldOwner.PRIMARY)) }
             runtime?.toIntOrNull()?.let { put(ResolvedField.RUNTIME, FieldValue(it, FieldOwner.PRIMARY)) }
             releaseInfo?.let { put(ResolvedField.RELEASE_DATE, FieldValue(it, FieldOwner.PRIMARY)) }
@@ -865,8 +866,24 @@ class MetadataRouterFacade(
             poster = poster ?: fallback.poster,
             backdrop = backdrop ?: fallback.backdrop,
             releaseInfo = releaseDate ?: fallback.releaseInfo,
-            genres = genres.ifEmpty { fallback.genres }
+            genres = genres.ifEmpty { fallback.genres },
+            artwork = mergeResolvedArtwork(fallback)
         )
+
+    private fun ResolvedMetadataDocument.mergeResolvedArtwork(fallback: HomeDisplayMetadata): ArtworkBundle? {
+        val selectedArtwork = artwork.takeUnless { it.isEmpty() }
+        val fallbackArtwork = fallback.artwork ?: return selectedArtwork
+        val merged = ArtworkBundle(
+            poster = selectedArtwork?.poster ?: fallbackArtwork.poster.takeIf { poster == null },
+            backdrop = selectedArtwork?.backdrop ?: fallbackArtwork.backdrop.takeIf { backdrop == null },
+            logo = selectedArtwork?.logo ?: fallbackArtwork.logo.takeIf { logo == null },
+            thumbnail = selectedArtwork?.thumbnail ?: fallbackArtwork.thumbnail
+        )
+        return merged.takeUnless { it.isEmpty() }
+    }
+
+    private fun ArtworkBundle.isEmpty(): Boolean =
+        poster == null && backdrop == null && logo == null && thumbnail == null
 
     private fun ResolvedMetadataDocument.toTvMetadataEnrichment(): TvMetadataEnrichment =
         TvMetadataEnrichment(

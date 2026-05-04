@@ -1,5 +1,12 @@
 package com.nexio.tv.core.metadata.router
 
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -83,6 +90,56 @@ class MetadataRouterFacadeTest {
         assertEquals("1999-10-15", result.resolvedDocument.releaseDate)
         assertEquals(listOf("Canonical Genre"), result.displayMetadata.genres)
         assertEquals("1999-10-15", result.displayMetadata.releaseInfo)
+    }
+
+    @Test
+    fun `metadata facade carries typed preview artwork into resolved display metadata`() = runTest {
+        val posterRef = artworkRef("previewPosterDecision", "previewPosterAsset", ArtworkType.POSTER)
+        val result = facade(RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB)).resolveRequest(
+            MetadataRequest(
+                contentId = "tvdb:123",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        title = "Preview title",
+                        poster = "rawPreviewPoster",
+                        artwork = ArtworkBundle(poster = posterRef)
+                    ),
+                    previewSourceRole = SourceRole.ADDON_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.TVDB.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals(posterRef, result.resolvedDocument.artwork.poster)
+        assertEquals("nexio-artwork://asset/previewPosterAsset", result.resolvedDocument.poster)
+        assertEquals(posterRef, result.displayMetadata.artwork?.poster)
+        assertEquals("nexio-artwork://asset/previewPosterAsset", result.displayMetadata.displayPoster)
+    }
+
+    @Test
+    fun `metadata facade does not let fallback typed preview artwork override primary raw poster`() = runTest {
+        val fallbackPosterRef = artworkRef("fallbackPosterDecision", "fallbackPosterAsset", ArtworkType.POSTER)
+        val result = facade(PrimaryPosterMetadataProviderAdapter(MetadataPrimaryProvider.TMDB)).resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:550",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        artwork = ArtworkBundle(poster = fallbackPosterRef)
+                    ),
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.TRAKT.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("primaryPoster", result.resolvedDocument.poster)
+        assertEquals("primaryPoster", result.displayMetadata.poster)
+        assertEquals("primaryPoster", result.displayMetadata.displayPoster)
+        assertNull(result.displayMetadata.artwork?.poster)
     }
 
     @Test
@@ -440,6 +497,20 @@ class MetadataRouterFacadeTest {
         return event.payload as Map<*, *>
     }
 
+    private fun artworkRef(
+        decisionKey: String,
+        assetKey: String,
+        imageType: ArtworkType
+    ): ArtworkDisplayRef.RuntimeAsset =
+        ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey(decisionKey),
+            assetKey = ArtworkAssetKey(assetKey),
+            imageType = imageType,
+            selectedProvider = null,
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            trace = ArtworkTrace.empty()
+        )
+
     private class RecordingMetadataProviderAdapter(
         override val provider: MetadataPrimaryProvider,
         private val emptyEpisodeParentIds: Set<String> = emptySet()
@@ -494,6 +565,24 @@ class MetadataRouterFacadeTest {
                         ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY),
                         ResolvedField.GENRES to FieldValue(listOf("Canonical Genre"), FieldOwner.PRIMARY),
                         ResolvedField.RELEASE_DATE to FieldValue("1999-10-15", FieldOwner.PRIMARY)
+                    )
+                )
+            )
+    }
+
+    private class PrimaryPosterMetadataProviderAdapter(
+        override val provider: MetadataPrimaryProvider
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean = true
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = route.provider,
+                    fields = mapOf(
+                        ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY),
+                        ResolvedField.POSTER to FieldValue("primaryPoster", FieldOwner.PRIMARY)
                     )
                 )
             )

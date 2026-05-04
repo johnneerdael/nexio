@@ -1,6 +1,8 @@
 package com.nexio.tv.domain.model
 
 import androidx.compose.runtime.Immutable
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 
 enum class FirstPaintSource {
     ADDON_META_PREVIEW,
@@ -31,10 +33,21 @@ data class MetaPreview(
     val firstPaintSourceProvider: ProviderId? = null,
     val firstPaintStableIds: ProviderIds = ProviderIds(),
     val firstPaintRailSource: RailSource? = null,
-    val firstPaintSourceItemId: String? = null
+    val firstPaintSourceItemId: String? = null,
+    @Transient
+    val artwork: ArtworkBundle? = null
 ) {
     val apiType: String
         get() = type.toApiString(rawType)
+
+    val displayPoster: String?
+        get() = artwork?.poster.toLegacyArtworkString() ?: poster
+
+    val displayBackground: String?
+        get() = artwork?.backdrop.toLegacyArtworkString() ?: background
+
+    val displayLogo: String?
+        get() = artwork?.logo.toLegacyArtworkString() ?: logo
 
     /**
      * Gson bypasses the Kotlin default-constructor mechanism, so it can set [firstPaintSource]
@@ -55,7 +68,8 @@ data class MetaPreview(
             releaseInfo, runtime, imdbRating, ratingSource, tomatoesRating, genres,
             trailerYtIds, language, posterProviderTag,
             safeSource,
-            firstPaintSourceProvider, safeStableIds, firstPaintRailSource, firstPaintSourceItemId
+            firstPaintSourceProvider, safeStableIds, firstPaintRailSource, firstPaintSourceItemId,
+            artwork
         )
     }
 
@@ -89,6 +103,7 @@ data class MetaPreview(
             firstPaintSourceProvider == other.firstPaintSourceProvider &&
             effectiveStableIds == otherEffectiveStableIds &&
             firstPaintRailSource == other.firstPaintRailSource &&
-            firstPaintSourceItemId == other.firstPaintSourceItemId
+            firstPaintSourceItemId == other.firstPaintSourceItemId &&
+            artwork == other.artwork
     }
 }

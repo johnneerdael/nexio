@@ -9,6 +9,9 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class HomeDisplayMetadataTest {
@@ -211,6 +214,155 @@ class HomeDisplayMetadataTest {
     }
 
     @Test
+    fun `Meta toHomeDisplayMetadata carries typed artwork and displayPoster prefers projection`() {
+        val artwork = ArtworkBundle(
+            poster = artworkRef("metaPosterDecision", "metaPosterAsset", ArtworkType.POSTER)
+        )
+        val meta = meta(artwork = artwork)
+
+        val metadata = meta.toHomeDisplayMetadata()
+
+        assertEquals(artwork, metadata.artwork)
+        assertEquals("nexio-artwork://asset/metaPosterAsset", meta.displayPoster)
+        assertEquals("nexio-artwork://asset/metaPosterAsset", metadata.displayPoster)
+        assertEquals("legacyPoster", metadata.poster)
+    }
+
+    @Test
+    fun `MetaPreview toHomeDisplayMetadata carries typed artwork and display fields prefer projection`() {
+        val artwork = ArtworkBundle(
+            poster = artworkRef("previewPosterDecision", "previewPosterAsset", ArtworkType.POSTER),
+            backdrop = artworkRef("previewBackdropDecision", "previewBackdropAsset", ArtworkType.BACKDROP),
+            logo = artworkRef("previewLogoDecision", "previewLogoAsset", ArtworkType.LOGO)
+        )
+        val preview = metaPreview(artwork = artwork)
+
+        val metadata = preview.toHomeDisplayMetadata()
+
+        assertEquals(artwork, metadata.artwork)
+        assertEquals("nexio-artwork://asset/previewPosterAsset", preview.displayPoster)
+        assertEquals("nexio-artwork://asset/previewBackdropAsset", preview.displayBackground)
+        assertEquals("nexio-artwork://asset/previewLogoAsset", preview.displayLogo)
+        assertEquals("nexio-artwork://asset/previewPosterAsset", metadata.displayPoster)
+        assertEquals("nexio-artwork://asset/previewBackdropAsset", metadata.displayBackdrop)
+        assertEquals("nexio-artwork://asset/previewLogoAsset", metadata.displayLogo)
+    }
+
+    @Test
+    fun `HomeDisplayMetadata applyTo propagates typed artwork and legacy strings become internal refs`() {
+        val artwork = ArtworkBundle(
+            poster = artworkRef("applyPosterDecision", "applyPosterAsset", ArtworkType.POSTER),
+            backdrop = artworkRef("applyBackdropDecision", "applyBackdropAsset", ArtworkType.BACKDROP),
+            logo = artworkRef("applyLogoDecision", "applyLogoAsset", ArtworkType.LOGO)
+        )
+        val base = metaPreview()
+
+        val applied = HomeDisplayMetadata(
+            poster = "rawPoster",
+            backdrop = "rawBackdrop",
+            logo = "rawLogo",
+            artwork = artwork
+        ).applyTo(base)
+
+        assertEquals(artwork, applied.artwork)
+        assertEquals("nexio-artwork://asset/applyPosterAsset", applied.poster)
+        assertEquals("nexio-artwork://asset/applyBackdropAsset", applied.background)
+        assertEquals("nexio-artwork://asset/applyLogoAsset", applied.logo)
+        assertEquals("nexio-artwork://asset/applyPosterAsset", applied.displayPoster)
+    }
+
+    @Test
+    fun `HomeDisplayMetadata applyTo does not let base fallback typed artwork override incoming raw poster`() {
+        val fallbackArtwork = ArtworkBundle(
+            poster = artworkRef("fallbackPosterDecision", "fallbackPosterAsset", ArtworkType.POSTER)
+        )
+        val base = metaPreview(artwork = fallbackArtwork)
+
+        val applied = HomeDisplayMetadata(
+            poster = "primaryRawPoster"
+        ).applyTo(base)
+
+        assertNull(applied.artwork?.poster)
+        assertEquals("primaryRawPoster", applied.poster)
+        assertEquals("primaryRawPoster", applied.displayPoster)
+    }
+
+    @Test
+    fun `MetaPreview equality includes typed artwork safely`() {
+        val first = metaPreview(
+            artwork = ArtworkBundle(
+                poster = artworkRef("firstDecision", "firstAsset", ArtworkType.POSTER)
+            )
+        )
+        val second = first.copy(
+            artwork = ArtworkBundle(
+                poster = artworkRef("secondDecision", "secondAsset", ArtworkType.POSTER)
+            )
+        )
+
+        first.hashCode()
+        second.hashCode()
+
+        assertNotEquals(first, second)
+        assertNotEquals(first.hashCode(), second.hashCode())
+    }
+
+    @Test
+    fun `Video displayThumbnail prefers typed thumbnail projection`() {
+        val video = Video(
+            id = "episode-1",
+            title = "Episode 1",
+            released = null,
+            thumbnail = "legacyThumbnail",
+            season = 1,
+            episode = 1,
+            overview = null,
+            thumbnailArtwork = artworkRef("thumbnailDecision", "thumbnailAsset", ArtworkType.THUMBNAIL)
+        )
+
+        assertEquals("nexio-artwork://asset/thumbnailAsset", video.displayThumbnail)
+    }
+
+    @Test
+    fun `Gson persistence ignores transient typed artwork on metadata models`() {
+        val gson = Gson()
+        val artwork = ArtworkBundle(
+            poster = artworkRef("persistDecision", "persistAsset", ArtworkType.POSTER)
+        )
+        val displayMetadata = HomeDisplayMetadata(
+            poster = "nexio-artwork://asset/persistAsset",
+            artwork = artwork
+        )
+        val video = Video(
+            id = "episode-1",
+            title = "Episode 1",
+            released = null,
+            thumbnail = "legacyThumbnail",
+            season = 1,
+            episode = 1,
+            overview = null,
+            thumbnailArtwork = artworkRef("thumbnailDecision", "thumbnailAsset", ArtworkType.THUMBNAIL)
+        )
+
+        val metaJson = gson.toJson(meta(artwork = artwork).copy(videos = listOf(video)))
+        val previewJson = gson.toJson(metaPreview(artwork = artwork))
+        val displayMetadataJson = gson.toJson(displayMetadata)
+
+        assertFalse(metaJson.contains("\"artwork\""))
+        assertFalse(metaJson.contains("\"thumbnailArtwork\""))
+        assertFalse(previewJson.contains("\"artwork\""))
+        assertFalse(displayMetadataJson.contains("\"artwork\""))
+        assertNull(gson.fromJson(metaJson, Meta::class.java).artwork)
+        assertNull(gson.fromJson(metaJson, Meta::class.java).videos.first().thumbnailArtwork)
+        assertNull(gson.fromJson(previewJson, MetaPreview::class.java).artwork)
+        assertNull(gson.fromJson(displayMetadataJson, HomeDisplayMetadata::class.java).artwork)
+        assertEquals(
+            "nexio-artwork://asset/persistAsset",
+            gson.fromJson(displayMetadataJson, HomeDisplayMetadata::class.java).displayPoster
+        )
+    }
+
+    @Test
     fun `legacy preview without rating source can be hashed and converted`() {
         val preview = Gson().fromJson(
             """
@@ -241,5 +393,63 @@ class HomeDisplayMetadataTest {
         val displayMetadata = preview.toHomeDisplayMetadata()
 
         assertEquals(TitleRatingSource.IMDB, displayMetadata.ratingSource)
+    }
+
+    private fun artworkRef(
+        decisionKey: String,
+        assetKey: String,
+        imageType: ArtworkType
+    ): ArtworkDisplayRef.RuntimeAsset {
+        return ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey(decisionKey),
+            assetKey = ArtworkAssetKey(assetKey),
+            imageType = imageType,
+            selectedProvider = null,
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace.empty()
+        )
+    }
+
+    private fun metaPreview(artwork: ArtworkBundle? = null): MetaPreview {
+        return MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "legacyPoster",
+            posterShape = PosterShape.POSTER,
+            background = "legacyBackdrop",
+            logo = "legacyLogo",
+            description = "description",
+            releaseInfo = "2025",
+            runtime = "120",
+            imdbRating = 8.3f,
+            genres = listOf("Drama"),
+            artwork = artwork
+        )
+    }
+
+    private fun meta(artwork: ArtworkBundle? = null): Meta {
+        return Meta(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "legacyPoster",
+            posterShape = PosterShape.POSTER,
+            background = "legacyBackdrop",
+            logo = "legacyLogo",
+            description = "description",
+            releaseInfo = "2025",
+            imdbRating = 8.3f,
+            genres = listOf("Drama"),
+            runtime = "120",
+            director = listOf("Director"),
+            cast = listOf("Actor"),
+            videos = emptyList(),
+            country = "US",
+            awards = null,
+            language = "en",
+            links = emptyList(),
+            artwork = artwork
+        )
     }
 }
