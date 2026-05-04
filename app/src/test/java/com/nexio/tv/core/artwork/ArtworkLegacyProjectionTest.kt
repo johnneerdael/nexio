@@ -6,6 +6,13 @@ import org.junit.Test
 
 class ArtworkLegacyProjectionTest {
     @Test
+    fun `null ref projects to null`() {
+        val ref: ArtworkDisplayRef? = null
+
+        assertEquals(null, ref.toLegacyArtworkString())
+    }
+
+    @Test
     fun `runtime asset projects to asset URI when asset key is known`() {
         val ref = ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("artwork-decision:poster:imdb:tt0137523"),
