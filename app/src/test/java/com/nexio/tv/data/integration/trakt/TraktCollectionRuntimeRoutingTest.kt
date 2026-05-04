@@ -3,10 +3,18 @@ package com.nexio.tv.data.integration.trakt
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.byteArrayRuntimeFixture
 import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionEpisodeDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionSeasonDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionShowItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionWriteCountsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
@@ -101,12 +109,132 @@ class TraktCollectionRuntimeRoutingTest {
         coVerify(exactly = 2) { traktApi.getCollectionShows(any(), any()) }
     }
 
+    @Test
+    fun addToCollection_movie_invalidates_collection_movies_cache() = runBlocking {
+        coEvery { traktApi.getCollectionMovies(any(), any()) } returns Response.success(emptyList())
+        coEvery { traktApi.addToCollection(any(), any()) } returns Response.success(
+            TraktCollectionAddResponseDto(added = TraktCollectionWriteCountsDto(movies = 1))
+        )
+
+        provider.getCollectionMovies()  // populates cache
+        provider.addToCollection(TraktCollectionAddRequestDto(
+            movies = listOf(TraktCollectionAddMovieDto(ids = TraktIdsDto(imdb = "tt0372784")))
+        ))
+        provider.getCollectionMovies()  // should re-fetch
+
+        coVerify(exactly = 2) { traktApi.getCollectionMovies(any(), any()) }
+    }
+
+    @Test
+    fun removeFromCollection_show_invalidates_collection_shows_cache() = runBlocking {
+        coEvery { traktApi.getCollectionShows(any(), any()) } returns Response.success(emptyList())
+        coEvery { traktApi.removeFromCollection(any(), any()) } returns Response.success(
+            TraktCollectionRemoveResponseDto(deleted = TraktCollectionWriteCountsDto(episodes = 1))
+        )
+
+        provider.getCollectionShows()
+        provider.removeFromCollection(TraktCollectionRemoveRequestDto(
+            shows = listOf(TraktCollectionRemoveShowDto(ids = TraktIdsDto(tvdb = 81189)))
+        ))
+        provider.getCollectionShows()
+
+        coVerify(exactly = 2) { traktApi.getCollectionShows(any(), any()) }
+    }
+
+    @Test
+    fun addToCollection_with_both_movies_and_shows_invalidates_both_caches() = runBlocking {
+        coEvery { traktApi.getCollectionMovies(any(), any()) } returns Response.success(emptyList())
+        coEvery { traktApi.getCollectionShows(any(), any()) } returns Response.success(emptyList())
+        coEvery { traktApi.addToCollection(any(), any()) } returns Response.success(
+            TraktCollectionAddResponseDto(
+                added = TraktCollectionWriteCountsDto(movies = 1, episodes = 5)
+            )
+        )
+
+        provider.getCollectionMovies()
+        provider.getCollectionShows()
+        provider.addToCollection(TraktCollectionAddRequestDto(
+            movies = listOf(TraktCollectionAddMovieDto(ids = TraktIdsDto(imdb = "tt0372784"))),
+            shows = listOf(TraktCollectionAddShowDto(ids = TraktIdsDto(tvdb = 81189)))
+        ))
+        provider.getCollectionMovies()
+        provider.getCollectionShows()
+
+        coVerify(exactly = 2) { traktApi.getCollectionMovies(any(), any()) }
+        coVerify(exactly = 2) { traktApi.getCollectionShows(any(), any()) }
+    }
+
+    @Test
+    fun addToCollection_failure_does_not_invalidate_cache() = runBlocking {
+        coEvery { traktApi.getCollectionMovies(any(), any()) } returns Response.success(emptyList())
+        coEvery { traktApi.addToCollection(any(), any()) } returns Response.error(
+            500,
+            okhttp3.ResponseBody.create(null, "")
+        )
+
+        provider.getCollectionMovies()
+        provider.addToCollection(TraktCollectionAddRequestDto(
+            movies = listOf(TraktCollectionAddMovieDto(ids = TraktIdsDto(imdb = "tt0372784")))
+        ))
+        provider.getCollectionMovies()  // should hit cache, not wire
+
+        coVerify(exactly = 1) { traktApi.getCollectionMovies(any(), any()) }
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
+    private val traktApi: TraktApi = mockk()
+    private val provider: TraktIntegrationProvider = buildProvider(traktApi = traktApi)
+
     private fun <T> unwrap(result: IntegrationCallResult<T>): T? =
         if (result is IntegrationCallResult.Success) result.value else null
+
+    private fun buildProvider(
+        traktApi: TraktApi = mockk(),
+        runtimeFixture: com.nexio.tv.core.integration.ByteArrayRuntimeFixture = byteArrayRuntimeFixture()
+    ): TraktIntegrationProvider {
+        val session = TrackingAuthSession(
+            provider = TrackingProvider.TRAKT,
+            profileId = 1,
+            credentialHash = "hash-p1"
+        )
+        val traktAuthService = mockk<TraktAuthService> {
+            coEvery { accountScopedSession() } returns session
+            coEvery { accountScopedSession(any()) } returns session
+            coEvery {
+                executeAuthorizedRequestWithinRuntimeCall(any(), any<suspend (String) -> Response<List<TraktCollectionMovieItemDto>>>())
+            } coAnswers {
+                val block = secondArg<suspend (String) -> Response<List<TraktCollectionMovieItemDto>>>()
+                block("Bearer hash-p1")
+            }
+            coEvery {
+                executeAuthorizedRequestWithinRuntimeCall(any(), any<suspend (String) -> Response<List<TraktCollectionShowItemDto>>>())
+            } coAnswers {
+                val block = secondArg<suspend (String) -> Response<List<TraktCollectionShowItemDto>>>()
+                block("Bearer hash-p1")
+            }
+            coEvery {
+                executeAuthorizedRequestWithinRuntimeCall(any(), any<suspend (String) -> Response<TraktCollectionAddResponseDto>>())
+            } coAnswers {
+                val block = secondArg<suspend (String) -> Response<TraktCollectionAddResponseDto>>()
+                block("Bearer hash-p1")
+            }
+            coEvery {
+                executeAuthorizedRequestWithinRuntimeCall(any(), any<suspend (String) -> Response<TraktCollectionRemoveResponseDto>>())
+            } coAnswers {
+                val block = secondArg<suspend (String) -> Response<TraktCollectionRemoveResponseDto>>()
+                block("Bearer hash-p1")
+            }
+        }
+        return TraktIntegrationProvider(
+            runtime = runtimeFixture.runtime,
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            cacheStore = runtimeFixture.cacheStore
+        )
+    }
 
     private fun buildMovieProvider(
         traktApi: TraktApi,
