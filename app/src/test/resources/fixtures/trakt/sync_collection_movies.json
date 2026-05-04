@@ -1,0 +1,24 @@
+[
+  {
+    "collected_at": "2014-09-01T09:10:11.000Z",
+    "updated_at": "2014-09-01T09:10:11.000Z",
+    "metadata": {
+      "media_type": "digital",
+      "resolution": "hd_1080p",
+      "hdr": "dolby_vision",
+      "audio": "dts_ma",
+      "audio_channels": "5.1",
+      "3d": false
+    },
+    "movie": {
+      "title": "Batman Begins",
+      "year": 2005,
+      "ids": {
+        "trakt": 6,
+        "slug": "batman-begins-2005",
+        "imdb": "tt0372784",
+        "tmdb": 272
+      }
+    }
+  }
+]
