@@ -845,7 +845,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.CALENDAR_SHOWS,
-            operationKey = accountOperationKey(session, "trakt.calendar.shows"),
+            operationKey = globalContentOperationKey("trakt.calendar.shows"),
             cacheKey = globalContentCacheKey("trakt:calendar:shows:start:$startDate:days:$days"),
             codec = gsonCodec<List<TraktCalendarEpisodeItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -884,7 +884,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.TRENDING_MOVIES,
-            operationKey = accountOperationKey(session, "trakt.trending.movies"),
+            operationKey = globalContentOperationKey("trakt.trending.movies"),
             cacheKey = globalContentCacheKey("trakt:trending:movies:limit:$limit"),
             codec = gsonCodec<List<TraktTrendingMovieItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -921,7 +921,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.TRENDING_SHOWS,
-            operationKey = accountOperationKey(session, "trakt.trending.shows"),
+            operationKey = globalContentOperationKey("trakt.trending.shows"),
             cacheKey = globalContentCacheKey("trakt:trending:shows:limit:$limit"),
             codec = gsonCodec<List<TraktTrendingShowItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -958,7 +958,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_MOVIES,
-            operationKey = accountOperationKey(session, "trakt.popular.movies"),
+            operationKey = globalContentOperationKey("trakt.popular.movies"),
             cacheKey = globalContentCacheKey("trakt:popular:movies:limit:$limit"),
             codec = gsonCodec<List<TraktMovieDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -995,7 +995,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_SHOWS,
-            operationKey = accountOperationKey(session, "trakt.popular.shows"),
+            operationKey = globalContentOperationKey("trakt.popular.shows"),
             cacheKey = globalContentCacheKey("trakt:popular:shows:limit:$limit"),
             codec = gsonCodec<List<TraktShowDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -1035,7 +1035,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = if (type == "shows") TraktApiShapes.RECOMMENDED_SHOWS else TraktApiShapes.RECOMMENDED_MOVIES,
-            operationKey = accountOperationKey(session, "trakt.recommendations.$type"),
+            operationKey = globalContentOperationKey("trakt.recommendations.$type"),
             cacheKey = globalContentCacheKey("trakt:recommendations:$type:limit:$limit"),
             codec = gsonCodec<List<TraktRecommendationItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -1076,7 +1076,7 @@ class TraktIntegrationProvider @Inject constructor(
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.POPULAR_LISTS,
-            operationKey = accountOperationKey(session, "trakt.popular.lists"),
+            operationKey = globalContentOperationKey("trakt.popular.lists"),
             cacheKey = globalContentCacheKey("trakt:popular:lists:page:$page:limit:$limit"),
             codec = gsonCodec<List<TraktPopularListItemDto>>(),
             cachePolicy = IntegrationCachePolicy.CacheFirst(
@@ -1416,6 +1416,9 @@ class TraktIntegrationProvider @Inject constructor(
      */
     private fun globalContentCacheKey(logicalKey: String): String =
         "global:provider:TRAKT:$logicalKey"
+
+    private fun globalContentOperationKey(logicalKey: String): String =
+        "global:provider:TRAKT:operation:$logicalKey"
 
     private fun accountScope(session: TrackingAuthSession): IntegrationScope.Account =
         IntegrationScope.Account(
