@@ -7,6 +7,9 @@ import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -160,6 +163,51 @@ class TraktEpisodeMappingServiceTest {
 
         assertNotNull(cached)
         assertEquals("Pilot", cached?.title)
+    }
+
+    @Test
+    fun concurrent_prefetch_for_same_show_dedups_to_single_api_call() = runBlocking {
+        val seasons = listOf(
+            seasonWith(
+                number = 1,
+                episodes = listOf(
+                    episode(season = 1, number = 1, title = "Pilot"),
+                    episode(season = 1, number = 2, title = "Two")
+                )
+            )
+        )
+        val traktApi = mockk<TraktApi> {
+            coEvery { getShowSeasons(any(), any(), any()) } coAnswers {
+                delay(50)
+                Response.success(seasons)
+            }
+        }
+        val service = buildService(traktApi = traktApi)
+
+        val results = listOf(
+            async {
+                service.prefetchEpisodeMapping(
+                    contentId = "tt8118186",
+                    contentType = "series",
+                    videoId = null,
+                    season = 1,
+                    episode = 1
+                )
+            },
+            async {
+                service.prefetchEpisodeMapping(
+                    contentId = "tt8118186",
+                    contentType = "series",
+                    videoId = null,
+                    season = 1,
+                    episode = 2
+                )
+            }
+        ).awaitAll()
+
+        coVerify(exactly = 1) { traktApi.getShowSeasons(any(), any(), any()) }
+        assertNotNull(results[0])
+        assertNotNull(results[1])
     }
 
     // -------------------------------------------------------------------------

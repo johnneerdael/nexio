@@ -44,6 +44,10 @@ class TraktEpisodeMappingService @Inject constructor(
      *   - any required argument is missing/blank,
      *   - Trakt has no season data for the show, or
      *   - Trakt's season tree contains no matching episode.
+     *
+     * Network/auth errors are also surfaced as `null` by design — callers
+     * should treat `null` as "use the absolute episode number you started
+     * with", never as "retry".
      */
     internal suspend fun prefetchEpisodeMapping(
         contentId: String?,
@@ -92,43 +96,36 @@ class TraktEpisodeMappingService @Inject constructor(
     }
 
     private suspend fun getTraktEpisodes(showLookupId: String): List<EpisodeMappingEntry> {
+        val ownDeferred: kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>?
+        val joinDeferred: kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>?
         cacheMutex.withLock {
             traktEpisodesCache[showLookupId]?.let { return it }
-        }
-
-        // Dedup: if another coroutine is already fetching this show, await its result.
-        val existingDeferred = cacheMutex.withLock { traktEpisodesInFlight[showLookupId] }
-        if (existingDeferred != null) {
-            return try { existingDeferred.await() } catch (_: Exception) { emptyList() }
-        }
-
-        val deferred = kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>()
-        val weOwn = cacheMutex.withLock {
-            traktEpisodesCache[showLookupId]?.let { return it }
-            if (traktEpisodesInFlight.containsKey(showLookupId)) {
-                false
+            val existing = traktEpisodesInFlight[showLookupId]
+            if (existing != null) {
+                ownDeferred = null
+                joinDeferred = existing
             } else {
-                traktEpisodesInFlight[showLookupId] = deferred
-                true
+                val newDeferred =
+                    kotlinx.coroutines.CompletableDeferred<List<EpisodeMappingEntry>>()
+                traktEpisodesInFlight[showLookupId] = newDeferred
+                ownDeferred = newDeferred
+                joinDeferred = null
             }
         }
-        if (!weOwn) {
-            val other = cacheMutex.withLock { traktEpisodesInFlight[showLookupId] }
-            return try { other?.await() ?: emptyList() } catch (_: Exception) { emptyList() }
-        }
-
+        if (joinDeferred != null) return try { joinDeferred.await() } catch (_: Exception) { emptyList() }
+        val deferred = ownDeferred!!
         return try {
             val episodes = fetchTraktEpisodes(showLookupId)
-            if (episodes.isNotEmpty()) {
-                cacheMutex.withLock { traktEpisodesCache[showLookupId] = episodes }
+            cacheMutex.withLock {
+                traktEpisodesCache[showLookupId] = episodes
+                traktEpisodesInFlight.remove(showLookupId)
             }
             deferred.complete(episodes)
             episodes
         } catch (e: Exception) {
+            cacheMutex.withLock { traktEpisodesInFlight.remove(showLookupId) }
             deferred.completeExceptionally(e)
             emptyList()
-        } finally {
-            cacheMutex.withLock { traktEpisodesInFlight.remove(showLookupId) }
         }
     }
 
