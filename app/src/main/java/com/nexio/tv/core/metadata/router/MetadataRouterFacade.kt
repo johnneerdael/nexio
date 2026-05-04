@@ -867,8 +867,24 @@ class MetadataRouterFacade(
             backdrop = backdrop ?: fallback.backdrop,
             releaseInfo = releaseDate ?: fallback.releaseInfo,
             genres = genres.ifEmpty { fallback.genres },
+            posterProviderTag = resolvedPosterProviderTag(fallback),
             artwork = mergeResolvedArtwork(fallback)
         )
+
+    private fun ResolvedMetadataDocument.resolvedPosterProviderTag(fallback: HomeDisplayMetadata): String? {
+        val selectedPoster = poster
+        val selectedRole = sourceRoles[ResolvedField.POSTER]
+        val selectedProvider = sourceProviders[ResolvedField.POSTER]
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        return when {
+            selectedPoster == null -> fallback.posterProviderTag
+            selectedRole == SourceRole.RAIL_PREVIEW || selectedRole == SourceRole.ADDON_PREVIEW -> fallback.posterProviderTag
+            selectedRole == SourceRole.ARTWORK && selectedProvider != null -> selectedProvider.lowercase()
+            else -> null
+        }
+    }
 
     private fun ResolvedMetadataDocument.mergeResolvedArtwork(fallback: HomeDisplayMetadata): ArtworkBundle? {
         val selectedArtwork = artwork.takeUnless { it.isEmpty() }
