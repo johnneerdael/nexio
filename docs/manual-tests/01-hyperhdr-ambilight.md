@@ -17,7 +17,9 @@
 3. Fill in:
    - **Host:** the HyperHDR server's IP
    - **FlatBuffer port:** `19400` (default)
-   - **JSON-RPC port:** `19444` (default)
+   - **JSON-RPC port:** `8090` (default — HyperHDR's web server port; serves
+     `/json-rpc` over HTTP. The raw-TCP JSON server on `19444` speaks
+     newline-delimited JSON, not HTTP, and is not what Nexio talks to.)
    - **Priority:** `100`
    - **HDR mode:** `Auto`
 4. Tap **Test connection**. Expect:
@@ -128,7 +130,7 @@ capable and the HDR Mode picker should be visible.
 - **`videomode` JSON call fails but FlatBuffer works** — non-fatal by
   design. HyperHDR will still receive frames; it just won't auto-switch
   HDR/SDR LUT profiles based on our signal. Check JSON port reachability
-  separately with `nc -v <host> 19444`.
+  separately with `curl -v http://<host>:8090/json-rpc -d '{"command":"serverinfo","tan":1}'`.
 - **HDR Mode picker isn't visible on a device you expect to be HDR-capable** —
   the device's compositor doesn't actually report HDR modes. Verify with
   the dumpsys command above. Some HDR-capable TVs/displays connected to
