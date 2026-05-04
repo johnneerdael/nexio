@@ -15,8 +15,6 @@ import javax.inject.Singleton
 object TmdbCatalogIds {
     const val TRENDING_MOVIES = "tmdb_trending_movies"
     const val TRENDING_SERIES = "tmdb_trending_series"
-    const val LATEST_RELEASES_MOVIES = "tmdb_latest_releases_movies"
-    const val LATEST_RELEASES_SERIES = "tmdb_latest_releases_series"
     const val POPULAR_MOVIES = "tmdb_popular_movies"
     const val POPULAR_SERIES = "tmdb_popular_series"
     const val YEAR_MOVIES = "tmdb_year_movies"
@@ -27,8 +25,6 @@ object TmdbCatalogIds {
     val BUILT_IN_ORDER: List<String> = listOf(
         TRENDING_MOVIES,
         TRENDING_SERIES,
-        LATEST_RELEASES_MOVIES,
-        LATEST_RELEASES_SERIES,
         POPULAR_MOVIES,
         POPULAR_SERIES,
         YEAR_MOVIES,
@@ -40,8 +36,8 @@ object TmdbCatalogIds {
     val DEFAULT_ENABLED: Set<String> = setOf(
         TRENDING_MOVIES,
         TRENDING_SERIES,
-        LATEST_RELEASES_MOVIES,
-        LATEST_RELEASES_SERIES
+        POPULAR_MOVIES,
+        POPULAR_SERIES
     )
 }
 

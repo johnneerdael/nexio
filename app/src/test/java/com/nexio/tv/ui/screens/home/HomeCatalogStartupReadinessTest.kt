@@ -951,16 +951,16 @@ class HomeCatalogStartupReadinessTest {
     @Test
     fun `tmdb refresh invalidates populated rows when digital release preference changes`() {
         val prefs = TmdbCatalogPreferences(
-            enabledCatalogs = setOf(TmdbCatalogIds.LATEST_RELEASES_MOVIES),
-            catalogOrder = listOf(TmdbCatalogIds.LATEST_RELEASES_MOVIES),
+            enabledCatalogs = setOf(TmdbCatalogIds.POPULAR_MOVIES),
+            catalogOrder = listOf(TmdbCatalogIds.POPULAR_MOVIES),
             includeAdult = false,
             hideUnreleasedDigital = true
         )
         val snapshot = TmdbDiscoverySnapshot(
             rowsByCatalog = mapOf(
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES to tmdbRow(
-                    catalogId = TmdbCatalogIds.LATEST_RELEASES_MOVIES,
-                    items = listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Latest Movie"))
+                TmdbCatalogIds.POPULAR_MOVIES to tmdbRow(
+                    catalogId = TmdbCatalogIds.POPULAR_MOVIES,
+                    items = listOf(samplePreview("tmdb:2", ContentType.MOVIE, "Popular Movie"))
                 )
             ),
             updatedAtMs = 123L,

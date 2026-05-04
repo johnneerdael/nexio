@@ -66,8 +66,6 @@ fun tmdbCatalogTitle(catalogId: String): String? {
     return when (catalogId) {
         TmdbCatalogIds.TRENDING_MOVIES -> "TMDB Trending Movies"
         TmdbCatalogIds.TRENDING_SERIES -> "TMDB Trending Series"
-        TmdbCatalogIds.LATEST_RELEASES_MOVIES -> "TMDB Latest Releases Movies"
-        TmdbCatalogIds.LATEST_RELEASES_SERIES -> "TMDB Latest Releases Series"
         TmdbCatalogIds.POPULAR_MOVIES -> "TMDB Popular Movies"
         TmdbCatalogIds.POPULAR_SERIES -> "TMDB Popular Series"
         TmdbCatalogIds.YEAR_MOVIES -> "TMDB Movies By Year"

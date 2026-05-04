@@ -152,12 +152,12 @@ class AndroidTvFeedCatalogServiceTmdbTest {
             enabledCatalogs = setOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.POPULAR_MOVIES,
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES
+                TmdbCatalogIds.YEAR_MOVIES
             ),
             catalogOrder = listOf(
                 TmdbCatalogIds.TRENDING_MOVIES,
                 TmdbCatalogIds.POPULAR_MOVIES,
-                TmdbCatalogIds.LATEST_RELEASES_MOVIES
+                TmdbCatalogIds.YEAR_MOVIES
             )
         )
         val fixture = fixture(
