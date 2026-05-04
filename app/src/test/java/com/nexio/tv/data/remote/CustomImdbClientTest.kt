@@ -142,6 +142,71 @@ class CustomImdbClientTest {
     }
 
     @Test
+    fun `fetchTitleRatings ignores out of range average ratings`() = runTest {
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com/custom",
+            apiKey = "secret-key"
+        ) { chain ->
+            jsonResponse(
+                chain,
+                """
+                {
+                  "results": [
+                    { "tconst": "tt0944947", "averageRating": 92345, "numVotes": 2300000 },
+                    { "tconst": "tt1111111", "averageRating": 9.1, "numVotes": 1200 }
+                  ],
+                  "missing": []
+                }
+                """.trimIndent()
+            )
+        }
+
+        val result = client.fetchTitleRatings(listOf("tt0944947", "tt1111111"))
+
+        assertEquals(mapOf("tt1111111" to 9.1), result)
+    }
+
+    @Test
+    fun `fetchEpisodeRatings ignores out of range average ratings`() = runTest {
+        val client = buildClient(
+            baseUrl = "https://ratings.example.com/custom",
+            apiKey = "secret-key"
+        ) { chain ->
+            jsonResponse(
+                chain,
+                """
+                {
+                  "requestTconst": "tt27444205",
+                  "episodesParentTconst": "tt27444205",
+                  "episodes": [
+                    {
+                      "tconst": "tt1000001",
+                      "parentTconst": "tt27444205",
+                      "seasonNumber": 1,
+                      "episodeNumber": 1,
+                      "averageRating": 81234,
+                      "numVotes": 200
+                    },
+                    {
+                      "tconst": "tt1000002",
+                      "parentTconst": "tt27444205",
+                      "seasonNumber": 1,
+                      "episodeNumber": 2,
+                      "averageRating": 7.4,
+                      "numVotes": 180
+                    }
+                  ]
+                }
+                """.trimIndent()
+            )
+        }
+
+        val result = client.fetchEpisodeRatings(tconst = "tt27444205")
+
+        assertEquals(mapOf((1 to 2) to 7.4), result)
+    }
+
+    @Test
     fun `fetchEpisodeRatings reuses version path when base url already ends in v1`() = runTest {
         var capturedPath = ""
         val client = buildClient(

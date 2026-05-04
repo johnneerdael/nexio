@@ -19,6 +19,7 @@ import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
@@ -52,7 +53,10 @@ fun buildMetaDetailsViewModel(
     profileBoundary: ProfileBoundary = defaultProfileBoundary(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
-    libraryRepository: LibraryRepository = defaultLibraryRepository()
+    libraryRepository: LibraryRepository = defaultLibraryRepository(),
+    mdbListRepository: MDBListRepository = mockk(relaxed = true),
+    titleRatingOverrideRepository: TitleRatingOverrideRepository = defaultTitleRatingOverrideRepository(),
+    episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository = mockk(relaxed = true)
 ): MetaDetailsViewModel {
     val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
     every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
@@ -77,8 +81,6 @@ fun buildMetaDetailsViewModel(
     every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
 
     val context = mockk<Context>(relaxed = true)
-    val titleRatingOverrideRepository = mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>()
-    coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
 
     return MetaDetailsViewModel(
         context = context,
@@ -92,9 +94,9 @@ fun buildMetaDetailsViewModel(
         tvMetadataRouter = tvMetadataRouter,
         kitsuMetadataService = kitsuMetadataService,
         profileBoundary = profileBoundary,
-        mdbListRepository = mockk(relaxed = true),
+        mdbListRepository = mdbListRepository,
         titleRatingOverrideRepository = titleRatingOverrideRepository,
-        episodeRatingsSelectionRepository = mockk(relaxed = true),
+        episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
         libraryRepository = libraryRepository,
         watchProgressRepository = watchProgressRepository,
         continueWatchingSnapshotService = mockk(relaxed = true),
@@ -174,4 +176,10 @@ fun defaultLibraryRepository(): LibraryRepository {
     every { repo.isInLibrary(any(), any()) } returns flowOf(false)
     every { repo.isInWatchlist(any(), any()) } returns flowOf(false)
     return repo
+}
+
+fun defaultTitleRatingOverrideRepository(): TitleRatingOverrideRepository {
+    return mockk<TitleRatingOverrideRepository>().also { repository ->
+        coEvery { repository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+    }
 }

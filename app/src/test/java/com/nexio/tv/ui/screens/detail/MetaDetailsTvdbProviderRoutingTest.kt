@@ -11,6 +11,9 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
+import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
@@ -366,6 +369,70 @@ class MetaDetailsTvdbProviderRoutingTest {
 
         assertEquals("Nederlandse Pilot", viewModel.uiState.value.episodesForSeason.single().title)
         assertEquals("Nederlandse afleveringstekst", viewModel.uiState.value.episodesForSeason.single().overview)
+    }
+
+    @Test
+    fun `tvdb remote imdb id is used for title mdb and episode rating hydration`() = runTest(dispatcher) {
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = 121361,
+                localizedTitle = "TVDB Title",
+                remoteIds = mapOf(
+                    "tvdb" to setOf("121361"),
+                    "imdb" to setOf("tt0944947"),
+                    "tmdb" to setOf("1399")
+                )
+            )
+        )
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = emptyMap()
+        )
+
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+        val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
+        val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>()
+        coEvery {
+            episodeRatingsSelectionRepository.getEpisodeRatings(any(), any(), any(), any())
+        } returns emptyMap()
+
+        buildMetaDetailsViewModel(
+            meta = buildSeriesMeta().copy(id = "tvdb:121361"),
+            itemId = "tvdb:121361",
+            itemType = "series",
+            tvMetadataRouter = tvMetadataRouter,
+            mdbListRepository = mdbListRepository,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useCredits = false,
+                useProductions = false,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = false,
+                useReviews = false,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        coVerify {
+            titleRatingOverrideRepository.enrichMeta(any(), "tt0944947", "series")
+        }
+        coVerify {
+            mdbListRepository.getRatingsForMeta(any(), "tt0944947", "series")
+        }
+        coVerify {
+            episodeRatingsSelectionRepository.getEpisodeRatings(any(), "tt0944947", "series", mapOf(1 to setOf(1)))
+        }
     }
 
     private fun buildSeriesMeta(): Meta {
