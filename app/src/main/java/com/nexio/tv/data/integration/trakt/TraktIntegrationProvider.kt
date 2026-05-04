@@ -212,20 +212,41 @@ class TraktIntegrationProvider @Inject constructor(
         return IntegrationCallResult.Success(value)
     }
 
-    suspend fun getWatchedShows(
-        extended: String? = null
-    ): IntegrationCallResult<List<TraktWatchedShowItemDto>> =
-        executeAuthorizedBackgroundCall(
+    suspend fun getWatchedShows(): IntegrationCallResult<List<TraktWatchedShowItemDto>> {
+        val session = traktAuthService.accountScopedSession()
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
             apiShapeId = TraktApiShapes.WATCHED_SHOWS,
-            operationKey = "trakt.watched.shows",
-            request = { authorization ->
-                traktApi.getWatchedShows(
-                    authorization = authorization,
-                    extended = extended
-                )
-            },
-            mapSuccess = { response -> IntegrationCallResult.Success(response.body().orEmpty()) }
+            operationKey = accountOperationKey(session, "trakt.watched.shows"),
+            cacheKey = accountCacheKey(session, "trakt:sync:watched:shows"),
+            codec = gsonCodec<List<TraktWatchedShowItemDto>>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = WATCHED_SNAPSHOT_TTL_MS,
+                staleAfterExpiryMs = WATCHED_SNAPSHOT_STALE_GRACE_MS
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = {
+                val response = traktAuthService.executeAuthorizedRequestWithinRuntimeCall(session) { authorization ->
+                    traktApi.getWatchedShows(
+                        authorization = authorization,
+                        extended = null
+                    )
+                } ?: return@IntegrationSpec IntegrationLoadResult.HttpError(401, reason = "auth_missing")
+                if (!response.isSuccessful) {
+                    return@IntegrationSpec IntegrationLoadResult.HttpError(
+                        statusCode = response.code(),
+                        retryAfterMs = response.headers()["Retry-After"]?.toLongOrNull()?.times(1000L),
+                        reason = "trakt_watched_shows_failed"
+                    )
+                }
+                IntegrationLoadResult.Success(response.body().orEmpty())
+            }
         )
+        val value = runtime.get(spec).valueOrNull() ?: return IntegrationCallResult.Missing
+        return IntegrationCallResult.Success(value)
+    }
 
     suspend fun getHiddenItems(
         section: String,

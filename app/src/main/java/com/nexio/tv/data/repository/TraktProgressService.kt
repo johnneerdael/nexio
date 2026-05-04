@@ -1397,7 +1397,7 @@ class TraktProgressService @Inject constructor(
 
             watchedShowsLastAttemptAtMs = now
             trace("watched-shows fetch: requesting /sync/watched/shows?extended=noseasons")
-            val watchedShowItems = when (val result = traktIntegrationProvider.getWatchedShows(extended = "noseasons")) {
+            val watchedShowItems = when (val result = traktIntegrationProvider.getWatchedShows()) {
                 is IntegrationCallResult.Success -> result.value
                 else -> {
                     trace("watched-shows fetch: request returned null (network/auth failure)")
