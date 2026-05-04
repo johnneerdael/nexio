@@ -31,6 +31,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onKeyEvent
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -60,6 +62,18 @@ fun HyperHdrSettingsContent(
 ) {
     val cfg by viewModel.config.collectAsStateWithLifecycle()
     val testResult by viewModel.testResult.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    LaunchedEffect(testResult) {
+        val message = when (val r = testResult) {
+            is HyperHdrSettingsViewModel.TestResult.Success ->
+                "✔ Connected to ${r.hostname}${if (r.instanceName != null) " · ${r.instanceName}" else ""}"
+            is HyperHdrSettingsViewModel.TestResult.Failed -> "✘ ${r.message}"
+            else -> null
+        } ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        viewModel.consumeTestResult()
+    }
 
     var showHostDialog by remember { mutableStateOf(false) }
     var showPortDialog by remember { mutableStateOf(false) }
@@ -182,44 +196,10 @@ fun HyperHdrSettingsContent(
                     SettingsActionRow(
                         title = "Test connection",
                         subtitle = "Validate FlatBuffer + JSON ports against the server",
-                        value = null,
+                        value = if (testResult is HyperHdrSettingsViewModel.TestResult.Testing) "Testing…" else null,
+                        enabled = testResult !is HyperHdrSettingsViewModel.TestResult.Testing,
                         onClick = { viewModel.testConnection() }
                     )
-                }
-
-                val result = testResult
-                if (result != HyperHdrSettingsViewModel.TestResult.Idle) {
-                    item(key = "hyperhdr_test_result") {
-                        when (result) {
-                            HyperHdrSettingsViewModel.TestResult.Testing -> {
-                                SettingsActionRow(
-                                    title = "Testing…",
-                                    subtitle = null,
-                                    enabled = false,
-                                    onClick = {}
-                                )
-                            }
-                            is HyperHdrSettingsViewModel.TestResult.Success -> {
-                                SettingsActionRow(
-                                    title = "✔ Connected",
-                                    subtitle = "${result.hostname}${if (result.instanceName != null) " · ${result.instanceName}" else ""}",
-                                    enabled = false,
-                                    onClick = {}
-                                )
-                            }
-                            is HyperHdrSettingsViewModel.TestResult.Failed -> {
-                                SettingsActionRow(
-                                    title = "✘ Failed",
-                                    subtitle = result.message,
-                                    enabled = false,
-                                    onClick = {}
-                                )
-                            }
-                            HyperHdrSettingsViewModel.TestResult.Idle -> {
-                                // Excluded by the outer if-check; unreachable here
-                            }
-                        }
-                    }
                 }
             }
         }

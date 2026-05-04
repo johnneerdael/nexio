@@ -67,6 +67,10 @@ class HyperHdrSettingsViewModel @Inject constructor(
     fun setJsonToken(value: String) =
         viewModelScope.launch { store.update { it.copy(jsonToken = value.trim()) } }
 
+    fun consumeTestResult() {
+        _testResult.value = TestResult.Idle
+    }
+
     fun startDiscovery() = runCatching { discovery.start() }
 
     fun stopDiscovery() = runCatching { discovery.stop() }
