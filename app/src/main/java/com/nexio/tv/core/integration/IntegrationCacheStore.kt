@@ -8,6 +8,17 @@ interface IntegrationCacheStore {
     suspend fun delete(spec: IntegrationSpec<*>): Boolean
 
     companion object {
+        /**
+         * No-op fallback used as a constructor default for legacy test sites that
+         * predate the cacheStore parameter. Production goes through the Hilt-bound
+         * LocalIntegrationCacheStore. New tests should use ByteArrayIntegrationCacheStore
+         * (in the test source set) so cache behaviour is actually exercised.
+         */
+        @Deprecated(
+            message = "For legacy test compatibility only. Production uses LocalIntegrationCacheStore via Hilt; " +
+                "new tests should use ByteArrayIntegrationCacheStore.",
+            level = DeprecationLevel.WARNING
+        )
         val Noop: IntegrationCacheStore = object : IntegrationCacheStore {
             override suspend fun <T> readFresh(spec: IntegrationSpec<T>): T? = null
             override suspend fun <T> readStale(spec: IntegrationSpec<T>): T? = null
