@@ -273,4 +273,8 @@ private class InMemoryIntegrationCacheDao : IntegrationCacheDao() {
         keys.forEach(entries::remove)
         return keys.size
     }
+
+    override suspend fun deleteByCacheKey(cacheKey: String): Int {
+        return if (entries.remove(cacheKey) != null) 1 else 0
+    }
 }

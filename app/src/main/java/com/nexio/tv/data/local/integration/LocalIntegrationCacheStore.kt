@@ -86,4 +86,15 @@ class LocalIntegrationCacheStore @Inject constructor(
         blobPaths.forEach { blobStore.delete(it) }
         return deleted
     }
+
+    override suspend fun delete(spec: IntegrationSpec<*>): Boolean {
+        val cacheKey = spec.requiredCacheKey
+        val entry = cacheDao.getCacheEntry(cacheKey) ?: return false
+        val deleted = cacheDao.deleteByCacheKey(cacheKey) > 0
+        if (deleted) {
+            // Mirror deleteOwnedMedia: best-effort blob cleanup; orphans are reapable.
+            runCatching { blobStore.delete(entry.blobPath) }
+        }
+        return deleted
+    }
 }
