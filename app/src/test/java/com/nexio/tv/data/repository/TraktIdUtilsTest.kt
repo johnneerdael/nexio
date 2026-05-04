@@ -71,4 +71,59 @@ class TraktIdUtilsTest {
         val ids = TraktIdsDto(imdb = "tt0903747", tmdb = 1396, tvdb = 81189)
         assertEquals("tt0903747", normalizeContentId(ids))
     }
+
+    @Test
+    fun traktIdLookupKeys_show_emits_full_alias_set() {
+        val ids = TraktIdsDto(
+            trakt = 1, slug = "breaking-bad",
+            imdb = "tt0903747", tmdb = 1396, tvdb = 81189
+        )
+        val keys = traktIdLookupKeys(ids, MediaKind.SHOW)
+        assertEquals(
+            setOf("tvdb:81189", "tmdb:1396", "tt0903747", "trakt:1", "breaking-bad"),
+            keys.toSet()
+        )
+    }
+
+    @Test
+    fun traktIdLookupKeys_movie_omits_tvdb_when_absent() {
+        val ids = TraktIdsDto(
+            trakt = 6, slug = "batman-begins-2005",
+            imdb = "tt0372784", tmdb = 272, tvdb = null
+        )
+        val keys = traktIdLookupKeys(ids, MediaKind.MOVIE)
+        assertEquals(
+            setOf("tmdb:272", "tt0372784", "trakt:6", "batman-begins-2005"),
+            keys.toSet()
+        )
+    }
+
+    @Test
+    fun preferredTraktPathId_show_prefers_trakt_over_tvdb_for_path_use() {
+        // Trakt path endpoints accept trakt slug/id and imdb; tvdb is unreliable in {id}.
+        val ids = TraktIdsDto(trakt = 1, slug = "breaking-bad", tvdb = 81189)
+        assertEquals("breaking-bad", preferredTraktPathId(ids, MediaKind.SHOW))
+    }
+
+    @Test
+    fun preferredTraktPathId_show_uses_imdb_when_no_trakt() {
+        val ids = TraktIdsDto(imdb = "tt0903747", tvdb = 81189)
+        assertEquals("tt0903747", preferredTraktPathId(ids, MediaKind.SHOW))
+    }
+
+    @Test
+    fun preferredTraktPathId_movie_uses_imdb_then_trakt_then_tmdb() {
+        assertEquals(
+            "tt0372784",
+            preferredTraktPathId(TraktIdsDto(imdb = "tt0372784", tmdb = 272), MediaKind.MOVIE)
+        )
+        assertEquals(
+            "trakt:6",
+            preferredTraktPathId(TraktIdsDto(trakt = 6, tmdb = 272), MediaKind.MOVIE)
+        )
+        assertEquals(
+            "tmdb:272",
+            preferredTraktPathId(TraktIdsDto(tmdb = 272), MediaKind.MOVIE)
+        )
+    }
 }
