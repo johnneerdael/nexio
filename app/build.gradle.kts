@@ -801,6 +801,7 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.container)
     implementation(libs.media3.extractor)
+    implementation(libs.media3.effect)
 
     // Local AAR libraries from forked ExoPlayer.
     if (useMedia3Source) {
@@ -829,6 +830,9 @@ dependencies {
     }
 
     implementation(libs.gson)
+
+    // FlatBuffers runtime (HyperHDR ambilight protocol)
+    implementation("com.google.flatbuffers:flatbuffers-java:25.2.10")
 
     // Markdown rendering
     implementation(libs.markdown.renderer.m3)

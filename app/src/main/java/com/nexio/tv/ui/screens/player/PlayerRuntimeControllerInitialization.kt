@@ -71,6 +71,20 @@ import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import com.nexio.tv.ui.screens.player.ass.AssSsaTimeRenderer
 import com.nexio.tv.ui.screens.player.ass.AssSsaTranslatingSampleSink
+import com.nexio.tv.integrations.hyperhdr.capture.CaptureMode
+import com.nexio.tv.integrations.hyperhdr.capture.FormatDetector
+import com.nexio.tv.integrations.hyperhdr.capture.HyperHdrCaptureEffect
+import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
+import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
+import com.nexio.tv.integrations.hyperhdr.network.ConnectionState
+import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferReconnector
+import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionStateHolder
+import dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoints
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -83,6 +97,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
 private const val ASS_SSA_STARTUP_PROBE_TIMEOUT_MS = 2_500L
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+internal interface HyperHdrEntryPoint {
+    fun hyperHdrConfigDataStore(): HyperHdrConfigDataStore
+    fun displayColorCapability(): com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
+    fun hyperHdrSessionStateHolder(): HyperHdrSessionStateHolder
+}
 
 internal data class StartupSubtitlePreparation(
     val fetchedSubtitles: List<Subtitle>,
@@ -731,6 +753,80 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             assSsaPipelineSwitchInFlight = false
             _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
 
+            val hyperHdrEntry = EntryPoints
+                .get(context.applicationContext, HyperHdrEntryPoint::class.java)
+            val hyperHdrStore = hyperHdrEntry.hyperHdrConfigDataStore()
+            val hyperHdrDisplayCapability = hyperHdrEntry.displayColorCapability()
+            val hyperHdrSessionStateHolder = hyperHdrEntry.hyperHdrSessionStateHolder()
+
+            var hyperHdrCfg: HyperHdrConfig = HyperHdrConfig()
+            var hyperHdrFbReconnector: HyperHdrFlatBufferReconnector? = null
+            var hyperHdrStateCollectJob: kotlinx.coroutines.Job? = null
+            var hyperHdrCurrentMode: CaptureMode? = null
+
+            scope.launch {
+                hyperHdrStore.config.collect { hyperHdrCfg = it }
+            }
+
+            suspend fun startHyperHdrCapture(targetMode: CaptureMode) {
+                val player = _exoPlayer ?: return
+                val cfg = hyperHdrCfg
+                if (!cfg.isUsable) return
+
+                hyperHdrStateCollectJob?.cancel()
+                hyperHdrStateCollectJob = null
+                hyperHdrFbReconnector?.close()
+                hyperHdrFbReconnector = null
+
+                val reconnector = HyperHdrFlatBufferReconnector(
+                    host = cfg.host,
+                    port = cfg.port,
+                    priority = cfg.priority,
+                    origin = "Nexio-HyperHDR"
+                )
+                reconnector.start()
+                hyperHdrFbReconnector = reconnector
+                Log.d("HyperHdrIntegration", "Reconnector started for ${cfg.host}:${cfg.port}, awaiting connect")
+
+                hyperHdrSessionStateHolder.update(HyperHdrSessionState.Connecting(targetMode))
+                hyperHdrStateCollectJob = scope.launch {
+                    reconnector.state.collect { connState ->
+                        val sessionState = when (connState) {
+                            ConnectionState.CONNECTED -> HyperHdrSessionState.Connected(targetMode)
+                            ConnectionState.CONNECTING -> HyperHdrSessionState.Connecting(targetMode)
+                            ConnectionState.ERROR -> HyperHdrSessionState.Reconnecting(targetMode)
+                            ConnectionState.DISCONNECTED -> HyperHdrSessionState.Idle
+                        }
+                        hyperHdrSessionStateHolder.update(sessionState)
+                    }
+                }
+
+                runCatching {
+                    val jsonClient = HyperHdrJsonApiClient(
+                        host = cfg.host,
+                        port = cfg.jsonPort,
+                        token = cfg.jsonToken.ifBlank { null }
+                    )
+                    jsonClient.setHdrVideoMode(targetMode == CaptureMode.HDR_P010)
+                }.onFailure {
+                    Log.w("HyperHdrIntegration", "JSON setHdrVideoMode failed (continuing)", it)
+                }
+
+                hyperHdrCurrentMode = targetMode
+                player.setVideoEffects(listOf(HyperHdrCaptureEffect(reconnector, targetMode)))
+            }
+
+            fun stopHyperHdrCapture() {
+                val player = _exoPlayer ?: return
+                player.setVideoEffects(emptyList())
+                hyperHdrStateCollectJob?.cancel()
+                hyperHdrStateCollectJob = null
+                hyperHdrFbReconnector?.close()
+                hyperHdrFbReconnector = null
+                hyperHdrCurrentMode = null
+                hyperHdrSessionStateHolder.update(HyperHdrSessionState.Idle)
+            }
+
             _exoPlayer?.apply {
                 
                 val audioAttributes = AudioAttributes.Builder()
@@ -899,6 +995,23 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        if (!hyperHdrCfg.isUsable) {
+                            if (hyperHdrFbReconnector != null) stopHyperHdrCapture()
+                        } else if (isPlaying) {
+                            scope.launch {
+                                val cfg = hyperHdrCfg
+                                val colorInfo = _exoPlayer?.videoFormat?.colorInfo
+                                val mode = FormatDetector.detect(
+                                    colorInfo,
+                                    cfg.hdrMode,
+                                    deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor
+                                )
+                                startHyperHdrCapture(mode)
+                            }
+                        } else {
+                            stopHyperHdrCapture()
+                        }
+
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         _uiState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
@@ -926,6 +1039,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onTracksChanged(tracks: Tracks) {
+                        if (hyperHdrCfg.isUsable && _exoPlayer?.isPlaying == true) {
+                            val colorInfo = _exoPlayer?.videoFormat?.colorInfo
+                            val newMode = FormatDetector.detect(
+                                colorInfo,
+                                hyperHdrCfg.hdrMode,
+                                deviceComposesWideColor = hyperHdrDisplayCapability.composesWideColor
+                            )
+                            if (newMode != hyperHdrCurrentMode) {
+                                scope.launch { startHyperHdrCapture(newMode) }
+                            }
+                        }
+
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         updateAvailableTracks(tracks)
                     }

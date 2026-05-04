@@ -27,6 +27,8 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionStateHolder
 import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -64,6 +66,7 @@ class PlayerViewModel @Inject constructor(
     private val playbackSessionRegistry: PlaybackSessionRegistry,
     private val egressIpFingerprint: EgressIpFingerprint,
     private val authRecoveryInterceptor: AuthRecoveryInterceptor,
+    private val hyperHdrSessionStateHolder: HyperHdrSessionStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var playbackRegistrationToken: String? = null
@@ -114,6 +117,9 @@ class PlayerViewModel @Inject constructor(
 
     val progressUiState: StateFlow<PlayerPlaybackProgressUiState>
         get() = controller.progressUiState
+
+    val hyperHdrSessionState: StateFlow<HyperHdrSessionState> =
+        hyperHdrSessionStateHolder.state
 
     val exoPlayer: ExoPlayer?
         get() = controller.exoPlayer

@@ -119,6 +119,8 @@ import com.nexio.tv.R
 import com.nexio.tv.core.player.ExternalPlayerLauncher
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.integrations.hyperhdr.capture.CaptureMode
+import com.nexio.tv.integrations.hyperhdr.session.HyperHdrSessionState
 import android.text.format.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -1079,6 +1081,7 @@ private fun PlayerControlsOverlay(
     val customSourcePainter = rememberRawSvgPainter(R.raw.ic_player_source)
     val customAspectPainter = rememberRawSvgPainter(R.raw.ic_player_aspect_ratio)
     val customEpisodesPainter = rememberRawSvgPainter(R.raw.ic_player_episodes)
+    val hyperHdrSessionState by viewModel.hyperHdrSessionState.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Single draw pass for top/bottom control gradients.
@@ -1183,7 +1186,8 @@ private fun PlayerControlsOverlay(
                         uiState.videoHdrType != null ||
                         uiState.videoCodecName != null ||
                         uiState.audioCodecName != null ||
-                        uiState.audioChannelLayout != null
+                        uiState.audioChannelLayout != null ||
+                        hyperHdrSessionState !is HyperHdrSessionState.Idle
 
                     if (hasAnyBadge) {
                         Spacer(modifier = Modifier.height(6.dp))
@@ -1229,6 +1233,8 @@ private fun PlayerControlsOverlay(
                                     textColor = Color.White.copy(alpha = 0.9f)
                                 )
                             }
+
+                            HyperHdrBadge(state = hyperHdrSessionState)
                         }
                     }
                 }
@@ -2093,6 +2099,24 @@ private fun QualityBadge(
                 shape = RoundedCornerShape(4.dp)
             )
             .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun HyperHdrBadge(state: HyperHdrSessionState) {
+    val text = when (state) {
+        HyperHdrSessionState.Idle -> return
+        is HyperHdrSessionState.Connecting -> "HyperHDR..."
+        is HyperHdrSessionState.Reconnecting -> "HyperHDR retry"
+        is HyperHdrSessionState.Connected -> when (state.mode) {
+            CaptureMode.HDR_P010 -> "HyperHDR HDR"
+            CaptureMode.SDR_NV12 -> "HyperHDR"
+        }
+    }
+    QualityBadge(
+        text = text,
+        backgroundColor = Color.White.copy(alpha = 0.15f),
+        textColor = Color.White.copy(alpha = 0.9f)
     )
 }
 
