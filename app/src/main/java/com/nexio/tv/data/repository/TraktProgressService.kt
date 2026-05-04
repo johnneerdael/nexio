@@ -251,7 +251,9 @@ class TraktProgressService @Inject constructor(
         var lastKnownHiddenProgressFingerprint: String? = null,
         var lastManualRefreshSignalMs: Long = 0L,
         val episodeProgressActivityVersion: AtomicLong = AtomicLong(0L),
-        val showNextUpActivityVersion: AtomicLong = AtomicLong(0L)
+        val showNextUpActivityVersion: AtomicLong = AtomicLong(0L),
+        @Volatile var cachedActivities: TraktLastActivitiesResponseDto? = null,
+        @Volatile var cachedActivitiesAtMs: Long = 0L
     ) {
         fun clear() {
             remoteProgress.value = emptyList()
@@ -287,6 +289,8 @@ class TraktProgressService @Inject constructor(
             lastManualRefreshSignalMs = 0L
             episodeProgressActivityVersion.set(0L)
             showNextUpActivityVersion.set(0L)
+            cachedActivities = null
+            cachedActivitiesAtMs = 0L
         }
     }
 
@@ -380,6 +384,12 @@ class TraktProgressService @Inject constructor(
         set(value) { runtimeState().lastManualRefreshSignalMs = value }
     private val episodeProgressActivityVersion get() = runtimeState().episodeProgressActivityVersion
     private val showNextUpActivityVersion get() = runtimeState().showNextUpActivityVersion
+    private var cachedActivities: TraktLastActivitiesResponseDto?
+        get() = runtimeState().cachedActivities
+        set(value) { runtimeState().cachedActivities = value }
+    private var cachedActivitiesAtMs: Long
+        get() = runtimeState().cachedActivitiesAtMs
+        set(value) { runtimeState().cachedActivitiesAtMs = value }
 
     private fun runtimeState(): TraktProgressRuntimeState {
         return runtimeRegistry.stateFor(
@@ -389,9 +399,6 @@ class TraktProgressService @Inject constructor(
             )
         )
     }
-
-    @Volatile private var cachedActivities: TraktLastActivitiesResponseDto? = null
-    @Volatile private var cachedActivitiesAtMs: Long = 0L
 
     // Shared last-activities cache - avoids duplicate /sync/last_activities calls
     // when both TraktProgressService and TraktDiscoveryService refresh in the same cycle.
