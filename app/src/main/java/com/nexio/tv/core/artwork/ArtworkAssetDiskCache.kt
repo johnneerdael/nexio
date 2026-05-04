@@ -30,11 +30,12 @@ class ArtworkAssetDiskCache(
             staleUntilMs = decision.staleUntilMs ?: decision.expiresAtMs
         )
 
-    fun write(record: ArtworkAssetRecord, bytes: ByteArray): File {
-        val file = File(cacheRoot, record.relativePath)
+    fun write(record: ArtworkAssetRecord, bytes: ByteArray): ArtworkAssetDiskWrite {
+        val canonicalRecord = record.copy(relativePath = relativePathFor(record.assetKey))
+        val file = File(cacheRoot, canonicalRecord.relativePath)
         file.parentFile?.mkdirs()
         file.writeBytes(bytes)
-        return file
+        return ArtworkAssetDiskWrite(file = file, record = canonicalRecord)
     }
 
     fun getExistingFile(assetKey: ArtworkAssetKey): File? {
@@ -57,3 +58,8 @@ class ArtworkAssetDiskCache(
     private fun String.safePathSegment(): String =
         replace(Regex("[^A-Za-z0-9._-]"), "_")
 }
+
+data class ArtworkAssetDiskWrite(
+    val file: File,
+    val record: ArtworkAssetRecord
+)
