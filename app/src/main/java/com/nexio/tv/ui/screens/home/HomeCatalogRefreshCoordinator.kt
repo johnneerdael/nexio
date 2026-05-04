@@ -353,14 +353,24 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
         items.forEach { item ->
             val itemKey = "${item.apiType}:${item.id}"
+            val metadata = item.toHomeDisplayMetadata()
             val entries = buildList {
-                item.poster?.trim()?.takeIf(String::isNotEmpty)?.let {
+                metadata.displayPoster?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                    ?.takeUnless(::isInternalArtworkRef)
+                    ?.let {
                     add(ImageCacheEntry(it, ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, it)))
                 }
-                item.background?.trim()?.takeIf(String::isNotEmpty)?.let {
+                metadata.displayBackdrop?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                    ?.takeUnless(::isInternalArtworkRef)
+                    ?.let {
                     add(ImageCacheEntry(it, ArtworkImageCacheKeys.backdrop(item.id)))
                 }
-                item.logo?.trim()?.takeIf(String::isNotEmpty)?.let {
+                metadata.displayLogo?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                    ?.takeUnless(::isInternalArtworkRef)
+                    ?.let {
                     add(ImageCacheEntry(it, ArtworkImageCacheKeys.logo(item.id)))
                 }
             }
@@ -392,6 +402,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             itemEvents = itemEvents
         )
     }
+
+    private fun isInternalArtworkRef(value: String): Boolean =
+        value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
 
     @OptIn(ExperimentalCoilApi::class)
     private fun hasImageCached(diskCacheKey: String): Boolean {

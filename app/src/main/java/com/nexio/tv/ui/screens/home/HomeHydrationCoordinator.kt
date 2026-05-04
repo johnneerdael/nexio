@@ -369,17 +369,28 @@ class HomeHydrationCoordinator @Inject constructor(
         before: HomeDisplayMetadata,
         after: HomeDisplayMetadata
     ): List<String> = buildList {
+        val displayLogoChanged = before.displayLogo != after.displayLogo
+        val displayPosterChanged = before.displayPoster != after.displayPoster
+        val displayBackdropChanged = before.displayBackdrop != after.displayBackdrop
         if (before.title != after.title) add("title")
-        if (before.logo != after.logo) add("logo")
+        if (displayLogoChanged) add("logo")
         if (before.description != after.description) add("description")
         if (before.genres != after.genres) add("genres")
         if (before.releaseInfo != after.releaseInfo) add("releaseInfo")
         if (before.runtime != after.runtime) add("runtime")
         if (before.imdbRating != after.imdbRating || before.ratingSource != after.ratingSource) add("rating")
         if (before.tomatoesRating != after.tomatoesRating) add("tomatoesRating")
-        if (before.poster != after.poster) add("poster")
+        if (displayPosterChanged) add("poster")
         if (before.posterProviderTag != after.posterProviderTag) add("posterProviderTag")
-        if (before.backdrop != after.backdrop) add("backdrop")
+        if (displayBackdropChanged) add("backdrop")
+        if (
+            before.artwork != after.artwork &&
+            !displayLogoChanged &&
+            !displayPosterChanged &&
+            !displayBackdropChanged
+        ) {
+            add("artwork")
+        }
     }
 
     private data class CanonicalIdentity(
