@@ -45,9 +45,6 @@ internal fun normalizeContentId(ids: TraktIdsDto?, fallback: String? = null): St
     val tmdb = ids?.tmdb
     if (tmdb != null) return "tmdb:$tmdb"
 
-    val tvdb = ids?.tvdb
-    if (tvdb != null) return "tvdb:$tvdb"
-
     val trakt = ids?.trakt
     if (trakt != null) return "trakt:$trakt"
 
@@ -59,7 +56,6 @@ internal fun toTraktPathId(contentId: String): String {
     return when {
         !parsed.imdb.isNullOrBlank() -> parsed.imdb
         parsed.tmdb != null -> "tmdb:${parsed.tmdb}"
-        parsed.tvdb != null -> "tvdb:${parsed.tvdb}"
         parsed.trakt != null -> parsed.trakt.toString()
         else -> contentId
     }
