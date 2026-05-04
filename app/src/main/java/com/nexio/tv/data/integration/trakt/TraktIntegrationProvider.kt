@@ -53,7 +53,11 @@ import com.nexio.tv.data.remote.dto.trakt.TraktTrendingShowItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserStatsResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCollectionShowItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
@@ -406,6 +410,38 @@ class TraktIntegrationProvider @Inject constructor(
             load = { IntegrationLoadResult.Success(Unit) }
         )
         cacheStore.delete(spec)
+    }
+
+    suspend fun addToCollection(
+        body: TraktCollectionAddRequestDto
+    ): IntegrationCallResult<TraktCollectionAddResponseDto> {
+        val result = executeAuthorizedBackgroundCall(
+            apiShapeId = TraktApiShapes.COLLECTION_ADD,
+            operationKey = "trakt.collection.add",
+            request = { authorization -> traktApi.addToCollection(authorization, body) },
+            mapSuccess = { response -> response.body().toCallResult() }
+        )
+        if (result is IntegrationCallResult.Success) {
+            if (body.movies?.isNotEmpty() == true) invalidateCollectionSnapshot(TraktCollectionKind.MOVIES)
+            if (body.shows?.isNotEmpty() == true) invalidateCollectionSnapshot(TraktCollectionKind.SHOWS)
+        }
+        return result
+    }
+
+    suspend fun removeFromCollection(
+        body: TraktCollectionRemoveRequestDto
+    ): IntegrationCallResult<TraktCollectionRemoveResponseDto> {
+        val result = executeAuthorizedBackgroundCall(
+            apiShapeId = TraktApiShapes.COLLECTION_REMOVE,
+            operationKey = "trakt.collection.remove",
+            request = { authorization -> traktApi.removeFromCollection(authorization, body) },
+            mapSuccess = { response -> response.body().toCallResult() }
+        )
+        if (result is IntegrationCallResult.Success) {
+            if (body.movies?.isNotEmpty() == true) invalidateCollectionSnapshot(TraktCollectionKind.MOVIES)
+            if (body.shows?.isNotEmpty() == true) invalidateCollectionSnapshot(TraktCollectionKind.SHOWS)
+        }
+        return result
     }
 
     suspend fun invalidateLastActivities() {
