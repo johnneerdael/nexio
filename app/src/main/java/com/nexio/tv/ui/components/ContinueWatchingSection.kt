@@ -59,6 +59,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.contentId
+import com.nexio.tv.ui.screens.home.displayMetadata
 import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscreen
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.ui.theme.NexioColors
@@ -264,6 +265,8 @@ fun ContinueWatchingCard(
 
     val progress = remember(item) { (item as? ContinueWatchingItem.InProgress)?.progress }
     val nextUp = remember(item) { (item as? ContinueWatchingItem.NextUp)?.info }
+    val progressDisplay = remember(item) { (item as? ContinueWatchingItem.InProgress)?.displayMetadata() }
+    val nextUpDisplay = remember(item) { (item as? ContinueWatchingItem.NextUp)?.displayMetadata() }
     val episodeStr = remember(progress, nextUp) {
         progress?.episodeDisplayString ?: nextUp?.let { "S${it.season}E${it.episode}" }
     }
@@ -294,21 +297,21 @@ fun ContinueWatchingCard(
         remainingText ?: nextUpBadgeText ?: strNextUp
     }
     val progressFraction = remember(progress) { progress?.progressPercentage ?: 0f }
-    val imageModel = remember(nextUp, progress) {
+    val imageModel = remember(nextUp, progress, nextUpDisplay, progressDisplay) {
         when {
             nextUp != null && !nextUp.hasAired -> firstNonBlank(
-                nextUp.backdrop,
-                nextUp.poster,
-                nextUp.thumbnail,
-                progress?.backdrop,
-                progress?.poster
+                nextUpDisplay?.displayBackdrop,
+                nextUpDisplay?.displayPoster,
+                nextUp.displayThumbnail,
+                progressDisplay?.displayBackdrop,
+                progressDisplay?.displayPoster
             )
             else -> firstNonBlank(
-                nextUp?.thumbnail,
-                progress?.backdrop,
-                progress?.poster,
-                nextUp?.backdrop,
-                nextUp?.poster
+                nextUp?.displayThumbnail,
+                progressDisplay?.displayBackdrop,
+                progressDisplay?.displayPoster,
+                nextUpDisplay?.displayBackdrop,
+                nextUpDisplay?.displayPoster
             )
         }
     }

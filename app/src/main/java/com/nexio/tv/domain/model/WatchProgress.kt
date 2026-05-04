@@ -46,6 +46,15 @@ data class WatchProgress(
             return if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
         }
 
+    val displayPoster: String?
+        get() = poster
+
+    val displayBackdrop: String?
+        get() = backdrop
+
+    val displayLogo: String?
+        get() = logo
+
     /**
      * Returns true if the content has been watched past the threshold (default 85%)
      */

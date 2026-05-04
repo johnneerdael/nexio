@@ -377,7 +377,7 @@ internal fun buildContinueWatchingItem(
             }
             HeroPreview(
                 title = displayMetadata.title ?: item.progress.name,
-                logo = displayMetadata.displayLogo ?: item.progress.logo,
+                logo = displayMetadata.displayLogo,
                 description = item.episodeDescription
                     ?: displayMetadata.description
                     ?: item.progress.episodeTitle,
@@ -388,21 +388,17 @@ internal fun buildContinueWatchingItem(
                 ratingSource = if (item.episodeImdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
-                poster = displayMetadata.displayPoster ?: item.progress.poster,
-                backdrop = displayMetadata.displayBackdrop ?: item.progress.backdrop,
+                poster = displayMetadata.displayPoster,
+                backdrop = displayMetadata.displayBackdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
                         displayMetadata.displayBackdrop,
-                        displayMetadata.displayPoster,
-                        item.progress.backdrop,
-                        item.progress.poster
+                        displayMetadata.displayPoster
                     )
                 } else {
                     firstNonBlank(
                         displayMetadata.displayPoster,
-                        displayMetadata.displayBackdrop,
-                        item.progress.poster,
-                        item.progress.backdrop
+                        displayMetadata.displayBackdrop
                     )
                 }
             )
@@ -413,7 +409,7 @@ internal fun buildContinueWatchingItem(
             val episodeLabel = if (episodeTitle != null) "$episodeCode · $episodeTitle" else episodeCode
             HeroPreview(
                 title = displayMetadata.title ?: item.info.name,
-                logo = displayMetadata.displayLogo ?: item.info.logo,
+                logo = displayMetadata.displayLogo,
                 description = item.info.episodeDescription
                     ?: displayMetadata.description
                     ?: item.info.episodeTitle
@@ -425,22 +421,18 @@ internal fun buildContinueWatchingItem(
                 ratingSource = if (item.info.imdbRating != null) TitleRatingSource.IMDB else displayMetadata.ratingSource.orDefault(),
                 tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.info.genres.ifEmpty { displayMetadata.genres },
-                poster = displayMetadata.displayPoster ?: item.info.poster,
-                backdrop = displayMetadata.displayBackdrop ?: item.info.backdrop,
+                poster = displayMetadata.displayPoster,
+                backdrop = displayMetadata.displayBackdrop,
                 imageUrl = if (useLandscapePosters) {
                     firstNonBlank(
                         displayMetadata.displayBackdrop,
                         displayMetadata.displayPoster,
-                        item.info.backdrop,
-                        item.info.poster,
                         item.info.thumbnail
                     )
                 } else {
                     firstNonBlank(
                         displayMetadata.displayPoster,
                         displayMetadata.displayBackdrop,
-                        item.info.poster,
-                        item.info.backdrop,
                         item.info.thumbnail
                     )
                 }
@@ -454,16 +446,12 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     item.episodeThumbnail,
                     displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop,
-                    item.progress.poster,
-                    item.progress.backdrop
+                    displayMetadata.displayBackdrop
                 )
             } else {
                 firstNonBlank(
                     displayMetadata.displayBackdrop,
-                    displayMetadata.displayPoster,
-                    item.progress.backdrop,
-                    item.progress.poster
+                    displayMetadata.displayPoster
                 )
             }
         } else {
@@ -471,16 +459,12 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     heroPreview.poster,
                     displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop,
-                    item.progress.poster,
-                    item.progress.backdrop
+                    displayMetadata.displayBackdrop
                 )
             } else {
                 firstNonBlank(
                     displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop,
-                    item.progress.poster,
-                    item.progress.backdrop
+                    displayMetadata.displayBackdrop
                 )
             }
         }
@@ -489,16 +473,12 @@ internal fun buildContinueWatchingItem(
                 firstNonBlank(
                     item.info.thumbnail,
                     displayMetadata.displayPoster,
-                    displayMetadata.displayBackdrop,
-                    item.info.poster,
-                    item.info.backdrop
+                    displayMetadata.displayBackdrop
                 )
             } else {
                 firstNonBlank(
                     displayMetadata.displayBackdrop,
                     displayMetadata.displayPoster,
-                    item.info.backdrop,
-                    item.info.poster,
                     item.info.thumbnail
                 )
             }
@@ -506,8 +486,6 @@ internal fun buildContinueWatchingItem(
             firstNonBlank(
                 displayMetadata.displayPoster,
                 displayMetadata.displayBackdrop,
-                item.info.poster,
-                item.info.backdrop,
                 item.info.thumbnail
             )
         }
@@ -548,10 +526,10 @@ internal fun continueWatchingInProgressToMetaPreview(item: ContinueWatchingItem.
         type = contentType,
         rawType = item.progress.contentType,
         name = displayMetadata.title ?: item.progress.name,
-        poster = displayMetadata.displayPoster ?: item.progress.poster,
+        poster = displayMetadata.displayPoster,
         posterShape = PosterShape.LANDSCAPE,
-        background = displayMetadata.displayBackdrop ?: item.progress.backdrop,
-        logo = displayMetadata.displayLogo ?: item.progress.logo,
+        background = displayMetadata.displayBackdrop,
+        logo = displayMetadata.displayLogo,
         description = displayMetadata.description ?: item.progress.episodeTitle,
         releaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
         imdbRating = item.episodeImdbRating ?: displayMetadata.imdbRating,
@@ -569,12 +547,12 @@ internal fun buildCatalogItem(
 ): ModernCarouselItem {
     val displayMetadata = item.toFirstPaintHomeDisplayMetadata()
     val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
-        ?: firstNonBlank(item.background, displayMetadata.displayBackdrop)
+        ?: displayMetadata.displayBackdrop
     val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
-        ?: firstNonBlank(displayMetadata.displayLogo, item.logo)
+        ?: displayMetadata.displayLogo
     val heroPreview = HeroPreview(
         title = displayMetadata.title ?: item.name,
-        logo = displayMetadata.displayLogo ?: item.logo,
+        logo = displayMetadata.displayLogo,
         description = displayMetadata.description ?: item.description,
         contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
         yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
@@ -582,12 +560,12 @@ internal fun buildCatalogItem(
         ratingSource = if (displayMetadata.imdbRating != null) displayMetadata.ratingSource.orDefault() else item.ratingSource.orDefault(),
         tomatoesText = (displayMetadata.tomatoesRating ?: item.tomatoesRating)?.let(::formatPreviewTomatoesRating),
         genres = displayMetadata.genres.ifEmpty { item.genres }.take(3),
-        poster = displayMetadata.displayPoster ?: item.poster,
-        backdrop = displayMetadata.displayBackdrop ?: item.background,
+        poster = displayMetadata.displayPoster,
+        backdrop = displayMetadata.displayBackdrop,
         imageUrl = if (useLandscapePosters) {
-            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster, item.background, item.poster)
+            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster)
         } else {
-            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop, item.poster, item.background)
+            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop)
         },
         frozenBackdropUrl = frozenBackdrop,
         frozenLogoUrl = frozenLogo
@@ -598,9 +576,9 @@ internal fun buildCatalogItem(
         title = displayMetadata.title ?: item.name,
         subtitle = displayMetadata.releaseInfo ?: item.releaseInfo,
         imageUrl = if (useLandscapePosters) {
-            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster, item.background, item.poster)
+            firstNonBlank(displayMetadata.displayBackdrop, displayMetadata.displayPoster)
         } else {
-            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop, item.poster, item.background)
+            firstNonBlank(displayMetadata.displayPoster, displayMetadata.displayBackdrop)
         },
         heroPreview = heroPreview,
         payload = ModernPayload.Catalog(
@@ -621,26 +599,27 @@ internal fun ContinueWatchingItem.displayMetadata(): HomeDisplayMetadata {
     return when (this) {
         is ContinueWatchingItem.InProgress -> displayMetadata ?: HomeDisplayMetadata(
             title = progress.name,
-            logo = progress.logo,
+            logo = progress.displayLogo,
             description = episodeDescription ?: progress.episodeTitle,
             genres = genres,
             releaseInfo = releaseInfo,
             imdbRating = episodeImdbRating,
             tomatoesRating = displayMetadata?.tomatoesRating,
-            poster = progress.poster,
-            backdrop = progress.backdrop
+            poster = progress.displayPoster,
+            backdrop = progress.displayBackdrop
         )
 
         is ContinueWatchingItem.NextUp -> info.displayMetadata ?: HomeDisplayMetadata(
             title = info.name,
-            logo = info.logo,
+            logo = info.displayLogo,
             description = info.episodeDescription ?: info.episodeTitle,
             genres = info.genres,
             releaseInfo = info.releaseInfo ?: info.released,
             imdbRating = info.imdbRating,
             tomatoesRating = info.displayMetadata?.tomatoesRating,
-            poster = info.poster ?: info.thumbnail,
-            backdrop = info.backdrop ?: info.thumbnail
+            poster = info.displayPoster ?: info.displayThumbnail,
+            backdrop = info.displayBackdrop ?: info.displayThumbnail,
+            thumbnail = info.displayThumbnail
         )
     }
 }

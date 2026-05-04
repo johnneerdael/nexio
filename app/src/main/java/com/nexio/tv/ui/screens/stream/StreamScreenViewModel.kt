@@ -2133,7 +2133,16 @@ data class StreamPlaybackInfo(
     val isDolbyVisionCandidate: Boolean = false,
     val addonBaseUrl: String? = null,
     val autoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList()
-)
+) {
+    val displayPoster: String?
+        get() = poster
+
+    val displayBackdrop: String?
+        get() = backdrop
+
+    val displayLogo: String?
+        get() = logo
+}
 
 data class AutoPlayStreamAlternative(
     val streamKey: String?,

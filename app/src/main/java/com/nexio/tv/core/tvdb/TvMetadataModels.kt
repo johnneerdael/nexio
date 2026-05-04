@@ -114,7 +114,10 @@ data class KitsuAdvancedRelatedTitle(
     val poster: String? = null,
     val releaseInfo: String? = null,
     val relationKind: String
-)
+) {
+    val displayPoster: String?
+        get() = poster
+}
 
 data class KitsuAdvancedProductionCompany(
     val producerId: String,

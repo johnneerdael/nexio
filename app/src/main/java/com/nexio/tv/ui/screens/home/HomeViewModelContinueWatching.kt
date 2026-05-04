@@ -233,9 +233,9 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
                 info = item.info.copy(
                     displayMetadata = enrichedMetadata,
                     name = enrichedMetadata.title?.takeIf { it.isNotBlank() } ?: item.info.name,
-                    poster = enrichedMetadata.displayPoster ?: item.info.poster,
-                    backdrop = enrichedMetadata.displayBackdrop ?: item.info.backdrop,
-                    logo = enrichedMetadata.displayLogo ?: item.info.logo,
+                    poster = enrichedMetadata.displayPoster,
+                    backdrop = enrichedMetadata.displayBackdrop,
+                    logo = enrichedMetadata.displayLogo,
                     episodeDescription = localizedEpisodeDescription
                         ?: enrichedMetadata.description
                         ?: item.info.episodeDescription,
@@ -289,46 +289,46 @@ internal suspend fun HomeViewModel.recordContinueWatchingRouteContextForPlayback
 private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPreview {
     return when (this) {
         is ContinueWatchingItem.InProgress -> {
-            val displayMetadata = displayMetadata
+            val displayMetadata = displayMetadata()
             MetaPreview(
                 id = progress.contentId,
                 type = ContentType.fromString(progress.contentType),
                 rawType = progress.contentType,
-                name = displayMetadata?.title ?: progress.name,
-                poster = displayMetadata?.displayPoster ?: progress.poster,
+                name = displayMetadata.title ?: progress.name,
+                poster = displayMetadata.displayPoster,
                 posterShape = PosterShape.LANDSCAPE,
-                background = displayMetadata?.displayBackdrop ?: progress.backdrop,
-                logo = displayMetadata?.displayLogo ?: progress.logo,
-                description = displayMetadata?.description ?: episodeDescription ?: progress.episodeTitle,
-                releaseInfo = displayMetadata?.releaseInfo ?: releaseInfo,
-                runtime = displayMetadata?.runtime,
-                imdbRating = displayMetadata?.imdbRating ?: episodeImdbRating,
-                tomatoesRating = displayMetadata?.tomatoesRating,
-                genres = displayMetadata?.genres?.takeIf { it.isNotEmpty() } ?: genres,
+                background = displayMetadata.displayBackdrop,
+                logo = displayMetadata.displayLogo,
+                description = displayMetadata.description ?: episodeDescription ?: progress.episodeTitle,
+                releaseInfo = displayMetadata.releaseInfo ?: releaseInfo,
+                runtime = displayMetadata.runtime,
+                imdbRating = displayMetadata.imdbRating ?: episodeImdbRating,
+                tomatoesRating = displayMetadata.tomatoesRating,
+                genres = displayMetadata.genres.takeIf { it.isNotEmpty() } ?: genres,
                 language = null,
-                posterProviderTag = displayMetadata?.posterProviderTag
+                posterProviderTag = displayMetadata.posterProviderTag
             )
         }
 
         is ContinueWatchingItem.NextUp -> {
-            val displayMetadata = info.displayMetadata
+            val displayMetadata = displayMetadata()
             MetaPreview(
                 id = info.contentId,
                 type = ContentType.fromString(info.contentType),
                 rawType = info.contentType,
-                name = displayMetadata?.title ?: info.name,
-                poster = displayMetadata?.displayPoster ?: info.poster,
+                name = displayMetadata.title ?: info.name,
+                poster = displayMetadata.displayPoster,
                 posterShape = PosterShape.LANDSCAPE,
-                background = displayMetadata?.displayBackdrop ?: info.backdrop,
-                logo = displayMetadata?.displayLogo ?: info.logo,
-                description = displayMetadata?.description ?: info.episodeDescription ?: info.episodeTitle,
-                releaseInfo = displayMetadata?.releaseInfo ?: info.releaseInfo ?: info.released,
-                runtime = displayMetadata?.runtime,
-                imdbRating = displayMetadata?.imdbRating ?: info.imdbRating,
-                tomatoesRating = displayMetadata?.tomatoesRating,
-                genres = displayMetadata?.genres?.takeIf { it.isNotEmpty() } ?: info.genres,
+                background = displayMetadata.displayBackdrop,
+                logo = displayMetadata.displayLogo,
+                description = displayMetadata.description ?: info.episodeDescription ?: info.episodeTitle,
+                releaseInfo = displayMetadata.releaseInfo ?: info.releaseInfo ?: info.released,
+                runtime = displayMetadata.runtime,
+                imdbRating = displayMetadata.imdbRating ?: info.imdbRating,
+                tomatoesRating = displayMetadata.tomatoesRating,
+                genres = displayMetadata.genres.takeIf { it.isNotEmpty() } ?: info.genres,
                 language = null,
-                posterProviderTag = displayMetadata?.posterProviderTag
+                posterProviderTag = displayMetadata.posterProviderTag
             )
         }
     }
@@ -545,9 +545,9 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
                     contentId = item.info.contentId,
                     contentType = item.info.contentType,
                     name = item.info.name,
-                    poster = item.info.displayMetadata?.displayPoster ?: item.info.poster,
-                    backdrop = item.info.displayMetadata?.displayBackdrop ?: item.info.backdrop,
-                    logo = item.info.displayMetadata?.displayLogo ?: item.info.logo,
+                    poster = item.displayMetadata().displayPoster,
+                    backdrop = item.displayMetadata().displayBackdrop,
+                    logo = item.displayMetadata().displayLogo,
                     videoId = item.info.videoId,
                     season = item.info.season,
                     episode = item.info.episode,
