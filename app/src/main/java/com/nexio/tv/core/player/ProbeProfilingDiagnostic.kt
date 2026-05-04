@@ -14,8 +14,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Diagnostic-only probe profiling for deterministic autoplay decisions.
  *
- * The diagnostic races ffprobe against the primary proxy URL directly and the
- * normal resolver-backed CDN path, plus a capped set of fallback candidates.
+ * The diagnostic probes the normal resolver-backed CDN path for the primary
+ * stream plus a capped set of fallback candidates.
  * Results are logged only; they never influence autoplay selection.
  */
 object ProbeProfilingDiagnostic {
@@ -52,16 +52,6 @@ object ProbeProfilingDiagnostic {
         val primaryHeaders = playbackInfo.headers.orEmpty()
         val primaryAddonHost = CometProxyUrlResolver.hostOfAddonBaseUrl(playbackInfo.addonBaseUrl)
         return buildList {
-            add(
-                ProbeProfilingRequest(
-                    label = "primary_proxy_direct",
-                    streamKey = primaryStreamKey,
-                    url = primaryUrl,
-                    headers = primaryHeaders,
-                    addonHost = null,
-                    routeThroughResolver = false
-                )
-            )
             add(
                 ProbeProfilingRequest(
                     label = "primary_resolve_cdn",

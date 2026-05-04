@@ -140,10 +140,20 @@ class DiskSpoolStorageResolverTest {
     fun `spool usable space falls back to nearest existing parent`() {
         val cacheDir = temp.newFolder("cache")
         val missingSpoolDir = File(cacheDir, "missing-cache/player_disk_spool")
+        val existingDirectories = setOf(cacheDir.canonicalFile)
 
         assertEquals(
-            cacheDir.usableSpace,
-            DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(missingSpoolDir)
+            4_096L,
+            DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(
+                spoolDirectory = missingSpoolDir,
+                existsOf = { file -> file.canonicalFile in existingDirectories },
+                usableSpaceOf = { file ->
+                    when (file.canonicalFile) {
+                        cacheDir.canonicalFile -> 4_096L
+                        else -> 512L
+                    }
+                }
+            )
         )
     }
 }

@@ -109,6 +109,7 @@ class StreamScreenViewModel @Inject constructor(
     private var activeStreamSearchRequestId: String? = null
     private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     private var streamDiagnosticsEnabled: Boolean = false
+    @Volatile
     private var probeProfilingDiagnosticEnabled: Boolean = false
     private var streamParserCache = StreamPresentationEngine.ParserCache()
     private val shadowAutoPlayReplayCoordinator =
@@ -1242,6 +1243,17 @@ class StreamScreenViewModel @Inject constructor(
                     "providerBuckets=${earlyFinishDecision.providerBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
                     "fallbackElapsedMs=$earlyFinishFallbackElapsed fallbackReached=$earlyFinishFallbackReached"
             )
+            Log.i(
+                TAG,
+                earlyFinishDecision.breakdown.toLogLine(
+                    target = "${earlyFinishDecision.resolution}/${earlyFinishDecision.releaseType}"
+                )
+            )
+            if (probeProfilingDiagnosticEnabled) {
+                earlyFinishDecision.breakdown.perStream.forEach { row ->
+                    Log.i(TAG, row.toLogLine())
+                }
+            }
         }
         if (!isFinalPass && !earlyFinishDecision.triggered && !earlyFinishFallbackReached) {
             return null
@@ -1755,8 +1767,64 @@ internal data class DeterministicEarlyFinishDecision(
     val resolution: String,
     val releaseType: String,
     val hasRemux: Boolean,
-    val providerBuckets: Map<String, Int> = emptyMap()
+    val providerBuckets: Map<String, Int> = emptyMap(),
+    val breakdown: DeterministicEarlyFinishBreakdown = DeterministicEarlyFinishBreakdown.EMPTY
 )
+
+internal data class DeterministicEarlyFinishBreakdown(
+    val rawWinners: Int,
+    val countedWinners: Int,
+    val resolutionBuckets: Map<String, Int>,
+    val releaseTypeBuckets: Map<String, Int>,
+    val bitrateBuckets: Map<String, Int>,
+    val zeroBitrate: Int,
+    val zeroBitrateMissingSize: Int,
+    val zeroBitrateMissingDuration: Int,
+    val perStream: List<DeterministicEarlyFinishStreamRow>
+) {
+    fun toLogLine(target: String): String {
+        return "EARLY_FINISH_COUNT_BREAKDOWN target=$target " +
+            "raw=$rawWinners counted=$countedWinners " +
+            "resolution=${resolutionBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
+            "releaseType=${releaseTypeBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
+            "bitrate=${bitrateBuckets.entries.joinToString(",", "{", "}") { "${it.key}:${it.value}" }} " +
+            "zeroBitrate=$zeroBitrate (missingSize=$zeroBitrateMissingSize missingDuration=$zeroBitrateMissingDuration)"
+    }
+
+    companion object {
+        val EMPTY = DeterministicEarlyFinishBreakdown(
+            rawWinners = 0,
+            countedWinners = 0,
+            resolutionBuckets = emptyMap(),
+            releaseTypeBuckets = emptyMap(),
+            bitrateBuckets = emptyMap(),
+            zeroBitrate = 0,
+            zeroBitrateMissingSize = 0,
+            zeroBitrateMissingDuration = 0,
+            perStream = emptyList()
+        )
+    }
+}
+
+internal data class DeterministicEarlyFinishStreamRow(
+    val streamKey: String,
+    val provider: String,
+    val filename: String?,
+    val sizeBytes: Long?,
+    val durationMs: Long?,
+    val runtimeSource: String?,
+    val resolution: String?,
+    val releaseType: String,
+    val bitrateMbps: Double
+) {
+    fun toLogLine(): String {
+        return "EARLY_FINISH_STREAM provider=$provider " +
+            "resolution=${resolution ?: "none"} releaseType=$releaseType " +
+            "bitrate=${String.format(Locale.US, "%.2f", bitrateMbps)} " +
+            "sizeBytes=${sizeBytes ?: "null"} durationMs=${durationMs ?: "null"} " +
+            "runtimeSource=${runtimeSource ?: "none"} filename=${filename ?: "none"}"
+    }
+}
 
 private fun isX265TaggedFilename(filename: String?): Boolean {
     return filename?.contains("x265", ignoreCase = true) == true
@@ -1768,6 +1836,10 @@ internal fun deterministicAutoplayEarlyFinishDecision(
 ): DeterministicEarlyFinishDecision {
     val countedWinners = winners.distinctBy(::deterministicEarlyFinishCountKey)
     val providerBuckets = countedWinners.groupingBy { it.provider.storageKey }.eachCount()
+    val breakdown = buildDeterministicEarlyFinishBreakdown(
+        rawWinners = winners.size,
+        countedWinners = countedWinners
+    )
     if (countedWinners.isEmpty()) {
         return DeterministicEarlyFinishDecision(
             triggered = false,
@@ -1776,7 +1848,8 @@ internal fun deterministicAutoplayEarlyFinishDecision(
             resolution = "none",
             releaseType = "none",
             hasRemux = false,
-            providerBuckets = providerBuckets
+            providerBuckets = providerBuckets,
+            breakdown = breakdown
         )
     }
     val has4k = countedWinners.any { it.resolution.equals("2160p", ignoreCase = true) }
@@ -1816,7 +1889,8 @@ internal fun deterministicAutoplayEarlyFinishDecision(
                 resolution = targetResolution,
                 releaseType = "remux",
                 hasRemux = hasRemux,
-                providerBuckets = providerBuckets
+                providerBuckets = providerBuckets,
+                breakdown = breakdown
             )
         }
         val localHasRemux = countedWinners.any {
@@ -1843,7 +1917,8 @@ internal fun deterministicAutoplayEarlyFinishDecision(
                 resolution = targetResolution,
                 releaseType = if (x265SmallEncodeCount > 0) "webdl_or_x265_small" else "webdl",
                 hasRemux = hasRemux,
-                providerBuckets = providerBuckets
+                providerBuckets = providerBuckets,
+                breakdown = breakdown
             )
         }
         return null
@@ -1862,7 +1937,74 @@ internal fun deterministicAutoplayEarlyFinishDecision(
         resolution = resolution,
         releaseType = if (hasRemux) "remux" else "webdl",
         hasRemux = hasRemux,
-        providerBuckets = providerBuckets
+        providerBuckets = providerBuckets,
+        breakdown = breakdown
+    )
+}
+
+private fun buildDeterministicEarlyFinishBreakdown(
+    rawWinners: Int,
+    countedWinners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>
+): DeterministicEarlyFinishBreakdown {
+    val resolutionBuckets = mutableMapOf<String, Int>()
+    val releaseTypeBuckets = mutableMapOf<String, Int>()
+    val bitrateBuckets = linkedMapOf(
+        "zero" to 0,
+        "lt6" to 0,
+        "6to10" to 0,
+        "10to18" to 0,
+        "18plus" to 0
+    )
+    var zeroBitrate = 0
+    var zeroBitrateMissingSize = 0
+    var zeroBitrateMissingDuration = 0
+    val perStream = ArrayList<DeterministicEarlyFinishStreamRow>(countedWinners.size)
+
+    countedWinners.forEach { decision ->
+        val resKey = decision.resolution?.lowercase(Locale.US) ?: "none"
+        resolutionBuckets[resKey] = (resolutionBuckets[resKey] ?: 0) + 1
+
+        val rtKey = decision.breakdown.releaseType.lowercase(Locale.US).ifBlank { "unknown" }
+        releaseTypeBuckets[rtKey] = (releaseTypeBuckets[rtKey] ?: 0) + 1
+
+        val mbps = decision.breakdown.averageBitrateMbps
+        val bucket = when {
+            mbps <= 0.0 -> "zero"
+            mbps < 6.0 -> "lt6"
+            mbps < 10.0 -> "6to10"
+            mbps < 18.0 -> "10to18"
+            else -> "18plus"
+        }
+        bitrateBuckets[bucket] = (bitrateBuckets[bucket] ?: 0) + 1
+        if (mbps <= 0.0) {
+            zeroBitrate += 1
+            if (decision.parsed.sizeBytes == null) zeroBitrateMissingSize += 1
+            if (decision.parsed.durationMs == null) zeroBitrateMissingDuration += 1
+        }
+
+        perStream += DeterministicEarlyFinishStreamRow(
+            streamKey = decision.streamKey,
+            provider = decision.provider.storageKey,
+            filename = decision.parsed.filename,
+            sizeBytes = decision.parsed.sizeBytes,
+            durationMs = decision.parsed.durationMs,
+            runtimeSource = decision.parsed.runtimeSource,
+            resolution = decision.resolution,
+            releaseType = rtKey,
+            bitrateMbps = mbps
+        )
+    }
+
+    return DeterministicEarlyFinishBreakdown(
+        rawWinners = rawWinners,
+        countedWinners = countedWinners.size,
+        resolutionBuckets = resolutionBuckets,
+        releaseTypeBuckets = releaseTypeBuckets,
+        bitrateBuckets = bitrateBuckets,
+        zeroBitrate = zeroBitrate,
+        zeroBitrateMissingSize = zeroBitrateMissingSize,
+        zeroBitrateMissingDuration = zeroBitrateMissingDuration,
+        perStream = perStream
     )
 }
 

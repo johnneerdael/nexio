@@ -451,6 +451,55 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     @Test
+    fun `early finish decision reports deterministic count breakdown`() {
+        val decision = deterministicAutoplayEarlyFinishDecision(
+            winners = listOf(
+                remuxWinner(
+                    streamKey = "rd-a",
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    averageBitrateMbps = 0.0,
+                    filename = "Same.Release.1080p.WEB-DL.mkv",
+                    resolution = "1080p",
+                    releaseType = "webdl"
+                ),
+                remuxWinner(
+                    streamKey = "rd-b",
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    averageBitrateMbps = 8.0,
+                    filename = "Same.Release.1080p.WEB-DL.mkv",
+                    resolution = "1080p",
+                    releaseType = "webdl",
+                    sizeBytes = 4_000L,
+                    durationMs = 1_000L,
+                    runtimeSource = "probe"
+                ),
+                remuxWinner(
+                    streamKey = "pm",
+                    provider = DebridBenchmarkProvider.PREMIUMIZE,
+                    averageBitrateMbps = 20.0,
+                    filename = "Other.Release.2160p.REMUX.mkv",
+                    resolution = "2160p",
+                    releaseType = "remux",
+                    sizeBytes = 8_000L
+                )
+            ),
+            request = movieRequest()
+        )
+
+        assertEquals(3, decision.breakdown.rawWinners)
+        assertEquals(2, decision.breakdown.countedWinners)
+        assertEquals(mapOf("1080p" to 1, "2160p" to 1), decision.breakdown.resolutionBuckets)
+        assertEquals(mapOf("webdl" to 1, "remux" to 1), decision.breakdown.releaseTypeBuckets)
+        assertEquals(1, decision.breakdown.bitrateBuckets["zero"])
+        assertEquals(1, decision.breakdown.bitrateBuckets["18plus"])
+        assertEquals(1, decision.breakdown.zeroBitrate)
+        assertEquals(1, decision.breakdown.zeroBitrateMissingSize)
+        assertEquals(1, decision.breakdown.zeroBitrateMissingDuration)
+        assertEquals(2, decision.breakdown.perStream.size)
+        assertTrue(decision.breakdown.toLogLine("2160p/remux").contains("EARLY_FINISH_COUNT_BREAKDOWN"))
+    }
+
+    @Test
     fun `same release across different unlockers can satisfy early finish`() {
         val winners = listOf(
             remuxWinner("rd", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Movie.Release.2160p.REMUX.mkv"),
@@ -929,12 +978,20 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         averageBitrateMbps: Double,
         filename: String,
         resolution: String = "2160p",
-        releaseType: String = "remux"
+        releaseType: String = "remux",
+        sizeBytes: Long? = null,
+        durationMs: Long? = null,
+        runtimeSource: String? = null
     ): ShadowStreamDecision {
         val resolutionTier = if (resolution.equals("2160p", ignoreCase = true)) "uhd_2160" else "fhd_1080"
         return ShadowStreamDecision(
             streamKey = streamKey,
-            parsed = ShadowParsedStreamFacts(filename = filename),
+            parsed = ShadowParsedStreamFacts(
+                filename = filename,
+                sizeBytes = sizeBytes,
+                durationMs = durationMs,
+                runtimeSource = runtimeSource
+            ),
             provider = provider,
             transport = DebridBenchmarkTransportMode.OPTIMIZED,
             finalScore = 90,
