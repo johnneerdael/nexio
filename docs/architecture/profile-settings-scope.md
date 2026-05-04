@@ -135,7 +135,6 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 | `TvdbIdentityCacheStore` | `global-device` | `device` | `derived-cache` | none | TVDB identity lookup cache, not source-of-truth. |
 | `TvdbTokenStore` | `account-remote` | `account` | `remote-synced` | `account_secrets` or token-refresh service state | TVDB token is derived from account-owned TVDB credentials. |
 | `WatchProgressPreferences` | `profile-local` | `profile` | `local-only` | none | Local watch progress preferences must not bleed across profiles. |
-| `WatchedItemsPreferences` | `profile-local` | `profile` | `local-only` | none | Local watched item state must not bleed across profiles. |
 | `UpdatePreferences` | `global-device` | `device` | `local-only` | none | App update preference is device-wide operational state. |
 | `profile_cleanup_state` | `global-device` | `device` | `local-only` | none | Pending remote profile cleanup retry state, not user preference. |
 
