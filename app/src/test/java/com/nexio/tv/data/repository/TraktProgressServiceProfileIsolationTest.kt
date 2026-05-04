@@ -13,6 +13,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 class TraktProgressServiceProfileIsolationTest {
 
@@ -25,11 +26,11 @@ class TraktProgressServiceProfileIsolationTest {
 
     @Test
     fun cachedActivities_does_not_leak_across_profiles() = runBlocking {
-        // getRecentActivities calls runtimeState() (→ currentTraktProfileId()) once per property
-        // access: cache-miss path: 1 getter + 2 setters = 3; cache-hit path: 2 getters = 2.
-        // 4 calls total: miss(3) + miss(3) + hit(2) + hit(2) = 10 accesses.
-        every { traktIntegrationProvider.currentTraktProfileId() } returnsMany
-            listOf(1, 1, 1, 2, 2, 2, 1, 1, 2, 2)
+        // currentTraktProfileId() is read multiple times per getRecentActivities call (once
+        // per runtimeState() accessor). Use a counter the test orchestrates between calls so
+        // the test doesn't depend on the exact internal read count.
+        val activeProfileId = AtomicInteger(1)
+        every { traktIntegrationProvider.currentTraktProfileId() } answers { activeProfileId.get() }
         val profile1Activities = TraktLastActivitiesResponseDto(
             all = "2026-05-04T10:00:00Z",
             episodes = TraktLastActivitiesMediaDto(watchedAt = "2026-05-04T09:00:00Z")
@@ -43,9 +44,13 @@ class TraktProgressServiceProfileIsolationTest {
             IntegrationCallResult.Success(profile2Activities)
         )
 
+        activeProfileId.set(1)
         val first = service.getRecentActivities(maxAgeMs = 60_000L)
+        activeProfileId.set(2)
         val second = service.getRecentActivities(maxAgeMs = 60_000L)
+        activeProfileId.set(1)
         val third = service.getRecentActivities(maxAgeMs = 60_000L)
+        activeProfileId.set(2)
         val fourth = service.getRecentActivities(maxAgeMs = 60_000L)
 
         assertEquals("2026-05-04T09:00:00Z", first?.episodes?.watchedAt)
