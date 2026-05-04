@@ -41,6 +41,34 @@
 7. LEDs follow the HDR content with bright, saturated highlights (PQ-encoded
    data going through HyperHDR's calibrated LUT).
 
+## Verify stock HyperHDR fallback
+
+If the server you're testing against is **stock HyperHDR** (no `flatbuffer`
+block in `serverinfo`), Nexio must auto-downconvert HDR sources to NV12
+instead of attempting P010. To verify:
+
+1. Point Nexio at a stock HyperHDR install.
+2. Confirm the server omits the capability block:
+
+   ```bash
+   curl -s http://<host>:8090/json-rpc \
+     -H "Content-Type: application/json" \
+     -d '{"command":"serverinfo","tan":1}' \
+     | python3 -m json.tool | grep flatbuffer
+   ```
+
+   Expected: no output (the `flatbuffer` key is absent in stock).
+
+3. Start playback of an HEVC HDR10 source.
+4. On the HyperHDR server, watch the log: expect NV12 frames (not P010).
+   The status bar in Nexio should say "HyperHDR" (not "HyperHDR HDR").
+
+If you instead see attempted P010 sends and HyperHDR errors about
+"Unsupported flatbuffers image format", the `supportsP010` gate isn't
+wired correctly — re-check the `detectHyperHdrCaptureMode` helper in
+`PlayerRuntimeControllerInitialization.kt` and the `FormatDetector.detect()`
+gate.
+
 ## Verify SDR auto-detection (HEVC SDR / H.264)
 
 8. Without changing HDR mode (leave on `Auto`), play an SDR source — H.264 or
