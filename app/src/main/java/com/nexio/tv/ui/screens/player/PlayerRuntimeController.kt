@@ -385,7 +385,7 @@ class PlayerRuntimeController(
     internal var lastLoggedAudioTrackSignature: String? = null
     internal var episodeStreamsJob: Job? = null
     internal var episodeStreamsCacheRequestKey: String? = null
-    internal var currentTraktEpisodeMapping: List<EpisodeMappingEntry>? = null
+    internal var currentTraktEpisodeMapping: EpisodeMappingEntry? = null
     internal var currentTraktEpisodeMappingKey: String? = null
     internal var playbackPreparationJob: Job? = null
     internal val streamCacheKey: String? by lazy {
