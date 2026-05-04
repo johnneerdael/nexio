@@ -261,7 +261,7 @@ class MetaDetailsTvdbProviderRoutingTest {
     }
 
     @Test
-    fun `series detail becomes visible before episode metadata hydration completes`() = runTest(dispatcher) {
+    fun `series detail remains loading until episode metadata hydration completes`() = runTest(dispatcher) {
         val episodeHydrationStarted = CompletableDeferred<Unit>()
         val allowEpisodeHydration = CompletableDeferred<Unit>()
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
@@ -292,7 +292,7 @@ class MetaDetailsTvdbProviderRoutingTest {
         }
 
         val viewModel = buildMetaDetailsViewModel(
-            meta = buildSeriesMeta(),
+            meta = buildSeriesMeta().copy(videos = emptyList()),
             tvMetadataRouter = tvMetadataRouter,
             tmdbSettings = TmdbSettings(
                 enabled = true,
@@ -310,13 +310,14 @@ class MetaDetailsTvdbProviderRoutingTest {
         runCurrent()
 
         assertEquals(true, episodeHydrationStarted.isCompleted)
-        assertEquals(false, viewModel.uiState.value.isLoading)
-        assertEquals("TVDB Title", viewModel.uiState.value.meta?.name)
-        assertEquals("Original Episode", viewModel.uiState.value.episodesForSeason.single().title)
+        assertEquals(true, viewModel.uiState.value.isLoading)
+        assertEquals(null, viewModel.uiState.value.meta)
 
         allowEpisodeHydration.complete(Unit)
         advanceUntilIdle()
 
+        assertEquals(false, viewModel.uiState.value.isLoading)
+        assertEquals("TVDB Title", viewModel.uiState.value.meta?.name)
         assertEquals("Nederlandse Pilot", viewModel.uiState.value.episodesForSeason.single().title)
         assertEquals("Nederlandse afleveringstekst", viewModel.uiState.value.episodesForSeason.single().overview)
     }
