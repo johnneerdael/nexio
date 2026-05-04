@@ -1365,6 +1365,13 @@ class TraktProgressService @Inject constructor(
     internal suspend fun testOnlyProjectWatchedShows(): Map<String, WatchedShowIndexEntry> =
         getWatchedShowsSnapshot(forceRefresh = false)
 
+    @VisibleForTesting
+    internal suspend fun testOnlyDeriveNextUp(): List<NextUpEntry> {
+        val watchedShows = getWatchedShowsSnapshot(forceRefresh = false)
+        val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = false)
+        return deriveNextUpFromWatchedShows(watchedShows = watchedShows, hiddenProgress = hiddenProgress)
+    }
+
     private fun mapWatchedShowItem(item: TraktWatchedShowItemDto): WatchedShowIndexEntry? {
         val show = item.show ?: return null
         val ids = show.ids ?: return null
@@ -1446,11 +1453,11 @@ class TraktProgressService @Inject constructor(
             val droppedShows = fetchHiddenItems(section = "dropped", type = "show")
 
             val snapshot = HiddenProgressSnapshot(
-                hiddenShowIds = hiddenShows.mapNotNull { item ->
-                    normalizeContentId(item.show?.ids).takeIf { it.isNotBlank() }
+                hiddenShowIds = hiddenShows.flatMap { item ->
+                    showAliasKeys(item.show?.ids)
                 }.toSet(),
                 hiddenSeasonKeys = hiddenSeasons.mapNotNull { item ->
-                    val contentId = normalizeContentId(item.show?.ids)
+                    val contentId = normalizeContentId(item.show?.ids, kind = MediaKind.SHOW)
                     val season = item.season?.number
                     if (contentId.isBlank() || season == null || season <= 0) {
                         null
@@ -1458,8 +1465,8 @@ class TraktProgressService @Inject constructor(
                         hiddenSeasonKey(contentId, season)
                     }
                 }.toSet(),
-                droppedShowIds = droppedShows.mapNotNull { item ->
-                    normalizeContentId(item.show?.ids).takeIf { it.isNotBlank() }
+                droppedShowIds = droppedShows.flatMap { item ->
+                    showAliasKeys(item.show?.ids)
                 }.toSet()
             )
 
@@ -1584,12 +1591,11 @@ class TraktProgressService @Inject constructor(
             .asSequence()
             .distinctBy { it.canonicalContentId }
             .filter { showInfo ->
-                val contentId = showInfo.canonicalContentId
-                val canonicalId = canonicalLookupKey(contentId)
-                contentId !in hiddenProgress.hiddenShowIds &&
-                    contentId !in hiddenProgress.droppedShowIds &&
-                    canonicalId !in hiddenProgress.hiddenShowIds &&
-                    canonicalId !in hiddenProgress.droppedShowIds
+                val entryAliases = showInfo.aliasContentIds + showInfo.canonicalContentId
+                val anyHiddenMatch = entryAliases.any {
+                    it in hiddenProgress.hiddenShowIds || it in hiddenProgress.droppedShowIds
+                }
+                !anyHiddenMatch
             }
             .sortedByDescending { it.lastWatchedAtMs }
             .map { showInfo ->
@@ -1756,6 +1762,16 @@ class TraktProgressService @Inject constructor(
 
     private fun hiddenSeasonKey(contentId: String, season: Int): String {
         return "${contentId.trim()}_s$season"
+    }
+
+    private fun showAliasKeys(ids: TraktIdsDto?): List<String> {
+        if (ids == null) return emptyList()
+        val canonical = normalizeContentId(ids, kind = MediaKind.SHOW)
+        val aliases = traktIdLookupKeys(ids, kind = MediaKind.SHOW)
+        return buildList {
+            if (canonical.isNotBlank()) add(canonical)
+            addAll(aliases)
+        }.distinct()
     }
 
     private fun hasCachedNextUpAirDateTransition(nowMs: Long = System.currentTimeMillis()): Boolean {
