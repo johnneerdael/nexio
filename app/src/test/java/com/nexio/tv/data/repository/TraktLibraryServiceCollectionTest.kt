@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TraktLibraryServiceCollectionTest {
@@ -183,5 +185,48 @@ class TraktLibraryServiceCollectionTest {
         }
 
         assertEquals(true, service.isInCollection("tt0372784").first())  // restored
+    }
+
+    @Test
+    fun addToCollection_420_response_surfaces_list_limit_error() = runBlocking {
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.addToCollection(any()) } returns
+            IntegrationCallResult.HttpError(statusCode = 420, reason = "trakt_list_limit")
+        service.refreshCollection()
+
+        val ex = runCatching {
+            service.addToCollection(contentId = "tt0372784", contentType = "movie")
+        }.exceptionOrNull()
+
+        assertNotNull(ex)
+        assertTrue(ex is TraktListLimitException)
+        assertTrue("expected user-facing list limit message; got: ${ex?.message}",
+            (ex?.message ?: "").contains("list limit", ignoreCase = true))
+        // Membership must have been rolled back.
+        assertEquals(false, service.isInCollection("tt0372784").first())
+    }
+
+    @Test
+    fun removeFromCollection_420_response_surfaces_list_limit_error() = runBlocking {
+        val item = TraktCollectionMovieItemDto(
+            movie = TraktMovieDto(
+                ids = TraktIdsDto(trakt = 6, slug = "batman-begins-2005", imdb = "tt0372784", tmdb = 272)
+            )
+        )
+        coEvery { traktIntegrationProvider.getCollectionMovies() } returns
+            IntegrationCallResult.Success(listOf(item))
+        coEvery { traktIntegrationProvider.getCollectionShows() } returns IntegrationCallResult.Success(emptyList())
+        coEvery { traktIntegrationProvider.removeFromCollection(any()) } returns
+            IntegrationCallResult.HttpError(statusCode = 420, reason = "trakt_list_limit")
+        service.refreshCollection()
+
+        val ex = runCatching {
+            service.removeFromCollection(contentId = "tt0372784", contentType = "movie")
+        }.exceptionOrNull()
+
+        assertTrue(ex is TraktListLimitException)
+        // Item should still be in collection (rollback restored).
+        assertEquals(true, service.isInCollection("tt0372784").first())
     }
 }

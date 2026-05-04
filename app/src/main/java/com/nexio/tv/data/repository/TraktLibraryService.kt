@@ -69,6 +69,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 class IntegrationMutationFailedException(message: String) : Exception(message)
+class TraktListLimitException(message: String) : Exception(message)
 
 @Singleton
 class TraktLibraryService @Inject constructor(
@@ -1407,6 +1408,14 @@ class TraktLibraryService @Inject constructor(
             is IntegrationCallResult.Success -> {
                 // Confirmed; nothing further to do.
             }
+            is IntegrationCallResult.HttpError -> {
+                collectionMembership.value = previous  // rollback
+                if (result.statusCode == 420) {
+                    throw TraktListLimitException("Trakt list limit reached. Upgrade required.")
+                } else {
+                    throw IntegrationMutationFailedException("addToCollection failed: $result")
+                }
+            }
             else -> {
                 collectionMembership.value = previous  // rollback
                 throw IntegrationMutationFailedException("addToCollection failed: $result")
@@ -1431,6 +1440,14 @@ class TraktLibraryService @Inject constructor(
         when (result) {
             is IntegrationCallResult.Success -> {
                 // Confirmed; nothing further to do.
+            }
+            is IntegrationCallResult.HttpError -> {
+                collectionMembership.value = previous  // rollback
+                if (result.statusCode == 420) {
+                    throw TraktListLimitException("Trakt list limit reached. Upgrade required.")
+                } else {
+                    throw IntegrationMutationFailedException("removeFromCollection failed: $result")
+                }
             }
             else -> {
                 collectionMembership.value = previous  // rollback
