@@ -38,6 +38,46 @@ internal fun parseContentIds(contentId: String?): ParsedContentIds {
     }
 }
 
+internal enum class MediaKind { MOVIE, SHOW, ANIME }
+
+internal fun normalizeContentId(
+    ids: TraktIdsDto?,
+    kind: MediaKind,
+    animeCanonical: String? = null,
+    fallback: String? = null
+): String {
+    if (kind == MediaKind.ANIME) {
+        animeCanonical?.takeIf { it.isNotBlank() }?.let { return it }
+    }
+    val tvdb = ids?.tvdb
+    val tmdb = ids?.tmdb
+    val imdb = ids?.imdb?.takeIf { it.isNotBlank() }
+    val trakt = ids?.trakt
+
+    return when (kind) {
+        MediaKind.SHOW -> when {
+            tvdb != null -> "tvdb:$tvdb"
+            tmdb != null -> "tmdb:$tmdb"
+            !imdb.isNullOrBlank() -> imdb
+            trakt != null -> "trakt:$trakt"
+            else -> fallback?.takeIf { it.isNotBlank() } ?: ""
+        }
+        MediaKind.MOVIE -> when {
+            tmdb != null -> "tmdb:$tmdb"
+            !imdb.isNullOrBlank() -> imdb
+            trakt != null -> "trakt:$trakt"
+            else -> fallback?.takeIf { it.isNotBlank() } ?: ""
+        }
+        MediaKind.ANIME -> when {
+            !imdb.isNullOrBlank() -> imdb
+            tmdb != null -> "tmdb:$tmdb"
+            tvdb != null -> "tvdb:$tvdb"
+            trakt != null -> "trakt:$trakt"
+            else -> fallback?.takeIf { it.isNotBlank() } ?: ""
+        }
+    }
+}
+
 internal fun normalizeContentId(ids: TraktIdsDto?, fallback: String? = null): String {
     val imdb = ids?.imdb?.takeIf { it.isNotBlank() }
     if (!imdb.isNullOrBlank()) return imdb
