@@ -133,6 +133,30 @@ class HomeDisplayMetadataTest {
     }
 
     @Test
+    fun `mergeFallback does not attach fallback poster provider tag to primary raw poster`() {
+        val merged = HomeDisplayMetadata(
+            poster = "primaryPoster",
+            posterProviderTag = null
+        ).mergeFallback(
+            HomeDisplayMetadata(
+                poster = "premiumPoster",
+                posterProviderTag = "rpdb"
+            )
+        )
+        val applied = merged.applyTo(
+            metaPreview().copy(
+                poster = "oldPremiumPoster",
+                posterProviderTag = "rpdb"
+            )
+        )
+
+        assertEquals("primaryPoster", merged.displayPoster)
+        assertNull(merged.posterProviderTag)
+        assertEquals("primaryPoster", applied.poster)
+        assertNull(applied.posterProviderTag)
+    }
+
+    @Test
     fun `toHomeDisplayMetadata and applyTo preserve tomatoes rating`() {
         val preview = MetaPreview(
             id = "tt123",
@@ -185,6 +209,59 @@ class HomeDisplayMetadataTest {
 
         assertEquals("rpdb", displayMetadata.posterProviderTag)
         assertEquals("rpdb", roundTripped.posterProviderTag)
+    }
+
+    @Test
+    fun `applyTo clears stale poster provider tag when metadata supplies raw poster without tag`() {
+        val preview = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "premiumPoster",
+            posterShape = PosterShape.POSTER,
+            background = "background",
+            logo = "logo",
+            description = "description",
+            releaseInfo = "2025",
+            runtime = "120",
+            imdbRating = 8.3f,
+            genres = listOf("Drama"),
+            posterProviderTag = "rpdb"
+        )
+
+        val updated = HomeDisplayMetadata(
+            poster = "primaryPoster",
+            posterProviderTag = null
+        ).applyTo(preview)
+
+        assertEquals("primaryPoster", updated.poster)
+        assertNull(updated.posterProviderTag)
+    }
+
+    @Test
+    fun `applyTo preserves base poster provider tag when metadata supplies no display poster`() {
+        val preview = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = "premiumPoster",
+            posterShape = PosterShape.POSTER,
+            background = "background",
+            logo = "logo",
+            description = "description",
+            releaseInfo = "2025",
+            imdbRating = 8.3f,
+            genres = listOf("Drama"),
+            posterProviderTag = "rpdb"
+        )
+
+        val updated = HomeDisplayMetadata(
+            title = "Updated title",
+            posterProviderTag = null
+        ).applyTo(preview)
+
+        assertEquals("premiumPoster", updated.poster)
+        assertEquals("rpdb", updated.posterProviderTag)
     }
 
     @Test

@@ -85,7 +85,7 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         ratingSource = if (imdbRating != null) ratingSource.orDefault() else base.ratingSource.orDefault(),
         tomatoesRating = tomatoesRating ?: base.tomatoesRating,
         poster = displayPoster ?: base.poster,
-        posterProviderTag = posterProviderTag ?: base.posterProviderTag,
+        posterProviderTag = if (displayPoster != null) posterProviderTag else base.posterProviderTag,
         background = displayBackdrop ?: base.background,
         artwork = mergeAppliedArtwork(base)
     )
@@ -104,7 +104,7 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         ratingSource = if (imdbRating != null) ratingSource.orDefault() else fallback.ratingSource.orDefault(),
         tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
         poster = poster ?: fallback.poster,
-        posterProviderTag = posterProviderTag ?: fallback.posterProviderTag,
+        posterProviderTag = if (displayPoster != null) posterProviderTag else fallback.posterProviderTag,
         backdrop = backdrop ?: fallback.backdrop,
         thumbnail = thumbnail ?: fallback.thumbnail,
         artwork = mergeFallbackArtwork(fallback)

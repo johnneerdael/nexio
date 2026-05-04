@@ -7,6 +7,7 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -140,6 +141,80 @@ class MetadataRouterFacadeTest {
         assertEquals("primaryPoster", result.displayMetadata.poster)
         assertEquals("primaryPoster", result.displayMetadata.displayPoster)
         assertNull(result.displayMetadata.artwork?.poster)
+    }
+
+    @Test
+    fun `resolved RPDB premium poster projects poster provider tag`() = runTest {
+        val result = facade(
+            RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TMDB),
+            PremiumPosterMetadataProviderAdapter(
+                provider = MetadataPrimaryProvider.RPDB,
+                apiShapeId = PosterApiShapes.RPDB_POSTER_TEMPLATE,
+                poster = "https://rpdb.example/poster.jpg"
+            )
+        ).resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:550",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        poster = "rawPreviewPoster",
+                        posterProviderTag = "tmdb"
+                    ),
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.TMDB.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("https://rpdb.example/poster.jpg", result.displayMetadata.poster)
+        assertEquals("rpdb", result.displayMetadata.posterProviderTag)
+    }
+
+    @Test
+    fun `preview poster preserves fallback premium poster provider tag when no replacement wins`() = runTest {
+        val result = facade(RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TMDB)).resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:550",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        poster = "premiumFallbackPoster",
+                        posterProviderTag = "rpdb"
+                    ),
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.RPDB.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("premiumFallbackPoster", result.displayMetadata.poster)
+        assertEquals(SourceRole.RAIL_PREVIEW, result.resolvedDocument.sourceRoles[ResolvedField.POSTER])
+        assertEquals("rpdb", result.displayMetadata.posterProviderTag)
+    }
+
+    @Test
+    fun `primary raw poster clears stale fallback premium poster provider tag`() = runTest {
+        val result = facade(PrimaryPosterMetadataProviderAdapter(MetadataPrimaryProvider.TMDB)).resolveRequest(
+            MetadataRequest(
+                contentId = "tmdb:550",
+                contentType = ContentType.MOVIE,
+                sourceContext = MetadataSourceContext(
+                    addonMetadata = HomeDisplayMetadata(
+                        poster = "premiumFallbackPoster",
+                        posterProviderTag = "rpdb"
+                    ),
+                    previewSourceRole = SourceRole.RAIL_PREVIEW,
+                    previewSourceProvider = MetadataPrimaryProvider.RPDB.name
+                ),
+                depth = MetadataDepth.DETAIL_CORE
+            )
+        )
+
+        assertEquals("primaryPoster", result.displayMetadata.poster)
+        assertNull(result.displayMetadata.posterProviderTag)
     }
 
     @Test
@@ -584,6 +659,32 @@ class MetadataRouterFacadeTest {
                         ResolvedField.TITLE to FieldValue("Runtime title", FieldOwner.PRIMARY),
                         ResolvedField.POSTER to FieldValue("primaryPoster", FieldOwner.PRIMARY)
                     )
+                )
+            )
+    }
+
+    private class PremiumPosterMetadataProviderAdapter(
+        override val provider: MetadataPrimaryProvider,
+        private val apiShapeId: String,
+        private val poster: String
+    ) : MetadataProviderAdapter {
+        override fun supports(step: ProviderPlanStep): Boolean =
+            step.apiShapeId == apiShapeId
+
+        override suspend fun execute(route: MetadataRoute, step: ProviderPlanStep): ProviderStepResult =
+            ProviderStepResult(
+                step = step,
+                candidate = MetadataCandidate(
+                    provider = provider,
+                    fields = mapOf(
+                        ResolvedField.POSTER to FieldValue(
+                            value = poster,
+                            owner = FieldOwner.ARTWORK,
+                            sourceRole = SourceRole.ARTWORK
+                        )
+                    ),
+                    sourceProvider = provider.name,
+                    sourceRole = SourceRole.ARTWORK
                 )
             )
     }
