@@ -124,3 +124,29 @@ internal fun toTraktIds(ids: ParsedContentIds): TraktIdsDto {
 internal fun TraktIdsDto.hasAnyId(): Boolean {
     return trakt != null || !imdb.isNullOrBlank() || tmdb != null || tvdb != null || !slug.isNullOrBlank()
 }
+
+internal fun traktIdLookupKeys(ids: TraktIdsDto?, kind: MediaKind): List<String> {
+    if (ids == null) return emptyList()
+    return buildList {
+        ids.tvdb?.let { if (kind != MediaKind.MOVIE) add("tvdb:$it") }
+        ids.tmdb?.let { add("tmdb:$it") }
+        ids.imdb?.takeIf { it.isNotBlank() }?.let { add(it) }
+        ids.trakt?.let { add("trakt:$it") }
+        ids.slug?.takeIf { it.isNotBlank() }?.let { add(it) }
+    }
+}
+
+/**
+ * Returns the id form to use as a Trakt API path segment (e.g. /shows/{id}/...).
+ * Trakt accepts trakt slug, trakt id, and imdb id reliably; tvdb is not accepted
+ * for /shows/{id}/... endpoints, so we prefer trakt and imdb. tmdb is a last resort.
+ */
+internal fun preferredTraktPathId(ids: TraktIdsDto?, kind: MediaKind): String? {
+    if (ids == null) return null
+    val slug = ids.slug?.takeIf { it.isNotBlank() }
+    val imdb = ids.imdb?.takeIf { it.isNotBlank() }
+    return when (kind) {
+        MediaKind.SHOW, MediaKind.ANIME -> slug ?: imdb ?: ids.trakt?.toString() ?: ids.tmdb?.let { "tmdb:$it" }
+        MediaKind.MOVIE -> imdb ?: ids.trakt?.let { "trakt:$it" } ?: ids.tmdb?.let { "tmdb:$it" } ?: slug
+    }
+}
