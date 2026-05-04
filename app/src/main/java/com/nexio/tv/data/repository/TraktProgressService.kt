@@ -1453,6 +1453,9 @@ class TraktProgressService @Inject constructor(
             val seasonNumber = season.number ?: return@flatMap emptyList()
             season.episodes.orEmpty().mapNotNull { episode ->
                 val episodeNumber = episode.number ?: return@mapNotNull null
+                // parseIsoToMillis returns System.currentTimeMillis() when last_watched_at is
+                // missing/unparseable, so episodes without timestamps are kept (they sort as "now"
+                // and will not be older than reset_at).
                 val watchedAtMs = parseIsoToMillis(episode.lastWatchedAt)
                 if (resetAtMs != null && watchedAtMs < resetAtMs) return@mapNotNull null
                 seasonNumber to episodeNumber
