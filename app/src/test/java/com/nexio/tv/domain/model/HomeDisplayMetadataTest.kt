@@ -110,6 +110,26 @@ class HomeDisplayMetadataTest {
     }
 
     @Test
+    fun `mergeFallback does not let fallback typed artwork override primary raw poster`() {
+        val fallback = HomeDisplayMetadata(
+            artwork = ArtworkBundle(
+                poster = ArtworkDisplayRef.RuntimeAsset(
+                    decisionKey = ArtworkDecisionKey("fallbackDecision"),
+                    assetKey = ArtworkAssetKey("fallbackAsset"),
+                    imageType = ArtworkType.POSTER,
+                    selectedProvider = null,
+                    sourceRole = ArtworkSourceRole.PRIMARY,
+                    trace = ArtworkTrace.empty()
+                )
+            )
+        )
+
+        val merged = HomeDisplayMetadata(poster = "primaryPoster").mergeFallback(fallback)
+
+        assertEquals("primaryPoster", merged.displayPoster)
+    }
+
+    @Test
     fun `toHomeDisplayMetadata and applyTo preserve tomatoes rating`() {
         val preview = MetaPreview(
             id = "tt123",

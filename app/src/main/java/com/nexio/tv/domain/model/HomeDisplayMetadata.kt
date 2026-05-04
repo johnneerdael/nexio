@@ -96,8 +96,24 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         poster = poster ?: fallback.poster,
         posterProviderTag = posterProviderTag ?: fallback.posterProviderTag,
         backdrop = backdrop ?: fallback.backdrop,
-        artwork = artwork ?: fallback.artwork
+        artwork = mergeFallbackArtwork(fallback)
     )
+}
+
+private fun HomeDisplayMetadata.mergeFallbackArtwork(fallback: HomeDisplayMetadata): ArtworkBundle? {
+    val fallbackArtwork = fallback.artwork ?: return artwork
+    val merged = ArtworkBundle(
+        poster = artwork?.poster ?: fallbackArtwork.poster.takeIf { displayPoster == null },
+        backdrop = artwork?.backdrop ?: fallbackArtwork.backdrop.takeIf { displayBackdrop == null },
+        logo = artwork?.logo ?: fallbackArtwork.logo.takeIf { displayLogo == null },
+        thumbnail = artwork?.thumbnail ?: fallbackArtwork.thumbnail
+    )
+    return merged.takeUnless {
+        it.poster == null &&
+            it.backdrop == null &&
+            it.logo == null &&
+            it.thumbnail == null
+    }
 }
 
 fun homeDisplayItemKey(contentType: String, contentId: String): String {
