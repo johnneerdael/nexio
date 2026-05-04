@@ -3,6 +3,7 @@ package com.nexio.tv.data.integration.trakt
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.core.integration.IntegrationCallSpec
 import com.nexio.tv.core.integration.IntegrationCachePolicy
+import com.nexio.tv.core.integration.IntegrationCacheStore
 import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
@@ -61,6 +62,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import retrofit2.Response
 
+enum class TraktWatchedKind { MOVIES, SHOWS }
+
 data class TraktCommentsPage(
     val items: List<TraktCommentItemDto>,
     val hasMore: Boolean
@@ -75,7 +78,8 @@ data class TraktPagedResponse<T>(
 class TraktIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
     private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService
+    private val traktAuthService: TraktAuthService,
+    private val cacheStore: IntegrationCacheStore
 ) {
     fun currentTraktProfileId(): Int = traktAuthService.currentTraktProfileId()
 
@@ -246,6 +250,36 @@ class TraktIntegrationProvider @Inject constructor(
         )
         val value = runtime.get(spec).valueOrNull() ?: return IntegrationCallResult.Missing
         return IntegrationCallResult.Success(value)
+    }
+
+    suspend fun invalidateWatchedSnapshot(kind: TraktWatchedKind) {
+        val session = traktAuthService.accountScopedSession()
+        val (apiShapeId, cacheKey, opSuffix) = when (kind) {
+            TraktWatchedKind.MOVIES -> Triple(
+                TraktApiShapes.WATCHED,
+                accountCacheKey(session, "trakt:sync:watched:movies"),
+                "movies"
+            )
+            TraktWatchedKind.SHOWS -> Triple(
+                TraktApiShapes.WATCHED_SHOWS,
+                accountCacheKey(session, "trakt:sync:watched:shows"),
+                "shows"
+            )
+        }
+        // Build a minimal spec; only the cacheKey is consulted by IntegrationCacheStore.delete(spec).
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TRAKT,
+            apiShapeId = apiShapeId,
+            operationKey = accountOperationKey(session, "trakt.watched.invalidate.$opSuffix"),
+            cacheKey = cacheKey,
+            codec = gsonCodec<Unit>(),
+            cachePolicy = IntegrationCachePolicy.CacheFirst(ttlMs = 1L, staleAfterExpiryMs = 0L),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            scope = accountScope(session),
+            profileContext = profileContext(session),
+            load = { IntegrationLoadResult.Success(Unit) }
+        )
+        cacheStore.delete(spec)
     }
 
     suspend fun getHiddenItems(

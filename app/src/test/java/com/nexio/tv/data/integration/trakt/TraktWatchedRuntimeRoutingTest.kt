@@ -120,6 +120,55 @@ class TraktWatchedRuntimeRoutingTest {
     }
 
     // -------------------------------------------------------------------------
+    // Invalidation tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun invalidateWatchedSnapshot_shows_then_read_hits_wire_again() = runBlocking {
+        val items = listOf(breakingBadDto())
+        val fixture = byteArrayRuntimeFixture()
+        val traktApi = mockk<TraktApi> {
+            coEvery {
+                getWatchedShows(any(), any())
+            } returns Response.success(items)
+        }
+        val provider = buildShowProvider(traktApi = traktApi, runtimeFixture = fixture)
+
+        provider.getWatchedShows()  // populates cache
+        provider.invalidateWatchedSnapshot(TraktWatchedKind.SHOWS)
+        provider.getWatchedShows()  // should re-fetch
+
+        coVerify(exactly = 2) { traktApi.getWatchedShows(any(), any()) }
+    }
+
+    @Test
+    fun invalidateWatchedSnapshot_movies_then_read_hits_wire_again() = runBlocking {
+        val item = TraktWatchedMovieItemDto(
+            plays = 4,
+            lastWatchedAt = "2014-10-11T17:00:54.000Z",
+            lastUpdatedAt = "2014-10-11T17:00:54.000Z",
+            movie = TraktMovieDto(
+                title = "Batman Begins",
+                year = 2005,
+                ids = TraktIdsDto(trakt = 6, slug = "batman-begins-2005", imdb = "tt0372784", tmdb = 272)
+            )
+        )
+        val fixture = byteArrayRuntimeFixture()
+        val traktApi = mockk<TraktApi> {
+            coEvery {
+                getWatched(any(), eq("movies"), any())
+            } returns Response.success(listOf(item))
+        }
+        val provider = buildProvider(traktApi = traktApi, runtimeFixture = fixture)
+
+        provider.getWatched(type = "movies")
+        provider.invalidateWatchedSnapshot(TraktWatchedKind.MOVIES)
+        provider.getWatched(type = "movies")
+
+        coVerify(exactly = 2) { traktApi.getWatched(any(), eq("movies"), any()) }
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -148,7 +197,8 @@ class TraktWatchedRuntimeRoutingTest {
         return TraktIntegrationProvider(
             runtime = runtimeFixture.runtime,
             traktApi = traktApi,
-            traktAuthService = traktAuthService
+            traktAuthService = traktAuthService,
+            cacheStore = runtimeFixture.cacheStore
         )
     }
 
@@ -174,7 +224,8 @@ class TraktWatchedRuntimeRoutingTest {
         return TraktIntegrationProvider(
             runtime = runtimeFixture.runtime,
             traktApi = traktApi,
-            traktAuthService = traktAuthService
+            traktAuthService = traktAuthService,
+            cacheStore = runtimeFixture.cacheStore
         )
     }
 
