@@ -79,7 +79,7 @@ class TraktIntegrationProvider @Inject constructor(
     private val runtime: IntegrationRuntime,
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
-    private val cacheStore: IntegrationCacheStore
+    private val cacheStore: IntegrationCacheStore = IntegrationCacheStore.Noop
 ) {
     fun currentTraktProfileId(): Int = traktAuthService.currentTraktProfileId()
 
