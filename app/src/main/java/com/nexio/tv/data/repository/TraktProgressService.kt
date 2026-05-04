@@ -771,6 +771,7 @@ class TraktProgressService @Inject constructor(
         ) {
             invalidateEpisodeProgressCache(progress.contentId)
             invalidateShowNextUpCache(progress.contentId)
+            traktIntegrationProvider.invalidateWatchedSnapshot(TraktWatchedKind.SHOWS)
         }
         refreshNow()
     }
@@ -798,6 +799,7 @@ class TraktProgressService @Inject constructor(
         ) {
             invalidateEpisodeProgressCache(progress.contentId)
             invalidateShowNextUpCache(progress.contentId)
+            traktIntegrationProvider.invalidateWatchedSnapshot(TraktWatchedKind.SHOWS)
         }
         refreshNow()
     }
@@ -906,11 +908,13 @@ class TraktProgressService @Inject constructor(
                 myShowsNextUpAll.update { items -> items.filterNot { it.contentId == canonicalId } }
                 invalidateEpisodeProgressCache(canonicalId)
                 invalidateShowNextUpCache(canonicalId)
+                traktIntegrationProvider.invalidateWatchedSnapshot(TraktWatchedKind.SHOWS)
             }
 
             season != null && episode != null -> {
                 invalidateEpisodeProgressCache(contentId)
                 invalidateShowNextUpCache(contentId)
+                traktIntegrationProvider.invalidateWatchedSnapshot(TraktWatchedKind.SHOWS)
             }
 
             else -> {
