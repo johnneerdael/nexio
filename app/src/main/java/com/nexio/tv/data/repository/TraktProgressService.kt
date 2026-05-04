@@ -301,13 +301,13 @@ class TraktProgressService @Inject constructor(
     }
 
     private class TraktProgressRuntimeRegistry {
-        private val states = mutableMapOf<Int, TraktProgressRuntimeState>()
+        private val states = java.util.concurrent.ConcurrentHashMap<Int, TraktProgressRuntimeState>()
 
         fun stateFor(session: TrackingRuntimeSession): TraktProgressRuntimeState {
             require(session.provider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
                 "TraktProgressRuntimeRegistry only accepts TRAKT sessions"
             }
-            return states.getOrPut(session.profileId) { TraktProgressRuntimeState() }
+            return states.computeIfAbsent(session.profileId) { TraktProgressRuntimeState() }
         }
 
         fun peek(profileId: Int): TraktProgressRuntimeState? = states[profileId]

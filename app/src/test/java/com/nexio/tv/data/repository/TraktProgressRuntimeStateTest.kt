@@ -13,8 +13,8 @@ class TraktProgressRuntimeStateTest {
         val source = source()
 
         assertTrue(source.contains("private class TraktProgressRuntimeRegistry"))
-        assertTrue(source.contains("private val states = mutableMapOf<Int, TraktProgressRuntimeState>()"))
-        assertTrue(source.contains("states.getOrPut(session.profileId)"))
+        assertTrue(source.contains("private val states = java.util.concurrent.ConcurrentHashMap<Int, TraktProgressRuntimeState>()"))
+        assertTrue(source.contains("states.computeIfAbsent(session.profileId)"))
         assertTrue(source.contains("private val remoteProgress get() = runtimeState().remoteProgress"))
         assertTrue(source.contains("private val myShowsNextUp get() = runtimeState().myShowsNextUp"))
     }
