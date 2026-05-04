@@ -14,6 +14,12 @@ import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.ProviderMutationOutboxCoordinator
 import com.nexio.tv.core.integration.IntegrationCallResult
 import com.nexio.tv.data.integration.trakt.TraktCollectionKind
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionAddShowDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCollectionRemoveShowDto
 import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.normalizeContentId
 import com.nexio.tv.data.repository.parseContentIds
@@ -61,6 +67,8 @@ import kotlinx.coroutines.sync.withPermit
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+class IntegrationMutationFailedException(message: String) : Exception(message)
 
 @Singleton
 class TraktLibraryService @Inject constructor(
@@ -1377,6 +1385,58 @@ class TraktLibraryService @Inject constructor(
         val parsed = parseContentIds(contentId)
         val canonical = normalizeContentId(toTraktIds(parsed))
         return if (canonical.isNotBlank()) canonical else contentId.trim()
+    }
+
+    private fun kindOf(contentType: String): MediaKind =
+        if (contentType.equals("movie", ignoreCase = true)) MediaKind.MOVIE else MediaKind.SHOW
+
+    suspend fun addToCollection(contentId: String, contentType: String) {
+        val ids = toTraktIds(parseContentIds(contentId))
+        val previous = collectionMembership.value
+        collectionMembership.value = previous + traktIdLookupKeys(ids, kindOf(contentType))
+        val result = if (contentType.equals("movie", ignoreCase = true)) {
+            traktIntegrationProvider.addToCollection(TraktCollectionAddRequestDto(
+                movies = listOf(TraktCollectionAddMovieDto(ids = ids))
+            ))
+        } else {
+            traktIntegrationProvider.addToCollection(TraktCollectionAddRequestDto(
+                shows = listOf(TraktCollectionAddShowDto(ids = ids))
+            ))
+        }
+        when (result) {
+            is IntegrationCallResult.Success -> {
+                // Confirmed; nothing further to do.
+            }
+            else -> {
+                collectionMembership.value = previous  // rollback
+                throw IntegrationMutationFailedException("addToCollection failed: $result")
+            }
+        }
+    }
+
+    suspend fun removeFromCollection(contentId: String, contentType: String) {
+        val ids = toTraktIds(parseContentIds(contentId))
+        val previous = collectionMembership.value
+        val keysToRemove = traktIdLookupKeys(ids, kindOf(contentType)).toSet()
+        collectionMembership.value = previous - keysToRemove
+        val result = if (contentType.equals("movie", ignoreCase = true)) {
+            traktIntegrationProvider.removeFromCollection(TraktCollectionRemoveRequestDto(
+                movies = listOf(TraktCollectionRemoveMovieDto(ids = ids))
+            ))
+        } else {
+            traktIntegrationProvider.removeFromCollection(TraktCollectionRemoveRequestDto(
+                shows = listOf(TraktCollectionRemoveShowDto(ids = ids))
+            ))
+        }
+        when (result) {
+            is IntegrationCallResult.Success -> {
+                // Confirmed; nothing further to do.
+            }
+            else -> {
+                collectionMembership.value = previous  // rollback
+                throw IntegrationMutationFailedException("removeFromCollection failed: $result")
+            }
+        }
     }
 
     companion object {
