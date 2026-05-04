@@ -64,7 +64,22 @@ data class TraktWatchedShowItemDto(
     @Json(name = "plays") val plays: Int? = null,
     @Json(name = "last_watched_at") val lastWatchedAt: String? = null,
     @Json(name = "last_updated_at") val lastUpdatedAt: String? = null,
-    @Json(name = "show") val show: TraktShowDto? = null
+    @Json(name = "reset_at") val resetAt: String? = null,
+    @Json(name = "show") val show: TraktShowDto? = null,
+    @Json(name = "seasons") val seasons: List<TraktWatchedSeasonDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktWatchedSeasonDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "episodes") val episodes: List<TraktWatchedEpisodeDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktWatchedEpisodeDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "plays") val plays: Int? = null,
+    @Json(name = "last_watched_at") val lastWatchedAt: String? = null
 )
 
 @JsonClass(generateAdapter = true)
