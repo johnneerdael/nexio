@@ -310,12 +310,12 @@ class TraktProgressService @Inject constructor(
             return states.getOrPut(session.profileId) { TraktProgressRuntimeState() }
         }
 
+        fun peek(profileId: Int): TraktProgressRuntimeState? = states[profileId]
+
         fun clearProfile(profileId: Int) {
             states[profileId]?.clear()
         }
     }
-
-    private val eventDrivenRefreshTotalFiringCount = java.util.concurrent.atomic.AtomicInteger(0)
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e(TAG, "Uncaught exception in TraktProgressService scope", throwable)
@@ -499,13 +499,13 @@ class TraktProgressService @Inject constructor(
         }
         lastEventDrivenRefreshMs = now
         runtimeState().eventDrivenRefreshFiringCount += 1
-        eventDrivenRefreshTotalFiringCount.incrementAndGet()
         trace("requestEventDrivenRefresh: emitting signal")
         refreshSignals.emit(Unit)
     }
 
     @VisibleForTesting
-    internal fun testOnlyEventDrivenRefreshFiringCount(): Int = eventDrivenRefreshTotalFiringCount.get()
+    internal fun testOnlyEventDrivenRefreshFiringCount(profileId: Int): Int =
+        runtimeRegistry.peek(profileId)?.eventDrivenRefreshFiringCount ?: 0
 
     suspend fun getCachedStats(forceRefresh: Boolean = false): TraktCachedStats? {
         val now = System.currentTimeMillis()
