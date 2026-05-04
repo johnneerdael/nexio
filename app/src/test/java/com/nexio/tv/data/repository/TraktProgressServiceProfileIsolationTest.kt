@@ -59,4 +59,40 @@ class TraktProgressServiceProfileIsolationTest {
         assertEquals("2026-05-04T10:00:00Z", fourth?.episodes?.watchedAt)
         coVerify(exactly = 2) { traktIntegrationProvider.getLastActivities() }
     }
+
+    @Test
+    fun episodeInfoCache_does_not_leak_across_profiles() = runBlocking {
+        val activeProfileId = AtomicInteger(1)
+        every { traktIntegrationProvider.currentTraktProfileId() } answers { activeProfileId.get() }
+
+        // Profile 1 caches an entry via the test seam.
+        activeProfileId.set(1)
+        service.testOnlyPutEpisodeInfo(
+            contentId = "tvdb:81189",
+            season = 1,
+            episode = 1,
+            info = sampleResolvedEpisodeInfo()
+        )
+
+        // Profile 2's cache must not see profile 1's entry.
+        activeProfileId.set(2)
+        val profile2HasIt = service.testOnlyEpisodeInfoCacheContains(
+            contentId = "tvdb:81189",
+            season = 1,
+            episode = 1
+        )
+        assertEquals(false, profile2HasIt)
+
+        // Profile 1's cache still has it.
+        activeProfileId.set(1)
+        val profile1HasIt = service.testOnlyEpisodeInfoCacheContains(
+            contentId = "tvdb:81189",
+            season = 1,
+            episode = 1
+        )
+        assertEquals(true, profile1HasIt)
+    }
+
+    private fun sampleResolvedEpisodeInfo() =
+        TraktProgressService.ResolvedEpisodeInfo(videoId = "tvdb:81189:1:1", released = null)
 }

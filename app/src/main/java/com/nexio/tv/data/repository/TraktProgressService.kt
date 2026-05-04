@@ -253,7 +253,8 @@ class TraktProgressService @Inject constructor(
         val episodeProgressActivityVersion: AtomicLong = AtomicLong(0L),
         val showNextUpActivityVersion: AtomicLong = AtomicLong(0L),
         @Volatile var cachedActivities: TraktLastActivitiesResponseDto? = null,
-        @Volatile var cachedActivitiesAtMs: Long = 0L
+        @Volatile var cachedActivitiesAtMs: Long = 0L,
+        val episodeInfoCache: MutableMap<String, ResolvedEpisodeInfo> = mutableMapOf()
     ) {
         fun clear() {
             remoteProgress.value = emptyList()
@@ -291,6 +292,7 @@ class TraktProgressService @Inject constructor(
             showNextUpActivityVersion.set(0L)
             cachedActivities = null
             cachedActivitiesAtMs = 0L
+            episodeInfoCache.clear()
         }
     }
 
@@ -314,7 +316,7 @@ class TraktProgressService @Inject constructor(
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private val refreshSignals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val episodeInfoCache = mutableMapOf<String, ResolvedEpisodeInfo>()
+    private val episodeInfoCache get() = runtimeState().episodeInfoCache
     private val runtimeRegistry = TraktProgressRuntimeRegistry()
     private val remoteProgress get() = runtimeState().remoteProgress
     private val myShowsNextUp get() = runtimeState().myShowsNextUp
@@ -2067,12 +2069,24 @@ class TraktProgressService @Inject constructor(
         episode: Int
     ): ResolvedEpisodeInfo = findEpisodeInfo(contentId, season, episode)
 
+    private fun episodeInfoCacheKey(contentId: String, season: Int, episode: Int): String =
+        "$contentId:$season:$episode"
+
+    @VisibleForTesting
+    internal fun testOnlyPutEpisodeInfo(contentId: String, season: Int, episode: Int, info: ResolvedEpisodeInfo) {
+        episodeInfoCache[episodeInfoCacheKey(contentId, season, episode)] = info
+    }
+
+    @VisibleForTesting
+    internal fun testOnlyEpisodeInfoCacheContains(contentId: String, season: Int, episode: Int): Boolean =
+        episodeInfoCache.containsKey(episodeInfoCacheKey(contentId, season, episode))
+
     internal suspend fun findEpisodeInfo(
         contentId: String,
         season: Int,
         episode: Int
     ): ResolvedEpisodeInfo {
-        val key = "$contentId:$season:$episode"
+        val key = episodeInfoCacheKey(contentId, season, episode)
         episodeInfoCache[key]?.let { return it }
 
         val request = MetadataRequest(
