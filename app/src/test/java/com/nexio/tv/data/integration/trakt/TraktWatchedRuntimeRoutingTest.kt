@@ -1,9 +1,9 @@
 package com.nexio.tv.data.integration.trakt
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.integration.byteArrayRuntimeFixture
 import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktAuthService
@@ -18,16 +18,30 @@ import retrofit2.Response
 
 class TraktWatchedRuntimeRoutingTest {
 
-    private val gson = Gson()
-
     @Test
     fun getWatched_movies_second_call_within_ttl_does_not_hit_traktApi() = runBlocking {
         val fixture = byteArrayRuntimeFixture()
-        val fixtureJson = readFixture("trakt/sync_watched_movies.json")
-        val parsed = parseList<TraktWatchedMovieItemDto>(fixtureJson)
+
+        val item = TraktWatchedMovieItemDto(
+            plays = 4,
+            lastWatchedAt = "2014-10-11T17:00:54.000Z",
+            lastUpdatedAt = "2014-10-11T17:00:54.000Z",
+            movie = TraktMovieDto(
+                title = "Batman Begins",
+                year = 2005,
+                ids = TraktIdsDto(
+                    trakt = 6,
+                    slug = "batman-begins-2005",
+                    imdb = "tt0372784",
+                    tmdb = 272
+                )
+            )
+        )
 
         val traktApi = mockk<TraktApi> {
-            coEvery { getWatched(any(), eq("movies"), any()) } returns Response.success(parsed)
+            coEvery {
+                getWatched(any(), eq("movies"), any())
+            } returns Response.success(listOf(item))
         }
         val provider = buildProvider(traktApi = traktApi, runtimeFixture = fixture)
 
@@ -37,26 +51,21 @@ class TraktWatchedRuntimeRoutingTest {
             .let { if (it is com.nexio.tv.core.integration.IntegrationCallResult.Success) it.value else null }
 
         assertEquals(1, first?.size)
+        assertEquals(4, first?.get(0)?.plays)
+        assertEquals("2014-10-11T17:00:54.000Z", first?.get(0)?.lastWatchedAt)
+        assertEquals(272, first?.get(0)?.movie?.ids?.tmdb)
+
         assertEquals(1, second?.size)
+        assertEquals(4, second?.get(0)?.plays)
+        assertEquals("2014-10-11T17:00:54.000Z", second?.get(0)?.lastWatchedAt)
+        assertEquals(272, second?.get(0)?.movie?.ids?.tmdb)
+
         coVerify(exactly = 1) { traktApi.getWatched(any(), eq("movies"), any()) }
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-
-    private fun readFixture(path: String): String =
-        checkNotNull(
-            TraktWatchedRuntimeRoutingTest::class.java.classLoader
-                ?.getResourceAsStream("fixtures/$path")
-        ) { "Fixture not found: fixtures/$path" }
-            .bufferedReader()
-            .readText()
-
-    private inline fun <reified T> parseList(json: String): List<T> {
-        val type = object : TypeToken<List<T>>() {}.type
-        return gson.fromJson(json, type)
-    }
 
     private fun buildProvider(
         traktApi: TraktApi,
