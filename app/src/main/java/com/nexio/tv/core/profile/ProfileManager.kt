@@ -185,12 +185,12 @@ class ProfileManager(
         return true
     }
 
-    suspend fun deleteProfile(id: Int): Boolean {
+    suspend fun deleteProfile(id: Int, syncRemoteDelete: Boolean = false): Boolean {
         if (id == 1) return false
         // Read latest from DataStore directly — StateFlow may lag behind DataStore writes
         val current = dataStore.profilesList.first()
         if (current.none { it.id == id }) return false
-        deleteProfileDataAsync(id)
+        deleteProfileDataAsync(id, syncRemoteDelete)
         dataStore.deleteProfile(id)
         return true
     }

@@ -383,6 +383,24 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `profile delete remote sync is gated on live full account session`() {
+        val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsViewModel.kt").readText()
+        val screenSource = File("app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt").readText()
+        val profileManagerSource = File("app/src/main/java/com/nexio/tv/core/profile/ProfileManager.kt").readText()
+
+        assertTrue(viewModelSource.contains("hasLiveFullAccountSyncSession("))
+        assertTrue(viewModelSource.contains("val syncRemoteDelete = hasLiveFullAccountSyncSession("))
+        assertTrue(viewModelSource.contains("syncRemoteDelete = syncRemoteDelete"))
+        assertTrue(viewModelSource.contains("authManager.authState.value"))
+        assertTrue(viewModelSource.contains("authManager.currentSessionUserId"))
+        assertTrue(screenSource.contains("if (hasLiveFullAccountSession)"))
+        assertTrue(profileManagerSource.contains("suspend fun deleteProfile(id: Int, syncRemoteDelete: Boolean = false): Boolean"))
+        assertTrue(profileManagerSource.contains("deleteProfileDataAsync(id, syncRemoteDelete)"))
+        assertTrue(profileManagerSource.contains("if (syncRemoteDelete) {"))
+        assertTrue(profileManagerSource.contains("deleteProfileRemote(profileId)"))
+    }
+
+    @Test
     fun `profile boundary owns secondary route decisions and rejects default`() {
         val boundarySource = profileBoundary.readText()
         val routerSource = profileModeRouter.readText()
