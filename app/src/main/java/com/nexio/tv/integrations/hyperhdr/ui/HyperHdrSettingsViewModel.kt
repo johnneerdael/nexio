@@ -6,6 +6,8 @@ import com.nexio.tv.integrations.hyperhdr.capture.DisplayColorCapability
 import com.nexio.tv.integrations.hyperhdr.data.HdrMode
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfig
 import com.nexio.tv.integrations.hyperhdr.data.HyperHdrConfigDataStore
+import com.nexio.tv.integrations.hyperhdr.discovery.DiscoveredHyperHdrService
+import com.nexio.tv.integrations.hyperhdr.discovery.HyperHdrServiceDiscovery
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrFlatBufferClient
 import com.nexio.tv.integrations.hyperhdr.network.HyperHdrJsonApiClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +23,7 @@ import javax.inject.Inject
 class HyperHdrSettingsViewModel @Inject constructor(
     private val store: HyperHdrConfigDataStore,
     private val displayCapability: DisplayColorCapability,
+    private val discovery: HyperHdrServiceDiscovery,
 ) : ViewModel() {
 
     val composesWideColor: Boolean = displayCapability.composesWideColor
@@ -30,6 +33,22 @@ class HyperHdrSettingsViewModel @Inject constructor(
 
     private val _testResult = MutableStateFlow<TestResult>(TestResult.Idle)
     val testResult: StateFlow<TestResult> = _testResult.asStateFlow()
+
+    val discoveredServices: StateFlow<List<DiscoveredHyperHdrService>> = discovery.services
+
+    fun startDiscovery() = discovery.start()
+    fun stopDiscovery() = discovery.stop()
+
+    fun selectDiscoveredServer(svc: DiscoveredHyperHdrService) =
+        viewModelScope.launch {
+            store.update {
+                it.copy(
+                    host = svc.ipAddress,
+                    port = svc.flatbufPort,
+                    jsonPort = svc.jsonPort ?: 19444,
+                )
+            }
+        }
 
     sealed interface TestResult {
         data object Idle : TestResult

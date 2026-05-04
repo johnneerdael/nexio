@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +47,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.integrations.hyperhdr.data.HdrMode
+import com.nexio.tv.integrations.hyperhdr.discovery.DiscoveredHyperHdrService
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.screens.settings.SettingsActionRow
 import com.nexio.tv.ui.screens.settings.SettingsDetailHeader
@@ -60,6 +63,7 @@ fun HyperHdrSettingsContent(
     val cfg by viewModel.config.collectAsStateWithLifecycle()
     val testResult by viewModel.testResult.collectAsStateWithLifecycle()
 
+    var showServerPickerDialog by remember { mutableStateOf(false) }
     var showHostDialog by remember { mutableStateOf(false) }
     var showPortDialog by remember { mutableStateOf(false) }
     var showJsonPortDialog by remember { mutableStateOf(false) }
@@ -104,7 +108,7 @@ fun HyperHdrSettingsContent(
                         title = "Host",
                         subtitle = "HyperHDR server IP or hostname",
                         value = cfg.host.ifEmpty { "Not set" },
-                        onClick = { showHostDialog = true }
+                        onClick = { showServerPickerDialog = true }
                     )
                 }
 
@@ -212,6 +216,26 @@ fun HyperHdrSettingsContent(
                 }
             }
         }
+    }
+
+    if (showServerPickerDialog) {
+        HyperHdrServerPickerDialog(
+            discoveredServices = viewModel.discoveredServices.collectAsStateWithLifecycle().value,
+            onStartDiscovery = { viewModel.startDiscovery() },
+            onStopDiscovery = { viewModel.stopDiscovery() },
+            onPick = { svc ->
+                viewModel.selectDiscoveredServer(svc)
+                showServerPickerDialog = false
+            },
+            onManualEntry = {
+                showServerPickerDialog = false
+                showHostDialog = true
+            },
+            onDismiss = {
+                viewModel.stopDiscovery()
+                showServerPickerDialog = false
+            },
+        )
     }
 
     if (showHostDialog) {
@@ -432,6 +456,52 @@ private fun HyperHdrHdrModeDialog(
                     )
                 ) { Text("Cancel") }
             }
+        }
+    }
+}
+
+@Composable
+private fun HyperHdrServerPickerDialog(
+    discoveredServices: List<DiscoveredHyperHdrService>,
+    onStartDiscovery: () -> Unit,
+    onStopDiscovery: () -> Unit,
+    onPick: (DiscoveredHyperHdrService) -> Unit,
+    onManualEntry: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    LaunchedEffect(Unit) { onStartDiscovery() }
+    DisposableEffect(Unit) { onDispose { onStopDiscovery() } }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = "Choose HyperHDR server",
+        subtitle = "Discovered servers are listed below. Pick one or enter the host manually.",
+        width = 700.dp,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (discoveredServices.isEmpty()) {
+                Text(
+                    text = "Searching the network…",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                discoveredServices.forEach { svc ->
+                    SettingsActionRow(
+                        title = svc.hostname,
+                        subtitle = "${svc.ipAddress}:${svc.flatbufPort}" +
+                            (svc.jsonPort?.let { " · JSON $it" } ?: " · JSON not advertised"),
+                        value = "Pick",
+                        onClick = { onPick(svc) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            SettingsActionRow(
+                title = "Enter manually",
+                subtitle = "Type the host/IP if it's not auto-discovered",
+                value = null,
+                onClick = onManualEntry,
+            )
         }
     }
 }
