@@ -13,6 +13,7 @@ import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.PosterRatingsSettings
+import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import com.nexio.tv.domain.model.toArtworkProviderSettings
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
@@ -121,11 +122,22 @@ class PosterRatingsSettingsViewModelTest {
     fun `Top Posters API key changes invalidate artwork display state without clearing primary metadata caches`() = runTest(dispatcher) {
         val fixture = Fixture()
         val viewModel = fixture.createViewModel()
-        coEvery { fixture.providerSettingsRepository.isTopPostersApiKeyValid("top-key") } returns true
+        val snapshot = TopPostersEntitlementSnapshot(
+            valid = true,
+            isActive = true,
+            tier = 1,
+            tierName = "Premium",
+            episodeThumbnails = true,
+            verifiedAtMs = 1_700_000_000_000L,
+            expiresAtMs = 1_700_086_400_000L
+        )
+        coEvery { fixture.providerSettingsRepository.validateTopPostersApiKey("top-key") } returns snapshot
 
         viewModel.validateAndSaveTopPostersApiKey(" top-key ") {}
         advanceUntilIdle()
 
+        coVerify(exactly = 1) { fixture.dataStore.setTopPostersApiKey("top-key") }
+        coVerify(exactly = 1) { fixture.dataStore.setTopPostersEntitlement(snapshot) }
         coVerify(exactly = 1) {
             fixture.integrationOwnershipService.syncRails(
                 RailKeyFactory.homeCatalogNamespace(7),
@@ -136,6 +148,31 @@ class PosterRatingsSettingsViewModelTest {
         coVerify(exactly = 1) { fixture.hydratedHomeOverlayStore.clearAll() }
         verify(exactly = 1) { fixture.artworkDecisionCache.invalidatePremiumArtworkPolicy() }
         fixture.verifyPrimaryMetadataCachesNotCleared()
+    }
+
+    @Test
+    fun `blank Top Posters API key clears entitlement`() = runTest(dispatcher) {
+        val fixture = Fixture()
+        val viewModel = fixture.createViewModel()
+
+        viewModel.validateAndSaveTopPostersApiKey("   ") {}
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { fixture.dataStore.setTopPostersApiKey("") }
+        coVerify(exactly = 1) { fixture.dataStore.setTopPostersEntitlement(null) }
+    }
+
+    @Test
+    fun `failed Top Posters API key validation clears stale entitlement`() = runTest(dispatcher) {
+        val fixture = Fixture()
+        val viewModel = fixture.createViewModel()
+        coEvery { fixture.providerSettingsRepository.validateTopPostersApiKey("invalid-key") } returns null
+
+        viewModel.validateAndSaveTopPostersApiKey(" invalid-key ") {}
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { fixture.dataStore.setTopPostersApiKey(any()) }
+        coVerify(exactly = 1) { fixture.dataStore.setTopPostersEntitlement(null) }
     }
 
     private class Fixture(
@@ -157,6 +194,11 @@ class PosterRatingsSettingsViewModelTest {
             }
             coEvery { setTopPostersApiKey(any()) } coAnswers {
                 this@Fixture.settings.value = this@Fixture.settings.value.copy(topPostersApiKey = firstArg<String>().trim())
+            }
+            coEvery { setTopPostersEntitlement(any()) } coAnswers {
+                this@Fixture.settings.value = this@Fixture.settings.value.copy(
+                    topPostersEntitlement = firstArg<TopPostersEntitlementSnapshot?>()
+                )
             }
         }
         val providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true)

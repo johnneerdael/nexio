@@ -71,7 +71,6 @@ class TopPostersIntegrationProvider @Inject constructor(
         val trimmed = apiKey.trim()
         if (trimmed.isBlank()) return null
 
-        val verifiedAtMs = System.currentTimeMillis()
         val credentialHash = credentialHash(IntegrationProvider.TOP_POSTERS, trimmed)
         val spec = IntegrationSpec(
             provider = IntegrationProvider.TOP_POSTERS,
@@ -82,7 +81,7 @@ class TopPostersIntegrationProvider @Inject constructor(
             } else {
                 IntegrationCachePolicy.CacheFirst(
                     ttlMs = TOP_POSTERS_ENTITLEMENT_TTL_MS,
-                    staleAfterExpiryMs = TOP_POSTERS_ENTITLEMENT_TTL_MS
+                    staleAfterExpiryMs = 0L
                 )
             },
             workClass = IntegrationWorkClass.USER_VISIBLE,
@@ -99,20 +98,32 @@ class TopPostersIntegrationProvider @Inject constructor(
                                     reason = "topposters_key_validation_failed"
                                 )
                             } else {
-                                IntegrationLoadResult.Success(response.body()?.string().orEmpty())
+                                val verifiedAtMs = System.currentTimeMillis()
+                                runCatching {
+                                    TopPostersEntitlementParser.serialize(
+                                        TopPostersEntitlementParser.parse(
+                                            body = response.body()?.string().orEmpty(),
+                                            verifiedAtMs = verifiedAtMs,
+                                            ttlMs = TOP_POSTERS_ENTITLEMENT_TTL_MS
+                                        )
+                                    )
+                                }.fold(
+                                    onSuccess = { IntegrationLoadResult.Success(it) },
+                                    onFailure = {
+                                        IntegrationLoadResult.HttpError(
+                                            response.code(),
+                                            reason = "topposters_key_validation_malformed_body"
+                                        )
+                                    }
+                                )
                             }
                         },
                         onFailure = { IntegrationLoadResult.NetworkError(it) }
                     )
             }
         )
-        return runtime.get(spec).valueOrNull()?.let { body ->
-            TopPostersEntitlementParser.parse(
-                body = body,
-                verifiedAtMs = verifiedAtMs,
-                ttlMs = TOP_POSTERS_ENTITLEMENT_TTL_MS
-            )
-        }
+        return runtime.get(spec).valueOrNull()
+            ?.let(TopPostersEntitlementParser::parseCachedSnapshot)
     }
 
     private fun PosterIntegrationRequest.toRemoteUrl(): String {

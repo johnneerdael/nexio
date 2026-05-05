@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.posters
 
+import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -54,5 +55,23 @@ class TopPostersEntitlementTest {
         )
 
         assertFalse(snapshot.episodeThumbnails)
+    }
+
+    @Test
+    fun `parse cached snapshot preserves original verification timestamps`() {
+        val original = TopPostersEntitlementSnapshot(
+            valid = true,
+            isActive = true,
+            tier = 1,
+            tierName = "Premium",
+            episodeThumbnails = true,
+            verifiedAtMs = 1_700_000_000_000L,
+            expiresAtMs = 1_700_086_400_000L
+        )
+
+        val cachedBody = TopPostersEntitlementParser.serialize(original)
+        val snapshot = TopPostersEntitlementParser.parseCachedSnapshot(cachedBody)
+
+        assertEquals(original, snapshot)
     }
 }
