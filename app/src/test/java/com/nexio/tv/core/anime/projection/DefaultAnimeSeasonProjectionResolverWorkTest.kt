@@ -4,6 +4,7 @@ import com.nexio.tv.core.anime.AnimeIdMapAsset
 import com.nexio.tv.core.anime.AnimeIdMapRecord
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.trace.AnimeProjectionTraceEvents
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -24,7 +25,7 @@ class DefaultAnimeSeasonProjectionResolverWorkTest {
             )
         )
         val service = AnimeIdMappingService(assetProvider = { asset })
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true), store = InMemoryAnimeEpisodeCoordinateStore())
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true), store = InMemoryAnimeEpisodeCoordinateStore(), traceEvents = mockk(relaxed = true))
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
 
@@ -44,7 +45,7 @@ class DefaultAnimeSeasonProjectionResolverWorkTest {
             )
         )
         val service = AnimeIdMappingService(assetProvider = { asset })
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true), store = InMemoryAnimeEpisodeCoordinateStore())
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true), store = InMemoryAnimeEpisodeCoordinateStore(), traceEvents = mockk(relaxed = true))
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "11469", animeStremioId = null))
 

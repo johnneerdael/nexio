@@ -5,6 +5,7 @@ import com.nexio.tv.core.anime.AnimeIdMapRecord
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.trace.AnimeProjectionTraceEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.domain.model.ProviderId
 import io.mockk.coEvery
@@ -82,6 +83,7 @@ class DefaultAnimeSeasonProjectionResolverEpisodeTest {
         ),
         kitsuMetadataService = kitsuMetadataService,
         store = InMemoryAnimeEpisodeCoordinateStore(),
+        traceEvents = mockk(relaxed = true),
     )
 
     private fun kitsuEp(season: Int, ep: Int) = TvEpisodeMetadata(
