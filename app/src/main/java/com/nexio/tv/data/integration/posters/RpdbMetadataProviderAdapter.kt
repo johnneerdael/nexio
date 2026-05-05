@@ -1,7 +1,8 @@
 package com.nexio.tv.data.integration.posters
 
-import com.nexio.tv.core.integration.PosterApiShapes
+import com.nexio.tv.core.artwork.ArtworkOwnerKey
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataCandidate
@@ -13,15 +14,16 @@ import com.nexio.tv.core.metadata.router.ProviderStepResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.SourceRole
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Adapter that injects an RPDB poster URL into the FieldResolver merge pipeline.
+ * Adapter that injects an RPDB poster artwork ref into the FieldResolver merge pipeline.
  *
  * Handles plan steps with [PosterApiShapes.RPDB_POSTER_TEMPLATE] so that when
  * [com.nexio.tv.core.metadata.router.ProviderPlanExecutor] appends an RPDB step to a
- * primary-provider plan, this adapter resolves the poster URL via
+ * primary-provider plan, this adapter resolves the poster artwork ref via
  * [PosterRatingsUrlResolver] and emits a [MetadataCandidate] carrying
  * [ResolvedField.POSTER] with [FieldOwner.ARTWORK].
  *
@@ -43,27 +45,29 @@ class RpdbMetadataProviderAdapter @Inject constructor(
         route: MetadataRoute,
         step: ProviderPlanStep
     ): ProviderStepResult {
-        val activeProvider = posterResolver.getActiveProvider()
-            ?.takeIf { it.provider == com.nexio.tv.domain.model.PosterRatingsProvider.RPDB }
+        val settings = posterResolver.currentSettings()
         val stableContentId = route.premiumPosterStableContentId(IntegrationProvider.RPDB)
 
-        val posterUrl = if (activeProvider != null && stableContentId != null) {
-            posterResolver.resolvePosterUrl(
-                originalPosterUrl = null,
-                contentId = stableContentId,
-                contentType = route.mediaKind.toContentType(),
-                activeProvider = activeProvider
+        val poster = if (
+            settings.selection.posterProvider == ArtworkProviderChoiceKey.RPDB &&
+            stableContentId != null
+        ) {
+            posterResolver.resolvePosterArtworkString(
+                settings = settings,
+                providerIds = route.premiumPosterProviderIds(),
+                mediaKind = route.mediaKind,
+                ownerKey = ArtworkOwnerKey.CanonicalContent(stableContentId)
             )
         } else {
             null
         }
 
-        val candidate = if (posterUrl != null) {
+        val candidate = if (poster != null) {
             MetadataCandidate(
                 provider = MetadataPrimaryProvider.RPDB,
                 fields = mapOf(
                     ResolvedField.POSTER to FieldValue(
-                        value = posterUrl,
+                        value = poster,
                         owner = FieldOwner.ARTWORK,
                         sourceRole = SourceRole.ARTWORK
                     )
@@ -78,5 +82,3 @@ class RpdbMetadataProviderAdapter @Inject constructor(
         return ProviderStepResult(step = step, candidate = candidate)
     }
 }
-
-// toContentType() is defined in PosterAdapterUtils.kt (F2-13-E)

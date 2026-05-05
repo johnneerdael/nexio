@@ -32,6 +32,9 @@ internal fun MetadataRoute.premiumPosterStableContentId(provider: IntegrationPro
         .firstOrNull()
         ?.let { "${it.idType}:${it.mediaId}" }
 
+internal fun MetadataRoute.premiumPosterProviderIds(): ProviderIds =
+    targetIds.toProviderIds()
+
 private fun Map<MetadataPrimaryProvider, String>.toProviderIds(): ProviderIds =
     ProviderIds(
         imdb = imdbTargetId(this[MetadataPrimaryProvider.IMDB]),
