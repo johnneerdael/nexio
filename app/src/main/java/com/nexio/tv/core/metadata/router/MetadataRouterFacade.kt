@@ -715,7 +715,7 @@ class MetadataRouterFacade(
         return if (effectiveSeasons.isEmpty()) {
             if (route.provider == MetadataPrimaryProvider.KITSU) {
                 // Kitsu returns all episodes when seasonNumber is null; use an unconstrained route
-                // so KitsuMetadataProviderAdapter passes an empty season filter to KitsuMetadataService,
+                // so the provider adapter passes an empty season filter through to the Kitsu backend,
                 // which then returns every episode regardless of franchise-relative season number.
                 // Last-write-wins on duplicate (season, episode) keys from multiple step results —
                 // acceptable because providers are expected to return disjoint episode ranges.
