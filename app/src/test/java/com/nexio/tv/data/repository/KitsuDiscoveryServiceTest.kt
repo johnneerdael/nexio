@@ -1,5 +1,9 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.anime.AnimeIdMapAsset
+import com.nexio.tv.core.anime.AnimeIdMapRecord
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.data.integration.railpreview.KitsuRailFranchiseGrouper
 import com.nexio.tv.data.local.KitsuCatalogIds
 import com.nexio.tv.data.local.KitsuCatalogPreferences
 import com.nexio.tv.data.remote.api.KitsuAnimeAttributes
@@ -105,6 +109,36 @@ class KitsuDiscoveryServiceTest {
         assertEquals(refreshed, emission.await())
     }
 
+    @Test
+    fun `franchise grouping collapses MHA S1 and S3 sharing tvdb into one card`() = runTest {
+        val mhaAsset = AnimeIdMapAsset(
+            schemaVersion = 1,
+            recordsByKitsu = mapOf(
+                "11469" to AnimeIdMapRecord(kitsu = "11469", tvdb = "305074", mediaType = "series", sourceType = "TV"),
+                "13881" to AnimeIdMapRecord(kitsu = "13881", tvdb = "305074", mediaType = "series", sourceType = "TV"),
+            )
+        )
+        val grouper = KitsuRailFranchiseGrouper(AnimeIdMappingService(assetProvider = { mhaAsset }))
+        val service = FakeKitsuDiscoveryClient(
+            catalogResults = mapOf(
+                KitsuCatalogIds.TRENDING_ANIME to listOf(
+                    animeResult(id = "11469", canonicalTitle = "My Hero Academia"),
+                    animeResult(id = "13881", canonicalTitle = "My Hero Academia Season 3"),
+                )
+            )
+        ).createService(grouper = grouper)
+
+        val snapshot = service.refreshCatalogs(
+            KitsuCatalogPreferences(enabledCatalogs = setOf(KitsuCatalogIds.TRENDING_ANIME)),
+            force = true
+        )
+
+        val previews = snapshot.rowRecordsByCatalog.getValue(KitsuCatalogIds.TRENDING_ANIME).previews
+        assertEquals("MHA S1 and S3 should collapse to one card", 1, previews.size)
+        assertEquals("kitsu:11469", previews.single().sourceItemId)
+        assertEquals("305074", previews.single().stableIds.tvdb)
+    }
+
     private class FakeKitsuDiscoveryClient(
         private val catalogResults: Map<String, List<KitsuAnimeResource>> = emptyMap()
     ) : KitsuDiscoveryClient {
@@ -113,7 +147,13 @@ class KitsuDiscoveryServiceTest {
             preferences: KitsuCatalogPreferences
         ): List<KitsuAnimeResource> = catalogResults[catalogId].orEmpty()
 
-        fun createService(): KitsuDiscoveryService = KitsuDiscoveryService(this)
+        fun createService(
+            grouper: KitsuRailFranchiseGrouper = noOpGrouper()
+        ): KitsuDiscoveryService = KitsuDiscoveryService(this, grouper)
+
+        private fun noOpGrouper() = KitsuRailFranchiseGrouper(
+            AnimeIdMappingService(assetProvider = { AnimeIdMapAsset(schemaVersion = 0) })
+        )
     }
 
     private fun animeResult(
