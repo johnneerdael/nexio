@@ -10,7 +10,11 @@ import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceHash
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.trace.TraceMode
+import com.nexio.tv.core.trace.TraceSession
+import com.nexio.tv.core.trace.TraceSessionManager
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.HydrationState
@@ -22,6 +26,9 @@ import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -249,6 +256,75 @@ class ScreensaverCandidateRepositoryTest {
     }
 
     @Test
+    fun `injected constructor hashes active profile with runtime trace session salt`() = runTest {
+        val surface = testSurface()
+        val sink = RecordingTraceSink()
+        val profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
+            every { activeProfileSession } returns MutableStateFlow(
+                ActiveProfileSession(
+                    profileId = 1,
+                    sessionId = "active-profile-session-id",
+                    sessionOrdinal = 1L,
+                    startedAtMs = 1_000L
+                )
+            )
+        }
+        val traceSessionManager = mockk<TraceSessionManager> {
+            every { activeSession() } returns traceSession("runtime-trace-session")
+        }
+        val repository = ScreensaverCandidateRepository(
+            surfaceRepository = surface,
+            traceEvents = TraceMetadataEvents(sink, sessionId = { "runtime-trace-session" }),
+            profileManager = profileManager,
+            traceSessionManager = traceSessionManager
+        )
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:550", title = "Fight Club"))
+        )
+
+        repository.getCandidatesSnapshot(profileId = 1)
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertEquals(TraceHash.of("runtime-trace-session", "1"), payload["profileHash"])
+    }
+
+    @Test
+    fun `injected constructor emits null profile hash when no runtime trace session is active`() = runTest {
+        val surface = testSurface()
+        val sink = RecordingTraceSink()
+        val profileManager = mockk<com.nexio.tv.core.profile.ProfileManager> {
+            every { activeProfileSession } returns MutableStateFlow(
+                ActiveProfileSession(
+                    profileId = 1,
+                    sessionId = "active-profile-session-id",
+                    sessionOrdinal = 1L,
+                    startedAtMs = 1_000L
+                )
+            )
+        }
+        val traceSessionManager = mockk<TraceSessionManager> {
+            every { activeSession() } returns null
+        }
+        val repository = ScreensaverCandidateRepository(
+            surfaceRepository = surface,
+            traceEvents = TraceMetadataEvents(sink, sessionId = { null }),
+            profileManager = profileManager,
+            traceSessionManager = traceSessionManager
+        )
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(resolvedItem(itemKey = "movie:tmdb:550", title = "Fight Club"))
+        )
+
+        repository.getCandidatesSnapshot(profileId = 1)
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertTrue(payload.containsKey("profileHash"))
+        assertEquals(null, payload["profileHash"])
+    }
+
+    @Test
     fun `trailer candidates exclude items without title or artwork`() = runTest {
         val surface = testSurface()
         val repository = testScreensaverCandidates(surface)
@@ -316,6 +392,19 @@ class ScreensaverCandidateRepositoryTest {
                 startedAtMs = 1_000L
             )
         }
+    )
+
+    private fun traceSession(traceSessionId: String) = TraceSession(
+        traceSessionId = traceSessionId,
+        startedAtEpochMs = 1_700_000_000_000L,
+        appVersion = "1.0",
+        buildType = "debug",
+        gitSha = null,
+        deviceModel = "test-device",
+        androidVersion = "14",
+        activeProfileHash = null,
+        mode = TraceMode.SAFE_METADATA_RUNTIME,
+        salt = "trace-salt"
     )
 
     private fun artworkRef(
