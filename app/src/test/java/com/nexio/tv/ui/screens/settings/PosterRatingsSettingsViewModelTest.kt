@@ -11,6 +11,7 @@ import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.PosterRatingsSettings
 import com.nexio.tv.domain.model.toArtworkProviderSettings
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -147,7 +148,7 @@ class PosterRatingsSettingsViewModelTest {
                 this@Fixture.settings.value = this@Fixture.settings.value.copy(
                     selection = this@Fixture.settings.value.selection.withProvider(
                         type = firstArg(),
-                        provider = secondArg()
+                        provider = ArtworkProviderChoiceKey(secondArg<String>())
                     )
                 )
             }
