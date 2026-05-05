@@ -973,6 +973,7 @@ class HomeViewModelFocusHydrationTest {
             debugSettingsDataStore = mockk(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),
             syntheticHomeCatalogStore = mockk(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true),
             profileManager = profileManagerWithSwitch,
             profileModeRouter = profileModeRouter,
             profileBoundary = profileBoundary,

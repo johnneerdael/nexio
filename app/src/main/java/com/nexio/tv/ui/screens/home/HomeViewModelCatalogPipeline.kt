@@ -28,6 +28,8 @@ import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.toHomeRailDefinitions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -44,6 +46,15 @@ import com.nexio.tv.core.util.filterReleasedItems
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
+
+private fun collectPersistedSyntheticOrderKeys(
+    traktGroups: List<PersistedSyntheticCatalogGroup>,
+    simklGroups: List<PersistedSyntheticCatalogGroup>,
+    mdblistGroups: List<PersistedSyntheticCatalogGroup>,
+    tmdbGroups: List<PersistedSyntheticCatalogGroup>,
+    kitsuGroups: List<PersistedSyntheticCatalogGroup>,
+): List<HomeRailKey> = (traktGroups + simklGroups + mdblistGroups + kitsuGroups + tmdbGroups)
+    .map { HomeRailKey(it.orderKey) }
 
 private data class CatalogUpdateResult(
     val displayRows: List<CatalogRow>,
@@ -2442,31 +2453,65 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
         }
 
-        val defaultOrderKeys = buildList {
-            addAll(syntheticGroups.map { it.orderKey })
-            addAll(rawRowsByKey.keys)
-            addAll(pendingRowsByKey.keys)
-        }.distinct()
+        // Build the live definition list from the catalog plan. This is the authoritative
+        // input the HomeRailOrderStore reconciler uses to compute effective order.
+        val liveDefinitions = catalogPlan.toHomeRailDefinitions()
 
-        val savedOrderKeys = homeCatalogOrderKeys
-            .asSequence()
-            .mapNotNull { rawKey -> resolveHomeOrderedKey(rawKey, defaultOrderKeys.toSet()) }
-            .distinct()
-            .toList()
+        // Run migration once per ViewModel lifecycle (legacy -> live default -> synthetic-fallback).
+        // Subsequent ticks skip this; onLiveDefinitionsArrived is cheap and runs every tick to
+        // upgrade MIGRATION_SYNTHETIC_FALLBACK -> MIGRATION once live definitions arrive.
+        if (!migrationAttempted) {
+            homeRailOrderStore.tryMigrate(
+                persistedSyntheticOrder = collectPersistedSyntheticOrderKeys(
+                    traktGroups = if (activeProfileTraktAuthenticated) persistedTraktSyntheticGroups else emptyList(),
+                    simklGroups = persistedSimklSyntheticGroups,
+                    mdblistGroups = persistedMDBListSyntheticGroups,
+                    tmdbGroups = currentPreferencePersistedTmdbSyntheticGroups,
+                    kitsuGroups = currentPreferencePersistedKitsuSyntheticGroups,
+                ),
+                liveDefinitions = liveDefinitions,
+            )
+            migrationAttempted = true
+        }
+        homeRailOrderStore.onLiveDefinitionsArrived(liveDefinitions)
 
-        val savedOrderSet = savedOrderKeys.toSet()
-        val effectiveOrderKeys = savedOrderKeys + defaultOrderKeys.filterNot { it in savedOrderSet }
+        // Compute effective order synchronously from the authoritative store.
+        val effectiveOrder = homeRailOrderStore.reconcileNow(liveDefinitions)
+
+        // Build content-by-key maps for the pure materializer. Synthetic groups remain
+        // content sources only; their iteration order is no longer authoritative.
+        val liveSyntheticByKey: Map<HomeRailKey, List<CatalogRow>> =
+            liveSyntheticGroups.associate { HomeRailKey(it.orderKey) to it.rows }
+        val persistedSyntheticByKey: Map<HomeRailKey, List<CatalogRow>> = (
+            (if (activeProfileTraktAuthenticated) syntheticTraktGroups else emptyList()) +
+            syntheticSimklGroups + syntheticMDBListGroups + syntheticKitsuGroups + syntheticTmdbGroups
+        ).associate { HomeRailKey(it.orderKey) to it.rows }
+        val rawRowsByRailKey: Map<HomeRailKey, CatalogRow> =
+            rawRowsByKey.mapKeys { HomeRailKey(it.key) }
+        val pendingRowsByRailKey: Map<HomeRailKey, CatalogRow> =
+            pendingRowsByKey.mapKeys { HomeRailKey(it.key) }
+
+        val combinedRows = materializeHomeRows(
+            effectiveOrder = effectiveOrder,
+            liveSyntheticGroupsByKey = liveSyntheticByKey,
+            persistedSyntheticGroupsByKey = persistedSyntheticByKey,
+            rawRowsByKey = rawRowsByRailKey,
+            pendingRowsByKey = pendingRowsByRailKey,
+        )
+        val liveOrderedRows = combinedRows
+
+        // Preserve diagnostics signatures for downstream call sites - same shape as before,
+        // computed from the new effective order so CatalogUpdateResult continues to populate.
+        // (Phase 9/Task 20 will replace these with home.rail_order_reconciled events.)
+        val effectiveOrderKeys = effectiveOrder.visibleKeys.map { it.value }
+        val newlyDiscoveredSet = effectiveOrder.newlyDiscoveredKeys.toSet()
+        val savedOrderKeys = effectiveOrder.visibleKeys
+            .filter { it !in newlyDiscoveredSet }
+            .map { it.value }
+        val defaultOrderKeys = liveDefinitions.map { it.key.value }
         val orderDiagnosticsSignature = "${savedOrderKeys.hashCode()}:${defaultOrderKeys.hashCode()}:${effectiveOrderKeys.hashCode()}"
         val orderDiagnosticsMessage =
             "Catalog order reconciliation saved=${savedOrderKeys.size} default=${defaultOrderKeys.size} effective=${effectiveOrderKeys.size}"
-        val combinedRows = buildList {
-            effectiveOrderKeys.forEach { key ->
-                syntheticRowsByKey[key]?.let { addAll(it) }
-                    ?: rawRowsByKey[key]?.let { add(it) }
-                    ?: pendingRowsByKey[key]?.let { add(it) }
-            }
-        }
-        val liveOrderedRows = combinedRows
 
         val currentCachedTmdbCatalogIds = currentTmdbCatalogIds(
             tmdbPrefs = tmdbPrefs,
