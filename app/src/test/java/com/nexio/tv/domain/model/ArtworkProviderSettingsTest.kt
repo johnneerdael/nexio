@@ -46,6 +46,7 @@ class ArtworkProviderSettingsTest {
 
     @Test
     fun `inactive top posters entitlement does not enable thumbnails`() {
+        val now = System.currentTimeMillis()
         val settings = ArtworkProviderSettings(
             topPostersApiKey = "TP-test",
             topPostersEntitlement = TopPostersEntitlementSnapshot(
@@ -55,7 +56,7 @@ class ArtworkProviderSettingsTest {
                 tierName = "Premium",
                 episodeThumbnails = true,
                 verifiedAtMs = 1_000L,
-                expiresAtMs = 86_401_000L
+                expiresAtMs = now + 86_400_000L
             )
         )
 
