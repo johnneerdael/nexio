@@ -53,7 +53,9 @@ class TrackingWatchingNowRoutingTest {
             traktScrobbleService = traktService,
             simklScrobbleService = simklService,
             trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL),
-            rejectionReporter = mockk(relaxed = true)
+            rejectionReporter = mockk(relaxed = true),
+            animeSeasonProjectionResolver = mockk(relaxed = true),
+            idMappingService = mockk(relaxed = true),
         )
 
         val observed = service.observeWatchingNowState().first()
@@ -73,7 +75,9 @@ class TrackingWatchingNowRoutingTest {
             traktScrobbleService = traktService,
             simklScrobbleService = simklService,
             trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL),
-            rejectionReporter = mockk(relaxed = true)
+            rejectionReporter = mockk(relaxed = true),
+            animeSeasonProjectionResolver = mockk(relaxed = true),
+            idMappingService = mockk(relaxed = true),
         )
 
         service.scrobbleStart(
