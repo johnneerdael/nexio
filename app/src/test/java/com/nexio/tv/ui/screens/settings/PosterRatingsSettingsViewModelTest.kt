@@ -121,7 +121,7 @@ class PosterRatingsSettingsViewModelTest {
     fun `Top Posters API key changes invalidate artwork display state without clearing primary metadata caches`() = runTest(dispatcher) {
         val fixture = Fixture()
         val viewModel = fixture.createViewModel()
-        coEvery { fixture.providerSettingsRepository.validateTopPostersApiKey("top-key") } returns true
+        coEvery { fixture.providerSettingsRepository.isTopPostersApiKeyValid("top-key") } returns true
 
         viewModel.validateAndSaveTopPostersApiKey(" top-key ") {}
         advanceUntilIdle()

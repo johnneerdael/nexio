@@ -6,6 +6,7 @@ import com.nexio.tv.data.integration.posters.RpdbIntegrationProvider
 import com.nexio.tv.data.integration.posters.TopPostersIntegrationProvider
 import com.nexio.tv.data.integration.skip.AnimeSkipIntegrationProvider
 import com.nexio.tv.data.integration.tmdb.TmdbIntegrationProvider
+import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,6 +34,9 @@ class DefaultProviderSettingsRepository @Inject constructor(
     override suspend fun validateRpdbApiKey(apiKey: String): Boolean =
         rpdbProvider.validateApiKey(apiKey)
 
-    override suspend fun validateTopPostersApiKey(apiKey: String): Boolean =
-        topPostersProvider.validateApiKey(apiKey)
+    override suspend fun validateTopPostersApiKey(
+        apiKey: String,
+        forceRefresh: Boolean
+    ): TopPostersEntitlementSnapshot? =
+        topPostersProvider.validateApiKey(apiKey, forceRefresh)
 }
