@@ -12,14 +12,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Pins the contract that [MetadataRouterFacade.fetchTvEpisodeEnrichment] must NOT default
- * the episode-enrichment season to 1 when both:
+ * Pins the routing contract that [MetadataRouterFacade.fetchTvEpisodeEnrichment] must NOT
+ * default the episode-enrichment season to 1 when both:
  *   - [TvMetadataRequest.seasonNumbers] is empty, and
  *   - [MetadataRequest.seasonNumber] is null.
  *
  * Before the fix (line 648: `?: 1`), the captured route.seasonNumber was always 1.
- * After the fix it must be null so that KitsuMetadataService receives an unconstrained
- * season hint and returns all episodes (e.g. all 25 MHA Season 3 episodes).
+ * After the fix it must be null.
+ *
+ * NOTE: This test only pins the routing contract — it captures the [MetadataRoute.seasonNumber]
+ * field passed to [ProviderPlanExecutor.buildPlan] and asserts it is null. It does NOT verify
+ * that episode data flows through or that KitsuMetadataService returns all episodes; that
+ * behaviour is covered by [KitsuMetadataServiceSeasonFilterTest].
  *
  * This test is expected to FAIL before the fix in MetadataRouterFacade.kt and PASS after.
  */
@@ -27,8 +31,8 @@ class MetadataRouterFacadeSeasonDefaultTest {
 
     /**
      * When both [TvMetadataRequest.seasonNumbers] and [MetadataRequest.seasonNumber] are absent,
-     * the route built inside [fetchTvEpisodeEnrichment] must carry seasonNumber = null —
-     * NOT the old defaulted value of 1.
+     * [fetchTvEpisodeEnrichment] must pass seasonNumber = null to [ProviderPlanExecutor.buildPlan]
+     * so that the unconstrained Kitsu route is used — NOT the old defaulted value of 1.
      */
     @Test
     fun `fetchTvEpisodeEnrichment must not default seasonNumber to 1 when no season hint is provided`() = runTest {

@@ -6,6 +6,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,6 +24,7 @@ class KitsuMetadataServiceSeasonFilterTest {
 
     private fun buildService(): KitsuMetadataService {
         val provider = mockk<KitsuIntegrationProvider>()
+        // Returns the pre-built episode map directly; KitsuMetadataService applies its own season filter on the returned map
         coEvery {
             provider.fetchEpisodeEnrichment(
                 rawId = any(),
@@ -30,15 +32,7 @@ class KitsuMetadataServiceSeasonFilterTest {
                 mediaKind = any(),
                 mapper = any()
             )
-        } coAnswers {
-            // Invoke the mapper lambda with a representative list — the actual list contents
-            // don't matter because KitsuMetadataService applies its own season filter after
-            // calling the mapper. We pass the pre-mapped result directly by having the mock
-            // invoke the mapper arg with an empty list and then returning our test map.
-            // Since the mapper is the 4th argument (index 3), invoke it and ignore its result,
-            // then return our controlled dataset.
-            allEpisodesByKey
-        }
+        } returns allEpisodesByKey
 
         val idMappingService = AnimeIdMappingService(
             assetProvider = {
@@ -109,5 +103,25 @@ class KitsuMetadataServiceSeasonFilterTest {
         assertTrue("Season 3 episode 3 must be present", result.containsKey(3 to 3))
         assertTrue("Season 1 episodes must be absent", result.none { (k, _) -> k.first == 1 })
         assertTrue("Season 2 episodes must be absent", result.none { (k, _) -> k.first == 2 })
+    }
+
+    @Test
+    fun `seasonNumbers with season 1 only returns season-1 episodes`() = runTest {
+        val service = buildService()
+
+        val result = service.fetchEpisodeEnrichment(
+            rawId = "kitsu:13881",
+            mediaKind = ContentMediaKind.SERIES,
+            seasonNumbers = listOf(1)
+        )
+
+        assertEquals(
+            "Only the 2 season-1 episodes must be returned when seasonNumbers = [1]",
+            2,
+            result.size
+        )
+        assertTrue("Season 1 episode 1 must be present", result.containsKey(1 to 1))
+        assertTrue("Season 1 episode 2 must be present", result.containsKey(1 to 2))
+        assertFalse("Season 3 episode 1 must be absent", result.containsKey(3 to 1))
     }
 }

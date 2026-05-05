@@ -719,6 +719,8 @@ class MetadataRouterFacade(
             val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
             providerPlanRunner.run(plan).stepResults
                 .flatMap { stepResult -> stepResult.episodeMetadata.entries }
+                // Last-write-wins on duplicate (season, episode) keys from multiple step results — acceptable
+                // because providers are expected to return disjoint episode ranges.
                 .associate { it.toPair() }
         } else {
             effectiveSeasons.flatMap { seasonNumber ->
@@ -727,6 +729,8 @@ class MetadataRouterFacade(
                 providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
                     stepResult.episodeMetadata.entries
                 }
+            // Last-write-wins on duplicate (season, episode) keys from multiple step results — acceptable
+            // because providers are expected to return disjoint episode ranges.
             }.associate { it.toPair() }
         }
     }
