@@ -12,6 +12,7 @@ import javax.inject.Singleton
 class DefaultAnimeSeasonProjectionResolver @Inject constructor(
     private val idMappingService: AnimeIdMappingService,
     private val kitsuMetadataService: KitsuMetadataService,
+    private val store: AnimeEpisodeCoordinateStore,
 ) : AnimeSeasonProjectionResolver {
 
     override suspend fun resolveWork(source: AnimeSourceIdentity): AnimeWorkIdentity {
@@ -123,7 +124,12 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         work: AnimeWorkIdentity,
         sourceEpisode: SourceEpisodeCoordinate,
         target: EpisodeProjectionTarget,
-    ): AnimeEpisodeProjection = computeEpisodeProjection(work, sourceEpisode, target)
+    ): AnimeEpisodeProjection {
+        store.get(work.groupKey, sourceEpisode, target)?.let { return it }
+        val computed = computeEpisodeProjection(work, sourceEpisode, target)
+        store.put(work.groupKey, sourceEpisode, target, computed)
+        return computed
+    }
 
     private suspend fun computeEpisodeProjection(
         work: AnimeWorkIdentity,
