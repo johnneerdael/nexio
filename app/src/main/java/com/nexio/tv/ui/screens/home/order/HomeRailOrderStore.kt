@@ -135,7 +135,6 @@ class HomeRailOrderStore @Inject constructor(
         val current = currentForMutation()
         val newDisabled = if (enabled) current.disabledKeys - key else current.disabledKeys + key
         if (newDisabled == current.disabledKeys) return@withLock
-        val before = current.orderedKeys
         persist(current.copy(
             disabledKeys = newDisabled,
             version = current.version + 1,
@@ -144,7 +143,8 @@ class HomeRailOrderStore @Inject constructor(
         ))
         diagnostics.emitEnabledChanged(key = key, enabled = enabled, source = source)
         if (!enabled) diagnostics.emitHiddenDueToDisabled(key)
-        diagnostics.emitMutation(source = source, before = before, after = before)
+        // Intentionally no rail_order_mutation emission here — orderedKeys did not change;
+        // the rail_enabled_changed event below carries the actual semantic.
     }
 
     suspend fun reorderProviderKeys(
