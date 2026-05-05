@@ -1,6 +1,8 @@
 package com.nexio.tv.core.anime.projection
 
 import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.ContentMediaKind
+import com.nexio.tv.core.anime.KitsuMetadataService
 import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -8,6 +10,7 @@ import javax.inject.Singleton
 @Singleton
 class DefaultAnimeSeasonProjectionResolver @Inject constructor(
     private val idMappingService: AnimeIdMappingService,
+    private val kitsuMetadataService: KitsuMetadataService,
 ) : AnimeSeasonProjectionResolver {
 
     override suspend fun resolveWork(source: AnimeSourceIdentity): AnimeWorkIdentity {
@@ -57,7 +60,63 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         work: AnimeWorkIdentity,
         sourceKitsuId: String,
         requestedSeason: Int?,
-    ): AnimeSeasonPresentation = TODO("Task 1.7")
+    ): AnimeSeasonPresentation {
+        val cleanSourceId = sourceKitsuId.removePrefix("kitsu:")
+        // Fetch episodes for every member kitsu resource to discover which seasons each carries.
+        val perMember = work.memberKitsuIds.associateWith { memberId ->
+            kitsuMetadataService.fetchEpisodeEnrichment(
+                rawId = "kitsu:$memberId",
+                mediaKind = ContentMediaKind.SERIES,
+                seasonNumbers = emptyList(),
+            )
+        }
+        // Build season → member mapping (first member that reports a season wins).
+        val seasonToMember = mutableMapOf<Int, String>()
+        val seasonToCount = mutableMapOf<Int, Int>()
+        perMember.forEach { (memberId, eps) ->
+            eps.keys.forEach { (season, _) ->
+                seasonToMember.putIfAbsent(season, memberId)
+                seasonToCount[season] = (seasonToCount[season] ?: 0) + 1
+            }
+        }
+
+        // Flat-franchise detection: single season, single member, high episode count.
+        val isFlatFranchise = seasonToMember.size == 1
+            && (perMember[cleanSourceId]?.size ?: 0) >= FLAT_KITSU_MIN_EPISODES
+        val source = if (isFlatFranchise) SeasonPresentationSource.KITSU_FLAT_FALLBACK
+                     else SeasonPresentationSource.KITSU_SEASON_NUMBERS
+
+        // Click-source-aware default: prefer the season the clicked kitsu resource actually carries.
+        val sourceSeasons = perMember[cleanSourceId]?.keys?.map { it.first }?.toSet().orEmpty()
+        val defaultSelected = requestedSeason
+            ?: sourceSeasons.minOrNull()
+            ?: seasonToMember.keys.minOrNull()
+            ?: 1
+
+        val tabs = seasonToMember.entries
+            .sortedBy { it.key }
+            .map { (season, memberId) ->
+                AnimeSeasonTab(
+                    seasonNumber = season,
+                    title = null,
+                    episodeCount = seasonToCount[season],
+                    episodesKitsuMemberId = memberId,
+                    isFlatFallback = isFlatFranchise,
+                )
+            }
+
+        return AnimeSeasonPresentation(
+            work = work,
+            seasons = tabs,
+            selectedSeason = defaultSelected,
+            source = source,
+            confidence = if (isFlatFranchise) CoordinateConfidence.LOW else CoordinateConfidence.HIGH,
+        )
+    }
+
+    private companion object {
+        private const val FLAT_KITSU_MIN_EPISODES = 50
+    }
 
     override suspend fun resolveEpisodeProjection(
         work: AnimeWorkIdentity,
