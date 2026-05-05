@@ -302,7 +302,7 @@ class TraceMetadataEvents(
         emitScreensaverEvent(
             eventType = "screensaver.candidate_pool_built",
             payload = mapOf(
-                "profileHash" to optionalTraceValue(profileHash),
+                "profileHash" to profileHash,
                 "source" to source,
                 "imageCandidateCount" to imageCandidateCount,
                 "trailerCandidateCount" to trailerCandidateCount

@@ -111,6 +111,23 @@ class TraceMetadataEventsTest {
     }
 
     @Test
+    fun `screensaver candidate pool preserves null profile hash when unavailable`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "screensaver-session" })
+
+        events.emitScreensaverCandidatePoolBuilt(
+            profileHash = null,
+            source = "RESOLVED_DISPLAY_SURFACE",
+            imageCandidateCount = 0,
+            trailerCandidateCount = 0
+        )
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertTrue(payload.containsKey("profileHash"))
+        assertEquals(null, payload["profileHash"])
+    }
+
+    @Test
     fun `home hydration lifecycle emits ordered envelopes with shared sequence`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "home-session" })

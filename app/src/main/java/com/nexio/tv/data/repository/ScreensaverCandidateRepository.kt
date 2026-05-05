@@ -4,6 +4,7 @@ import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.TraceHash
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.trace.TraceSessionManager
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
@@ -27,14 +28,16 @@ class ScreensaverCandidateRepository(
     constructor(
         surfaceRepository: ResolvedDisplaySurfaceRepository,
         traceEvents: TraceMetadataEvents,
-        profileManager: ProfileManager
+        profileManager: ProfileManager,
+        traceSessionManager: TraceSessionManager
     ) : this(
         surfaceRepository = surfaceRepository,
         traceEvents = traceEvents,
         profileHashForTrace = { profileId ->
-            val session = profileManager.activeProfileSession.value
-            if (session.profileId == profileId) {
-                TraceHash.of(session.sessionId, session.profileId.toString())
+            val activeProfileSession = profileManager.activeProfileSession.value
+            val traceSessionId = traceSessionManager.activeSession()?.traceSessionId
+            if (activeProfileSession.profileId == profileId && traceSessionId != null) {
+                TraceHash.of(traceSessionId, profileId.toString())
             } else {
                 null
             }
