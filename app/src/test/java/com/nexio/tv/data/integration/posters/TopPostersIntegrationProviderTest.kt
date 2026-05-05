@@ -296,6 +296,36 @@ class TopPostersIntegrationProviderTest {
     }
 
     @Test
+    fun `validateApiKey maps incomplete success body to malformed body http error`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val specSlot = slot<IntegrationSpec<String>>()
+        var capturedLoadResult: IntegrationLoadResult<String>? = null
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } coAnswers {
+            val loadResult = specSlot.captured.load()
+            capturedLoadResult = loadResult
+            when (loadResult) {
+                is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(loadResult.value)
+                else -> IntegrationFetchResult.Missing
+            }
+        }
+        coEvery { topPostersApi.verifyApiKey("top-secret-key") } returns Response.success(
+            """{"valid":true}""".toResponseBody("application/json".toMediaType())
+        )
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, mockk<PosterTransport>())
+        val snapshot = provider.validateApiKey("top-secret-key")
+        val loadResult = capturedLoadResult
+
+        assertNull(snapshot)
+        assertTrue(loadResult is IntegrationLoadResult.HttpError)
+        loadResult as IntegrationLoadResult.HttpError
+        assertEquals(200, loadResult.statusCode)
+        assertEquals("topposters_key_validation_malformed_body", loadResult.reason)
+    }
+
+    @Test
     fun `validateApiKey disables cache policy when force refresh is requested`() = runTest {
         val runtime = mockk<IntegrationRuntime>()
         val topPostersApi = mockk<TopPostersApi>()

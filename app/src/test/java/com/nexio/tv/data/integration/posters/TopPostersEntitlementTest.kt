@@ -3,6 +3,7 @@ package com.nexio.tv.data.integration.posters
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -55,6 +56,24 @@ class TopPostersEntitlementTest {
         )
 
         assertFalse(snapshot.episodeThumbnails)
+    }
+
+    @Test
+    fun `parse rejects incomplete entitlement response`() {
+        listOf(
+            "{}",
+            """{"valid":true}""",
+            """{"valid":null,"is_active":true,"tier":1,"tier_name":"Premium"}""",
+            """{"valid":true,"is_active":{},"tier":1,"tier_name":"Premium"}"""
+        ).forEach { body ->
+            assertThrows(IllegalArgumentException::class.java) {
+                TopPostersEntitlementParser.parse(
+                    body = body,
+                    verifiedAtMs = 1_700_000_000_000L,
+                    ttlMs = 86_400_000L
+                )
+            }
+        }
     }
 
     @Test
