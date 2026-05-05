@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.integration.railpreview.KitsuRailFranchiseGrouper
 import com.nexio.tv.data.integration.railpreview.KitsuRailPreviewMapper
 import com.nexio.tv.data.integration.kitsu.KitsuDiscoveryIntegrationProvider
 import com.nexio.tv.data.local.KitsuCatalogPreferences
@@ -19,7 +20,8 @@ typealias RetrofitKitsuDiscoveryClient = KitsuDiscoveryIntegrationProvider
 
 @Singleton
 class KitsuDiscoveryService @Inject constructor(
-    private val client: KitsuDiscoveryClient
+    private val client: KitsuDiscoveryClient,
+    private val grouper: KitsuRailFranchiseGrouper
 ) {
     private val snapshot = MutableStateFlow(KitsuDiscoverySnapshot())
     private val railPreviewMapper = KitsuRailPreviewMapper()
@@ -104,7 +106,7 @@ class KitsuDiscoveryService @Inject constructor(
         results: List<KitsuAnimeResource>,
         generatedAtMs: Long
     ): List<RailItemPreview> {
-        return results.take(MAX_ITEMS_PER_SOURCE)
+        val mapped = results.take(MAX_ITEMS_PER_SOURCE)
             .mapIndexedNotNull { index, result ->
                 railPreviewMapper.mapAnime(
                     railId = railId,
@@ -113,6 +115,7 @@ class KitsuDiscoveryService @Inject constructor(
                     generatedAtMs = generatedAtMs
                 )
             }
+        return grouper.group(mapped)
     }
 
     companion object {
