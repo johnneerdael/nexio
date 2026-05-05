@@ -3,6 +3,7 @@ package com.nexio.tv.core.anime.projection
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -122,7 +123,85 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         work: AnimeWorkIdentity,
         sourceEpisode: SourceEpisodeCoordinate,
         target: EpisodeProjectionTarget,
-    ): AnimeEpisodeProjection = TODO("Task 1.8")
+    ): AnimeEpisodeProjection = computeEpisodeProjection(work, sourceEpisode, target)
+
+    private suspend fun computeEpisodeProjection(
+        work: AnimeWorkIdentity,
+        sourceEpisode: SourceEpisodeCoordinate,
+        target: EpisodeProjectionTarget,
+    ): AnimeEpisodeProjection {
+        val sourceKitsuCoord = EpisodeCoordinate(
+            provider = ProviderId.KITSU,
+            seriesId = sourceEpisode.sourceKitsuId,
+            season = sourceEpisode.season,
+            episode = sourceEpisode.episode,
+        )
+        val record = idMappingService.recordForKitsuId(sourceEpisode.sourceKitsuId)
+        val tvdbId = record?.tvdb?.takeIf { it.isNotBlank() }
+        val tmdbId = record?.tmdb?.takeIf { it.isNotBlank() }
+
+        // Flat detection from presentation source (not per-episode heuristic).
+        val presentation = resolveSeasonPresentation(work, sourceEpisode.sourceKitsuId, requestedSeason = null)
+        val isFlatFranchise = presentation.source == SeasonPresentationSource.KITSU_FLAT_FALLBACK
+
+        val tvdbCoord = tvdbId?.let { id ->
+            if (isFlatFranchise) null
+            else EpisodeCoordinate(ProviderId.TVDB, id, sourceEpisode.season, sourceEpisode.episode)
+        }
+        val tmdbCoord = tmdbId?.let { id ->
+            if (isFlatFranchise) null
+            else EpisodeCoordinate(ProviderId.TMDB, id, sourceEpisode.season, sourceEpisode.episode)
+        }
+
+        val confidence = when {
+            isFlatFranchise -> CoordinateConfidence.LOW
+            tvdbCoord != null -> CoordinateConfidence.HIGH
+            tmdbCoord != null -> CoordinateConfidence.MEDIUM
+            else -> CoordinateConfidence.UNKNOWN
+        }
+        val fallbackReason = when {
+            isFlatFranchise -> FallbackReason.LOW_CONFIDENCE_FLAT_KITSU
+            tvdbCoord == null && tmdbCoord == null -> FallbackReason.NO_TVDB_MAPPING
+            else -> null
+        }
+
+        val scrobbleCoord = when (target) {
+            EpisodeProjectionTarget.TRAKT_SCROBBLE,
+            EpisodeProjectionTarget.SIMKL_SCROBBLE ->
+                if (confidence == CoordinateConfidence.HIGH) tvdbCoord else null
+            else -> tvdbCoord
+        }
+        val artworkCoord = if (confidence != CoordinateConfidence.LOW) (tvdbCoord ?: tmdbCoord) else null
+        val displayCoord = tvdbCoord ?: sourceKitsuCoord
+
+        val targetCoordinate = when (target) {
+            EpisodeProjectionTarget.UI_DISPLAY -> tvdbCoord ?: sourceKitsuCoord
+            EpisodeProjectionTarget.TRAKT_SCROBBLE,
+            EpisodeProjectionTarget.SIMKL_SCROBBLE -> scrobbleCoord
+            EpisodeProjectionTarget.PREMIUM_THUMBNAIL -> artworkCoord
+            EpisodeProjectionTarget.CONTINUE_WATCHING -> tvdbCoord ?: tmdbCoord ?: sourceKitsuCoord
+            EpisodeProjectionTarget.EPISODE_RATING -> tvdbCoord ?: tmdbCoord
+        }
+
+        return AnimeEpisodeProjection(
+            sourceKitsuId = sourceEpisode.sourceKitsuId,
+            sourceKitsuCoordinate = sourceKitsuCoord,
+            displayCoordinate = displayCoord,
+            targetCoordinate = targetCoordinate,
+            scrobbleCoordinate = scrobbleCoord,
+            premiumArtworkCoordinate = artworkCoord,
+            tvdbCoordinate = tvdbCoord,
+            tmdbCoordinate = tmdbCoord,
+            confidence = confidence,
+            fallbackReason = fallbackReason,
+            evidence = listOfNotNull(
+                tvdbId?.let { "kitsu.tvdb=$it" },
+                tmdbId?.let { "kitsu.tmdb=$it" },
+                "source.member-count=${work.memberKitsuIds.size}",
+                if (isFlatFranchise) "flat-franchise=true" else null,
+            ),
+        )
+    }
 
     private fun unknownWork(source: AnimeSourceIdentity): AnimeWorkIdentity = AnimeWorkIdentity(
         groupKey = AnimeWorkGroupKey.preferred(null, null, null, source.sourceKitsuId),
