@@ -94,3 +94,18 @@ data class IdleTrailerScreensaverCandidate(
             )
         )
 }
+
+@Immutable
+data class ScreensaverSlideCandidate(
+    val itemKey: String,
+    val contentId: String,
+    val itemType: String,
+    val title: String?,
+    val subtitle: String?,
+    val overview: String?,
+    val rating: com.nexio.tv.domain.model.TitleRating?,
+    val artwork: com.nexio.tv.core.artwork.ArtworkBundle,
+    val preferredImage: com.nexio.tv.core.artwork.ArtworkDisplayRef?,
+    val stableIds: com.nexio.tv.domain.model.ProviderIds,
+    val trace: List<com.nexio.tv.domain.model.HydratedHomeFieldTrace>
+)
