@@ -79,3 +79,5 @@ tools/
 .tmp/
 state/
 .openrouter.env
+!tools/anime-mapping-generator/
+!tools/anime-mapping-generator/**
