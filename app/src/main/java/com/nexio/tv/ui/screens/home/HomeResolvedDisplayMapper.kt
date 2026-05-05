@@ -6,6 +6,7 @@ import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.HydrationState
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDisplayFields
 import com.nexio.tv.domain.model.ResolvedDisplayItem
@@ -32,6 +33,7 @@ internal object HomeResolvedDisplayMapper {
         val overlay = overlaysByItemKey[itemKey]
         val fields = toHomeDisplayMetadata()
         val ratingSource = fields.ratingSource ?: TitleRatingSource.IMDB
+        val stableIds = firstPaintStableIds.withOverlayStableId(overlay)
 
         return ResolvedDisplayItem(
             itemKey = itemKey,
@@ -45,21 +47,8 @@ internal object HomeResolvedDisplayMapper {
             },
             canonicalProvider = overlay?.canonicalProvider?.name,
             canonicalId = overlay?.canonicalId,
-            imdbId = overlay?.imdbId ?: firstPaintStableIds.imdb,
-            stableIds = ProviderIds(
-                imdb = overlay?.imdbId ?: firstPaintStableIds.imdb,
-                tmdb = overlay?.canonicalId?.takeIf { overlay.canonicalProvider.name == "TMDB" }
-                    ?: firstPaintStableIds.tmdb,
-                tvdb = overlay?.canonicalId?.takeIf { overlay.canonicalProvider.name == "TVDB" }
-                    ?: firstPaintStableIds.tvdb,
-                trakt = firstPaintStableIds.trakt,
-                simkl = firstPaintStableIds.simkl,
-                kitsu = firstPaintStableIds.kitsu,
-                slug = firstPaintStableIds.slug,
-                mal = firstPaintStableIds.mal,
-                anilist = firstPaintStableIds.anilist,
-                anidb = firstPaintStableIds.anidb
-            ),
+            imdbId = stableIds.imdb,
+            stableIds = stableIds,
             display = ResolvedDisplayFields(
                 title = fields.title,
                 originalTitle = null,
@@ -71,7 +60,7 @@ internal object HomeResolvedDisplayMapper {
             ),
             artwork = fields.artwork ?: ArtworkBundle(),
             rating = fields.imdbRating?.let { value -> TitleRating(value.toString().toDouble(), ratingSource) },
-            trailer = TrailerDisplayState(fallbackTrailerYtIds = emptyList()),
+            trailer = TrailerDisplayState(fallbackTrailerYtIds = trailerYtIds),
             hydrationState = when {
                 overlay == null -> HydrationState.PREVIEW_ONLY
                 overlay.isStale(nowMs) -> HydrationState.STALE_READY
@@ -80,5 +69,35 @@ internal object HomeResolvedDisplayMapper {
             sourceTrace = overlay?.fieldTrace.orEmpty(),
             updatedAtMs = overlay?.updatedAtMs ?: nowMs
         )
+    }
+
+    private fun ProviderIds.withOverlayStableId(overlay: HydratedHomeOverlay?): ProviderIds {
+        if (overlay == null) return this
+
+        return when (overlay.canonicalProvider) {
+            ProviderId.TMDB -> copy(
+                imdb = overlay.imdbId ?: imdb,
+                tmdb = overlay.canonicalId
+            )
+            ProviderId.TVDB -> copy(
+                imdb = overlay.imdbId ?: imdb,
+                tvdb = overlay.canonicalId
+            )
+            ProviderId.IMDB -> copy(imdb = overlay.canonicalId)
+            ProviderId.TRAKT -> copy(
+                imdb = overlay.imdbId ?: imdb,
+                trakt = overlay.canonicalId
+            )
+            ProviderId.SIMKL -> copy(
+                imdb = overlay.imdbId ?: imdb,
+                simkl = overlay.canonicalId
+            )
+            ProviderId.KITSU -> copy(
+                imdb = overlay.imdbId ?: imdb,
+                kitsu = overlay.canonicalId
+            )
+            ProviderId.ADDON,
+            ProviderId.MDBLIST -> copy(imdb = overlay.imdbId ?: imdb)
+        }
     }
 }
