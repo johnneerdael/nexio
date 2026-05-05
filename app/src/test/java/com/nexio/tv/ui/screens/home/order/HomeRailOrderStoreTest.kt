@@ -504,4 +504,47 @@ class HomeRailOrderStoreTest {
         // Assert that "p0_changed" is NOT in the final orderedKeys.
         assertEquals(false, finalState.orderedKeys.contains(HomeRailKey("p0_changed")))
     }
+
+    @Test
+    fun `setEnabled does not emit rail_order_mutation event`() = runTest {
+        val capturingSink = CapturingHomeRailOrderDiagnosticsSink()
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(
+            codec.encode(
+                HomeRailOrderState.Empty.copy(orderedKeys = listOf(HomeRailKey("k")))
+            )
+        )
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+            profileManager = stubProfileManager(profileId = 1),
+            diagnostics = capturingSink,
+        )
+
+        store.setEnabled(
+            key = HomeRailKey("k"),
+            enabled = false,
+            source = RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN,
+        )
+        advanceUntilIdle()
+
+        // Sanity: the enabled-changed event did fire.
+        assertEquals(
+            true,
+            capturingSink.events.any { it.eventType == "home.rail_enabled_changed" },
+        )
+        // Goal: rail_order_mutation must NOT fire for setEnabled — the orderedKeys
+        // field is unchanged, so emitting it would be misleading in the event stream.
+        assertEquals(
+            false,
+            capturingSink.events.any { it.eventType == "home.rail_order_mutation" },
+        )
+    }
 }
