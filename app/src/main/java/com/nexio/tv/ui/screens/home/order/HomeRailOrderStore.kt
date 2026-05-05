@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home.order
 
+import com.nexio.tv.core.di.ApplicationScope
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -44,7 +45,7 @@ class HomeRailOrderStore @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val codec: HomeRailOrderStateCodec,
     private val clock: Clock,
-    private val scope: CoroutineScope,
+    @ApplicationScope private val scope: CoroutineScope,
     private val reconciler: HomeRailOrderReconciler = HomeRailOrderReconciler(),
 ) {
     private val mutationLock = Mutex()
