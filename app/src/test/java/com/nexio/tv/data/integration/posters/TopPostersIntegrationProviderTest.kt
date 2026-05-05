@@ -173,9 +173,9 @@ class TopPostersIntegrationProviderTest {
 
     @Test
     fun `fromModel rejects thumbnail model with invalid provider without throwing`() {
-        val model = thumbnailModel(provider = "BOGUS")
-
-        assertNull(TopPostersThumbnailRequest.fromModel(model))
+        listOf("RPDB", "BOGUS").forEach { provider ->
+            assertNull(TopPostersThumbnailRequest.fromModel(thumbnailModel(provider = provider)))
+        }
     }
 
     @Test
@@ -188,6 +188,13 @@ class TopPostersIntegrationProviderTest {
             "&path=imdb/poster/tt15940132.jpg"
 
         assertNull(PosterIntegrationRequest.fromModel(model))
+    }
+
+    @Test
+    fun `thumbnail fromModel rejects malformed percent encoding without throwing`() {
+        val model = thumbnailModel(mediaId = "tt15940132%ZZ")
+
+        assertNull(TopPostersThumbnailRequest.fromModel(model))
     }
 
     @Test
