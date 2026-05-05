@@ -66,7 +66,7 @@ data class TopPostersEntitlementSnapshot(
         get() = System.currentTimeMillis() < expiresAtMs
 
     val allowsEpisodeThumbnails: Boolean
-        get() = valid && isActive && tier == 1 && episodeThumbnails
+        get() = valid && isActive && tier == 1 && episodeThumbnails && isFreshAtNow
 }
 
 data class ArtworkProviderSettings(
