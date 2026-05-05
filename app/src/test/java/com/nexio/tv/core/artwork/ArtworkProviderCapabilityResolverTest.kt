@@ -252,6 +252,22 @@ class ArtworkProviderCapabilityResolverTest {
     }
 
     @Test
+    fun `settings free top posters thumbnail rejects without entitlement using lower snake case reason`() {
+        val capability = resolver.evaluate(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+            imageType = ArtworkType.THUMBNAIL,
+            ids = ProviderIds(tmdb = "550"),
+            mediaKind = MetadataMediaKind.MOVIE
+        )
+
+        assertRejected(
+            reason = "topposters_entitlement_missing",
+            capability = capability
+        )
+        assertTrue(capability.reason!!.matches(Regex("[a-z0-9_]+")))
+    }
+
+    @Test
     fun `provider not selected for that artwork type rejects with provider not selected`() {
         assertRejected(
             reason = "provider_not_selected_for_artwork_type",

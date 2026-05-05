@@ -123,6 +123,9 @@ class ArtworkProviderCapabilityResolver {
         if (imageType !in descriptor.supportedArtworkTypes) {
             return "unsupported_artwork_type_for_provider"
         }
+        if (providerId == IntegrationProvider.TOP_POSTERS && imageType == ArtworkType.THUMBNAIL) {
+            return "topposters_entitlement_missing"
+        }
         if (!ids.hasAnyOf(descriptor.supportedIdTypes)) {
             return "missing_supported_provider_id"
         }
