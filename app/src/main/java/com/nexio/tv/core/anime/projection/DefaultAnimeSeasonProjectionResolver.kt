@@ -134,7 +134,8 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         store.get(work.groupKey, sourceEpisode, target)?.let { return it }
         val computed = computeEpisodeProjection(work, sourceEpisode, target)
         store.put(work.groupKey, sourceEpisode, target, computed)
-        if (computed.scrobbleCoordinate != null || target != EpisodeProjectionTarget.TRAKT_SCROBBLE) {
+        val isScrobbleTarget = target == EpisodeProjectionTarget.TRAKT_SCROBBLE || target == EpisodeProjectionTarget.SIMKL_SCROBBLE
+        if (computed.scrobbleCoordinate != null || !isScrobbleTarget) {
             traceEvents.emitEpisodeCoordinateResolved(computed, target)
         } else {
             traceEvents.emitEpisodeCoordinateUnresolved(
