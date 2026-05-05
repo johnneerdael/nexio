@@ -201,4 +201,27 @@ class HomeRailKeyScopingTest {
         assertEquals(true, mergedState.orderedKeys.contains(HomeRailKey("profile2_key")))
         assertEquals(true, mergedState.orderedKeys.contains(HomeRailKey("profile2_added")))
     }
+
+    @Test
+    fun `re-authentication with a different account produces distinct rail keys`() {
+        // Trakt user-list keys are derived from per-account listKey strings (the API's
+        // unique list identifier). Re-authenticating as a different Trakt account
+        // surfaces a different listKey set, which produces different rail keys —
+        // ensuring the new account's rails do not collide with the previous account's
+        // entries in HomeRailOrderState or SyntheticHomeCatalogStore.
+        val profileId = 1
+        val accountAList = "trakt-account-A-list-42"
+        val accountBList = "trakt-account-B-list-42"
+
+        // Same profile, different list keys (one from each account).
+        val keyForAccountA = RailKeyFactory.traktLibrary(profileId, accountAList)
+        val keyForAccountB = RailKeyFactory.traktLibrary(profileId, accountBList)
+
+        assertNotEquals(keyForAccountA, keyForAccountB)
+
+        // Sanity check: the same profile + same listKey does produce the same key
+        // (idempotent), which means re-running the same auth produces stable rails.
+        val keyForAccountARepeat = RailKeyFactory.traktLibrary(profileId, accountAList)
+        assertEquals(keyForAccountA, keyForAccountARepeat)
+    }
 }
