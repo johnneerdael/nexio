@@ -657,7 +657,7 @@ class MetadataRouterFacadeTest {
         assertEquals("primaryThumbnail", episode.thumbnail)
         assertEquals("TVDB", artwork.selectedProvider?.key)
         assertEquals(ArtworkSourceRole.PRIMARY, artwork.sourceRole)
-        assertEquals("missing_supported_id", artwork.trace.rejectedCandidates.single().reason)
+        assertEquals("missing_supported_provider_id", artwork.trace.rejectedCandidates.single().reason)
     }
 
     private fun facade(
