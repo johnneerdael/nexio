@@ -2,6 +2,11 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver
+import com.nexio.tv.core.anime.projection.AnimeSourceIdentity
+import com.nexio.tv.core.anime.projection.EpisodeProjectionTarget
+import com.nexio.tv.core.anime.projection.SourceEpisodeCoordinate
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
@@ -41,6 +46,76 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+/**
+ * Pure dedup function: collapses entries that share the same projected identity key into one row.
+ * The first occurrence of each key is kept; subsequent duplicates are dropped.
+ * Order of surviving entries is preserved.
+ *
+ * @param items the raw timeline list (already sorted / interleaved)
+ * @param identityKeyFor maps each item to its projected identity key; defaults to content-id
+ */
+internal fun dedupContinueWatchingByProjectedIdentity(
+    items: List<ContinueWatchingItem>,
+    identityKeyFor: (ContinueWatchingItem) -> String = { it.contentId() }
+): List<ContinueWatchingItem> {
+    val seen = linkedSetOf<String>()
+    return items.filter { item ->
+        val key = identityKeyFor(item)
+        seen.add(key)           // returns false when already present → item is dropped
+    }
+}
+
+/**
+ * Resolves projected identity keys for all items in [items].
+ *
+ * For items whose `contentId` starts with `kitsu:`, the resolver is called with
+ * [EpisodeProjectionTarget.CONTINUE_WATCHING] and the resulting
+ * `targetCoordinate?.identityKey` is used.  If resolution fails or the item is not
+ * kitsu-sourced, the raw `contentId` is returned as the identity key.
+ *
+ * The returned map has one entry per item index.
+ */
+internal suspend fun resolveProjectedContinueWatchingIdentityKeys(
+    items: List<ContinueWatchingItem>,
+    resolver: AnimeSeasonProjectionResolver
+): Map<Int, String> {
+    val result = mutableMapOf<Int, String>()
+    items.forEachIndexed { index, item ->
+        val contentId = item.contentId()
+        val season = item.season()
+        val episode = item.episode()
+        val key = if (
+            AnimeStremioId.isExplicitAnimeOnlyId(contentId) &&
+            season != null &&
+            episode != null
+        ) {
+            try {
+                val kitsuId = contentId.removePrefix("kitsu:")
+                val work = resolver.resolveWork(
+                    AnimeSourceIdentity(sourceKitsuId = kitsuId, animeStremioId = null)
+                )
+                val projection = resolver.resolveEpisodeProjection(
+                    work = work,
+                    sourceEpisode = SourceEpisodeCoordinate(
+                        sourceKitsuId = kitsuId,
+                        season = season,
+                        episode = episode
+                    ),
+                    target = EpisodeProjectionTarget.CONTINUE_WATCHING
+                )
+                projection.targetCoordinate?.identityKey
+                    ?: projection.sourceKitsuCoordinate.identityKey
+            } catch (_: Exception) {
+                contentId
+            }
+        } else {
+            contentId
+        }
+        result[index] = key
+    }
+    return result
+}
 
 internal fun shouldEnrichContinueWatchingProviderMetadata(
     items: List<ContinueWatchingItem>,
@@ -83,13 +158,24 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 nextUpRef = ::nextUpRefForContinueWatching
             )
             val nowMs = System.currentTimeMillis()
-            val items = timeline.map { row ->
+            val rawItems = timeline.map { row ->
                 when (row) {
                     is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
                     is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
                 }
             }.filter { item ->
                 item !is ContinueWatchingItem.NextUp || item.info.hasAired
+            }
+            // Apply anime projection dedup: kitsu:X S3E1 and tvdb:Y S3E1 that map to the same
+            // projected coordinate collapse to one entry, eliminating cross-source duplicates.
+            val projectedKeys = try {
+                resolveProjectedContinueWatchingIdentityKeys(rawItems, animeSeasonProjectionResolver)
+            } catch (_: Exception) {
+                emptyMap<Int, String>()
+            }
+            val items = dedupContinueWatchingByProjectedIdentity(rawItems) { item ->
+                val idx = rawItems.indexOfFirst { it === item }
+                projectedKeys[idx] ?: item.contentId()
             }
             val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
                 entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
