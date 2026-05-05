@@ -17,9 +17,10 @@ class ProviderPlanExecutor @Inject constructor() {
         check(depth !in unsupportedDepths) {
             "Unsupported provider plan depth $depth"
         }
-        check(depth != MetadataDepth.SEASON || route.seasonNumber != null) {
-            "SEASON provider plan requires seasonNumber"
-        }
+        // seasonNumber may be null for providers that support unconstrained season fetches
+        // (e.g. Kitsu returns all episodes when no season filter is applied).
+        // Non-Kitsu providers (TMDB, TVDB) still require a seasonNumber at SEASON depth —
+        // validated per-provider inside tmdbSteps / tvdbSteps.
 
         if (depth == MetadataDepth.PLAYER) {
             return ProviderExecutionPlan(route = route, depth = depth, steps = emptyList())
@@ -79,6 +80,9 @@ class ProviderPlanExecutor @Inject constructor() {
         validateMediaKind(route, MetadataMediaKind.MOVIE, MetadataMediaKind.SERIES)
         check(depth != MetadataDepth.SEASON || route.mediaKind == MetadataMediaKind.SERIES) {
             "TMDB SEASON provider plan requires SERIES mediaKind"
+        }
+        check(depth != MetadataDepth.SEASON || route.seasonNumber != null) {
+            "TMDB SEASON provider plan requires seasonNumber"
         }
 
         val isSeries = route.mediaKind == MetadataMediaKind.SERIES
@@ -141,6 +145,9 @@ class ProviderPlanExecutor @Inject constructor() {
 
     private fun tvdbSteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep> {
         validateMediaKind(route, MetadataMediaKind.SERIES)
+        check(depth != MetadataDepth.SEASON || route.seasonNumber != null) {
+            "TVDB SEASON provider plan requires seasonNumber"
+        }
 
         val steps = mutableListOf(
             step(

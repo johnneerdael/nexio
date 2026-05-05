@@ -138,6 +138,7 @@ class MetadataRouterFacade(
                 itemType = request.contentType,
                 routeProvider = route.provider,
                 knownIds = request.sourceContext.previewStableIds,
+                routedTargetIds = route.targetIds,
                 sourceProvider = request.sourceContext.previewSourceProvider
                     ?.let { raw -> ProviderId.entries.firstOrNull { it.name == raw } },
                 sourceItemId = request.sourceContext.previewSourceItemId,
@@ -642,9 +643,10 @@ class MetadataRouterFacade(
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
         val seasonMetadataRequest = metadataRequest.copy(
             depth = MetadataDepth.SEASON,
-            // Default to season 1 when no explicit season is provided — the episode metadata
-            // fetcher will expand to all available seasons via fetchEpisodeMetadataForRoute.
-            seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber ?: 1
+            // Pass through the caller's season hint without a numeric fallback — when both are
+            // absent the unconstrained path in fetchEpisodeMetadataForRoute will fetch all
+            // available seasons from the provider (e.g. all Kitsu episodes regardless of season).
+            seasonNumber = tvRequest.seasonNumbers.firstOrNull() ?: metadataRequest.seasonNumber
         )
         val baseRoute = router.route(seasonMetadataRequest)
         val resolvedBaseRoute = identityResolver.resolve(baseRoute)
@@ -709,17 +711,24 @@ class MetadataRouterFacade(
         seasonNumbers: List<Int>,
         metadataSeasonNumber: Int?
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
-        return seasonNumbers
-            .ifEmpty { listOfNotNull(metadataSeasonNumber) }
-            .ifEmpty { listOf(1) }
-            .flatMap { seasonNumber ->
+        val effectiveSeasons = seasonNumbers.ifEmpty { listOfNotNull(metadataSeasonNumber) }
+        return if (effectiveSeasons.isEmpty()) {
+            // No season hint — fetch all seasons from the provider by passing an unconstrained route.
+            // KitsuMetadataService.fetchEpisodeEnrichment returns everything when seasonNumbers is empty.
+            val unconstrainedRoute = route.copy(seasonNumber = null)
+            val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
+            providerPlanRunner.run(plan).stepResults
+                .flatMap { stepResult -> stepResult.episodeMetadata.entries }
+                .associate { it.toPair() }
+        } else {
+            effectiveSeasons.flatMap { seasonNumber ->
                 val seasonRoute = route.copy(seasonNumber = seasonNumber)
                 val plan = providerPlanExecutor.buildPlan(seasonRoute, MetadataDepth.SEASON)
                 providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
                     stepResult.episodeMetadata.entries
                 }
-            }
-            .associate { it.toPair() }
+            }.associate { it.toPair() }
+        }
     }
 
     private suspend fun fallbackRouteForDistinctContentId(
