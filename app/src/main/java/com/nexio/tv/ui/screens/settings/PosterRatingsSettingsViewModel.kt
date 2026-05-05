@@ -13,7 +13,9 @@ import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
-import com.nexio.tv.domain.model.PosterRatingsSettings
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSettings
+import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -76,11 +78,17 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     fun onEvent(event: PosterRatingsSettingsEvent) {
         when (event) {
             is PosterRatingsSettingsEvent.ToggleRpdb -> update {
-                dataStore.setRpdbEnabled(event.enabled)
+                dataStore.setProviderSelection(
+                    ArtworkTypeKey.POSTER,
+                    if (event.enabled) ArtworkProviderChoiceKey.RPDB else ArtworkProviderChoiceKey.DEFAULT
+                )
                 invalidateArtworkDisplayState()
             }
             is PosterRatingsSettingsEvent.ToggleTopPosters -> update {
-                dataStore.setTopPostersEnabled(event.enabled)
+                dataStore.setProviderSelection(
+                    ArtworkTypeKey.POSTER,
+                    if (event.enabled) ArtworkProviderChoiceKey.TOP_POSTERS else ArtworkProviderChoiceKey.DEFAULT
+                )
                 invalidateArtworkDisplayState()
             }
             is PosterRatingsSettingsEvent.InvalidatePosterCache -> invalidatePosterCache()
@@ -174,10 +182,10 @@ data class PosterRatingsSettingsUiState(
     val topPostersEnabled: Boolean = false,
     val topPostersApiKey: String = ""
 ) {
-    fun fromSettings(settings: PosterRatingsSettings): PosterRatingsSettingsUiState = copy(
-        rpdbEnabled = settings.rpdbEnabled,
+    fun fromSettings(settings: ArtworkProviderSettings): PosterRatingsSettingsUiState = copy(
+        rpdbEnabled = settings.selection.posterProvider == ArtworkProviderChoiceKey.RPDB,
         rpdbApiKey = settings.rpdbApiKey,
-        topPostersEnabled = settings.topPostersEnabled,
+        topPostersEnabled = settings.selection.posterProvider == ArtworkProviderChoiceKey.TOP_POSTERS,
         topPostersApiKey = settings.topPostersApiKey
     )
 }
