@@ -105,6 +105,18 @@ class TmdbCatalogSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setEnabledCatalogs(enabled: Set<String>) {
+        store().edit { prefs ->
+            prefs[catalogEnabledSetKey] = sanitizeEnabledCatalogs(enabled)
+        }
+    }
+
+    suspend fun setCatalogOrder(order: List<String>) {
+        store().edit { prefs ->
+            prefs[catalogOrderCsvKey] = sanitizeCatalogOrder(order).joinToString(",")
+        }
+    }
+
     suspend fun moveCatalog(catalogId: String, direction: Int) {
         if (catalogId !in TmdbCatalogIds.BUILT_IN_ORDER) return
         if (direction == 0) return

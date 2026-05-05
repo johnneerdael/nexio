@@ -2,6 +2,7 @@ package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
+import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -11,6 +12,7 @@ import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.local.normalizeSubtitleTranslationSettings
@@ -31,6 +33,10 @@ import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.TrackingProvider
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.ui.screens.home.order.RailFamily
+import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -330,6 +336,9 @@ internal suspend fun applyAccountConfigSyncSettings(
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
     simklSettingsDataStore: SimklSettingsDataStore,
+    tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore,
+    homeRailOrderStore: HomeRailOrderStore,
     playerSettingsDataStore: PlayerSettingsDataStore
 ) {
     // Null catalog sections / null inner fields = absent in payload, leave target unchanged.
@@ -339,7 +348,10 @@ internal suspend fun applyAccountConfigSyncSettings(
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         traktSettingsDataStore = traktSettingsDataStore,
         simklSettingsDataStore = simklSettingsDataStore,
-        mdbListSettingsDataStore = mdbListSettingsDataStore
+        mdbListSettingsDataStore = mdbListSettingsDataStore,
+        tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+        kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore,
+        homeRailOrderStore = homeRailOrderStore
     )
 
     tmdbSettingsDataStore.setEnabled(true)
@@ -421,7 +433,10 @@ internal suspend fun applyCatalogsSection(
     layoutPreferenceDataStore: LayoutPreferenceDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
     simklSettingsDataStore: SimklSettingsDataStore,
-    mdbListSettingsDataStore: MDBListSettingsDataStore
+    mdbListSettingsDataStore: MDBListSettingsDataStore,
+    tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore,
+    homeRailOrderStore: HomeRailOrderStore
 ) {
     val catalogs = payload.catalogs
 
@@ -441,6 +456,11 @@ internal suspend fun applyCatalogsSection(
                 catalogOrder = order,
                 selectedPopularListKeys = popular.toSet()
             )
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.TRAKT,
+                providerOrder = order.map(::HomeRailKey),
+                source = RailOrderMutationSource.ACCOUNT_SYNC,
+            )
         }
     }
 
@@ -451,6 +471,11 @@ internal suspend fun applyCatalogsSection(
             simklSettingsDataStore.setCatalogPreferences(
                 enabledCatalogs = enabled.toSet(),
                 catalogOrder = order
+            )
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.SIMKL,
+                providerOrder = order.map(::HomeRailKey),
+                source = RailOrderMutationSource.ACCOUNT_SYNC,
             )
         }
     }
@@ -464,6 +489,39 @@ internal suspend fun applyCatalogsSection(
                 hiddenPersonalListKeys = hidden.toSet(),
                 selectedTopListKeys = selected.toSet(),
                 catalogOrder = order
+            )
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.MDBLIST,
+                providerOrder = order.map(::HomeRailKey),
+                source = RailOrderMutationSource.ACCOUNT_SYNC,
+            )
+        }
+    }
+
+    catalogs.tmdb?.let { tmdb ->
+        tmdb.catalogEnabledSet?.let { enabled ->
+            tmdbCatalogSettingsDataStore.setEnabledCatalogs(enabled.toSet())
+        }
+        tmdb.catalogOrder?.let { order ->
+            tmdbCatalogSettingsDataStore.setCatalogOrder(order)
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.TMDB,
+                providerOrder = order.map(::HomeRailKey),
+                source = RailOrderMutationSource.ACCOUNT_SYNC,
+            )
+        }
+    }
+
+    catalogs.kitsu?.let { kitsu ->
+        kitsu.catalogEnabledSet?.let { enabled ->
+            kitsuCatalogSettingsDataStore.setEnabledCatalogs(enabled.toSet())
+        }
+        kitsu.catalogOrder?.let { order ->
+            kitsuCatalogSettingsDataStore.setCatalogOrder(order)
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.KITSU,
+                providerOrder = order.map(::HomeRailKey),
+                source = RailOrderMutationSource.ACCOUNT_SYNC,
             )
         }
     }

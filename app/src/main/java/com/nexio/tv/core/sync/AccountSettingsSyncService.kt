@@ -13,6 +13,7 @@ import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.KitsuAuthDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -31,6 +32,7 @@ import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.WyzieSettingsDataStore
 import com.nexio.tv.data.local.ThemeDataStore
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -100,6 +102,7 @@ import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TvdbValidationStatus
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
@@ -206,6 +209,9 @@ class AccountSettingsSyncService @Inject constructor(
     private val kitsuAuthDataStore: KitsuAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val simklSettingsDataStore: SimklSettingsDataStore,
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    private val kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore,
+    private val homeRailOrderStore: HomeRailOrderStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val profileManager: ProfileManager,
@@ -812,7 +818,10 @@ class AccountSettingsSyncService @Inject constructor(
                 layoutPreferenceDataStore = layoutPreferenceDataStore,
                 traktSettingsDataStore = traktSettingsDataStore,
                 simklSettingsDataStore = simklSettingsDataStore,
-                mdbListSettingsDataStore = mdbListSettingsDataStore
+                mdbListSettingsDataStore = mdbListSettingsDataStore,
+                tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+                kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore,
+                homeRailOrderStore = homeRailOrderStore
             )
             playerSettingsDataStore.setTrackingProvider(
                 runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
