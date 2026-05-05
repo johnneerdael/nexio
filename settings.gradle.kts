@@ -67,5 +67,6 @@ if (readUseMedia3SourceFlag()) {
 
 rootProject.name = "My Application"
 include(":app")
+include(":tools:anime-mapping-generator")
 // include(":benchmark")  // TODO: create when ready
  
