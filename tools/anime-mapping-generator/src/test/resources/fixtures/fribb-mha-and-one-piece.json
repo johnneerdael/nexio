@@ -1,0 +1,34 @@
+[
+  {
+    "type": "TV",
+    "anidb_id": 11739,
+    "kitsu_id": 11469,
+    "tvdb_id": 305074,
+    "themoviedb_id": 65930,
+    "imdb_id": "tt5626028",
+    "mal_id": 31964,
+    "anilist_id": 21459,
+    "season": { "tvdb": 1, "tmdb": 1 }
+  },
+  {
+    "type": "TV",
+    "anidb_id": 13485,
+    "kitsu_id": 13881,
+    "tvdb_id": 305074,
+    "themoviedb_id": 65930,
+    "imdb_id": "tt5626028",
+    "mal_id": 36456,
+    "anilist_id": 100166,
+    "season": { "tvdb": 3, "tmdb": 3 }
+  },
+  {
+    "type": "TV",
+    "anidb_id": 69,
+    "kitsu_id": 12,
+    "tvdb_id": 81797,
+    "themoviedb_id": 37854,
+    "imdb_id": "tt0388629",
+    "mal_id": 21,
+    "anilist_id": 21
+  }
+]
