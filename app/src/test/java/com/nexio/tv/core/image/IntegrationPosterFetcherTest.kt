@@ -145,6 +145,27 @@ class IntegrationPosterFetcherTest {
     }
 
     @Test
+    fun `factory rejects thumbnail typed poster fields without dispatching poster fetch`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val malformedModel = "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&provider=TOP_POSTERS" +
+            "&cacheKey=topposters:imdb:tt0137523:poster-default" +
+            "&apiKey=key" +
+            "&path=imdb/poster-default/tt0137523.jpg"
+
+        assertNull(PosterIntegrationRequest.fromModel(malformedModel))
+        assertNull(registry.newFetcher(Uri.parse(malformedModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
     fun `poster fetcher converts poster request into runtime cache key instead of remote url pass through`() = runTest {
         val runtime = RecordingIntegrationRuntime(successValue = "poster".toByteArray())
         val fetcher = IntegrationPosterFetcher(

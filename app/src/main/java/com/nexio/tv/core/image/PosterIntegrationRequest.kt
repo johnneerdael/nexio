@@ -62,15 +62,12 @@ data class PosterIntegrationRequest(
     }
 
     companion object {
-        fun fromModel(model: String): PosterIntegrationRequest? {
+        fun fromModel(model: String): PosterIntegrationRequest? = runCatching {
             if (!model.startsWith("integration-poster://fetch?")) return null
-            val query = model.substringAfter('?', "")
-            val params = query.split('&')
-                .mapNotNull { part ->
-                    val idx = part.indexOf('=')
-                    if (idx <= 0) null else part.substring(0, idx) to decode(part.substring(idx + 1))
-                }
-                .toMap()
+            val params = parseQuery(model)
+            params["type"]?.let { type ->
+                if (type != "poster") return null
+            }
             val provider = params["provider"]
                 ?.let { runCatching { IntegrationProvider.valueOf(it) }.getOrNull() }
                 ?: return null
@@ -89,7 +86,7 @@ data class PosterIntegrationRequest(
                 staleAfterExpiryMs = staleAfterExpiryMs,
                 mimeType = params["mimeType"]
             )
-        }
+        }.getOrNull()
 
         private const val DEFAULT_TTL_MS = 24L * 60L * 60L * 1000L
         private const val DEFAULT_STALE_AFTER_EXPIRY_MS = 7L * 24L * 60L * 60L * 1000L
@@ -169,6 +166,9 @@ data class TopPostersThumbnailRequest(
             if (!model.startsWith("integration-poster://fetch?")) return null
             val params = parseQuery(model)
             if (params["type"] != "topposters-thumbnail") return null
+            params["provider"]?.let { provider ->
+                if (provider != IntegrationProvider.TOP_POSTERS.name) return null
+            }
             val idType = params["idType"]?.takeIf { it.isNotBlank() } ?: return null
             val mediaId = params["mediaId"]?.takeIf { it.isNotBlank() } ?: return null
             val season = params["season"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
