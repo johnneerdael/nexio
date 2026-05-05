@@ -70,6 +70,9 @@ class HomeReactsToSyncReorderTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = mockk(relaxed = true),
+            profileManager = mockk<com.nexio.tv.core.profile.ProfileManager>(relaxed = true).also {
+                io.mockk.every { it.activeProfileId } returns MutableStateFlow(0)
+            },
         )
     }
 

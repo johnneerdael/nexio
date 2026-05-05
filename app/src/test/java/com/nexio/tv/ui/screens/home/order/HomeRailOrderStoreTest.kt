@@ -1,9 +1,11 @@
 package com.nexio.tv.ui.screens.home.order
 
 import com.google.gson.Gson
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +27,11 @@ class HomeRailOrderStoreTest {
     private val codec = HomeRailOrderStateCodec(gson)
     private val fixedClock = Clock.fixed(Instant.ofEpochMilli(1_000), ZoneOffset.UTC)
 
+    private fun stubProfileManager(profileId: Int = 0): ProfileManager =
+        mockk<ProfileManager>(relaxed = true).also {
+            every { it.activeProfileId } returns MutableStateFlow(profileId)
+        }
+
     @Test
     fun `state defaults to Empty when persisted json is null`() = runTest {
         val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
@@ -38,6 +45,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+            profileManager = stubProfileManager(),
         )
 
         assertEquals(HomeRailOrderState.Empty, store.state.first())
@@ -60,6 +68,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+            profileManager = stubProfileManager(),
         )
 
         store.updateOrder(
@@ -92,6 +101,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+            profileManager = stubProfileManager(),
         )
 
         store.updateOrder(
@@ -130,7 +140,7 @@ class HomeRailOrderStoreTest {
         coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
 
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val store = HomeRailOrderStore(layout, codec, fixedClock, testScope, CapturingHomeRailOrderDiagnosticsSink())
+        val store = HomeRailOrderStore(layout, codec, fixedClock, testScope, CapturingHomeRailOrderDiagnosticsSink(), stubProfileManager())
 
         val live = MutableStateFlow(
             listOf(
@@ -176,6 +186,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+            profileManager = stubProfileManager(),
         )
 
         store.updateOrder(
@@ -206,7 +217,8 @@ class HomeRailOrderStoreTest {
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
             TestScope(StandardTestDispatcher(testScheduler)),
-            CapturingHomeRailOrderDiagnosticsSink())
+            CapturingHomeRailOrderDiagnosticsSink(),
+            stubProfileManager())
 
         store.updateOrder(
             orderedKeys = listOf(HomeRailKey("A"), HomeRailKey("C")),
@@ -232,7 +244,8 @@ class HomeRailOrderStoreTest {
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
             TestScope(StandardTestDispatcher(testScheduler)),
-            CapturingHomeRailOrderDiagnosticsSink())
+            CapturingHomeRailOrderDiagnosticsSink(),
+            stubProfileManager())
 
         store.updateOrder(
             orderedKeys = listOf(HomeRailKey("k1"), HomeRailKey("k2")),
@@ -267,7 +280,8 @@ class HomeRailOrderStoreTest {
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
             TestScope(StandardTestDispatcher(testScheduler)),
-            CapturingHomeRailOrderDiagnosticsSink())
+            CapturingHomeRailOrderDiagnosticsSink(),
+            stubProfileManager())
 
         val live = listOf(
             HomeRailDefinition(
@@ -302,7 +316,8 @@ class HomeRailOrderStoreTest {
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
             TestScope(StandardTestDispatcher(testScheduler)),
-            CapturingHomeRailOrderDiagnosticsSink())
+            CapturingHomeRailOrderDiagnosticsSink(),
+            stubProfileManager())
 
         // Seed the cache by calling onLiveDefinitionsArrived with a TMDB definition list.
         val live = listOf(
@@ -358,6 +373,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = sink,
+            profileManager = stubProfileManager(),
         )
 
         store.updateOrder(
@@ -389,6 +405,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+            profileManager = stubProfileManager(),
         )
 
         // Invoke tryMigrate immediately after construction. state.value may still be
@@ -419,6 +436,7 @@ class HomeRailOrderStoreTest {
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
             diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+            profileManager = stubProfileManager(),
         )
 
         store.tryMigrate(
@@ -431,5 +449,59 @@ class HomeRailOrderStoreTest {
         assertEquals(listOf(HomeRailKey("A"), HomeRailKey("B")), state.orderedKeys)
         assertEquals(setOf(HomeRailKey("D")), state.disabledKeys)
         assertEquals(RailOrderMutationSource.MIGRATION, state.lastMutationSource)
+    }
+
+    @Test
+    fun `profile switch clears lastWrittenState cache`() = runTest {
+        val activeProfileId = MutableStateFlow(0)
+        val profileManager = mockk<ProfileManager>(relaxed = true)
+        every { profileManager.activeProfileId } returns activeProfileId
+
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(
+            codec.encode(HomeRailOrderState.Empty.copy(orderedKeys = listOf(HomeRailKey("p0"))))
+        )
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val testScope = TestScope(StandardTestDispatcher(testScheduler))
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = testScope,
+            profileManager = profileManager,
+            diagnostics = mockk(relaxed = true),
+        )
+
+        // Trigger a mutation on profile 0 to populate lastWrittenState.
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("p0_changed")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("p0_changed")),
+        )
+        advanceUntilIdle()
+
+        // Switch to profile 1. Update the persisted-flow to simulate a different profile's state.
+        persisted.value = codec.encode(HomeRailOrderState.Empty.copy(orderedKeys = listOf(HomeRailKey("p1"))))
+        activeProfileId.value = 1
+        advanceUntilIdle()
+
+        // The next mutation on profile 1 should NOT see the profile 0 cache; it should
+        // observe the persisted profile 1 state via currentForMutation()'s flow read.
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("p1_changed")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("p1_changed")),
+        )
+        advanceUntilIdle()
+
+        val finalJson = persisted.value
+        val finalState = codec.decode(finalJson)
+        // The merge should have started from profile 1's persisted state, NOT profile 0's cached state.
+        // Assert that "p0_changed" is NOT in the final orderedKeys.
+        assertEquals(false, finalState.orderedKeys.contains(HomeRailKey("p0_changed")))
     }
 }

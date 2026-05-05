@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home.order
 
 import com.nexio.tv.core.di.ApplicationScope
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Clock
@@ -34,11 +36,13 @@ import javax.inject.Singleton
  *    write. The cache holds the just-written value.
  *
  * Callers that invoke `updateOrder(...)` without an explicit `knownLiveKeys`
- * rely on the `knownLiveKeysCache` populated by `effectiveOrder(...)`'s
- * `combine` transform. Production callers (the home pipeline) hold a long-lived
- * `effectiveOrder` collection before any user-initiated reorder, so the cache
- * is always populated. Tests and any caller that mutates without first
- * subscribing should pass `knownLiveKeys` explicitly.
+ * rely on the `knownLiveKeysCache` populated by the methods that receive
+ * `liveDefinitions`. Production callers (the home pipeline) call `tryMigrate`,
+ * `onLiveDefinitionsArrived`, and `reconcileNow` every tick; the cache is
+ * populated by those. Tests that mutate the store without first calling one of
+ * these should pass `knownLiveKeys` explicitly. `effectiveOrder(...)` also
+ * populates the cache, so the contract is consistent across all
+ * liveDefinitions-receiving methods.
  */
 @Singleton
 class HomeRailOrderStore @Inject constructor(
@@ -47,12 +51,28 @@ class HomeRailOrderStore @Inject constructor(
     private val clock: Clock,
     @ApplicationScope private val scope: CoroutineScope,
     private val diagnostics: HomeRailOrderDiagnosticsSink,
+    private val profileManager: ProfileManager,
     private val reconciler: HomeRailOrderReconciler = HomeRailOrderReconciler(),
 ) {
     private val mutationLock = Mutex()
     private val knownLiveKeysCache = MutableStateFlow<Set<HomeRailKey>>(emptySet())
     private var lastWrittenState: HomeRailOrderState? = null
     private var lastKnownLiveDefinitions: List<HomeRailDefinition> = emptyList()
+
+    init {
+        scope.launch {
+            var lastSeenProfileId: Int? = null
+            profileManager.activeProfileId.collect { profileId ->
+                if (lastSeenProfileId != null && lastSeenProfileId != profileId) {
+                    mutationLock.withLock {
+                        lastWrittenState = null
+                        lastKnownLiveDefinitions = emptyList()
+                    }
+                }
+                lastSeenProfileId = profileId
+            }
+        }
+    }
 
     val state: StateFlow<HomeRailOrderState> = layoutPreferenceDataStore.homeRailOrderStateJson
         .map { codec.decode(it) }
@@ -162,6 +182,7 @@ class HomeRailOrderStore @Inject constructor(
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
         lastKnownLiveDefinitions = liveDefinitions
+        knownLiveKeysCache.value = liveDefinitions.map { it.key }.toSet()
         val current = currentForMutation()
         val legacyOrder = layoutPreferenceDataStore.homeCatalogOrderKeys.first().map(::HomeRailKey)
         val legacyDisabled = layoutPreferenceDataStore.disabledHomeCatalogKeys.first().map(::HomeRailKey)
@@ -180,6 +201,7 @@ class HomeRailOrderStore @Inject constructor(
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
         lastKnownLiveDefinitions = liveDefinitions
+        knownLiveKeysCache.value = liveDefinitions.map { it.key }.toSet()
         val current = currentForMutation()
         val finalized = finalizeSyntheticFallback(
             current = current,
@@ -200,6 +222,7 @@ class HomeRailOrderStore @Inject constructor(
      */
     fun reconcileNow(liveDefinitions: List<HomeRailDefinition>): EffectiveHomeRailOrder {
         lastKnownLiveDefinitions = liveDefinitions
+        knownLiveKeysCache.value = liveDefinitions.map { it.key }.toSet()
         val current = lastWrittenState ?: state.value
         val result = reconciler.reconcile(current.orderedKeys, current.disabledKeys, liveDefinitions)
         emitReconciledDiagnostics(current, liveDefinitions, result)
