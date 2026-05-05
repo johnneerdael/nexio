@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mapping-list>
+  <mapping anidbseason="0" tvdbseason="0">;1-27;2-3;3-9;</mapping>
+  <mapping anidbseason="1" tmdbseason="1" start="1" end="61" offset="0"/>
+  <mapping anidbseason="1" tmdbseason="2" start="62" end="77" offset="-61"/>
+  <mapping anidbseason="1" tvdbseason="21" start="892" end="1085" offset="-891"/>
+  <mapping anidbseason="1" tvdbseason="22" start="1086" end="1155" offset="-1085"/>
+  <mapping anidbseason="1" tvdbseason="23" start="1156" offset="-1155"/>
+</mapping-list>
