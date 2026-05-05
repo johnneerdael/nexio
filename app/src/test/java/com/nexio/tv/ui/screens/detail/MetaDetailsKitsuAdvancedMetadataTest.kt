@@ -1,7 +1,17 @@
 package com.nexio.tv.ui.screens.detail
 
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.anime.projection.AnimeDetailResult
+import com.nexio.tv.core.anime.projection.AnimeSeasonDetailRepository
+import com.nexio.tv.core.anime.projection.AnimeSeasonPresentation
+import com.nexio.tv.core.anime.projection.AnimeSeasonTab
+import com.nexio.tv.core.anime.projection.AnimeWorkIdentity
+import com.nexio.tv.core.anime.projection.AnimeGroupingConfidence
+import com.nexio.tv.core.anime.projection.AnimeWorkGroupKey
+import com.nexio.tv.core.anime.projection.CoordinateConfidence
+import com.nexio.tv.core.anime.projection.SeasonPresentationSource
 import com.nexio.tv.core.metadata.router.ReviewsPage
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
@@ -357,6 +367,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
     fun `anime series detail stays loading until Kitsu episode metadata is available`() = runTest(dispatcher) {
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
         val kitsuMetadataService = mockk<KitsuMetadataService>()
+        val animeSeasonDetailRepository = mockk<AnimeSeasonDetailRepository>()
 
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.KITSU,
@@ -367,26 +378,43 @@ class MetaDetailsKitsuAdvancedMetadataTest {
                 language = "ja"
             )
         )
-        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } coAnswers {
-            delay(10_000)
-            TvMetadataDecision(
-                provider = TvProvider.KITSU,
-                reason = TvMetadataDecisionReason.KITSU_SUCCESS,
-                value = mapOf(
-                    (1 to 1) to com.nexio.tv.core.tvdb.TvEpisodeMetadata(
-                        providerEpisodeId = "kitsu:103482",
-                        seasonNumber = 1,
-                        episodeNumber = 1,
-                        title = "I'm Luffy! The Man Who's Gonna Be King of the Pirates!",
-                        overview = "Luffy begins his voyage.",
-                        thumbnail = "https://media.kitsu.test/one-piece-e1.jpg",
-                        runtimeMinutes = 24
-                    )
-                )
-            )
-        }
         coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:12", any(), "ja") } returns KitsuAdvancedAnimeDetail()
         coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
+
+        val lucidEpisode = Video(
+            id = "kitsu:12:1:1",
+            title = "I'm Luffy! The Man Who's Gonna Be King of the Pirates!",
+            released = null,
+            thumbnail = "https://media.kitsu.test/one-piece-e1.jpg",
+            streams = emptyList(),
+            season = 1,
+            episode = 1,
+            overview = "Luffy begins his voyage.",
+            runtime = 24
+        )
+        val workIdentity = AnimeWorkIdentity(
+            groupKey = AnimeWorkGroupKey("anime-work:kitsu:12"),
+            primaryKitsuId = "12",
+            memberKitsuIds = setOf("12"),
+            providerIds = ProviderIds(kitsu = "12"),
+            confidence = AnimeGroupingConfidence.LOW,
+            evidence = emptyList()
+        )
+        val seasonPresentation = AnimeSeasonPresentation(
+            work = workIdentity,
+            seasons = listOf(AnimeSeasonTab(1, null, 1, "12", false)),
+            selectedSeason = 1,
+            source = SeasonPresentationSource.KITSU_SEASON_NUMBERS,
+            confidence = CoordinateConfidence.HIGH
+        )
+        coEvery { animeSeasonDetailRepository.resolveAndHydrateAnimeDetail(any(), any(), any()) } coAnswers {
+            delay(10_000)
+            val baseMeta = firstArg<Meta>()
+            AnimeDetailResult.Success(
+                meta = baseMeta.copy(videos = listOf(lucidEpisode)),
+                presentation = seasonPresentation
+            )
+        }
 
         val viewModel = buildMetaDetailsViewModel(
             meta = buildAnimeMeta().copy(id = "kitsu:12", name = "One Piece"),
@@ -394,6 +422,7 @@ class MetaDetailsKitsuAdvancedMetadataTest {
             itemType = "series",
             tvMetadataRouter = tvMetadataRouter,
             kitsuMetadataService = kitsuMetadataService,
+            animeSeasonDetailRepository = animeSeasonDetailRepository,
             tmdbSettings = TmdbSettings(
                 enabled = true,
                 apiKey = "tmdb-key",

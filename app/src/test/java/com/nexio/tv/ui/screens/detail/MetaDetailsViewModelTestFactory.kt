@@ -7,6 +7,7 @@ import com.nexio.tv.core.metadata.router.testMetadataRouterFacade
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.anime.projection.AnimeSeasonDetailRepository
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -76,7 +77,8 @@ fun buildMetaDetailsViewModel(
     addonRepository: AddonRepository? = null,
     mdbListRepository: MDBListRepository = mockk(relaxed = true),
     titleRatingOverrideRepository: TitleRatingOverrideRepository = defaultTitleRatingOverrideRepository(),
-    episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository = mockk(relaxed = true)
+    episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository = mockk(relaxed = true),
+    animeSeasonDetailRepository: AnimeSeasonDetailRepository = mockk(relaxed = true)
 ): MetaDetailsViewModel {
     val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
     every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
@@ -137,6 +139,7 @@ fun buildMetaDetailsViewModel(
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         playerSettingsDataStore = playerSettingsDataStore,
         trailerService = effectiveTrailerService,
+        animeSeasonDetailRepository = animeSeasonDetailRepository,
         savedStateHandle = SavedStateHandle(
             mapOf(
                 "itemId" to itemId,

@@ -98,6 +98,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import android.content.Context
 import com.nexio.tv.R
+import com.nexio.tv.core.anime.projection.AnimeDetailResult
+import com.nexio.tv.core.anime.projection.AnimeSeasonDetailRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
@@ -196,6 +198,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val trailerService: TrailerService,
+    private val animeSeasonDetailRepository: AnimeSeasonDetailRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -771,20 +774,56 @@ class MetaDetailsViewModel @Inject constructor(
                 "detail.episode_enrichment_required_before_ready metaId=${enrichment.meta.id} " +
                     "provider=${if (enrichment.isAnimeDetail) "KITSU" else "TVDB"} videos=${enrichment.meta.videos.size}"
             )
-            val episodeHydratedMeta = try {
-                applyTvEpisodeEnrichment(
-                    targetMeta = enrichment.meta,
-                    tvEnrichment = enrichment.tvEnrichment,
-                    tmdbContentType = enrichment.tmdbContentType,
-                    tvdbLanguage = enrichment.tvdbLanguage,
-                    settings = enrichment.settings,
-                    isTvContent = enrichment.isTvContent
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Log.w(TAG, "Mandatory episode metadata failed for ${enrichment.meta.id}: ${error.message}", error)
-                enrichment.meta.takeIf(::hasEpisodeRows)
+            val episodeHydratedMeta = if (enrichment.isAnimeDetail) {
+                val sourceKitsuId = listOf(enrichment.meta.id, itemId)
+                    .firstOrNull { AnimeStremioId.parse(it) != null }
+                if (sourceKitsuId != null) {
+                    val result = try {
+                        animeSeasonDetailRepository.resolveAndHydrateAnimeDetail(
+                            baseMeta = enrichment.meta,
+                            sourceKitsuId = sourceKitsuId,
+                            requestedSeason = preferredSeason,
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Anime detail repository failed for ${enrichment.meta.id}: ${error.message}", error)
+                        AnimeDetailResult.Error(error.message ?: "Unknown error")
+                    }
+                    when (result) {
+                        is AnimeDetailResult.Success -> {
+                            _uiState.update { state ->
+                                val season = result.presentation.selectedSeason
+                                if (season !in state.seasons || state.selectedSeason == season) state
+                                else state.withManualSeasonSelection(season)
+                            }
+                            result.meta
+                        }
+                        is AnimeDetailResult.Error -> {
+                            Log.w(TAG, "Anime detail unavailable for ${enrichment.meta.id}: ${result.message}")
+                            _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            return
+                        }
+                    }
+                } else {
+                    enrichment.meta.takeIf(::hasEpisodeRows)
+                }
+            } else {
+                try {
+                    applyTvEpisodeEnrichment(
+                        targetMeta = enrichment.meta,
+                        tvEnrichment = enrichment.tvEnrichment,
+                        tmdbContentType = enrichment.tmdbContentType,
+                        tvdbLanguage = enrichment.tvdbLanguage,
+                        settings = enrichment.settings,
+                        isTvContent = enrichment.isTvContent
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.w(TAG, "Mandatory episode metadata failed for ${enrichment.meta.id}: ${error.message}", error)
+                    enrichment.meta.takeIf(::hasEpisodeRows)
+                }
             }
             if (episodeHydratedMeta == null || episodeHydratedMeta.videos.isEmpty()) {
                 Log.w(TAG, "Series detail blocked without episode metadata for ${enrichment.meta.id}")

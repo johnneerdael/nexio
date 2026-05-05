@@ -1,7 +1,9 @@
 package com.nexio.tv.core.di
 
 import com.nexio.tv.core.anime.projection.AnimeEpisodeCoordinateStore
+import com.nexio.tv.core.anime.projection.AnimeSeasonDetailRepository
 import com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver
+import com.nexio.tv.core.anime.projection.DefaultAnimeSeasonDetailRepository
 import com.nexio.tv.core.anime.projection.DefaultAnimeSeasonProjectionResolver
 import com.nexio.tv.core.anime.projection.InMemoryAnimeEpisodeCoordinateStore
 import dagger.Binds
@@ -17,4 +19,7 @@ abstract class AnimeProjectionModule {
 
     @Binds
     abstract fun bindStore(impl: InMemoryAnimeEpisodeCoordinateStore): AnimeEpisodeCoordinateStore
+
+    @Binds
+    abstract fun bindDetailRepository(impl: DefaultAnimeSeasonDetailRepository): AnimeSeasonDetailRepository
 }
