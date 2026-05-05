@@ -1098,6 +1098,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             trailerService = trailerService,
+            animeSeasonDetailRepository = mockk(relaxed = true),
             savedStateHandle = SavedStateHandle(
                 mapOf(
                     "itemId" to meta.id,

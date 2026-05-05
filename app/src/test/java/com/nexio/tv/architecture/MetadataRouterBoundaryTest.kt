@@ -38,7 +38,12 @@ class MetadataRouterBoundaryTest {
                 // and must remain allowlisted so the scan ignores their own class declarations.
                 "/com/nexio/tv/core/tmdb/TmdbMetadataService.kt",
                 "/com/nexio/tv/core/anime/KitsuMetadataService.kt",
-                "/com/nexio/tv/core/tvdb/TvdbMetadataService.kt"
+                "/com/nexio/tv/core/tvdb/TvdbMetadataService.kt",
+                // Projection-layer facades are the canonical boundary through which callers access
+                // KitsuMetadataService; they are allowlisted so the resolver and repository files
+                // that own the Kitsu calls are not flagged.
+                "/com/nexio/tv/core/anime/projection/DefaultAnimeSeasonProjectionResolver.kt",
+                "/com/nexio/tv/core/anime/projection/DefaultAnimeSeasonDetailRepository.kt"
             )
         )
 
