@@ -1,5 +1,6 @@
 package com.nexio.tv.core.tvdb
 
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
@@ -63,6 +64,8 @@ data class TvEpisodeMetadata(
     val title: String? = null,
     val overview: String? = null,
     val thumbnail: String? = null,
+    @Transient
+    val thumbnailArtwork: ArtworkDisplayRef? = null,
     val airDate: String? = null,
     val runtimeMinutes: Int? = null,
     val absoluteNumber: Int? = null,
