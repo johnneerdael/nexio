@@ -4,7 +4,9 @@ import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
+import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 
 internal fun ScreensaverSlideCandidate.toIdleScreensaverSlide(): IdleScreensaverSlide? {
     val title = title?.takeIf { it.isNotBlank() } ?: return null
@@ -31,5 +33,28 @@ internal fun ScreensaverSlideCandidate.toIdleScreensaverSlide(): IdleScreensaver
         modeData = IdleScreensaverModeData(
             image = IdleScreensaverImageModeData(fallbackArtworkUrls = fallbackArtworkUrls)
         )
+    )
+}
+
+internal fun ScreensaverTrailerCandidate.toIdleTrailerScreensaverCandidate(): IdleTrailerScreensaverCandidate? {
+    val imageUrl = artwork.backdrop.toLegacyArtworkString()
+        ?: artwork.poster.toLegacyArtworkString()
+        ?: return null
+    return IdleTrailerScreensaverCandidate(
+        itemId = contentId,
+        itemType = itemType,
+        addonBaseUrl = "",
+        title = title,
+        logoUrl = artwork.logo.toLegacyArtworkString(),
+        backgroundUrl = imageUrl,
+        fallbackArtworkUrls = listOf(imageUrl),
+        genres = emptyList(),
+        description = overview?.takeIf { it.isNotBlank() },
+        releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
+        runtime = null,
+        imdbRating = rating?.value?.toFloat(),
+        tomatoesRating = null,
+        trailerYtIds = fallbackTrailerYtIds,
+        stableIds = stableIds
     )
 }

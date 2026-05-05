@@ -12,6 +12,7 @@ import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
+import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -43,6 +44,7 @@ class IdleScreensaverRepositoryTest {
                 )
             )
         )
+        every { candidateRepository.observeTrailerCandidates(2) } returns flowOf(emptyList())
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = candidateRepository,
             activeProfileId = { 2 }
@@ -60,6 +62,7 @@ class IdleScreensaverRepositoryTest {
         assertNull(slide.modeData.trailer)
         assertEquals(emptyList<Any>(), repository.trailerCandidates.value)
         verify(exactly = 1) { candidateRepository.observeImageCandidates(2) }
+        verify(exactly = 1) { candidateRepository.observeTrailerCandidates(2) }
     }
 
     @Test
@@ -77,6 +80,7 @@ class IdleScreensaverRepositoryTest {
                 )
             )
         )
+        every { candidateRepository.observeTrailerCandidates(3) } returns flowOf(emptyList())
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = candidateRepository,
             activeProfileId = { 3 }
@@ -91,6 +95,43 @@ class IdleScreensaverRepositoryTest {
         assertEquals("nexio-artwork://asset/got-poster", slide.backgroundUrl)
         assertEquals(9.2f, slide.imdbRating ?: 0f, 0.0f)
         verify(exactly = 1) { candidateRepository.observeImageCandidates(3) }
+        verify(exactly = 1) { candidateRepository.observeTrailerCandidates(3) }
+    }
+
+    @Test
+    fun `warmFromCache populates trailer candidates from resolved display surface`() = runTest {
+        val candidateRepository = mockk<ScreensaverCandidateRepository>()
+        every { candidateRepository.observeImageCandidates(profileId = 1) } returns flowOf(emptyList())
+        every { candidateRepository.observeTrailerCandidates(profileId = 1) } returns flowOf(
+            listOf(
+                ScreensaverTrailerCandidate(
+                    itemKey = "series:tvdb:81189",
+                    contentId = "tvdb:81189",
+                    itemType = "series",
+                    title = "Breaking Bad",
+                    releaseInfo = "2008",
+                    overview = "A chemistry teacher...",
+                    rating = TitleRating(
+                        value = 9.5,
+                        source = TitleRatingSource.IMDB
+                    ),
+                    artwork = ArtworkBundle(backdrop = artworkRef("backdrop-81189", ArtworkType.BACKDROP)),
+                    fallbackTrailerYtIds = emptyList(),
+                    stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
+                )
+            )
+        )
+
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = candidateRepository,
+            activeProfileId = { 1 }
+        )
+
+        repository.warmFromCache()
+
+        assertEquals(1, repository.trailerCandidates.value.size)
+        assertEquals("Breaking Bad", repository.trailerCandidates.value.single().title)
+        assertEquals("81189", repository.trailerCandidates.value.single().stableIds.tvdb)
     }
 
     private fun candidate(

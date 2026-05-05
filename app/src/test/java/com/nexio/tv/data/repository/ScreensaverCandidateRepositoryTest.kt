@@ -18,10 +18,12 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
+import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScreensaverCandidateRepositoryTest {
@@ -118,6 +120,50 @@ class ScreensaverCandidateRepositoryTest {
         )
 
         assertEquals(emptyList<ScreensaverSlideCandidate>(), repository.observeImageCandidates(1).first())
+    }
+
+    @Test
+    fun `trailer candidates come from resolved items even when trailer ids are empty`() = runTest {
+        val surface = testSurface()
+        val repository = ScreensaverCandidateRepository(surface)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem("series:tvdb:81189", title = "Breaking Bad").copy(
+                    contentId = "tvdb:81189",
+                    parentId = "tvdb:81189",
+                    itemType = ContentType.SERIES,
+                    mediaKind = MetadataMediaKind.SERIES,
+                    canonicalProvider = "TVDB",
+                    canonicalId = "81189",
+                    stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
+                )
+            )
+        )
+
+        val candidates = repository.observeTrailerCandidates(profileId = 1).first()
+
+        assertEquals(1, candidates.size)
+        assertEquals("series:tvdb:81189", candidates.single().itemKey)
+        assertEquals("Breaking Bad", candidates.single().title)
+        assertTrue(candidates.single().fallbackTrailerYtIds.isEmpty())
+        assertEquals("81189", candidates.single().stableIds.tvdb)
+    }
+
+    @Test
+    fun `trailer candidates exclude items without title or artwork`() = runTest {
+        val surface = testSurface()
+        val repository = ScreensaverCandidateRepository(surface)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(itemKey = "movie:tmdb:551", title = null),
+                resolvedItem(itemKey = "movie:tmdb:552", title = "   "),
+                resolvedItem(itemKey = "movie:tmdb:553", title = "No Art", artwork = ArtworkBundle())
+            )
+        )
+
+        assertEquals(emptyList<ScreensaverTrailerCandidate>(), repository.observeTrailerCandidates(1).first())
     }
 
     private fun resolvedItem(
