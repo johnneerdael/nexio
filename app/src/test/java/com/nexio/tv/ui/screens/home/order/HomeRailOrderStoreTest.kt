@@ -114,4 +114,39 @@ class HomeRailOrderStoreTest {
         assertEquals(2L, lastPersisted.version)
         assertEquals(listOf(HomeRailKey("a"), HomeRailKey("b")), lastPersisted.orderedKeys)
     }
+
+    @Test
+    fun `effectiveOrder recomputes when liveDefinitions changes alone`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        coEvery { layout.homeRailOrderStateJson } returns flowOf(
+            codec.encode(HomeRailOrderState.Empty.copy(
+                orderedKeys = listOf(HomeRailKey("k")),
+            ))
+        )
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+
+        val testScope = TestScope(StandardTestDispatcher(testScheduler))
+        val store = HomeRailOrderStore(layout, codec, fixedClock, testScope)
+
+        val live = MutableStateFlow(
+            listOf(
+                HomeRailDefinition(
+                    HomeRailKey("k"), RailFamily.TMDB, RailSource.PROVIDER_PUBLIC, "k",
+                    enabled = true,
+                    defaultSortKey = DefaultSortKey(3, 0),
+                    publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+                )
+            )
+        )
+
+        val effective = store.effectiveOrder(live)
+        advanceUntilIdle()
+        assertEquals(listOf(HomeRailKey("k")), effective.value.visibleKeys)
+
+        // State unchanged; flip the live definition's enabled flag.
+        live.value = live.value.map { it.copy(enabled = false) }
+        advanceUntilIdle()
+        assertEquals(emptyList<HomeRailKey>(), effective.value.visibleKeys)
+    }
 }
