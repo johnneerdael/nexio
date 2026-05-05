@@ -1,8 +1,14 @@
 package com.nexio.tv.core.image
 
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
+import coil.annotation.ExperimentalCoilApi
 import coil.ComponentRegistry
+import coil.disk.DiskCache
 import coil.fetch.SourceResult
+import coil.request.Options
 import com.nexio.tv.core.integration.IntegrationFetchResult
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
@@ -18,17 +24,54 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.rules.TemporaryFolder
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class IntegrationPosterFetcherTest {
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
+
+    @OptIn(ExperimentalCoilApi::class)
+    @Test
+    fun `poster fetcher writes resolved bytes to coil disk cache key`() = runTest {
+        val diskKey = "artwork:rpdb:poster:tt0137523:imageLang:en:policy:1"
+        val diskCache = DiskCache.Builder()
+            .directory(temporaryFolder.newFolder("image_cache"))
+            .build()
+        val runtime = RecordingIntegrationRuntime(successValue = sampleJpeg())
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val fetcher = IntegrationPosterFetcher(
+            request = PosterIntegrationRequest(
+                provider = IntegrationProvider.RPDB,
+                cacheKey = "rpdb:imdb:tt0137523:poster-default",
+                apiKey = "key",
+                path = "imdb/poster-default/tt0137523.jpg"
+            ),
+            options = Options(context = context, diskCacheKey = diskKey),
+            rpdbProvider = RpdbIntegrationProvider(runtime, mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(runtime, mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk(relaxed = true),
+            diskCache = diskCache
+        )
+
+        val result = fetcher.fetch()
+
+        assertTrue(result is SourceResult)
+        val snapshot = diskCache.openSnapshot(diskKey)
+        assertNotNull(snapshot)
+        snapshot?.close()
+    }
+
     @Test
     fun `factory accepts mapped Uri poster integration model and rejects remote http Uri`() {
         val factory = IntegrationPosterFetcher.Factory(
@@ -255,5 +298,17 @@ class IntegrationPosterFetcherTest {
 
         assertNull(result)
         verify(exactly = 0) { transport.execute(any()) }
+    }
+
+    private companion object {
+        fun sampleJpeg(): ByteArray {
+            val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(Color.RED)
+            }
+            return ByteArrayOutputStream().use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                output.toByteArray()
+            }
+        }
     }
 }
