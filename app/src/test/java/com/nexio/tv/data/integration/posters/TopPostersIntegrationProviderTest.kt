@@ -9,6 +9,9 @@ import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.integration.PosterApiShapes
+import com.nexio.tv.core.integration.StringIntegrationCodec
+import com.nexio.tv.core.integration.credentialHash
 import com.nexio.tv.data.integration.posters.transport.PosterTransport
 import com.nexio.tv.data.integration.posters.transport.PosterTransportResult
 import com.nexio.tv.data.remote.api.TopPostersApi
@@ -21,10 +24,14 @@ import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
+import retrofit2.Response
 
 class TopPostersIntegrationProviderTest {
     @Test
@@ -138,5 +145,85 @@ class TopPostersIntegrationProviderTest {
         assertNull(result)
         assertTrue(loadResult is IntegrationLoadResult.NetworkError)
         assertEquals(expected, (loadResult as IntegrationLoadResult.NetworkError).throwable)
+    }
+
+    @Test
+    fun `validateApiKey routes validation through runtime with cache first hashed credential key and returns entitlement`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val transport = mockk<PosterTransport>()
+        val specSlot = slot<IntegrationSpec<String>>()
+        val rawApiKey = " top-secret-key "
+        val trimmedApiKey = "top-secret-key"
+        val json = """
+            {
+              "valid": true,
+              "is_active": true,
+              "tier": 1,
+              "tier_name": "Premium",
+              "tier_info": {
+                "features": {
+                  "episode_thumbnails": true
+                }
+              }
+            }
+        """.trimIndent()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } coAnswers {
+            val loadResult = specSlot.captured.load()
+            when (loadResult) {
+                is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(loadResult.value)
+                else -> IntegrationFetchResult.Missing
+            }
+        }
+        coEvery { topPostersApi.verifyApiKey(trimmedApiKey) } returns Response.success(
+            json.toResponseBody("application/json".toMediaType())
+        )
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, transport)
+        val snapshot = provider.validateApiKey(rawApiKey)
+
+        requireNotNull(snapshot)
+        assertTrue(snapshot.valid)
+        assertTrue(snapshot.isActive)
+        assertEquals(1, snapshot.tier)
+        assertEquals("Premium", snapshot.tierName)
+        assertTrue(snapshot.episodeThumbnails)
+        assertEquals(snapshot.verifiedAtMs + TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS, snapshot.expiresAtMs)
+        assertEquals(IntegrationProvider.TOP_POSTERS, specSlot.captured.provider)
+        assertEquals(PosterApiShapes.TOP_POSTERS_KEY_VALIDATION, specSlot.captured.apiShapeId)
+        assertEquals("topposters.key.validate", specSlot.captured.operationKey)
+        assertEquals(StringIntegrationCodec, specSlot.captured.codec)
+        assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
+        assertEquals(
+            IntegrationCachePolicy.CacheFirst(
+                ttlMs = TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS,
+                staleAfterExpiryMs = TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS
+            ),
+            specSlot.captured.cachePolicy
+        )
+        assertFalse(specSlot.captured.cacheKey.orEmpty().contains(trimmedApiKey))
+        assertTrue(
+            specSlot.captured.cacheKey.orEmpty().contains(
+                credentialHash(IntegrationProvider.TOP_POSTERS, trimmedApiKey)
+            )
+        )
+        coVerify(exactly = 1) { topPostersApi.verifyApiKey(trimmedApiKey) }
+    }
+
+    @Test
+    fun `validateApiKey disables cache policy when force refresh is requested`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val specSlot = slot<IntegrationSpec<String>>()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } returns IntegrationFetchResult.Updated(
+            """{"valid":false}"""
+        )
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, mockk<PosterTransport>())
+        provider.validateApiKey("top-secret-key", forceRefresh = true)
+
+        assertEquals(IntegrationCachePolicy.Disabled, specSlot.captured.cachePolicy)
     }
 }

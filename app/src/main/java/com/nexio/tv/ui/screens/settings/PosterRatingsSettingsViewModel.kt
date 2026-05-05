@@ -154,7 +154,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validatingTopPosters.value = true
-            val valid = providerSettingsRepository.validateTopPostersApiKey(trimmed)
+            val valid = providerSettingsRepository.isTopPostersApiKeyValid(trimmed)
             _validatingTopPosters.value = false
             if (valid) {
                 dataStore.setTopPostersApiKey(trimmed)
