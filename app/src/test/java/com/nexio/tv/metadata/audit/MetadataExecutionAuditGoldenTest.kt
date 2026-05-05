@@ -598,7 +598,7 @@ class MetadataExecutionAuditGoldenTest {
             toppostersPoster.rejectedCandidates.any { rejected ->
                 rejected.provider == "TMDB" &&
                     rejected.sourceRole == "ADDON_PREVIEW" &&
-                    rejected.reason == "premium artwork provider has precedence"
+                    rejected.reason == "premium_artwork_provider_precedence"
             }
         )
         assertEquals("RPDB", rpdbPoster.selectedProvider)
@@ -609,7 +609,7 @@ class MetadataExecutionAuditGoldenTest {
             rpdbPoster.rejectedCandidates.any { rejected ->
                 rejected.provider == "TMDB" &&
                     rejected.sourceRole == "ADDON_PREVIEW" &&
-                    rejected.reason == "premium artwork provider has precedence"
+                    rejected.reason == "premium_artwork_provider_precedence"
             }
         )
         assertTrue(topposters.runtimeCalls.any { it.apiShapeId == "topposters.poster_template" })
@@ -641,7 +641,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(toppostersPoster.rejectedCandidates.any { rejected ->
             rejected["provider"] == "TMDB" &&
                 rejected["sourceRole"] == "ADDON_PREVIEW" &&
-                rejected["reason"] == "premium artwork provider has precedence"
+                rejected["reason"] == "premium_artwork_provider_precedence"
         })
 
         val rpdbPoster = rpdb.artworkAudit.single { it.field == "poster" }
@@ -737,7 +737,7 @@ class MetadataExecutionAuditGoldenTest {
         assertTrue(poster.rejectedCandidates.none { rejected ->
             rejected.provider == "TMDB" &&
                 rejected.sourceRole == "ADDON_PREVIEW" &&
-                rejected.reason == "premium artwork provider has precedence"
+                rejected.reason == "premium_artwork_provider_precedence"
         })
     }
 

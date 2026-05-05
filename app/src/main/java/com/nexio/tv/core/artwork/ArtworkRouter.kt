@@ -77,12 +77,12 @@ class ArtworkRouter(
 
         val candidateProvider = provider
         if (candidateProvider == null || candidateProvider != policy.activePremiumProvider) {
-            return rejected("inactive premium artwork provider")
+            return rejected("inactive_premium_artwork_provider")
         }
 
         val capability = candidateProvider.evaluatePremiumCandidate(this, policy)
         if (capability.supported) return null
-        return rejected(capability.reason ?: "unsupported premium artwork provider")
+        return rejected(capability.reason ?: "unsupported_premium_artwork_provider")
     }
 
     private fun ArtworkProviderId.evaluatePremiumCandidate(
@@ -99,12 +99,12 @@ class ArtworkRouter(
 
     private fun ArtworkCandidate.rejectionReasonForSelected(selectedRank: RoutingRank): String =
         when (selectedRank) {
-            RoutingRank.PREMIUM -> "premium artwork provider has precedence"
-            RoutingRank.PRIMARY -> "primary provider artwork has precedence"
-            RoutingRank.CURRENT_PREVIEW -> "current preview artwork has precedence"
-            RoutingRank.OTHER_PREVIEW -> "other preview artwork has precedence"
-            RoutingRank.FALLBACK -> "fallback artwork has precedence"
-            RoutingRank.PLACEHOLDER -> "placeholder artwork has precedence"
+            RoutingRank.PREMIUM -> "premium_artwork_provider_precedence"
+            RoutingRank.PRIMARY -> "primary_provider_artwork_precedence"
+            RoutingRank.CURRENT_PREVIEW -> "current_preview_artwork_precedence"
+            RoutingRank.OTHER_PREVIEW -> "other_preview_artwork_precedence"
+            RoutingRank.FALLBACK -> "fallback_artwork_precedence"
+            RoutingRank.PLACEHOLDER -> "placeholder_artwork_precedence"
         }
 
     private fun ArtworkCandidate.rejected(reason: String): RejectedArtworkCandidate =
