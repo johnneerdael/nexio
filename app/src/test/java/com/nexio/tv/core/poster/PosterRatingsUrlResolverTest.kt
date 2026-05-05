@@ -278,6 +278,52 @@ class PosterRatingsUrlResolverTest {
         assertNull(resolved)
     }
 
+    @Test
+    fun `invalid top posters episode thumbnail context falls back to primary with rejection trace`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolved = resolver(cache).resolveEpisodeThumbnailArtworkRef(
+            settings = topPostersThumbnailSettings(),
+            providerIds = ProviderIds(tvdb = "1399"),
+            mediaKind = MetadataMediaKind.SERIES,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tvdb:1399:S0E1"),
+            episodeContext = EpisodeArtworkContext(season = 0, episode = 1),
+            fallbackThumbnailUrl = "https://image.tmdb.org/t/p/w500/fallback.jpg",
+            primaryProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+        )
+
+        val runtimeRef = resolved as ArtworkDisplayRef.RuntimeAsset
+        val decision = cache.get(runtimeRef.decisionKey)
+        assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
+        assertEquals(
+            listOf("topposters_invalid_episode_context"),
+            decision?.rejectedCandidates?.map { it.reason }
+        )
+        assertFalse(runtimeRef.displayHints.embedsRatingOverlay)
+    }
+
+    @Test
+    fun `unsupported top posters episode thumbnail id falls back to primary with rejection trace`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolved = resolver(cache).resolveEpisodeThumbnailArtworkRef(
+            settings = topPostersThumbnailSettings(),
+            providerIds = ProviderIds(tmdb = "bad-id"),
+            mediaKind = MetadataMediaKind.SERIES,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tmdb:bad-id:S1E1"),
+            episodeContext = EpisodeArtworkContext(season = 1, episode = 1),
+            fallbackThumbnailUrl = "https://image.tmdb.org/t/p/w500/fallback.jpg",
+            primaryProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+        )
+
+        val runtimeRef = resolved as ArtworkDisplayRef.RuntimeAsset
+        val decision = cache.get(runtimeRef.decisionKey)
+        assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
+        assertEquals(
+            listOf("missing_supported_provider_id"),
+            decision?.rejectedCandidates?.map { it.reason }
+        )
+        assertFalse(runtimeRef.displayHints.embedsRatingOverlay)
+    }
+
     private fun resolver(cache: ArtworkDecisionCache): PosterRatingsUrlResolver =
         PosterRatingsUrlResolver(
             settingsDataStore = mockk<PosterRatingsSettingsDataStore>(),

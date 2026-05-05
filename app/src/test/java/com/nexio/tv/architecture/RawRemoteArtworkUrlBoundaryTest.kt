@@ -216,6 +216,25 @@ class RawRemoteArtworkUrlBoundaryTest {
         }
     }
 
+    @Test
+    fun `metadata display projection surfaces do not expose raw premium provider urls`() {
+        val offenders = metadataDisplayProjectionFiles()
+            .flatMap { file ->
+                rawPremiumProviderUrlViolations(
+                    filePath = file.invariantSeparatorsPath,
+                    text = file.readText()
+                )
+            }
+
+        if (offenders.isNotEmpty()) {
+            fail(
+                "Metadata/domain/display projection surfaces must not expose raw premium provider URLs. " +
+                    "Use nexio-artwork://asset/..., nexio-artwork://decision/..., or nexio-placeholder://... instead:\n" +
+                    offenders.joinToString(separator = "\n")
+            )
+        }
+    }
+
     private fun metadataUiArtworkFiles(): List<File> {
         val roots = listOf(
             File("app/src/main/java/com/nexio/tv/ui/screens/home"),
@@ -247,6 +266,39 @@ class RawRemoteArtworkUrlBoundaryTest {
             .distinctBy { it.invariantSeparatorsPath }
             .sortedBy { it.invariantSeparatorsPath }
     }
+
+    private fun metadataDisplayProjectionFiles(): List<File> {
+        val roots = listOf(
+            File("app/src/main/java/com/nexio/tv/domain/model"),
+            File("app/src/main/java/com/nexio/tv/core/metadata/router"),
+            File("app/src/test/java/com/nexio/tv/domain/model"),
+            File("app/src/test/java/com/nexio/tv/core/metadata/router"),
+            File("app/src/test/java/com/nexio/tv/metadata/audit")
+        )
+
+        return roots
+            .flatMap { root ->
+                require(root.isDirectory) { "Required metadata display projection root is missing: ${root.path}" }
+                root.walkTopDown()
+                    .filter { it.isFile && it.extension == "kt" }
+                    .filterNot { it.invariantSeparatorsPath == RAW_BOUNDARY_TEST_PATH }
+                    .toList()
+            }
+            .distinctBy { it.invariantSeparatorsPath }
+            .sortedBy { it.invariantSeparatorsPath }
+    }
+
+    private fun rawPremiumProviderUrlViolations(
+        filePath: String,
+        text: String
+    ): List<String> =
+        text.lines().flatMapIndexed { index, line ->
+            if (premiumProviderUrlLiteralRegex.containsMatchIn(line)) {
+                listOf("$filePath:${index + 1}:raw-premium-provider-url")
+            } else {
+                emptyList()
+            }
+        }
 
     private fun rawRemoteArtworkUrlViolations(
         filePath: String,
@@ -333,8 +385,13 @@ class RawRemoteArtworkUrlBoundaryTest {
 
     private companion object {
         private const val CONTEXT_RADIUS = 3
+        private const val RAW_BOUNDARY_TEST_PATH =
+            "app/src/test/java/com/nexio/tv/architecture/RawRemoteArtworkUrlBoundaryTest.kt"
 
         private val rawUrlLiteralRegex = Regex("""["']https?://""")
+        private val premiumProviderUrlLiteralRegex = Regex(
+            """https://api\.(?:top-posters|ratingposterdb)\.com"""
+        )
         private val localRawUrlVariableRegex = Regex("""\b(?:val|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*["']https?://""")
         private val providerDomainLiteralRegex = Regex(
             """["'][^"']*https://(?:image\.tmdb\.org|artworks\.thetvdb\.com|media\.kitsu\.io|api\.ratingposterdb\.com|api\.top-posters\.com)[^"']*["']"""

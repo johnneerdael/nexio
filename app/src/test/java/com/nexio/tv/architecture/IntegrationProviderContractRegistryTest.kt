@@ -1,6 +1,7 @@
 package com.nexio.tv.architecture
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -111,7 +112,20 @@ class IntegrationProviderContractRegistryTest {
         assertTrue("Missing topposters.thumbnail contract block", block.isNotBlank())
         assertTrue(block.contains("provider: TOP_POSTERS"))
         assertTrue(block.contains("lifecycleStatus: ACTIVE_RUNTIME_COVERED"))
+        assertFalse(block.contains("lifecycleStatus: PLANNED_NOT_ACTIVE"))
+        assertFalse(block.contains("lifecycleStatus: EXEMPT"))
         assertTrue(block.contains("headerPolicy: topposters-thumbnail-v1"))
         assertTrue(block.contains("defaultCachePolicy: CacheFirst"))
+        assertTrue(block.contains("cacheContract: poster-generated-v1"))
+        val cacheContract = Regex("""(?ms)^  poster-generated-v1:\n(.*?)(?=^  [a-z0-9_.-]+:|\z)""")
+            .find(source)
+            ?.groupValues
+            ?.get(1)
+            .orEmpty()
+        assertTrue("Missing poster-generated-v1 cache contract block", cacheContract.isNotBlank())
+        assertTrue(cacheContract.contains("cachePolicy: CacheFirst"))
+        assertTrue(cacheContract.contains("ttl: 24h"))
+        assertTrue(cacheContract.contains("staleAfterExpiry: 7d"))
+        assertFalse(block.contains("Coil", ignoreCase = true))
     }
 }
