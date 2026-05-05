@@ -43,33 +43,38 @@ class IntegrationPosterFetcherTest {
 
     @OptIn(ExperimentalCoilApi::class)
     @Test
-    fun `poster fetcher writes resolved bytes to coil disk cache key`() = runTest {
-        val diskKey = "artwork:rpdb:poster:tt0137523:imageLang:en:policy:1"
-        val diskCache = DiskCache.Builder()
-            .directory(temporaryFolder.newFolder("image_cache"))
-            .build()
-        val runtime = RecordingIntegrationRuntime(successValue = sampleJpeg())
+    fun `poster fetcher writes resolved bytes to coil disk cache key for every premium provider`() = runTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val fetcher = IntegrationPosterFetcher(
-            request = PosterIntegrationRequest(
-                provider = IntegrationProvider.RPDB,
-                cacheKey = "rpdb:imdb:tt0137523:poster-default",
-                apiKey = "key",
-                path = "imdb/poster-default/tt0137523.jpg"
-            ),
-            options = Options(context = context, diskCacheKey = diskKey),
-            rpdbProvider = RpdbIntegrationProvider(runtime, mockk<RpdbApi>(), mockk<PosterTransport>()),
-            topPostersProvider = TopPostersIntegrationProvider(runtime, mockk<TopPostersApi>(), mockk<PosterTransport>()),
-            fallbackTransport = mockk(relaxed = true),
-            diskCache = diskCache
-        )
+        listOf(
+            IntegrationProvider.RPDB to "rpdb",
+            IntegrationProvider.TOP_POSTERS to "top_posters"
+        ).forEach { (provider, providerTag) ->
+            val diskKey = "artwork:$providerTag:poster:tt0137523:imageLang:en:policy:1"
+            val diskCache = DiskCache.Builder()
+                .directory(temporaryFolder.newFolder("image_cache_$providerTag"))
+                .build()
+            val runtime = RecordingIntegrationRuntime(successValue = sampleJpeg())
+            val fetcher = IntegrationPosterFetcher(
+                request = PosterIntegrationRequest(
+                    provider = provider,
+                    cacheKey = "$providerTag:imdb:tt0137523:poster-default",
+                    apiKey = "key",
+                    path = "imdb/poster-default/tt0137523.jpg"
+                ),
+                options = Options(context = context, diskCacheKey = diskKey),
+                rpdbProvider = RpdbIntegrationProvider(runtime, mockk<RpdbApi>(), mockk<PosterTransport>()),
+                topPostersProvider = TopPostersIntegrationProvider(runtime, mockk<TopPostersApi>(), mockk<PosterTransport>()),
+                fallbackTransport = mockk(relaxed = true),
+                diskCache = diskCache
+            )
 
-        val result = fetcher.fetch()
+            val result = fetcher.fetch()
 
-        assertTrue(result is SourceResult)
-        val snapshot = diskCache.openSnapshot(diskKey)
-        assertNotNull(snapshot)
-        snapshot?.close()
+            assertTrue(result is SourceResult)
+            val snapshot = diskCache.openSnapshot(diskKey)
+            assertNotNull("Expected cache entry for $provider", snapshot)
+            snapshot?.close()
+        }
     }
 
     @Test
