@@ -40,6 +40,9 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -55,6 +58,7 @@ fun PosterRatingsSettingsContent(
     val posterCacheInvalidated by viewModel.posterCacheInvalidated.collectAsStateWithLifecycle()
     var showRpdbDialog by remember { mutableStateOf(false) }
     var showTopDialog by remember { mutableStateOf(false) }
+    var providerDialogType by remember { mutableStateOf<ArtworkTypeKey?>(null) }
     val context = LocalContext.current
     val rpdbError = stringResource(R.string.poster_ratings_rpdb_invalid_api_key)
     val topError = stringResource(R.string.poster_ratings_top_invalid_api_key)
@@ -69,9 +73,6 @@ fun PosterRatingsSettingsContent(
         }
     }
 
-    val rpdbRowEnabled = !uiState.topPostersEnabled || uiState.rpdbEnabled
-    val topRowEnabled = !uiState.rpdbEnabled || uiState.topPostersEnabled
-
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -85,12 +86,12 @@ fun PosterRatingsSettingsContent(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            SettingsToggleRow(
-                title = stringResource(R.string.poster_ratings_rpdb_title),
-                subtitle = stringResource(R.string.poster_ratings_rpdb_subtitle),
-                checked = uiState.rpdbEnabled,
-                enabled = rpdbRowEnabled,
-                onToggle = { viewModel.onEvent(PosterRatingsSettingsEvent.ToggleRpdb(!uiState.rpdbEnabled)) },
+            ArtworkProviderSelectorRow(
+                type = ArtworkTypeKey.POSTER,
+                title = stringResource(R.string.poster_ratings_poster_provider_title),
+                subtitle = stringResource(R.string.poster_ratings_poster_provider_subtitle),
+                uiState = uiState,
+                onClick = { providerDialogType = ArtworkTypeKey.POSTER },
                 modifier = if (initialFocusRequester != null) {
                     Modifier.focusRequester(initialFocusRequester)
                 } else {
@@ -98,27 +99,41 @@ fun PosterRatingsSettingsContent(
                 }
             )
 
+            ArtworkProviderSelectorRow(
+                type = ArtworkTypeKey.LOGO,
+                title = stringResource(R.string.poster_ratings_logo_provider_title),
+                subtitle = stringResource(R.string.poster_ratings_logo_provider_subtitle),
+                uiState = uiState,
+                onClick = { providerDialogType = ArtworkTypeKey.LOGO }
+            )
+
+            ArtworkProviderSelectorRow(
+                type = ArtworkTypeKey.BACKDROP,
+                title = stringResource(R.string.poster_ratings_backdrop_provider_title),
+                subtitle = stringResource(R.string.poster_ratings_backdrop_provider_subtitle),
+                uiState = uiState,
+                onClick = { providerDialogType = ArtworkTypeKey.BACKDROP }
+            )
+
+            ArtworkProviderSelectorRow(
+                type = ArtworkTypeKey.THUMBNAIL,
+                title = stringResource(R.string.poster_ratings_thumbnail_provider_title),
+                subtitle = stringResource(R.string.poster_ratings_thumbnail_provider_subtitle),
+                uiState = uiState,
+                onClick = { providerDialogType = ArtworkTypeKey.THUMBNAIL }
+            )
+
             SettingsActionRow(
                 title = stringResource(R.string.poster_ratings_api_key_title),
-                subtitle = stringResource(R.string.poster_ratings_rpdb_api_key_subtitle),
+                subtitle = stringResource(R.string.poster_ratings_rpdb_api_key_availability_subtitle),
                 value = maskApiKey(uiState.rpdbApiKey, stringResource(R.string.mdblist_not_set)),
-                enabled = uiState.rpdbEnabled,
                 onClick = { showRpdbDialog = true }
             )
 
-            SettingsToggleRow(
-                title = stringResource(R.string.poster_ratings_top_title),
-                subtitle = stringResource(R.string.poster_ratings_top_subtitle),
-                checked = uiState.topPostersEnabled,
-                enabled = topRowEnabled,
-                onToggle = { viewModel.onEvent(PosterRatingsSettingsEvent.ToggleTopPosters(!uiState.topPostersEnabled)) }
-            )
-
             SettingsActionRow(
                 title = stringResource(R.string.poster_ratings_api_key_title),
-                subtitle = stringResource(R.string.poster_ratings_top_api_key_subtitle),
+                subtitle = topPostersApiKeySubtitle(uiState),
                 value = maskApiKey(uiState.topPostersApiKey, stringResource(R.string.mdblist_not_set)),
-                enabled = uiState.topPostersEnabled,
                 onClick = { showTopDialog = true }
             )
 
@@ -161,6 +176,74 @@ fun PosterRatingsSettingsContent(
             onClear = { viewModel.validateAndSaveTopPostersApiKey("") {}; showTopDialog = false },
             onDismiss = { showTopDialog = false }
         )
+    }
+
+    providerDialogType?.let { type ->
+        ArtworkProviderSelectionDialog(
+            title = artworkTypeTitle(type),
+            choices = uiState.availableChoicesFor(type.toArtworkType()),
+            selected = uiState.selectedProviderFor(type),
+            onSelect = { provider ->
+                viewModel.onEvent(
+                    PosterRatingsSettingsEvent.SetProviderSelection(
+                        type = type,
+                        provider = provider
+                    )
+                )
+                providerDialogType = null
+            },
+            onDismiss = { providerDialogType = null }
+        )
+    }
+}
+
+@Composable
+private fun ArtworkProviderSelectorRow(
+    type: ArtworkTypeKey,
+    title: String,
+    subtitle: String,
+    uiState: PosterRatingsSettingsUiState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val choices = uiState.availableChoicesFor(type.toArtworkType())
+    SettingsActionRow(
+        title = title,
+        subtitle = subtitle,
+        value = providerChoiceLabel(uiState.selectedProviderFor(type)),
+        enabled = choices.size > 1,
+        onClick = onClick,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun ArtworkProviderSelectionDialog(
+    title: String,
+    choices: List<ArtworkProviderChoiceKey>,
+    selected: ArtworkProviderChoiceKey,
+    onSelect: (ArtworkProviderChoiceKey) -> Unit,
+    onDismiss: () -> Unit
+) {
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = title,
+        subtitle = stringResource(R.string.poster_ratings_provider_dialog_subtitle),
+        width = 560.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            choices.forEach { choice ->
+                SettingsChoiceChip(
+                    label = providerChoiceLabel(choice),
+                    selected = choice == selected,
+                    onClick = { onSelect(choice) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 
@@ -284,3 +367,47 @@ private fun maskApiKey(key: String, notSetLabel: String): String {
     if (trimmed.isBlank()) return notSetLabel
     return if (trimmed.length <= 4) "••••" else "••••••${trimmed.takeLast(4)}"
 }
+
+@Composable
+private fun providerChoiceLabel(choice: ArtworkProviderChoiceKey): String =
+    when (choice) {
+        ArtworkProviderChoiceKey.DEFAULT -> stringResource(R.string.poster_ratings_provider_default)
+        ArtworkProviderChoiceKey.RPDB -> stringResource(R.string.poster_ratings_provider_rpdb)
+        ArtworkProviderChoiceKey.TOP_POSTERS -> stringResource(R.string.poster_ratings_provider_top_posters)
+        else -> choice.value
+    }
+
+@Composable
+private fun artworkTypeTitle(type: ArtworkTypeKey): String =
+    when (type) {
+        ArtworkTypeKey.POSTER -> stringResource(R.string.poster_ratings_poster_provider_title)
+        ArtworkTypeKey.LOGO -> stringResource(R.string.poster_ratings_logo_provider_title)
+        ArtworkTypeKey.BACKDROP -> stringResource(R.string.poster_ratings_backdrop_provider_title)
+        ArtworkTypeKey.THUMBNAIL -> stringResource(R.string.poster_ratings_thumbnail_provider_title)
+    }
+
+@Composable
+private fun topPostersApiKeySubtitle(uiState: PosterRatingsSettingsUiState): String {
+    val entitlement = uiState.topPostersEntitlementLabel
+    if (entitlement.isNullOrBlank()) {
+        return stringResource(R.string.poster_ratings_top_api_key_availability_subtitle)
+    }
+    val thumbnailStatus = if (uiState.topPostersThumbnailAvailable) {
+        stringResource(R.string.poster_ratings_thumbnail_available)
+    } else {
+        stringResource(R.string.poster_ratings_thumbnail_unavailable)
+    }
+    return stringResource(
+        R.string.poster_ratings_top_api_key_subtitle_entitled,
+        entitlement,
+        thumbnailStatus
+    )
+}
+
+private fun ArtworkTypeKey.toArtworkType(): ArtworkType =
+    when (this) {
+        ArtworkTypeKey.POSTER -> ArtworkType.POSTER
+        ArtworkTypeKey.LOGO -> ArtworkType.LOGO
+        ArtworkTypeKey.BACKDROP -> ArtworkType.BACKDROP
+        ArtworkTypeKey.THUMBNAIL -> ArtworkType.THUMBNAIL
+    }

@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkProviderRegistry
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.PremiumArtworkInvalidationNotifier
 import com.nexio.tv.core.integration.IntegrationOwnershipService
 import com.nexio.tv.core.integration.RailKeyFactory
@@ -28,7 +30,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -49,6 +50,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository
 ) : ViewModel() {
 
+    private val artworkProviderRegistry = ArtworkProviderRegistry()
     private val _uiState = MutableStateFlow(PosterRatingsSettingsUiState())
     val uiState: StateFlow<PosterRatingsSettingsUiState> = _uiState.asStateFlow()
 
@@ -64,7 +66,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
-                _uiState.update { it.fromSettings(settings) }
+                _uiState.value = PosterRatingsSettingsUiState.fromSettings(settings, artworkProviderRegistry)
             }
         }
     }
@@ -77,18 +79,8 @@ class PosterRatingsSettingsViewModel @Inject constructor(
 
     fun onEvent(event: PosterRatingsSettingsEvent) {
         when (event) {
-            is PosterRatingsSettingsEvent.ToggleRpdb -> update {
-                dataStore.setProviderSelection(
-                    ArtworkTypeKey.POSTER,
-                    if (event.enabled) ArtworkProviderChoiceKey.RPDB else ArtworkProviderChoiceKey.DEFAULT
-                )
-                invalidateArtworkDisplayState()
-            }
-            is PosterRatingsSettingsEvent.ToggleTopPosters -> update {
-                dataStore.setProviderSelection(
-                    ArtworkTypeKey.POSTER,
-                    if (event.enabled) ArtworkProviderChoiceKey.TOP_POSTERS else ArtworkProviderChoiceKey.DEFAULT
-                )
+            is PosterRatingsSettingsEvent.SetProviderSelection -> update {
+                dataStore.setProviderSelection(event.type, event.provider)
                 invalidateArtworkDisplayState()
             }
             is PosterRatingsSettingsEvent.InvalidatePosterCache -> invalidatePosterCache()
@@ -180,21 +172,61 @@ enum class PosterRatingsProviderType {
 }
 
 data class PosterRatingsSettingsUiState(
-    val rpdbEnabled: Boolean = false,
     val rpdbApiKey: String = "",
-    val topPostersEnabled: Boolean = false,
-    val topPostersApiKey: String = ""
+    val topPostersApiKey: String = "",
+    val posterProvider: ArtworkProviderChoiceKey = ArtworkProviderChoiceKey.DEFAULT,
+    val logoProvider: ArtworkProviderChoiceKey = ArtworkProviderChoiceKey.DEFAULT,
+    val backdropProvider: ArtworkProviderChoiceKey = ArtworkProviderChoiceKey.DEFAULT,
+    val thumbnailProvider: ArtworkProviderChoiceKey = ArtworkProviderChoiceKey.DEFAULT,
+    val posterChoices: List<ArtworkProviderChoiceKey> = listOf(ArtworkProviderChoiceKey.DEFAULT),
+    val logoChoices: List<ArtworkProviderChoiceKey> = listOf(ArtworkProviderChoiceKey.DEFAULT),
+    val backdropChoices: List<ArtworkProviderChoiceKey> = listOf(ArtworkProviderChoiceKey.DEFAULT),
+    val thumbnailChoices: List<ArtworkProviderChoiceKey> = listOf(ArtworkProviderChoiceKey.DEFAULT),
+    val topPostersEntitlementLabel: String? = null,
+    val topPostersThumbnailAvailable: Boolean = false
 ) {
-    fun fromSettings(settings: ArtworkProviderSettings): PosterRatingsSettingsUiState = copy(
-        rpdbEnabled = settings.selection.posterProvider == ArtworkProviderChoiceKey.RPDB,
-        rpdbApiKey = settings.rpdbApiKey,
-        topPostersEnabled = settings.selection.posterProvider == ArtworkProviderChoiceKey.TOP_POSTERS,
-        topPostersApiKey = settings.topPostersApiKey
-    )
+    fun availableChoicesFor(type: ArtworkType): List<ArtworkProviderChoiceKey> =
+        when (type) {
+            ArtworkType.POSTER -> posterChoices
+            ArtworkType.LOGO -> logoChoices
+            ArtworkType.BACKDROP -> backdropChoices
+            ArtworkType.THUMBNAIL -> thumbnailChoices
+        }
+
+    fun selectedProviderFor(type: ArtworkTypeKey): ArtworkProviderChoiceKey =
+        when (type) {
+            ArtworkTypeKey.POSTER -> posterProvider
+            ArtworkTypeKey.LOGO -> logoProvider
+            ArtworkTypeKey.BACKDROP -> backdropProvider
+            ArtworkTypeKey.THUMBNAIL -> thumbnailProvider
+        }
+
+    companion object {
+        fun fromSettings(
+            settings: ArtworkProviderSettings,
+            registry: ArtworkProviderRegistry
+        ): PosterRatingsSettingsUiState =
+            PosterRatingsSettingsUiState(
+                rpdbApiKey = settings.rpdbApiKey,
+                topPostersApiKey = settings.topPostersApiKey,
+                posterProvider = settings.selection.posterProvider,
+                logoProvider = settings.selection.logoProvider,
+                backdropProvider = settings.selection.backdropProvider,
+                thumbnailProvider = settings.selection.thumbnailProvider,
+                posterChoices = registry.availableChoices(ArtworkType.POSTER, settings),
+                logoChoices = registry.availableChoices(ArtworkType.LOGO, settings),
+                backdropChoices = registry.availableChoices(ArtworkType.BACKDROP, settings),
+                thumbnailChoices = registry.availableChoices(ArtworkType.THUMBNAIL, settings),
+                topPostersEntitlementLabel = settings.topPostersEntitlement?.tierName?.takeIf { it.isNotBlank() },
+                topPostersThumbnailAvailable = settings.topPostersCanProvideThumbnails
+            )
+    }
 }
 
 sealed class PosterRatingsSettingsEvent {
-    data class ToggleRpdb(val enabled: Boolean) : PosterRatingsSettingsEvent()
-    data class ToggleTopPosters(val enabled: Boolean) : PosterRatingsSettingsEvent()
+    data class SetProviderSelection(
+        val type: ArtworkTypeKey,
+        val provider: ArtworkProviderChoiceKey
+    ) : PosterRatingsSettingsEvent()
     data object InvalidatePosterCache : PosterRatingsSettingsEvent()
 }
