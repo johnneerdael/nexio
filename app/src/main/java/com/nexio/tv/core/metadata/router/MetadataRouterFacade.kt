@@ -713,24 +713,38 @@ class MetadataRouterFacade(
     ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
         val effectiveSeasons = seasonNumbers.ifEmpty { listOfNotNull(metadataSeasonNumber) }
         return if (effectiveSeasons.isEmpty()) {
-            // No season hint — fetch all seasons from the provider by passing an unconstrained route.
-            // KitsuMetadataService.fetchEpisodeEnrichment returns everything when seasonNumbers is empty.
-            val unconstrainedRoute = route.copy(seasonNumber = null)
-            val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
-            providerPlanRunner.run(plan).stepResults
-                .flatMap { stepResult -> stepResult.episodeMetadata.entries }
-                // Last-write-wins on duplicate (season, episode) keys from multiple step results — acceptable
-                // because providers are expected to return disjoint episode ranges.
-                .associate { it.toPair() }
+            if (route.provider == MetadataPrimaryProvider.KITSU) {
+                // Kitsu returns all episodes when seasonNumber is null; use an unconstrained route
+                // so KitsuMetadataProviderAdapter passes an empty season filter to KitsuMetadataService,
+                // which then returns every episode regardless of franchise-relative season number.
+                // Last-write-wins on duplicate (season, episode) keys from multiple step results —
+                // acceptable because providers are expected to return disjoint episode ranges.
+                val unconstrainedRoute = route.copy(seasonNumber = null)
+                val plan = providerPlanExecutor.buildPlan(unconstrainedRoute, MetadataDepth.SEASON)
+                providerPlanRunner.run(plan).stepResults
+                    .flatMap { stepResult -> stepResult.episodeMetadata.entries }
+                    .associate { it.toPair() }
+            } else {
+                // TVDB and TMDB require a seasonNumber at SEASON depth (enforced per-provider in
+                // ProviderPlanExecutor). Default to season 1 — the correct fallback for standard TV
+                // shows where the caller did not specify which season to hydrate.
+                // Last-write-wins on duplicate (season, episode) keys — acceptable here too.
+                val season1Route = route.copy(seasonNumber = 1)
+                val plan = providerPlanExecutor.buildPlan(season1Route, MetadataDepth.SEASON)
+                providerPlanRunner.run(plan).stepResults
+                    .flatMap { stepResult -> stepResult.episodeMetadata.entries }
+                    .associate { it.toPair() }
+            }
         } else {
+            // Season hints provided — fetch each requested season individually.
+            // Last-write-wins on duplicate (season, episode) keys — acceptable because providers
+            // are expected to return disjoint episode ranges.
             effectiveSeasons.flatMap { seasonNumber ->
                 val seasonRoute = route.copy(seasonNumber = seasonNumber)
                 val plan = providerPlanExecutor.buildPlan(seasonRoute, MetadataDepth.SEASON)
                 providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
                     stepResult.episodeMetadata.entries
                 }
-            // Last-write-wins on duplicate (season, episode) keys from multiple step results — acceptable
-            // because providers are expected to return disjoint episode ranges.
             }.associate { it.toPair() }
         }
     }

@@ -998,6 +998,20 @@ class MetaDetailsSeasonMediaViewModelTest {
                 origin = any()
             )
         } returns flowOf(NetworkResult.Success(meta))
+        // Seed the initial meta's videos/links via the addon-origin path so that the
+        // canonical resolver's empty-video result is back-filled before enrichment fires.
+        // Without this, canonical.toMeta() produces videos=emptyList() and the mandatory-
+        // episode blocking path triggers, preventing preloadAllSeasonMediaAvailability.
+        every {
+            metaRepository.getMeta(
+                addonBaseUrl = TEST_INITIAL_META_ADDON_URL,
+                type = any(),
+                id = any(),
+                cacheOnDisk = any(),
+                writeToDisk = any(),
+                origin = any()
+            )
+        } returns flowOf(NetworkResult.Success(meta))
 
         val libraryRepository = mockk<LibraryRepository>(relaxed = true)
         every { libraryRepository.sourceMode } returns flowOf(LibrarySourceMode.LOCAL)
@@ -1087,7 +1101,8 @@ class MetaDetailsSeasonMediaViewModelTest {
             savedStateHandle = SavedStateHandle(
                 mapOf(
                     "itemId" to meta.id,
-                    "itemType" to "series"
+                    "itemType" to "series",
+                    "addonBaseUrl" to TEST_INITIAL_META_ADDON_URL
                 )
             )
         )
