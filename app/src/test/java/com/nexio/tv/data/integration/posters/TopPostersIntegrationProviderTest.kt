@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.posters
 
 import com.nexio.tv.core.image.PosterIntegrationRequest
+import com.nexio.tv.core.image.TopPostersThumbnailRequest
 import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationFetchOptions
 import com.nexio.tv.core.integration.IntegrationFetchResult
@@ -35,6 +36,147 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.Response
 
 class TopPostersIntegrationProviderTest {
+    @Test
+    fun `fetchThumbnail routes thumbnail downloads through runtime with forced badge params`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val transport = mockk<PosterTransport>()
+        val request = TopPostersThumbnailRequest(
+            apiKey = "key",
+            idType = "imdb",
+            mediaId = "tt15940132",
+            season = 1,
+            episode = 5,
+            credentialHash = "credential-hash"
+        )
+        val remoteUrl = "https://api.top-posters.com/key/imdb/thumbnail/tt15940132/S1E5.jpg?badge_size=small&badge_position=top-right&blur=false"
+        val payload = "thumbnail".toByteArray()
+        val specSlot = slot<IntegrationSpec<ByteArray>>()
+        val events = mutableListOf<String>()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } coAnswers {
+            events += "runtime.get-enter"
+            val loadResult = specSlot.captured.load()
+            events += "runtime.get-exit"
+            when (loadResult) {
+                is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(loadResult.value)
+                else -> IntegrationFetchResult.Missing
+            }
+        }
+        every { transport.execute(remoteUrl) } answers {
+            events += "transport.execute"
+            PosterTransportResult(
+                statusCode = 200,
+                isSuccessful = true,
+                body = payload
+            )
+        }
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, transport)
+        val result = provider.fetchThumbnail(request)
+
+        assertArrayEquals(payload, result)
+        assertEquals(
+            listOf("runtime.get-enter", "transport.execute", "runtime.get-exit"),
+            events
+        )
+        assertEquals(IntegrationProvider.TOP_POSTERS, specSlot.captured.provider)
+        assertEquals(request.cacheKey, specSlot.captured.cacheKey)
+        assertEquals(PosterApiShapes.TOP_POSTERS_THUMBNAIL, specSlot.captured.apiShapeId)
+        assertEquals(IntegrationHeaderPolicies.TOP_POSTERS_THUMBNAIL_V1, specSlot.captured.headerPolicyId)
+        assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
+        assertEquals(
+            IntegrationCachePolicy.CacheFirst(
+                ttlMs = request.ttlMs,
+                staleAfterExpiryMs = request.staleAfterExpiryMs
+            ),
+            specSlot.captured.cachePolicy
+        )
+        assertTrue(specSlot.captured.operationKey.contains("idType:imdb"))
+        assertTrue(specSlot.captured.operationKey.contains("mediaId:tt15940132"))
+        assertTrue(specSlot.captured.operationKey.contains("episode:S1E5"))
+        assertTrue(specSlot.captured.operationKey.contains("badgePos:top-right"))
+        assertTrue(specSlot.captured.operationKey.contains("badgeSize:small"))
+        assertTrue(specSlot.captured.operationKey.contains("blur:false"))
+        assertTrue(specSlot.captured.operationKey.contains("credential:credential-hash"))
+        assertFalse(specSlot.captured.operationKey.contains("apiKey:key"))
+        assertFalse(remoteUrl.contains("fallback_url"))
+        assertEquals(1, Regex("/S1E5\\.jpg").findAll(remoteUrl).count())
+        verify(exactly = 1) { transport.execute(remoteUrl) }
+    }
+
+    @Test
+    fun `fetchThumbnail maps http failures and missing bodies to thumbnail reasons`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val transport = mockk<PosterTransport>()
+        val failedRequest = TopPostersThumbnailRequest(
+            apiKey = "key",
+            idType = "imdb",
+            mediaId = "tt15940132",
+            season = 1,
+            episode = 5,
+            credentialHash = "credential-hash"
+        )
+        val specSlot = slot<IntegrationSpec<ByteArray>>()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } returns IntegrationFetchResult.Missing
+        every { transport.execute(any()) } returns PosterTransportResult(
+            statusCode = 503,
+            isSuccessful = false,
+            body = "down".toByteArray()
+        )
+
+        val provider = TopPostersIntegrationProvider(runtime, mockk<TopPostersApi>(), transport)
+        val result = provider.fetchThumbnail(failedRequest)
+        val failedLoadResult = specSlot.captured.load()
+
+        assertNull(result)
+        assertTrue(failedLoadResult is IntegrationLoadResult.HttpError)
+        failedLoadResult as IntegrationLoadResult.HttpError
+        assertEquals(503, failedLoadResult.statusCode)
+        assertEquals("topposters_thumbnail_failed", failedLoadResult.reason)
+
+        every { transport.execute(any()) } returns PosterTransportResult(
+            statusCode = 200,
+            isSuccessful = true,
+            body = null
+        )
+
+        val missingBodyLoadResult = specSlot.captured.load()
+
+        assertTrue(missingBodyLoadResult is IntegrationLoadResult.HttpError)
+        missingBodyLoadResult as IntegrationLoadResult.HttpError
+        assertEquals(200, missingBodyLoadResult.statusCode)
+        assertEquals("topposters_thumbnail_missing_body", missingBodyLoadResult.reason)
+    }
+
+    @Test
+    fun `fetchThumbnail maps transport failures to network error`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val transport = mockk<PosterTransport>()
+        val request = TopPostersThumbnailRequest(
+            apiKey = "key",
+            idType = "imdb",
+            mediaId = "tt15940132",
+            season = 1,
+            episode = 5,
+            credentialHash = "credential-hash"
+        )
+        val specSlot = slot<IntegrationSpec<ByteArray>>()
+        val expected = IOException("timeout")
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } returns IntegrationFetchResult.Missing
+        every { transport.execute(any()) } throws expected
+
+        val provider = TopPostersIntegrationProvider(runtime, mockk<TopPostersApi>(), transport)
+        val result = provider.fetchThumbnail(request)
+        val loadResult = specSlot.captured.load()
+
+        assertNull(result)
+        assertTrue(loadResult is IntegrationLoadResult.NetworkError)
+        assertEquals(expected, (loadResult as IntegrationLoadResult.NetworkError).throwable)
+    }
+
     @Test
     fun `fetchPoster routes poster downloads through runtime and poster transport`() = runTest {
         val runtime = mockk<IntegrationRuntime>()

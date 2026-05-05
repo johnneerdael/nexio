@@ -22,7 +22,7 @@ import javax.inject.Singleton
 import okio.Path.Companion.toOkioPath
 
 class IntegrationPosterFetcher(
-    private val request: PosterIntegrationRequest,
+    private val request: IntegrationPosterRequest,
     private val options: coil.request.Options,
     private val rpdbProvider: RpdbIntegrationProvider,
     private val topPostersProvider: TopPostersIntegrationProvider,
@@ -40,14 +40,21 @@ class IntegrationPosterFetcher(
     }
 
     private suspend fun premiumBytes(): ByteArray? =
-        when (request.provider) {
-            IntegrationProvider.RPDB -> rpdbProvider.fetchPoster(request)
-            IntegrationProvider.TOP_POSTERS -> topPostersProvider.fetchPoster(request)
-            else -> null
-    }
+        when (request) {
+            is PosterIntegrationRequest -> when (request.provider) {
+                IntegrationProvider.RPDB -> rpdbProvider.fetchPoster(request)
+                IntegrationProvider.TOP_POSTERS -> topPostersProvider.fetchPoster(request)
+                else -> null
+            }
+            is TopPostersThumbnailRequest -> topPostersProvider.fetchThumbnail(request)
+        }
 
     private fun fallbackBytes(): ByteArray? {
-        val fallbackUrl = request.fallbackUrl?.trim()?.takeIf(::isSafeFallbackUrl) ?: return null
+        val fallbackUrl = (request as? PosterIntegrationRequest)
+            ?.fallbackUrl
+            ?.trim()
+            ?.takeIf(::isSafeFallbackUrl)
+            ?: return null
         val result = runCatching { fallbackTransport.execute(fallbackUrl) }.getOrNull() ?: return null
         return result.body?.takeIf { result.isSuccessful }
     }
@@ -113,7 +120,7 @@ class IntegrationPosterFetcher(
             options: coil.request.Options,
             imageLoader: ImageLoader
         ): Fetcher? {
-            val request = PosterIntegrationRequest.fromModel(data.toString()) ?: return null
+            val request = IntegrationPosterRequest.fromModel(data.toString()) ?: return null
             return IntegrationPosterFetcher(
                 request = request,
                 options = options,

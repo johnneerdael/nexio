@@ -98,4 +98,20 @@ class IntegrationProviderContractRegistryTest {
             assertTrue("Missing contract for $shapeId", source.contains("  $shapeId:"))
         }
     }
+
+    @Test
+    fun `top posters thumbnail is active runtime covered shape`() {
+        val source = registry.readText()
+        val block = Regex("""(?ms)^  topposters\.thumbnail:\n(.*?)(?=^  [a-z0-9_.-]+:|\z)""")
+            .find(source)
+            ?.groupValues
+            ?.get(1)
+            .orEmpty()
+
+        assertTrue("Missing topposters.thumbnail contract block", block.isNotBlank())
+        assertTrue(block.contains("provider: TOP_POSTERS"))
+        assertTrue(block.contains("lifecycleStatus: ACTIVE_RUNTIME_COVERED"))
+        assertTrue(block.contains("headerPolicy: topposters-thumbnail-v1"))
+        assertTrue(block.contains("defaultCachePolicy: CacheFirst"))
+    }
 }
