@@ -14,10 +14,10 @@ object TopPostersEntitlementParser {
             ?.optJSONObject("features")
 
         return TopPostersEntitlementSnapshot(
-            valid = json.optBoolean("valid", false),
-            isActive = json.optBoolean("is_active", false),
-            tier = json.optInt("tier", 0),
-            tierName = json.optString("tier_name", ""),
+            valid = json.requireBoolean("valid"),
+            isActive = json.requireBoolean("is_active"),
+            tier = json.requireInt("tier"),
+            tierName = json.requireString("tier_name"),
             episodeThumbnails = features?.optBoolean("episode_thumbnails", false) ?: false,
             verifiedAtMs = verifiedAtMs,
             expiresAtMs = verifiedAtMs + ttlMs
@@ -48,4 +48,27 @@ object TopPostersEntitlementParser {
                 expiresAtMs = json.getLong("expires_at_ms")
             )
         }.getOrNull()
+
+    private fun JSONObject.requireBoolean(name: String): Boolean {
+        val value = requireField(name)
+        require(value is Boolean) { "Expected boolean field '$name'" }
+        return value
+    }
+
+    private fun JSONObject.requireInt(name: String): Int {
+        val value = requireField(name)
+        require(value is Int) { "Expected integer field '$name'" }
+        return value
+    }
+
+    private fun JSONObject.requireString(name: String): String {
+        val value = requireField(name)
+        require(value is String) { "Expected string field '$name'" }
+        return value
+    }
+
+    private fun JSONObject.requireField(name: String): Any {
+        require(has(name) && !isNull(name)) { "Missing required field '$name'" }
+        return get(name)
+    }
 }
