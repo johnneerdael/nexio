@@ -119,6 +119,36 @@ class HomeRailOrderStore @Inject constructor(
         ))
     }
 
+    suspend fun tryMigrate(
+        persistedSyntheticOrder: List<HomeRailKey>,
+        liveDefinitions: List<HomeRailDefinition>,
+    ) = mutationLock.withLock {
+        val current = state.value
+        val legacyOrder = layoutPreferenceDataStore.homeCatalogOrderKeys.first().map(::HomeRailKey)
+        val legacyDisabled = layoutPreferenceDataStore.disabledHomeCatalogKeys.first().map(::HomeRailKey)
+        val migrated = migrateHomeRailOrderState(
+            current = current,
+            legacyOrder = legacyOrder,
+            legacyDisabled = legacyDisabled,
+            liveDefinitions = liveDefinitions,
+            persistedSyntheticOrder = persistedSyntheticOrder,
+            nowMs = clock.millis(),
+        )
+        if (migrated != current) persist(migrated)
+    }
+
+    suspend fun onLiveDefinitionsArrived(
+        liveDefinitions: List<HomeRailDefinition>,
+    ) = mutationLock.withLock {
+        val current = state.value
+        val finalized = finalizeSyntheticFallback(
+            current = current,
+            liveDefinitions = liveDefinitions,
+            nowMs = clock.millis(),
+        )
+        if (finalized != current) persist(finalized)
+    }
+
     private suspend fun currentForMutation(): HomeRailOrderState {
         lastWrittenState?.let { return it }
         val initial = codec.decode(layoutPreferenceDataStore.homeRailOrderStateJson.first())

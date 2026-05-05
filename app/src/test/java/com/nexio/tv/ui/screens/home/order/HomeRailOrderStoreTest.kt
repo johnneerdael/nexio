@@ -215,4 +215,32 @@ class HomeRailOrderStoreTest {
             store.state.first().orderedKeys,
         )
     }
+
+    @Test
+    fun `tryMigrate seeds from legacy when state json is null`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(null)
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(listOf("A", "B"))
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(listOf("D"))
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+        )
+
+        store.tryMigrate(
+            persistedSyntheticOrder = emptyList(),
+            liveDefinitions = emptyList(),
+        )
+        advanceUntilIdle()
+
+        val state = store.state.first()
+        assertEquals(listOf(HomeRailKey("A"), HomeRailKey("B")), state.orderedKeys)
+        assertEquals(setOf(HomeRailKey("D")), state.disabledKeys)
+        assertEquals(RailOrderMutationSource.MIGRATION, state.lastMutationSource)
+    }
 }
