@@ -97,6 +97,28 @@ class HomeRailOrderStore @Inject constructor(
         ))
     }
 
+    suspend fun reorderProviderKeys(
+        family: RailFamily,
+        providerOrder: List<HomeRailKey>,
+        source: RailOrderMutationSource,
+        liveDefinitions: List<HomeRailDefinition>,
+    ) = mutationLock.withLock {
+        val current = currentForMutation()
+        val merged = spliceProviderKeys(
+            current = current.orderedKeys,
+            family = family,
+            providerOrder = providerOrder,
+            liveDefinitions = liveDefinitions,
+        )
+        if (merged == current.orderedKeys) return@withLock
+        persist(current.copy(
+            orderedKeys = merged,
+            version = current.version + 1,
+            updatedAtMs = clock.millis(),
+            lastMutationSource = source,
+        ))
+    }
+
     private suspend fun currentForMutation(): HomeRailOrderState {
         lastWrittenState?.let { return it }
         val initial = codec.decode(layoutPreferenceDataStore.homeRailOrderStateJson.first())
