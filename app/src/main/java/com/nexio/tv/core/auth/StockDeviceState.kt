@@ -11,10 +11,12 @@ import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.KitsuCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
+import com.nexio.tv.data.remote.supabase.TmdbCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.domain.model.UserProfile
@@ -74,6 +76,14 @@ fun stockAccountConfigSyncPayload(): AccountConfigSyncPayload =
             mdblist = MDBListCatalogSyncSettings(
                 hiddenPersonalListKeys = emptyList(),
                 selectedTopListKeys = emptyList(),
+                catalogOrder = emptyList()
+            ),
+            tmdb = TmdbCatalogSyncSettings(
+                catalogEnabledSet = emptyList(),
+                catalogOrder = emptyList()
+            ),
+            kitsu = KitsuCatalogSyncSettings(
+                catalogEnabledSet = emptyList(),
                 catalogOrder = emptyList()
             )
         ),

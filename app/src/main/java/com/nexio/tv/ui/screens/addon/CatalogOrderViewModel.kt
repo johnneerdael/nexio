@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -155,7 +156,7 @@ class CatalogOrderViewModel @Inject constructor(
         viewModelScope.launch {
             val baseInputsFlow = combine(
                 addonRepository.getInstalledAddons(),
-                layoutPreferenceDataStore.homeCatalogOrderKeys,
+                homeRailOrderStore.state.map { state -> state.orderedKeys.map { it.value } },
                 layoutPreferenceDataStore.disabledHomeCatalogKeys,
                 traktDiscoveryService.observeSnapshot(),
                 traktSettingsDataStore.catalogPreferences
