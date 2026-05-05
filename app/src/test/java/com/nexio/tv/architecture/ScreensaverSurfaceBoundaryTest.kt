@@ -2,36 +2,47 @@ package com.nexio.tv.architecture
 
 import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ScreensaverSurfaceBoundaryTest {
+    private val providerMetadataRatingArtworkDependencies = setOf(
+        "TraktDiscoverySnapshotStore",
+        "TraktSettingsDataStore",
+        "AddonRepository",
+        "CatalogRepository",
+        "MetaRepository",
+        "MDBListRepository",
+        "MetadataRouterFacade",
+        "ArtworkRouter",
+        "ArtworkAssetRepository",
+        "TitleRatingOverrideRepository"
+    )
+
+    private val providerMetadataRatingArtworkCalls = setOf(
+        "refreshCatalogToDisk",
+        "getCatalogCachedFirst",
+        "readCachedMeta",
+        "enrichPreview",
+        "resolveRequest",
+        "resolveArtwork",
+        "getMetaFromAllAddons",
+        "getCachedMetaFromAllAddons",
+        "hydrateAddonOriginItem"
+    )
+
     @Test
     fun `idle screensaver repository does not depend on provider metadata rating artwork or source pools`() {
         val source = sourceOf("app/src/main/java/com/nexio/tv/data/repository/IdleScreensaverRepository.kt")
 
-        val bannedDependencies = setOf(
-            "TraktDiscoverySnapshotStore",
-            "TraktSettingsDataStore",
-            "AddonRepository",
-            "CatalogRepository",
-            "MetaRepository",
-            "MDBListRepository",
-            "MetadataRouterFacade",
-            "ArtworkRouter",
-            "ArtworkAssetRepository",
-            "TitleRatingOverrideRepository"
-        )
-
         assertEquals(
             "IdleScreensaverRepository must consume ScreensaverCandidateRepository output only.",
             emptyList<String>(),
-            importedSimpleNames(source).intersect(bannedDependencies).sorted()
+            importedSimpleNames(source).intersect(providerMetadataRatingArtworkDependencies).sorted()
         )
         assertEquals(
             "IdleScreensaverRepository must not reference provider-specific dependencies.",
             emptyList<String>(),
-            identifierReferences(source, bannedDependencies)
+            identifierReferences(source, providerMetadataRatingArtworkDependencies)
         )
 
         assertEquals(
@@ -39,15 +50,41 @@ class ScreensaverSurfaceBoundaryTest {
             emptyList<String>(),
             callReferences(
                 source = source,
-                names = setOf(
-                    "refreshCatalogToDisk",
-                    "getCatalogCachedFirst",
-                    "readCachedMeta",
-                    "enrichPreview",
-                    "resolveRequest",
-                    "getMetaFromAllAddons",
-                    "getCachedMetaFromAllAddons",
-                    "hydrateAddonOriginItem"
+                names = providerMetadataRatingArtworkCalls
+            )
+        )
+    }
+
+    @Test
+    fun `screensaver candidate repository only projects resolved display surface state`() {
+        val source = sourceOf("app/src/main/java/com/nexio/tv/data/repository/ScreensaverCandidateRepository.kt")
+        val bannedDependencies = providerMetadataRatingArtworkDependencies + setOf(
+            "TrailerService",
+            "TrailerRepository",
+            "TrailerMetadataRepository",
+            "TmdbTrailerMetadataAdapter",
+            "TvdbTrailerMetadataAdapter"
+        )
+
+        assertEquals(
+            "ScreensaverCandidateRepository must not import provider-specific metadata, rating, artwork, source-pool, or trailer services.",
+            emptyList<String>(),
+            importedSimpleNames(source).intersect(bannedDependencies).sorted()
+        )
+        assertEquals(
+            "ScreensaverCandidateRepository must project from ResolvedDisplaySurfaceRepository, not reference provider-specific services.",
+            emptyList<String>(),
+            identifierReferences(source, bannedDependencies)
+        )
+        assertEquals(
+            "ScreensaverCandidateRepository must not call provider enrichment, source-pool, artwork, metadata, rating, or trailer resolution APIs.",
+            emptyList<String>(),
+            callReferences(
+                source = source,
+                names = providerMetadataRatingArtworkCalls + setOf(
+                    "resolveTrailer",
+                    "resolveIdleTrailerScreensaverPlaybackSource",
+                    "buildIdleTrailerYouTubeUrl"
                 )
             )
         )
@@ -57,26 +94,15 @@ class ScreensaverSurfaceBoundaryTest {
     fun `idle screensaver preparation does not call artwork router or rating metadata repositories`() {
         val source = sourceOf("app/src/main/java/com/nexio/tv/data/repository/IdleScreensaverPreparation.kt")
 
-        val bannedDependencies = setOf(
-            "ArtworkRouter",
-            "ArtworkAssetRepository",
-            "MDBListRepository",
-            "MetadataRouterFacade",
-            "TitleRatingOverrideRepository",
-            "AddonRepository",
-            "CatalogRepository",
-            "MetaRepository"
-        )
-
         assertEquals(
             "IdleScreensaverPreparation must remain a candidate-to-legacy-model projection.",
             emptyList<String>(),
-            importedSimpleNames(source).intersect(bannedDependencies).sorted()
+            importedSimpleNames(source).intersect(providerMetadataRatingArtworkDependencies).sorted()
         )
         assertEquals(
             "IdleScreensaverPreparation must not reference artwork, metadata, or rating repositories.",
             emptyList<String>(),
-            identifierReferences(source, bannedDependencies)
+            identifierReferences(source, providerMetadataRatingArtworkDependencies)
         )
 
         assertEquals(
@@ -84,17 +110,7 @@ class ScreensaverSurfaceBoundaryTest {
             emptyList<String>(),
             callReferences(
                 source = source,
-                names = setOf(
-                    "resolveArtwork",
-                    "resolveRequest",
-                    "enrichPreview",
-                    "readCachedMeta",
-                    "getCatalogCachedFirst",
-                    "refreshCatalogToDisk",
-                    "getMetaFromAllAddons",
-                    "getCachedMetaFromAllAddons",
-                    "hydrateAddonOriginItem"
-                )
+                names = providerMetadataRatingArtworkCalls
             )
         )
     }
@@ -103,13 +119,18 @@ class ScreensaverSurfaceBoundaryTest {
     fun `main activity screensaver path does not construct youtube watch urls directly`() {
         val source = sourceOf("app/src/main/java/com/nexio/tv/MainActivity.kt")
 
-        assertFalse(
+        assertEquals(
             "Screensaver trailer playback must resolve through TrailerService, not direct URL construction.",
-            Regex("""\bbuildIdleTrailerYouTubeUrl\s*\(\s*trailerId\s*\)""").containsMatchIn(source)
+            emptyList<String>(),
+            callReferences(
+                source = source,
+                names = setOf("buildIdleTrailerYouTubeUrl")
+            )
         )
-        assertFalse(
+        assertEquals(
             "Screensaver trailer playback must not construct direct YouTube watch URLs.",
-            source.contains("\"https://www.youtube.com/watch?v=\"")
+            emptyList<String>(),
+            directYouTubeUrlReferences(source)
         )
     }
 
@@ -139,12 +160,110 @@ class ScreensaverSurfaceBoundaryTest {
             .sorted()
     }
 
+    private fun directYouTubeUrlReferences(source: String): List<String> {
+        val normalized = source.withoutComments().normalizedForLiteralScan()
+        return listOfNotNull(
+            "youtube.com/watch".takeIf { normalized.contains("youtube.com/watch") },
+            "watch?v=".takeIf { normalized.contains("watch?v=") },
+            "youtu.be".takeIf { normalized.contains("youtu.be") }
+        )
+    }
+
     private fun String.withoutImports(): String =
         replace(Regex("""(?m)^\s*import\s+[A-Za-z0-9_.]+\s*$"""), " ")
 
     private fun String.withoutCommentsAndStrings(): String {
-        val withoutBlockComments = replace(Regex("""(?s)/\*.*?\*/"""), " ")
-        val withoutLineComments = withoutBlockComments.replace(Regex("""(?m)//.*$"""), " ")
-        return withoutLineComments.replace(Regex("\"(?:\\\\.|[^\"\\\\])*\""), " ")
+        return withoutComments().withoutStringLiterals()
+    }
+
+    private fun String.withoutComments(): String {
+        val output = StringBuilder(length)
+        var index = 0
+        var inBlockComment = false
+        var inLineComment = false
+        while (index < length) {
+            val current = this[index]
+            val next = getOrNull(index + 1)
+            when {
+                inBlockComment && current == '*' && next == '/' -> {
+                    inBlockComment = false
+                    output.append(' ')
+                    index += 2
+                }
+                inBlockComment -> {
+                    output.append(' ')
+                    index += 1
+                }
+                inLineComment && current == '\n' -> {
+                    inLineComment = false
+                    output.append(current)
+                    index += 1
+                }
+                inLineComment -> {
+                    output.append(' ')
+                    index += 1
+                }
+                current == '/' && next == '*' -> {
+                    inBlockComment = true
+                    output.append(' ')
+                    index += 2
+                }
+                current == '/' && next == '/' -> {
+                    inLineComment = true
+                    output.append(' ')
+                    index += 2
+                }
+                else -> {
+                    output.append(current)
+                    index += 1
+                }
+            }
+        }
+        return output.toString()
+    }
+
+    private fun String.withoutStringLiterals(): String {
+        val output = StringBuilder(length)
+        var index = 0
+        var inString = false
+        while (index < length) {
+            val current = this[index]
+            when {
+                inString && current == '\\' -> {
+                    output.append(' ')
+                    if (index + 1 < length) {
+                        output.append(' ')
+                    }
+                    index += 2
+                }
+                inString && current == '"' -> {
+                    inString = false
+                    output.append(' ')
+                    index += 1
+                }
+                inString -> {
+                    output.append(' ')
+                    index += 1
+                }
+                current == '"' -> {
+                    inString = true
+                    output.append(' ')
+                    index += 1
+                }
+                else -> {
+                    output.append(current)
+                    index += 1
+                }
+            }
+        }
+        return output.toString()
+    }
+
+    private fun String.normalizedForLiteralScan(): String = buildString(length) {
+        this@normalizedForLiteralScan.lowercase().forEach { char ->
+            if (!char.isWhitespace() && char != '"' && char != '\'' && char != '+') {
+                append(char)
+            }
+        }
     }
 }
