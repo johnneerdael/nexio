@@ -15,6 +15,7 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
     private val kitsuMetadataService: KitsuMetadataService,
     private val store: AnimeEpisodeCoordinateStore,
     private val traceEvents: AnimeProjectionTraceEvents,
+    private val presentationCache: AnimeSeasonPresentationCache,
 ) : AnimeSeasonProjectionResolver {
 
     override suspend fun resolveWork(source: AnimeSourceIdentity): AnimeWorkIdentity {
@@ -68,7 +69,14 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         requestedSeason: Int?,
     ): AnimeSeasonPresentation {
         val cleanSourceId = sourceKitsuId.removePrefix("kitsu:")
-        // Fetch episodes for every member kitsu resource to discover which seasons each carries.
+
+        presentationCache.get(work.groupKey, cleanSourceId)?.let { cached ->
+            return if (requestedSeason != null && cached.seasons.any { it.seasonNumber == requestedSeason })
+                cached.copy(selectedSeason = requestedSeason)
+            else
+                cached
+        }
+
         val perMember = work.memberKitsuIds.associateWith { memberId ->
             kitsuMetadataService.fetchEpisodeEnrichment(
                 rawId = "kitsu:$memberId",
@@ -76,7 +84,6 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
                 seasonNumbers = emptyList(),
             )
         }
-        // Build season → member mapping (first member that reports a season wins).
         val seasonToMember = mutableMapOf<Int, String>()
         val seasonToCount = mutableMapOf<Int, Int>()
         perMember.forEach { (memberId, eps) ->
@@ -86,18 +93,16 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
             }
         }
 
-        // Flat-franchise detection: single season, single member, high episode count.
         val isFlatFranchise = seasonToMember.size == 1
             && (perMember[cleanSourceId]?.size ?: 0) >= FLAT_KITSU_MIN_EPISODES
         val source = if (isFlatFranchise) SeasonPresentationSource.KITSU_FLAT_FALLBACK
                      else SeasonPresentationSource.KITSU_SEASON_NUMBERS
 
-        // Click-source-aware default: prefer the season the clicked kitsu resource actually carries.
         val sourceSeasons = perMember[cleanSourceId]?.keys?.map { it.first }?.toSet().orEmpty()
-        val defaultSelected = requestedSeason
-            ?: sourceSeasons.minOrNull()
+        val autoSelected = sourceSeasons.minOrNull()
             ?: seasonToMember.keys.minOrNull()
             ?: 1
+        val defaultSelected = requestedSeason?.takeIf { seasonToMember.containsKey(it) } ?: autoSelected
 
         val tabs = seasonToMember.entries
             .sortedBy { it.key }
@@ -119,6 +124,7 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
             confidence = if (isFlatFranchise) CoordinateConfidence.LOW else CoordinateConfidence.HIGH,
         )
         traceEvents.emitSeasonProjectionBuilt(presentation)
+        presentationCache.put(work.groupKey, cleanSourceId, presentation.copy(selectedSeason = autoSelected))
         return presentation
     }
 
@@ -164,7 +170,6 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         val tvdbId = record?.tvdb?.takeIf { it.isNotBlank() }
         val tmdbId = record?.tmdb?.takeIf { it.isNotBlank() }
 
-        // Flat detection from presentation source (not per-episode heuristic).
         val presentation = resolveSeasonPresentation(work, sourceEpisode.sourceKitsuId, requestedSeason = null)
         val isFlatFranchise = presentation.source == SeasonPresentationSource.KITSU_FLAT_FALLBACK
 

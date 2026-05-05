@@ -84,6 +84,7 @@ class DefaultAnimeSeasonProjectionResolverEpisodeTest {
         kitsuMetadataService = kitsuMetadataService,
         store = InMemoryAnimeEpisodeCoordinateStore(),
         traceEvents = mockk(relaxed = true),
+        presentationCache = InMemoryAnimeSeasonPresentationCache(),
     )
 
     private fun kitsuEp(season: Int, ep: Int) = TvEpisodeMetadata(

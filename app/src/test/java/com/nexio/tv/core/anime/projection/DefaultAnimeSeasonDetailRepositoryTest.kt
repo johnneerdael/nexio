@@ -49,6 +49,7 @@ class DefaultAnimeSeasonDetailRepositoryTest {
             kitsuMetadataService = kitsu,
             store = InMemoryAnimeEpisodeCoordinateStore(),
             traceEvents = mockk(relaxed = true),
+            presentationCache = InMemoryAnimeSeasonPresentationCache(),
         )
         val repository = DefaultAnimeSeasonDetailRepository(
             animeSeasonProjectionResolver = resolver,
@@ -91,6 +92,7 @@ class DefaultAnimeSeasonDetailRepositoryTest {
             kitsuMetadataService = kitsu,
             store = InMemoryAnimeEpisodeCoordinateStore(),
             traceEvents = mockk(relaxed = true),
+            presentationCache = InMemoryAnimeSeasonPresentationCache(),
         )
         val repository = DefaultAnimeSeasonDetailRepository(
             animeSeasonProjectionResolver = resolver,
