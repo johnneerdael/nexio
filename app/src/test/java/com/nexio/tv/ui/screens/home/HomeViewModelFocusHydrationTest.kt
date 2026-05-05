@@ -984,6 +984,7 @@ class HomeViewModelFocusHydrationTest {
             homeHydrationCoordinator = homeHydrationCoordinator,
             traceEvents = traceEvents,
             premiumArtworkInvalidationNotifier = premiumArtworkInvalidationNotifier,
+            animeSeasonProjectionResolver = mockk(relaxed = true),
             appContext = mockk<Context>(relaxed = true)
         ).also(createdViewModels::add)
     }
