@@ -794,21 +794,25 @@ class AccountSettingsSyncService @Inject constructor(
         settings: AccountConfigSyncPayload,
         resolveRemoteInlineSecrets: Boolean = true
     ) {
-        lastRemoteTraktPinnedListOptions = settings.catalogs.trakt.pinnedListOptions
-        lastRemoteMDBListPinnedTopListOptions = settings.catalogs.mdblist.pinnedTopListOptions
+        // Null catalog sections / null inner fields = absent in payload, leave target unchanged.
+        // Empty list ([]) = present and intentionally empty, apply as cleared.
+        // pinnedListOptions / pinnedTopListOptions remain non-null typed-object
+        // lists; when their sub-section is null we fall back to the
+        // last-known value.
+        settings.catalogs.trakt?.let {
+            lastRemoteTraktPinnedListOptions = it.pinnedListOptions
+        }
+        settings.catalogs.mdblist?.let {
+            lastRemoteMDBListPinnedTopListOptions = it.pinnedTopListOptions
+        }
 
         if (isDefaultLegacyActive()) {
-            layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
-            layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
-            layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
-            traktSettingsDataStore.setCatalogPreferences(
-                enabledCatalogs = settings.catalogs.trakt.catalogEnabledSet.toSet(),
-                catalogOrder = settings.catalogs.trakt.catalogOrder,
-                selectedPopularListKeys = settings.catalogs.trakt.selectedPopularListKeys.toSet()
-            )
-            simklSettingsDataStore.setCatalogPreferences(
-                enabledCatalogs = settings.catalogs.simkl.catalogEnabledSet.toSet(),
-                catalogOrder = settings.catalogs.simkl.catalogOrder
+            applyCatalogsSection(
+                payload = settings,
+                layoutPreferenceDataStore = layoutPreferenceDataStore,
+                traktSettingsDataStore = traktSettingsDataStore,
+                simklSettingsDataStore = simklSettingsDataStore,
+                mdbListSettingsDataStore = mdbListSettingsDataStore
             )
             playerSettingsDataStore.setTrackingProvider(
                 runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
@@ -845,11 +849,20 @@ class AccountSettingsSyncService @Inject constructor(
         mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
         mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
         mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
-        mdbListSettingsDataStore.setCatalogPreferences(
-            hiddenPersonalListKeys = settings.catalogs.mdblist.hiddenPersonalListKeys.toSet(),
-            selectedTopListKeys = settings.catalogs.mdblist.selectedTopListKeys.toSet(),
-            catalogOrder = settings.catalogs.mdblist.catalogOrder
-        )
+        // Null catalogs.mdblist / null inner fields = absent in payload, leave target unchanged.
+        // Empty list ([]) = present and intentionally empty, apply as cleared.
+        settings.catalogs.mdblist?.let { mdblist ->
+            val hidden = mdblist.hiddenPersonalListKeys
+            val selected = mdblist.selectedTopListKeys
+            val order = mdblist.catalogOrder
+            if (hidden != null && selected != null && order != null) {
+                mdbListSettingsDataStore.setCatalogPreferences(
+                    hiddenPersonalListKeys = hidden.toSet(),
+                    selectedTopListKeys = selected.toSet(),
+                    catalogOrder = order
+                )
+            }
+        }
 
         omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
 
