@@ -907,8 +907,17 @@ class HomeViewModelFocusHydrationTest {
 
         // ProfileManager with profileSwitched SharedFlow so observeProfileSwitches()
         // in init doesn't NPE when it accesses profileManager.profileSwitched.
+        val profileSessionFlow = MutableStateFlow(
+            com.nexio.tv.core.integration.ActiveProfileSession(
+                profileId = 1,
+                sessionId = "test-session",
+                sessionOrdinal = 1L,
+                startedAtMs = 1L
+            )
+        )
         val profileManagerWithSwitch = mockk<com.nexio.tv.core.profile.ProfileManager>(relaxed = true) {
             every { activeProfileId } returns MutableStateFlow(1)
+            every { activeProfileSession } returns profileSessionFlow
             every { profileSwitched } returns MutableSharedFlow(extraBufferCapacity = 1)
         }
 
