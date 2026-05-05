@@ -15,7 +15,7 @@ class ScrobbleRejectionReporter @Inject constructor() {
         Log.w(LOG_TAG, "scrobble.rejected provider=$provider reason=$reason contentId=$contentId")
     }
 
-    private companion object {
+    companion object {
         private const val LOG_TAG = "ScrobbleRejection"
     }
 }
