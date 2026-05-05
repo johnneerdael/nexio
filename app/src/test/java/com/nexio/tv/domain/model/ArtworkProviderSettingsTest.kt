@@ -130,6 +130,25 @@ class ArtworkProviderSettingsTest {
     }
 
     @Test
+    fun `legacy enabled provider with blank key still migrates to poster selection`() {
+        val rpdb = PosterRatingsSettings(
+            rpdbEnabled = true,
+            rpdbApiKey = "",
+            topPostersEnabled = false,
+            topPostersApiKey = "TP-unused"
+        )
+        val topPosters = PosterRatingsSettings(
+            rpdbEnabled = false,
+            rpdbApiKey = "rpdb-unused",
+            topPostersEnabled = true,
+            topPostersApiKey = ""
+        )
+
+        assertEquals(ArtworkProviderChoiceKey.RPDB, rpdb.toArtworkProviderSettings().selection.posterProvider)
+        assertEquals(ArtworkProviderChoiceKey.TOP_POSTERS, topPosters.toArtworkProviderSettings().selection.posterProvider)
+    }
+
+    @Test
     fun `legacy migration preserves rpdb precedence when both providers are active`() {
         val legacy = PosterRatingsSettings(
             rpdbEnabled = true,

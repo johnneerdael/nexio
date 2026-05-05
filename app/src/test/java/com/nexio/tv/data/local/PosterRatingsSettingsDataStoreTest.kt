@@ -39,6 +39,36 @@ class PosterRatingsSettingsDataStoreTest {
     }
 
     @Test
+    fun `legacy enabled provider with blank api key migrates to provider selection`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = PosterRatingsSettingsDataStore(context)
+
+        store.writeLegacyForTest(
+            rpdbEnabled = false,
+            rpdbApiKey = "",
+            topPostersEnabled = true,
+            topPostersApiKey = ""
+        )
+
+        val topPostersSettings = store.settings.first()
+
+        assertEquals("", topPostersSettings.topPostersApiKey)
+        assertEquals(ArtworkProviderChoiceKey.TOP_POSTERS, topPostersSettings.selection.posterProvider)
+
+        store.writeLegacyForTest(
+            rpdbEnabled = true,
+            rpdbApiKey = "",
+            topPostersEnabled = true,
+            topPostersApiKey = ""
+        )
+
+        val rpdbSettings = store.settings.first()
+
+        assertEquals("", rpdbSettings.rpdbApiKey)
+        assertEquals(ArtworkProviderChoiceKey.RPDB, rpdbSettings.selection.posterProvider)
+    }
+
+    @Test
     fun `setting poster provider does not disable provider keys`() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val store = PosterRatingsSettingsDataStore(context)
@@ -72,6 +102,26 @@ class PosterRatingsSettingsDataStoreTest {
         store.setTopPostersEntitlement(snapshot)
 
         assertEquals(snapshot, store.settings.first().topPostersEntitlement)
+    }
+
+    @Test
+    fun `clearing top posters entitlement removes persisted snapshot`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = PosterRatingsSettingsDataStore(context)
+        val snapshot = TopPostersEntitlementSnapshot(
+            valid = true,
+            isActive = true,
+            tier = 1,
+            tierName = "Premium",
+            episodeThumbnails = true,
+            verifiedAtMs = 100L,
+            expiresAtMs = 200L
+        )
+
+        store.setTopPostersEntitlement(snapshot)
+        store.setTopPostersEntitlement(null)
+
+        assertEquals(null, store.settings.first().topPostersEntitlement)
     }
 
     @Test
