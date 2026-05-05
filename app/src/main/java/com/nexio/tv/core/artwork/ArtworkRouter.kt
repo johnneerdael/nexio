@@ -1,7 +1,10 @@
 package com.nexio.tv.core.artwork
 
+import com.nexio.tv.domain.model.ArtworkProviderSettings
+
 data class ArtworkRoutingPolicy(
-    val activePremiumProvider: ArtworkProviderId?
+    val activePremiumProvider: ArtworkProviderId?,
+    val artworkProviderSettings: ArtworkProviderSettings = ArtworkProviderSettings()
 )
 
 data class ArtworkSelectionResult(
@@ -67,7 +70,7 @@ class ArtworkRouter(
     private fun ArtworkCandidate.isActiveSupportedPremium(policy: ArtworkRoutingPolicy): Boolean =
         provider != null &&
             provider == policy.activePremiumProvider &&
-            provider.evaluatePremiumCandidate(this).supported
+            provider.evaluatePremiumCandidate(this, policy).supported
 
     private fun ArtworkCandidate.unsupportedPremiumRejection(policy: ArtworkRoutingPolicy): RejectedArtworkCandidate? {
         if (sourceRole != ArtworkSourceRole.PREMIUM) return null
@@ -77,17 +80,21 @@ class ArtworkRouter(
             return rejected("inactive premium artwork provider")
         }
 
-        val capability = candidateProvider.evaluatePremiumCandidate(this)
+        val capability = candidateProvider.evaluatePremiumCandidate(this, policy)
         if (capability.supported) return null
         return rejected(capability.reason ?: "unsupported premium artwork provider")
     }
 
-    private fun ArtworkProviderId.evaluatePremiumCandidate(candidate: ArtworkCandidate): ArtworkProviderCapability =
+    private fun ArtworkProviderId.evaluatePremiumCandidate(
+        candidate: ArtworkCandidate,
+        policy: ArtworkRoutingPolicy
+    ): ArtworkProviderCapability =
         capabilityResolver.evaluate(
             provider = this,
             imageType = candidate.imageType,
             ids = candidate.providerIds,
-            mediaKind = candidate.mediaKind
+            mediaKind = candidate.mediaKind,
+            settings = policy.artworkProviderSettings
         )
 
     private fun ArtworkCandidate.rejectionReasonForSelected(selectedRank: RoutingRank): String =

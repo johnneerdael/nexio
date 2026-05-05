@@ -1,6 +1,9 @@
 package com.nexio.tv.core.artwork
 
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ProviderIds
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -24,7 +27,8 @@ class ArtworkRouterTest {
                 )
             ),
             policy = ArtworkRoutingPolicy(
-                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS)
+                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                artworkProviderSettings = topPostersPosterSettings()
             )
         )
 
@@ -70,11 +74,14 @@ class ArtworkRouterTest {
                     providerIds = ProviderIds(kitsu = "7442")
                 )
             ),
-            policy = ArtworkRoutingPolicy(activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB))
+            policy = ArtworkRoutingPolicy(
+                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                artworkProviderSettings = rpdbPosterSettings()
+            )
         )
 
         assertEquals("KITSU", decision.selectedCandidate.provider?.key)
-        assertEquals("UNSUPPORTED_ID_TYPE", decision.rejectedCandidates.single().reason)
+        assertEquals("missing_supported_provider_id", decision.rejectedCandidates.single().reason)
     }
 
     @Test
@@ -116,25 +123,95 @@ class ArtworkRouterTest {
                     providerIds = ProviderIds(kitsu = "7442")
                 )
             ),
-            policy = ArtworkRoutingPolicy(activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB))
+            policy = ArtworkRoutingPolicy(
+                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                artworkProviderSettings = rpdbPosterSettings()
+            )
         )
 
         assertEquals(ArtworkSourceRole.PLACEHOLDER, decision.selectedCandidate.sourceRole)
         assertEquals("PLACEHOLDER", decision.selectedCandidate.provider?.key)
-        assertEquals("UNSUPPORTED_ID_TYPE", decision.rejectedCandidates.single().reason)
+        assertEquals("missing_supported_provider_id", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
+    fun `active premium provider not selected in settings rejects and primary wins`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20
+                )
+            ),
+            policy = ArtworkRoutingPolicy(
+                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                artworkProviderSettings = ArtworkProviderSettings(
+                    topPostersApiKey = "top-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        posterProvider = ArtworkProviderChoiceKey.DEFAULT
+                    )
+                )
+            )
+        )
+
+        assertEquals("TMDB", decision.selectedCandidate.provider?.key)
+        assertEquals(
+            "provider_not_selected_for_artwork_type",
+            decision.rejectedCandidates.single().reason
+        )
+    }
+
+    @Test
+    fun `top posters thumbnail selected without entitlement rejects and primary wins`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    imageType = ArtworkType.THUMBNAIL
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    imageType = ArtworkType.THUMBNAIL
+                )
+            ),
+            policy = ArtworkRoutingPolicy(
+                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                artworkProviderSettings = ArtworkProviderSettings(
+                    topPostersApiKey = "top-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                    ),
+                    topPostersEntitlement = null
+                )
+            )
+        )
+
+        assertEquals("TMDB", decision.selectedCandidate.provider?.key)
+        assertEquals("topposters_entitlement_missing", decision.rejectedCandidates.single().reason)
     }
 
     private fun candidate(
         provider: ArtworkProviderId,
         role: ArtworkSourceRole,
         priority: Int,
-        providerIds: ProviderIds = ProviderIds(imdb = "tt0137523")
+        providerIds: ProviderIds = ProviderIds(imdb = "tt0137523"),
+        imageType: ArtworkType = ArtworkType.POSTER
     ): ArtworkCandidate =
         ArtworkCandidate(
             ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
             canonicalContentId = "imdb:tt0137523",
             providerIds = providerIds,
-            imageType = ArtworkType.POSTER,
+            imageType = imageType,
             provider = provider,
             sourceRole = role,
             source = if (role == ArtworkSourceRole.PLACEHOLDER) {
@@ -151,5 +228,21 @@ class ArtworkRouterTest {
             },
             priority = priority,
             requiresRuntimeFetch = true
+        )
+
+    private fun rpdbPosterSettings(): ArtworkProviderSettings =
+        ArtworkProviderSettings(
+            rpdbApiKey = "rpdb-key",
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.RPDB
+            )
+        )
+
+    private fun topPostersPosterSettings(): ArtworkProviderSettings =
+        ArtworkProviderSettings(
+            topPostersApiKey = "top-key",
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+            )
         )
 }
