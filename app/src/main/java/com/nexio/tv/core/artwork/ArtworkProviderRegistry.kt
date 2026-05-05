@@ -12,22 +12,15 @@ class ArtworkProviderRegistry {
     ): List<ArtworkProviderChoiceKey> =
         buildList {
             add(ArtworkProviderChoiceKey.DEFAULT)
-            if (topPostersDescriptor.isAvailableFor(type, settings)) {
-                add(ArtworkProviderChoiceKey.TOP_POSTERS)
-            }
-            if (rpdbDescriptor.isAvailableFor(type, settings)) {
-                add(ArtworkProviderChoiceKey.RPDB)
-            }
+            artworkProviderDescriptors
+                .filter { descriptor -> descriptor.isAvailableFor(type, settings) }
+                .forEach { descriptor -> add(descriptor.choice) }
         }
 
     fun providerIdFor(choice: ArtworkProviderChoiceKey): ArtworkProviderId? =
-        when (choice.value) {
-            ArtworkProviderChoiceKey.RPDB.value ->
-                ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB)
-            ArtworkProviderChoiceKey.TOP_POSTERS.value ->
-                ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS)
-            else -> null
-        }
+        artworkProviderDescriptors
+            .firstOrNull { descriptor -> descriptor.choice == choice }
+            ?.let { descriptor -> ArtworkProviderId.RuntimeProvider(descriptor.provider) }
 }
 
 fun ArtworkType.toSettingsKey(): ArtworkTypeKey =
@@ -97,4 +90,9 @@ internal val topPostersDescriptor = ArtworkProviderDescriptor(
         settings.hasTopPostersKey &&
             (type != ArtworkType.THUMBNAIL || settings.topPostersCanProvideThumbnails)
     }
+)
+
+internal val artworkProviderDescriptors = listOf(
+    topPostersDescriptor,
+    rpdbDescriptor
 )

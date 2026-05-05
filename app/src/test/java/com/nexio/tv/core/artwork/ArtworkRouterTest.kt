@@ -5,6 +5,7 @@ import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -200,6 +201,33 @@ class ArtworkRouterTest {
         assertEquals("topposters_entitlement_missing", decision.rejectedCandidates.single().reason)
     }
 
+    @Test
+    fun `top posters thumbnail selected with premium entitlement wins over primary`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    imageType = ArtworkType.THUMBNAIL
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    imageType = ArtworkType.THUMBNAIL
+                )
+            ),
+            policy = ArtworkRoutingPolicy(
+                activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                artworkProviderSettings = topPostersThumbnailSettings()
+            )
+        )
+
+        assertEquals("TOP_POSTERS", decision.selectedCandidate.provider?.key)
+        assertEquals("premium artwork provider has precedence", decision.rejectedCandidates.single().reason)
+    }
+
     private fun candidate(
         provider: ArtworkProviderId,
         role: ArtworkSourceRole,
@@ -243,6 +271,23 @@ class ArtworkRouterTest {
             topPostersApiKey = "top-key",
             selection = ArtworkProviderSelectionSettings(
                 posterProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+            )
+        )
+
+    private fun topPostersThumbnailSettings(): ArtworkProviderSettings =
+        ArtworkProviderSettings(
+            topPostersApiKey = "top-key",
+            selection = ArtworkProviderSelectionSettings(
+                thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+            ),
+            topPostersEntitlement = TopPostersEntitlementSnapshot(
+                valid = true,
+                isActive = true,
+                tier = 1,
+                tierName = "Premium",
+                episodeThumbnails = true,
+                verifiedAtMs = 1_000L,
+                expiresAtMs = System.currentTimeMillis() + 86_400_000L
             )
         )
 }
