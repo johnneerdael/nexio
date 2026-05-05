@@ -99,6 +99,37 @@ object ArtworkCacheKeys {
             }.flattenParts()
         )
 
+    fun providerTemplatePathHash(
+        provider: ArtworkProviderId,
+        imageType: ArtworkType,
+        idType: String,
+        mediaId: String,
+        pathParams: Map<String, String> = emptyMap()
+    ): String =
+        sha256(
+            buildList {
+                add(provider.keyPart())
+                add(imageType.keyPart())
+                add(idType.safeRequiredPart("idType"))
+                add(mediaId.safeRequiredPart("mediaId"))
+                pathParams.toSortedMap().forEach { (key, value) ->
+                    add(key.safeRequiredPart("pathParamKey"))
+                    add(value.safeRequiredPart("pathParamValue"))
+                }
+            }.flattenParts()
+        )
+
+    fun providerTemplateSettingsHash(
+        imageType: ArtworkType,
+        settingsParts: Iterable<String>
+    ): String =
+        sha256(
+            buildList {
+                add(imageType.keyPart())
+                settingsParts.forEach { part -> add(part.safeRequiredPart("settingsPart")) }
+            }.flattenParts()
+        )
+
     fun normalizedUrlHash(rawUrl: String): String = sha256(normalizeUrl(rawUrl))
 
     fun normalizeUrl(rawUrl: String): String {
