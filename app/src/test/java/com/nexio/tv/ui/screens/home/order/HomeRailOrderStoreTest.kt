@@ -374,6 +374,37 @@ class HomeRailOrderStoreTest {
     }
 
     @Test
+    fun `tryMigrate sees persisted state even before stateIn upstream decodes`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val initialState = HomeRailOrderState.Empty.copy(orderedKeys = listOf(HomeRailKey("X")))
+        val persisted = MutableStateFlow<String?>(codec.encode(initialState))
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(listOf("LEGACY"))
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
+        )
+
+        // Invoke tryMigrate immediately after construction. state.value may still be
+        // HomeRailOrderState.Empty because the stateIn upstream has not yet decoded.
+        // currentForMutation() awaits homeRailOrderStateJson.first() and sees the
+        // real persisted state — so migration is a no-op (branch 1: state non-empty).
+        store.tryMigrate(persistedSyntheticOrder = emptyList(), liveDefinitions = emptyList())
+        advanceUntilIdle()
+
+        // If the bug were present (read state.value = Empty), legacy ["LEGACY"] would
+        // have been seeded over the persisted ["X"]. With the fix, "X" survives.
+        val state = store.state.first()
+        assertEquals(listOf(HomeRailKey("X")), state.orderedKeys)
+    }
+
+    @Test
     fun `tryMigrate seeds from legacy when state json is null`() = runTest {
         val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val persisted = MutableStateFlow<String?>(null)

@@ -162,7 +162,7 @@ class HomeRailOrderStore @Inject constructor(
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
         lastKnownLiveDefinitions = liveDefinitions
-        val current = state.value
+        val current = currentForMutation()
         val legacyOrder = layoutPreferenceDataStore.homeCatalogOrderKeys.first().map(::HomeRailKey)
         val legacyDisabled = layoutPreferenceDataStore.disabledHomeCatalogKeys.first().map(::HomeRailKey)
         val migrated = migrateHomeRailOrderState(
@@ -180,7 +180,7 @@ class HomeRailOrderStore @Inject constructor(
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
         lastKnownLiveDefinitions = liveDefinitions
-        val current = state.value
+        val current = currentForMutation()
         val finalized = finalizeSyntheticFallback(
             current = current,
             liveDefinitions = liveDefinitions,
