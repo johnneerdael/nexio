@@ -165,6 +165,93 @@ class ArtworkProviderCapabilityResolverTest {
     }
 
     @Test
+    fun `top posters selected for anime poster with mal anilist or anidb id supports`() {
+        listOf(
+            ProviderIds(mal = "1"),
+            ProviderIds(anilist = "1"),
+            ProviderIds(anidb = "1")
+        ).forEach { ids ->
+            assertSupported(
+                resolver.evaluate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    imageType = ArtworkType.POSTER,
+                    ids = ids,
+                    mediaKind = MetadataMediaKind.ANIME,
+                    settings = topPostersSelectedSettings()
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `top posters selected without api key rejects with not configured`() {
+        assertRejected(
+            reason = "topposters_not_configured",
+            capability = resolver.evaluate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                imageType = ArtworkType.POSTER,
+                ids = ProviderIds(imdb = "tt0137523"),
+                mediaKind = MetadataMediaKind.MOVIE,
+                settings = ArtworkProviderSettings(
+                    selection = ArtworkProviderSelectionSettings(
+                        posterProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `rpdb selected without api key rejects with not configured`() {
+        assertRejected(
+            reason = "rpdb_not_configured",
+            capability = resolver.evaluate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                imageType = ArtworkType.POSTER,
+                ids = ProviderIds(imdb = "tt0137523"),
+                mediaKind = MetadataMediaKind.MOVIE,
+                settings = ArtworkProviderSettings(
+                    selection = ArtworkProviderSelectionSettings(
+                        posterProvider = ArtworkProviderChoiceKey.RPDB
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `rpdb selected for backdrop rejects with unsupported artwork type`() {
+        assertRejected(
+            reason = "unsupported_artwork_type_for_provider",
+            capability = resolver.evaluate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                imageType = ArtworkType.BACKDROP,
+                ids = ProviderIds(imdb = "tt0137523"),
+                mediaKind = MetadataMediaKind.MOVIE,
+                settings = ArtworkProviderSettings(
+                    rpdbApiKey = "rpdb-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        backdropProvider = ArtworkProviderChoiceKey.RPDB
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `settings free compatibility evaluation uses descriptor reasons`() {
+        assertRejected(
+            reason = "missing_supported_provider_id",
+            capability = resolver.evaluate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                imageType = ArtworkType.POSTER,
+                ids = ProviderIds(),
+                mediaKind = MetadataMediaKind.ANIME
+            )
+        )
+    }
+
+    @Test
     fun `provider not selected for that artwork type rejects with provider not selected`() {
         assertRejected(
             reason = "provider_not_selected_for_artwork_type",
