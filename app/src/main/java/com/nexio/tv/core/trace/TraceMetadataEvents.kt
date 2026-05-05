@@ -293,6 +293,59 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitScreensaverCandidatePoolBuilt(
+        profileHash: String?,
+        source: String,
+        imageCandidateCount: Int,
+        trailerCandidateCount: Int
+    ) {
+        emitScreensaverEvent(
+            eventType = "screensaver.candidate_pool_built",
+            payload = mapOf(
+                "profileHash" to profileHash,
+                "source" to source,
+                "imageCandidateCount" to imageCandidateCount,
+                "trailerCandidateCount" to trailerCandidateCount
+            )
+        )
+    }
+
+    fun emitScreensaverSlideSelected(
+        itemKey: String,
+        source: String,
+        ratingSource: String?,
+        artworkSource: String?,
+        matchesHomeSurface: Boolean
+    ) {
+        emitScreensaverEvent(
+            eventType = "screensaver.slide_selected",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "source" to source,
+                "ratingSource" to optionalTraceValue(ratingSource),
+                "artworkSource" to optionalTraceValue(artworkSource),
+                "matchesHomeSurface" to matchesHomeSurface
+            )
+        )
+    }
+
+    fun emitScreensaverTrailerCandidateSelected(
+        itemKey: String,
+        source: String,
+        trailerSource: String?,
+        fallbackYouTubeIdsOnly: Boolean
+    ) {
+        emitScreensaverEvent(
+            eventType = "screensaver.trailer_candidate_selected",
+            payload = mapOf(
+                "itemKey" to itemKey,
+                "source" to source,
+                "trailerSource" to optionalTraceValue(trailerSource),
+                "fallbackYouTubeIdsOnly" to fallbackYouTubeIdsOnly
+            )
+        )
+    }
+
     fun emitHomeHydrationStarted(
         railId: String?,
         itemKey: String,
@@ -618,6 +671,20 @@ class TraceMetadataEvents(
     }
 
     private fun emitHomeHydrationEvent(
+        eventType: String,
+        payload: Map<String, Any?>
+    ) {
+        emitTraceEvent(eventType, payload)
+    }
+
+    private fun emitScreensaverEvent(
+        eventType: String,
+        payload: Map<String, Any?>
+    ) {
+        emitTraceEvent(eventType, payload)
+    }
+
+    private fun emitTraceEvent(
         eventType: String,
         payload: Map<String, Any?>
     ) {

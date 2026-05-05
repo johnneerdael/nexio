@@ -171,6 +171,52 @@ class LogcatRuntimeTraceSinkTest {
     }
 
     @Test
+    fun `screensaver events write to MetaRoute tag with curated parity fields`() {
+        val sink = LogcatRuntimeTraceSink(allEnabled)
+
+        sink.emit(envelope("screensaver.candidate_pool_built", mapOf(
+            "profileHash" to "profile-hash",
+            "source" to "RESOLVED_DISPLAY_SURFACE",
+            "imageCandidateCount" to 2,
+            "trailerCandidateCount" to 1
+        )))
+        sink.emit(envelope("screensaver.slide_selected", mapOf(
+            "itemKey" to "movie:tmdb:550",
+            "source" to "RESOLVED_DISPLAY_SURFACE",
+            "ratingSource" to "IMDB",
+            "artworkSource" to "TOP_POSTERS",
+            "matchesHomeSurface" to true
+        )))
+        sink.emit(envelope("screensaver.trailer_candidate_selected", mapOf(
+            "itemKey" to "movie:tmdb:550",
+            "source" to "RESOLVED_DISPLAY_SURFACE",
+            "trailerSource" to "FALLBACK_YOUTUBE_IDS",
+            "fallbackYouTubeIdsOnly" to true
+        )))
+
+        val logs = ShadowLog.getLogsForTag("Nexio.MetaRoute")
+        assertEquals(3, logs.size)
+        val pool = logs[0].msg
+        assertTrue(pool.contains("t=screensaver.candidate_pool_built"))
+        assertTrue(pool.contains("profile=profile-hash"))
+        assertTrue(pool.contains("source=RESOLVED_DISPLAY_SURFACE"))
+        assertTrue(pool.contains("imageCandidateCount=2"))
+        assertTrue(pool.contains("trailerCandidateCount=1"))
+
+        val slide = logs[1].msg
+        assertTrue(slide.contains("t=screensaver.slide_selected"))
+        assertTrue(slide.contains("itemKey=movie:tmdb:550"))
+        assertTrue(slide.contains("ratingSource=IMDB"))
+        assertTrue(slide.contains("artworkSource=TOP_POSTERS"))
+        assertTrue(slide.contains("matchesHomeSurface=true"))
+
+        val trailer = logs[2].msg
+        assertTrue(trailer.contains("t=screensaver.trailer_candidate_selected"))
+        assertTrue(trailer.contains("trailerSource=FALLBACK_YOUTUBE_IDS"))
+        assertTrue(trailer.contains("fallbackYouTubeIdsOnly=true"))
+    }
+
+    @Test
     fun `cache_decision event writes to IntRuntime tag with cache proof fields for all decisions`() {
         val sink = LogcatRuntimeTraceSink(allEnabled)
         val cases = listOf(

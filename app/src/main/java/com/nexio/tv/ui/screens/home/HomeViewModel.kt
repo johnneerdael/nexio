@@ -51,6 +51,7 @@ import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.KitsuDiscoveryService
 import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.ResolvedDisplaySurfaceRepository
 import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TmdbDiscoveryService
@@ -139,6 +140,7 @@ class HomeViewModel @Inject constructor(
     internal val profileBoundary: ProfileBoundary,
     internal val trackingProviderStateService: TrackingProviderStateService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
+    internal val resolvedDisplaySurfaceRepository: ResolvedDisplaySurfaceRepository = ResolvedDisplaySurfaceRepository(profileManager),
     internal val integrationPlaybackGate: IntegrationPlaybackGate = IntegrationPlaybackGate(),
     internal val activeRailTracker: ActiveRailTracker = ActiveRailTracker(),
     internal val integrationHydrationCoordinator: IntegrationHydrationCoordinator = NoOpIntegrationHydrationCoordinator,

@@ -58,6 +58,76 @@ class TraceMetadataEventsTest {
     }
 
     @Test
+    fun `screensaver events include shared surface source parity fields and optional values`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "screensaver-session" })
+
+        events.emitScreensaverCandidatePoolBuilt(
+            profileHash = "profile-hash",
+            source = "RESOLVED_DISPLAY_SURFACE",
+            imageCandidateCount = 2,
+            trailerCandidateCount = 1
+        )
+        events.emitScreensaverSlideSelected(
+            itemKey = "movie:tmdb:550",
+            source = "RESOLVED_DISPLAY_SURFACE",
+            ratingSource = null,
+            artworkSource = "TOP_POSTERS",
+            matchesHomeSurface = true
+        )
+        events.emitScreensaverTrailerCandidateSelected(
+            itemKey = "movie:tmdb:550",
+            source = "RESOLVED_DISPLAY_SURFACE",
+            trailerSource = null,
+            fallbackYouTubeIdsOnly = true
+        )
+
+        assertEquals(
+            listOf(
+                "screensaver.candidate_pool_built",
+                "screensaver.slide_selected",
+                "screensaver.trailer_candidate_selected"
+            ),
+            sink.events.map { it.eventType }
+        )
+        assertEquals(listOf(1L, 2L, 3L), sink.events.map { it.sequence })
+        assertTrue(sink.events.all { it.traceSessionId == "screensaver-session" })
+
+        val poolPayload = sink.events[0].payload as Map<*, *>
+        assertEquals("profile-hash", poolPayload["profileHash"])
+        assertEquals("RESOLVED_DISPLAY_SURFACE", poolPayload["source"])
+        assertEquals(2, poolPayload["imageCandidateCount"])
+        assertEquals(1, poolPayload["trailerCandidateCount"])
+
+        val slidePayload = sink.events[1].payload as Map<*, *>
+        assertEquals("movie:tmdb:550", slidePayload["itemKey"])
+        assertEquals("none", slidePayload["ratingSource"])
+        assertEquals("TOP_POSTERS", slidePayload["artworkSource"])
+        assertEquals(true, slidePayload["matchesHomeSurface"])
+
+        val trailerPayload = sink.events[2].payload as Map<*, *>
+        assertEquals("none", trailerPayload["trailerSource"])
+        assertEquals(true, trailerPayload["fallbackYouTubeIdsOnly"])
+    }
+
+    @Test
+    fun `screensaver candidate pool preserves null profile hash when unavailable`() {
+        val sink = RecordingTraceSink()
+        val events = TraceMetadataEvents(sink, sessionId = { "screensaver-session" })
+
+        events.emitScreensaverCandidatePoolBuilt(
+            profileHash = null,
+            source = "RESOLVED_DISPLAY_SURFACE",
+            imageCandidateCount = 0,
+            trailerCandidateCount = 0
+        )
+
+        val payload = sink.events.single().payload as Map<*, *>
+        assertTrue(payload.containsKey("profileHash"))
+        assertEquals(null, payload["profileHash"])
+    }
+
+    @Test
     fun `home hydration lifecycle emits ordered envelopes with shared sequence`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "home-session" })

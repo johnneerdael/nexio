@@ -1,6 +1,11 @@
 package com.nexio.tv.ui.screensaver
 
 import androidx.compose.runtime.Immutable
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.domain.model.HydratedHomeFieldTrace
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TitleRating
 
 @Immutable
 data class IdleScreensaverSlide(
@@ -52,7 +57,8 @@ data class IdleTrailerScreensaverCandidate(
     val runtime: String?,
     val imdbRating: Float?,
     val tomatoesRating: Double? = null,
-    val trailerYtIds: List<String>
+    val trailerYtIds: List<String>,
+    val stableIds: ProviderIds = ProviderIds()
 ) {
     constructor(
         slide: IdleScreensaverSlide,
@@ -71,7 +77,8 @@ data class IdleTrailerScreensaverCandidate(
         runtime = slide.runtime,
         imdbRating = slide.imdbRating,
         tomatoesRating = slide.tomatoesRating,
-        trailerYtIds = trailerYtIds
+        trailerYtIds = trailerYtIds,
+        stableIds = ProviderIds()
     )
 
     val slide: IdleScreensaverSlide
@@ -94,3 +101,32 @@ data class IdleTrailerScreensaverCandidate(
             )
         )
 }
+
+@Immutable
+data class ScreensaverSlideCandidate(
+    val itemKey: String,
+    val contentId: String,
+    val itemType: String,
+    val title: String?,
+    val subtitle: String?,
+    val overview: String?,
+    val rating: TitleRating?,
+    val artwork: ArtworkBundle,
+    val preferredImage: ArtworkDisplayRef,
+    val stableIds: ProviderIds,
+    val trace: List<HydratedHomeFieldTrace>
+)
+
+@Immutable
+data class ScreensaverTrailerCandidate(
+    val itemKey: String,
+    val contentId: String,
+    val itemType: String,
+    val title: String,
+    val releaseInfo: String?,
+    val overview: String?,
+    val rating: TitleRating?,
+    val artwork: ArtworkBundle,
+    val fallbackTrailerYtIds: List<String>,
+    val stableIds: ProviderIds
+)
