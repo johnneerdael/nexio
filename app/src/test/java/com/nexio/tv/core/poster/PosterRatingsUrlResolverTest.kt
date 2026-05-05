@@ -1,10 +1,16 @@
 package com.nexio.tv.core.poster
 
-import com.nexio.tv.core.image.PosterIntegrationRequest
+import com.nexio.tv.core.artwork.ArtworkCacheKeys
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkOwnerKey
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.EpisodeArtworkContext
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
+import com.nexio.tv.core.artwork.toLegacyArtworkString
+import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
@@ -14,6 +20,7 @@ import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterRatingsProvider
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -191,6 +198,84 @@ class PosterRatingsUrlResolverTest {
         assertEquals("tvdb/poster-default/121361.jpg", request?.path)
     }
 
+    @Test
+    fun `top posters episode thumbnail projects selected provider template as asset URI`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+
+        val resolved = resolver.resolveEpisodeThumbnailArtworkRef(
+            settings = topPostersThumbnailSettings(),
+            providerIds = ProviderIds(tvdb = "1399"),
+            mediaKind = MetadataMediaKind.SERIES,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tvdb:1399:S1E1"),
+            episodeContext = EpisodeArtworkContext(season = 1, episode = 1),
+            fallbackThumbnailUrl = "https://image.tmdb.org/t/p/w500/fallback.jpg",
+            primaryProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+        )
+
+        val runtimeRef = resolved as ArtworkDisplayRef.RuntimeAsset
+        val decision = cache.get(runtimeRef.decisionKey)
+        val expectedAssetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(
+            decision!!.selectedCandidate.providerTemplate!!
+        )
+        assertEquals(expectedAssetKey, runtimeRef.assetKey)
+        assertEquals("nexio-artwork://asset/${expectedAssetKey.value}", resolved.toLegacyArtworkString())
+    }
+
+    @Test
+    fun `primary episode thumbnail fallback projects selected remote URL as asset URI`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val fallbackUrl = "https://image.tmdb.org/t/p/w500/still.jpg?utm_source=newsletter"
+
+        val resolved = resolver.resolveEpisodeThumbnailArtworkRef(
+            settings = ArtworkProviderSettings(
+                topPostersApiKey = "top-key",
+                selection = ArtworkProviderSelectionSettings(
+                    thumbnailProvider = ArtworkProviderChoiceKey.DEFAULT
+                )
+            ),
+            providerIds = ProviderIds(tvdb = "1399"),
+            mediaKind = MetadataMediaKind.SERIES,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tvdb:1399:S1E1"),
+            episodeContext = EpisodeArtworkContext(season = 1, episode = 1),
+            fallbackThumbnailUrl = fallbackUrl,
+            primaryProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+        )
+
+        val runtimeRef = resolved as ArtworkDisplayRef.RuntimeAsset
+        val expectedAssetKey = ArtworkCacheKeys.assetKeyForRemoteUrl(
+            provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            imageType = ArtworkType.THUMBNAIL,
+            normalizedUrlHash = ArtworkCacheKeys.normalizedUrlHash(fallbackUrl),
+            variant = null,
+            policyVersion = 1
+        )
+        assertEquals(expectedAssetKey, runtimeRef.assetKey)
+        assertEquals("nexio-artwork://asset/${expectedAssetKey.value}", resolved.toLegacyArtworkString())
+    }
+
+    @Test
+    fun `unsupported top posters episode thumbnail without primary fallback returns null`() {
+        val resolved = resolver(InMemoryArtworkDecisionCache()).resolveEpisodeThumbnailArtworkRef(
+            settings = ArtworkProviderSettings(
+                topPostersApiKey = "top-key",
+                selection = ArtworkProviderSelectionSettings(
+                    thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                ),
+                topPostersEntitlement = null
+            ),
+            providerIds = ProviderIds(tvdb = "1399"),
+            mediaKind = MetadataMediaKind.SERIES,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tvdb:1399:S1E1"),
+            episodeContext = EpisodeArtworkContext(season = 1, episode = 1),
+            fallbackThumbnailUrl = null,
+            primaryProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+        )
+
+        assertNull(resolved)
+    }
+
     private fun resolver(cache: ArtworkDecisionCache): PosterRatingsUrlResolver =
         PosterRatingsUrlResolver(
             settingsDataStore = mockk<PosterRatingsSettingsDataStore>(),
@@ -210,6 +295,23 @@ class PosterRatingsUrlResolverTest {
             rpdbApiKey = "rpdb-key",
             selection = ArtworkProviderSelectionSettings(
                 posterProvider = ArtworkProviderChoiceKey.RPDB
+            )
+        )
+
+    private fun topPostersThumbnailSettings(): ArtworkProviderSettings =
+        ArtworkProviderSettings(
+            topPostersApiKey = "top-key",
+            selection = ArtworkProviderSelectionSettings(
+                thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+            ),
+            topPostersEntitlement = TopPostersEntitlementSnapshot(
+                valid = true,
+                isActive = true,
+                tier = 1,
+                tierName = "Premium",
+                episodeThumbnails = true,
+                verifiedAtMs = 1_000L,
+                expiresAtMs = System.currentTimeMillis() + 86_400_000L
             )
         )
 
