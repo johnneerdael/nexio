@@ -223,7 +223,7 @@ class HomeViewModel @Inject constructor(
     internal var catalogsLoadInProgress: Boolean = false
     internal var lastCatalogComputationSignature: String? = null
     internal var lastCatalogOrderDiagnosticsSignature: String? = null
-    internal var migrationAttempted: Boolean = false
+    internal val migrationAttempted: MutableSet<Int> = mutableSetOf()
     internal data class TruncatedRowCacheEntry(
         val sourceRow: CatalogRow,
         val truncatedRow: CatalogRow

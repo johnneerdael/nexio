@@ -2457,10 +2457,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         // input the HomeRailOrderStore reconciler uses to compute effective order.
         val liveDefinitions = catalogPlan.toHomeRailDefinitions()
 
-        // Run migration once per ViewModel lifecycle (legacy -> live default -> synthetic-fallback).
+        // Run migration once per profile per ViewModel lifecycle (legacy -> live default ->
+        // synthetic-fallback). Tracking by profile id ensures profile switches re-attempt
+        // migration for the new profile if its persisted state is empty and legacy keys exist.
         // Subsequent ticks skip this; onLiveDefinitionsArrived is cheap and runs every tick to
         // upgrade MIGRATION_SYNTHETIC_FALLBACK -> MIGRATION once live definitions arrive.
-        if (!migrationAttempted) {
+        val currentProfileId = profileManager.activeProfileId.value
+        if (currentProfileId !in migrationAttempted) {
             homeRailOrderStore.tryMigrate(
                 persistedSyntheticOrder = collectPersistedSyntheticOrderKeys(
                     traktGroups = if (activeProfileTraktAuthenticated) persistedTraktSyntheticGroups else emptyList(),
@@ -2471,7 +2474,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 ),
                 liveDefinitions = liveDefinitions,
             )
-            migrationAttempted = true
+            migrationAttempted.add(currentProfileId)
         }
         homeRailOrderStore.onLiveDefinitionsArrived(liveDefinitions)
 
