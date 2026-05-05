@@ -96,6 +96,22 @@ class MarkSeasonWatchedTest {
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
                 value = tvdbEpisodes
             )
+            // Stub fetchTvEpisodeEnrichment so the mandatory-episode blocking path in
+            // applyMetaWithEnrichment (introduced by d2955c201) resolves and applyMeta is called.
+            // Without this, the relaxed-mock return value produces an empty episodeMap and the
+            // ViewModel sets an error state before OnMarkSeasonWatched can be handled.
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
+            )
 
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
             val batchSlot = slot<List<SeasonEpisodeMark>>()
@@ -135,6 +151,19 @@ class MarkSeasonWatchedTest {
                 provider = TvProvider.TMDB,
                 reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
                 value = episodes
+            )
+            // Stub fetchTvEpisodeEnrichment so the mandatory-episode blocking path resolves.
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
             )
 
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
@@ -220,6 +249,19 @@ class MarkSeasonWatchedTest {
                 reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
                 value = episodes
             )
+            // Stub fetchTvEpisodeEnrichment so the mandatory-episode blocking path resolves.
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
+            )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()
             coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(2), capture(batchSlot)) } returns Unit
@@ -253,6 +295,19 @@ class MarkSeasonWatchedTest {
                 provider = TvProvider.TMDB,
                 reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
                 value = episodes24
+            )
+            // Stub fetchTvEpisodeEnrichment so the mandatory-episode blocking path resolves.
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
             )
 
             val batchSlot = slot<List<com.nexio.tv.domain.model.SeasonEpisodeMark>>()

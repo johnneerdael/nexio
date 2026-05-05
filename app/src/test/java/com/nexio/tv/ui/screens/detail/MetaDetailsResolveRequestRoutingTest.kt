@@ -73,6 +73,21 @@ class MetaDetailsResolveRequestRoutingTest {
             coEvery { facade.resolveRequest(capture(captured)) } returns buildTvdbResolutionResult()
             // Stub fetchTvEnrichment so enrichMeta doesn't throw ClassCastException from relaxed mock.
             coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            // Stub fetchTvEpisodeEnrichment so the mandatory-episode blocking path (introduced by
+            // d2955c201) resolves and applyMeta is called. Returning a single episode ensures
+            // episodeHydratedMeta.videos is non-empty and the blocking check passes.
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
+            )
 
             val viewModel = buildMetaDetailsViewModel(
                 // meta is needed for the factory — we supply a minimal placeholder.
@@ -130,6 +145,19 @@ class MetaDetailsResolveRequestRoutingTest {
             coEvery { facade.resolveRequest(any()) } returns buildNoRouteResolutionResult()
             // Stub fetchTvEnrichment so enrichMeta doesn't throw ClassCastException from relaxed mock.
             coEvery { facade.fetchTvEnrichment(any(), any()) } returns noEnrichmentDecision()
+            // Stub fetchTvEpisodeEnrichment so the mandatory-episode blocking path resolves.
+            coEvery { facade.fetchTvEpisodeEnrichment(any(), any()) } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = mapOf(
+                    (1 to 1) to TvEpisodeMetadata(
+                        providerEpisodeId = "tvdb:1",
+                        seasonNumber = 1,
+                        episodeNumber = 1,
+                        airDate = "2020-01-01"
+                    )
+                )
+            )
 
             // getMeta returns success so the fallback path resolves cleanly.
             coEvery {
