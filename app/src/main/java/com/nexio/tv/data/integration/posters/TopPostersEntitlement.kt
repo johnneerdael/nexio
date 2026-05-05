@@ -23,4 +23,29 @@ object TopPostersEntitlementParser {
             expiresAtMs = verifiedAtMs + ttlMs
         )
     }
+
+    fun serialize(snapshot: TopPostersEntitlementSnapshot): String =
+        JSONObject()
+            .put("valid", snapshot.valid)
+            .put("is_active", snapshot.isActive)
+            .put("tier", snapshot.tier)
+            .put("tier_name", snapshot.tierName)
+            .put("episode_thumbnails", snapshot.episodeThumbnails)
+            .put("verified_at_ms", snapshot.verifiedAtMs)
+            .put("expires_at_ms", snapshot.expiresAtMs)
+            .toString()
+
+    fun parseCachedSnapshot(body: String): TopPostersEntitlementSnapshot? =
+        runCatching {
+            val json = JSONObject(body)
+            TopPostersEntitlementSnapshot(
+                valid = json.optBoolean("valid", false),
+                isActive = json.optBoolean("is_active", false),
+                tier = json.optInt("tier", 0),
+                tierName = json.optString("tier_name", ""),
+                episodeThumbnails = json.optBoolean("episode_thumbnails", false),
+                verifiedAtMs = json.getLong("verified_at_ms"),
+                expiresAtMs = json.getLong("expires_at_ms")
+            )
+        }.getOrNull()
 }

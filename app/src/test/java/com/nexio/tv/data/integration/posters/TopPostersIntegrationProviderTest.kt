@@ -200,7 +200,7 @@ class TopPostersIntegrationProviderTest {
         assertEquals(
             IntegrationCachePolicy.CacheFirst(
                 ttlMs = TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS,
-                staleAfterExpiryMs = TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS
+                staleAfterExpiryMs = 0L
             ),
             specSlot.captured.cachePolicy
         )
@@ -239,19 +239,25 @@ class TopPostersIntegrationProviderTest {
         val runtime = mockk<IntegrationRuntime>()
         val topPostersApi = mockk<TopPostersApi>()
         val specSlot = slot<IntegrationSpec<String>>()
-        val cachedJson = """
-            {
-              "valid": true,
-              "is_active": true,
-              "tier": 1,
-              "tier_name": "Premium",
-              "tier_info": {
-                "features": {
-                  "episode_thumbnails": true
-                }
-              }
-            }
-        """.trimIndent()
+        val cachedJson = TopPostersEntitlementParser.serialize(
+            TopPostersEntitlementParser.parse(
+                body = """
+                    {
+                      "valid": true,
+                      "is_active": true,
+                      "tier": 1,
+                      "tier_name": "Premium",
+                      "tier_info": {
+                        "features": {
+                          "episode_thumbnails": true
+                        }
+                      }
+                    }
+                """.trimIndent(),
+                verifiedAtMs = 1_700_000_000_000L,
+                ttlMs = TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS
+            )
+        )
 
         coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } returns IntegrationFetchResult.Fresh(cachedJson)
 
@@ -261,7 +267,32 @@ class TopPostersIntegrationProviderTest {
         requireNotNull(snapshot)
         assertTrue(snapshot.valid)
         assertTrue(snapshot.episodeThumbnails)
+        assertEquals(1_700_000_000_000L, snapshot.verifiedAtMs)
+        assertEquals(1_700_086_400_000L, snapshot.expiresAtMs)
         coVerify(exactly = 0) { topPostersApi.verifyApiKey(any()) }
+    }
+
+    @Test
+    fun `validateApiKey returns null for malformed success body instead of throwing`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val specSlot = slot<IntegrationSpec<String>>()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } coAnswers {
+            val loadResult = specSlot.captured.load()
+            when (loadResult) {
+                is IntegrationLoadResult.Success -> IntegrationFetchResult.Updated(loadResult.value)
+                else -> IntegrationFetchResult.Missing
+            }
+        }
+        coEvery { topPostersApi.verifyApiKey("top-secret-key") } returns Response.success(
+            "not-json".toResponseBody("application/json".toMediaType())
+        )
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, mockk<PosterTransport>())
+        val snapshot = provider.validateApiKey("top-secret-key")
+
+        assertNull(snapshot)
     }
 
     @Test

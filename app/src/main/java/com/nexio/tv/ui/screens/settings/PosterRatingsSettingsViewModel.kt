@@ -147,6 +147,7 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         if (trimmed.isBlank()) {
             viewModelScope.launch {
                 dataStore.setTopPostersApiKey("")
+                dataStore.setTopPostersEntitlement(null)
                 invalidateArtworkDisplayState()
                 onSuccess()
             }
@@ -154,13 +155,15 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _validatingTopPosters.value = true
-            val valid = providerSettingsRepository.isTopPostersApiKeyValid(trimmed)
+            val snapshot = providerSettingsRepository.validateTopPostersApiKey(trimmed)
             _validatingTopPosters.value = false
-            if (valid) {
+            if (snapshot?.valid == true) {
                 dataStore.setTopPostersApiKey(trimmed)
+                dataStore.setTopPostersEntitlement(snapshot)
                 invalidateArtworkDisplayState()
                 onSuccess()
             } else {
+                dataStore.setTopPostersEntitlement(null)
                 _validationError.tryEmit(PosterRatingsProviderType.TOP_POSTERS)
             }
         }
