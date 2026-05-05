@@ -15,6 +15,7 @@ import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.domain.model.PosterRatingsSettings
+import com.nexio.tv.domain.model.toArtworkProviderSettings
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -123,7 +124,7 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
 
     private fun resolver(settings: PosterRatingsSettings): PosterRatingsUrlResolver {
         val dataStore = mockk<PosterRatingsSettingsDataStore>()
-        every { dataStore.settings } returns flowOf(settings)
+        every { dataStore.settings } returns flowOf(settings.toArtworkProviderSettings())
         return PosterRatingsUrlResolver(dataStore)
     }
 

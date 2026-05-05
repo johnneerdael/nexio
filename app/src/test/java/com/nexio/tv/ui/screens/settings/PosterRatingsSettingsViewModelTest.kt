@@ -12,6 +12,7 @@ import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.PosterRatingsSettings
+import com.nexio.tv.domain.model.toArtworkProviderSettings
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
@@ -139,21 +140,15 @@ class PosterRatingsSettingsViewModelTest {
     private class Fixture(
         initialSettings: PosterRatingsSettings = PosterRatingsSettings()
     ) {
-        private val settings = MutableStateFlow(initialSettings)
+        private val settings = MutableStateFlow(initialSettings.toArtworkProviderSettings())
         val dataStore = mockk<PosterRatingsSettingsDataStore> {
             every { settings } returns this@Fixture.settings
-            coEvery { setRpdbEnabled(any()) } coAnswers {
-                val enabled = firstArg<Boolean>()
+            coEvery { setProviderSelection(any(), any()) } coAnswers {
                 this@Fixture.settings.value = this@Fixture.settings.value.copy(
-                    rpdbEnabled = enabled,
-                    topPostersEnabled = if (enabled) false else this@Fixture.settings.value.topPostersEnabled
-                )
-            }
-            coEvery { setTopPostersEnabled(any()) } coAnswers {
-                val enabled = firstArg<Boolean>()
-                this@Fixture.settings.value = this@Fixture.settings.value.copy(
-                    topPostersEnabled = enabled,
-                    rpdbEnabled = if (enabled) false else this@Fixture.settings.value.rpdbEnabled
+                    selection = this@Fixture.settings.value.selection.withProvider(
+                        type = firstArg(),
+                        provider = secondArg()
+                    )
                 )
             }
             coEvery { setRpdbApiKey(any()) } coAnswers {

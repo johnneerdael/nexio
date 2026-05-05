@@ -3,11 +3,12 @@ package com.nexio.tv.core.poster
 import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
-import com.nexio.tv.domain.model.PosterRatingsSettings
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -54,17 +55,25 @@ class PosterRatingsUrlResolver @Inject constructor(
         )
     }
 
-    private fun resolveProvider(settings: PosterRatingsSettings): ActiveProvider? {
-        return when (settings.activeProvider) {
-            PosterRatingsProvider.RPDB -> ActiveProvider(
-                provider = PosterRatingsProvider.RPDB,
-                apiKey = settings.rpdbApiKey.trim()
-            )
-            PosterRatingsProvider.TOP_POSTERS -> ActiveProvider(
-                provider = PosterRatingsProvider.TOP_POSTERS,
-                apiKey = settings.topPostersApiKey.trim()
-            )
-            PosterRatingsProvider.NONE -> null
+    private fun resolveProvider(settings: ArtworkProviderSettings): ActiveProvider? {
+        return when (settings.selection.posterProvider) {
+            ArtworkProviderChoiceKey.RPDB -> settings.rpdbApiKey.trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { apiKey ->
+                    ActiveProvider(
+                        provider = PosterRatingsProvider.RPDB,
+                        apiKey = apiKey
+                    )
+                }
+            ArtworkProviderChoiceKey.TOP_POSTERS -> settings.topPostersApiKey.trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { apiKey ->
+                    ActiveProvider(
+                        provider = PosterRatingsProvider.TOP_POSTERS,
+                        apiKey = apiKey
+                    )
+                }
+            else -> null
         }
     }
 
