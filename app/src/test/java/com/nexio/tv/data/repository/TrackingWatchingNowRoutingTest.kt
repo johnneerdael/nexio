@@ -86,6 +86,11 @@ class TrackingWatchingNowRoutingTest {
             owner(1)
         )
 
+        // SimklScrobbleService.scrobbleStart has 4 parameters: (item, progressPercent, ownerProfileId,
+        // ownerSessionId). The 4 matchers here are correct — the interface TrackingScrobbleService
+        // has 3 params (owner: PlaybackOwnerContext), but the concrete service class this mock
+        // targets has an additional optional ownerSessionId parameter (defaulting to null when not
+        // supplied by DefaultTrackingScrobbleService).
         coVerify(exactly = 1) { simklService.scrobbleStart(any(), 12f, any(), any()) }
         coVerify(exactly = 0) { traktService.scrobbleStart(any(), any(), any(), any()) }
     }

@@ -2,14 +2,14 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.playback.PlaybackOwnerContext
 import com.nexio.tv.domain.model.TrackingProvider
+import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
-import io.mockk.coEvery
-import io.mockk.every
 
 class TrackingScrobbleServiceAnimeRejectionTest {
 
