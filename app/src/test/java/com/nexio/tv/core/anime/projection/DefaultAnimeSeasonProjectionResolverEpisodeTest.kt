@@ -81,6 +81,7 @@ class DefaultAnimeSeasonProjectionResolverEpisodeTest {
             }
         ),
         kitsuMetadataService = kitsuMetadataService,
+        store = InMemoryAnimeEpisodeCoordinateStore(),
     )
 
     private fun kitsuEp(season: Int, ep: Int) = TvEpisodeMetadata(

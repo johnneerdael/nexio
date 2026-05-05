@@ -33,6 +33,7 @@ class DefaultAnimeSeasonProjectionResolverPresentationTest {
         val resolver = DefaultAnimeSeasonProjectionResolver(
             idMappingService = mapping,
             kitsuMetadataService = kitsu,
+            store = InMemoryAnimeEpisodeCoordinateStore(),
         )
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
@@ -56,7 +57,7 @@ class DefaultAnimeSeasonProjectionResolverPresentationTest {
         coEvery { kitsu.fetchEpisodeEnrichment("kitsu:12", ContentMediaKind.SERIES, emptyList()) } returns
             (1..1050).associate { (1 to it) to kitsuEp(season = 1, ep = it) }
 
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = mapping, kitsuMetadataService = kitsu)
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = mapping, kitsuMetadataService = kitsu, store = InMemoryAnimeEpisodeCoordinateStore())
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "12", animeStremioId = null))
         val presentation = resolver.resolveSeasonPresentation(work, sourceKitsuId = "12", requestedSeason = null)
 

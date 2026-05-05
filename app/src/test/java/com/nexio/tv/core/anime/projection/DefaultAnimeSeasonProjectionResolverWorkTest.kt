@@ -24,7 +24,7 @@ class DefaultAnimeSeasonProjectionResolverWorkTest {
             )
         )
         val service = AnimeIdMappingService(assetProvider = { asset })
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true))
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true), store = InMemoryAnimeEpisodeCoordinateStore())
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
 
@@ -44,7 +44,7 @@ class DefaultAnimeSeasonProjectionResolverWorkTest {
             )
         )
         val service = AnimeIdMappingService(assetProvider = { asset })
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true))
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true), store = InMemoryAnimeEpisodeCoordinateStore())
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "11469", animeStremioId = null))
 
