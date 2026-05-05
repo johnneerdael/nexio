@@ -46,7 +46,7 @@ class DefaultTrackingScrobbleServiceTest {
         val itemSlot = slot<com.nexio.tv.data.repository.TraktScrobbleItem>()
         coEvery { traktService.checkin(capture(itemSlot), any(), any()) } returns true
 
-        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(traktService, simklService, trackingProviderStateService(), io.mockk.mockk(relaxed = true))
+        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(traktService, simklService, trackingProviderStateService(), io.mockk.mockk(relaxed = true), io.mockk.mockk(relaxed = true), io.mockk.mockk(relaxed = true))
         val result = service.checkin(
             com.nexio.tv.data.repository.TrackingScrobbleItem.Episode(
                 contentId = "tt1520211",
@@ -72,7 +72,7 @@ class DefaultTrackingScrobbleServiceTest {
     fun `movie checkin returns false when ids are unsupported`() = runTest {
         val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>(relaxed = true)
         val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>(relaxed = true)
-        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(traktService, simklService, trackingProviderStateService(), io.mockk.mockk(relaxed = true))
+        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(traktService, simklService, trackingProviderStateService(), io.mockk.mockk(relaxed = true), io.mockk.mockk(relaxed = true), io.mockk.mockk(relaxed = true))
 
         val result = service.checkin(
             com.nexio.tv.data.repository.TrackingScrobbleItem.Movie(
@@ -95,7 +95,9 @@ class DefaultTrackingScrobbleServiceTest {
             traktService,
             simklService,
             trackingProviderStateService(provider = com.nexio.tv.domain.model.TrackingProvider.SIMKL),
-            io.mockk.mockk(relaxed = true)
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
         )
 
         val result = service.checkin(
@@ -123,7 +125,9 @@ class DefaultTrackingScrobbleServiceTest {
                 traktAuthenticated = false,
                 simklAuthenticated = false
             ),
-            io.mockk.mockk(relaxed = true)
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
         )
 
         service.scrobbleStart(
@@ -152,7 +156,9 @@ class DefaultTrackingScrobbleServiceTest {
                 traktAuthenticated = false,
                 simklAuthenticated = false
             ),
-            io.mockk.mockk(relaxed = true)
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
         )
 
         val result = service.checkin(
@@ -180,7 +186,9 @@ class DefaultTrackingScrobbleServiceTest {
             traktService,
             simklService,
             stateService,
-            io.mockk.mockk(relaxed = true)
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
         )
 
         service.scrobbleStart(
@@ -211,7 +219,9 @@ class DefaultTrackingScrobbleServiceTest {
             traktService,
             simklService,
             stateService,
-            io.mockk.mockk(relaxed = true)
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
+            io.mockk.mockk(relaxed = true),
         )
 
         service.scrobbleStart(

@@ -1,6 +1,17 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.AnimeIdSource
+import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.anime.ContentMediaKind
+import com.nexio.tv.core.anime.projection.AnimeSeasonProjectionResolver
+import com.nexio.tv.core.anime.projection.AnimeSourceIdentity
+import com.nexio.tv.core.anime.projection.EpisodeProjectionTarget
+import com.nexio.tv.core.anime.projection.SourceEpisodeCoordinate
 import com.nexio.tv.core.playback.PlaybackOwnerContext
+import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -48,7 +59,9 @@ class DefaultTrackingScrobbleService @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val simklScrobbleService: SimklScrobbleService,
     private val trackingProviderStateService: TrackingProviderStateService,
-    private val rejectionReporter: ScrobbleRejectionReporter
+    private val rejectionReporter: ScrobbleRejectionReporter,
+    private val animeSeasonProjectionResolver: AnimeSeasonProjectionResolver,
+    private val idMappingService: AnimeIdMappingService,
 ) : TrackingScrobbleService {
 
     override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
@@ -144,34 +157,88 @@ class DefaultTrackingScrobbleService @Inject constructor(
         )
     }
 
-    private fun toTraktItem(item: TrackingScrobbleItem): TraktScrobbleItem? {
+    private suspend fun toTraktItem(item: TrackingScrobbleItem): TraktScrobbleItem? {
         val contentId = item.contentId()
+        val animeId = AnimeStremioId.parse(contentId)?.takeIf { it.source in ANIME_NATIVE_SOURCES }
+
+        if (animeId != null) {
+            val resolvedKitsuId = when (animeId.source) {
+                AnimeIdSource.KITSU -> animeId.value
+                else -> idMappingService.resolveKitsuId(animeId, ContentMediaKind.SERIES)
+            }
+            if (resolvedKitsuId == null) {
+                rejectionReporter.reportRejection(contentId, ScrobbleRejectionReason.NO_PARSEABLE_IDS, TrackingProvider.TRAKT)
+                return null
+            }
+            return projectAnimeToTraktItem(item, resolvedKitsuId)
+        }
+
         val ids = toTraktIds(parseContentIds(contentId))
         if (!ids.hasAnyId()) {
-            rejectionReporter.reportRejection(
-                contentId = contentId,
-                reason = ScrobbleRejectionReason.NO_PARSEABLE_IDS,
-                provider = TrackingProvider.TRAKT,
-            )
+            rejectionReporter.reportRejection(contentId, ScrobbleRejectionReason.NO_PARSEABLE_IDS, TrackingProvider.TRAKT)
             return null
         }
         return when (item) {
-            is TrackingScrobbleItem.Movie -> TraktScrobbleItem.Movie(
-                title = item.title,
-                year = item.year,
-                ids = ids
-            )
-
+            is TrackingScrobbleItem.Movie -> TraktScrobbleItem.Movie(item.title, item.year, ids)
             is TrackingScrobbleItem.Episode -> TraktScrobbleItem.Episode(
-                showTitle = item.showTitle,
-                showYear = item.showYear,
-                showIds = ids,
-                season = item.season,
-                number = item.number,
-                episodeTitle = item.episodeTitle
+                item.showTitle, item.showYear, ids, item.season, item.number, item.episodeTitle
             )
         }
     }
+
+    private suspend fun projectAnimeToTraktItem(
+        item: TrackingScrobbleItem,
+        sourceKitsuId: String,
+    ): TraktScrobbleItem? {
+        val work = animeSeasonProjectionResolver.resolveWork(
+            AnimeSourceIdentity(sourceKitsuId = sourceKitsuId, animeStremioId = null)
+        )
+        return when (item) {
+            is TrackingScrobbleItem.Movie -> {
+                val ids = work.providerIds.toTraktIds()
+                if (!ids.hasAnyId()) {
+                    rejectionReporter.reportRejection(item.contentId(), ScrobbleRejectionReason.EMPTY_ID_BUNDLE, TrackingProvider.TRAKT)
+                    null
+                } else TraktScrobbleItem.Movie(item.title, item.year, ids)
+            }
+            is TrackingScrobbleItem.Episode -> {
+                val projection = animeSeasonProjectionResolver.resolveEpisodeProjection(
+                    work = work,
+                    sourceEpisode = SourceEpisodeCoordinate(sourceKitsuId, item.season, item.number),
+                    target = EpisodeProjectionTarget.TRAKT_SCROBBLE,
+                )
+                val coord = projection.scrobbleCoordinate
+                if (coord == null) {
+                    rejectionReporter.reportRejection(
+                        contentId = item.contentId(),
+                        reason = ScrobbleRejectionReason.ANIME_COORDINATE_UNRESOLVED,
+                        provider = TrackingProvider.TRAKT,
+                    )
+                    null
+                } else {
+                    val ids = work.providerIds.toTraktIds().let { base ->
+                        if (coord.provider == ProviderId.TVDB) base.copy(tvdb = coord.seriesId.toIntOrNull())
+                        else base
+                    }
+                    TraktScrobbleItem.Episode(
+                        showTitle = item.showTitle,
+                        showYear = item.showYear,
+                        showIds = ids,
+                        season = coord.season,
+                        number = coord.episode,
+                        episodeTitle = item.episodeTitle,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun ProviderIds.toTraktIds(): TraktIdsDto = TraktIdsDto(
+        imdb = imdb,
+        tmdb = tmdb?.toIntOrNull(),
+        tvdb = tvdb?.toIntOrNull(),
+        trakt = trakt?.toIntOrNull(),
+    )
 
     private fun TrackingScrobbleItem.contentId(): String = when (this) {
         is TrackingScrobbleItem.Movie -> contentId
@@ -184,4 +251,14 @@ class DefaultTrackingScrobbleService @Inject constructor(
     private suspend fun providerState(ownerProfileId: Int?): EffectiveTrackingProviderState =
         ownerProfileId?.let { trackingProviderStateService.currentState(it) }
             ?: trackingProviderStateService.currentState()
+
+    private companion object {
+        /** Sources that are exclusively anime-native; must be projected before scrobbling. */
+        val ANIME_NATIVE_SOURCES = setOf(
+            AnimeIdSource.KITSU,
+            AnimeIdSource.MAL,
+            AnimeIdSource.ANILIST,
+            AnimeIdSource.ANIDB,
+        )
+    }
 }
