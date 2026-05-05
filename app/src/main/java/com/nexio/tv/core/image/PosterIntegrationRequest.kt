@@ -71,7 +71,9 @@ data class PosterIntegrationRequest(
                     if (idx <= 0) null else part.substring(0, idx) to decode(part.substring(idx + 1))
                 }
                 .toMap()
-            val provider = params["provider"]?.let(IntegrationProvider::valueOf) ?: return null
+            val provider = params["provider"]
+                ?.let { runCatching { IntegrationProvider.valueOf(it) }.getOrNull() }
+                ?: return null
             val cacheKey = params["cacheKey"] ?: return null
             val apiKey = params["apiKey"] ?: return null
             val path = params["path"] ?: return null
