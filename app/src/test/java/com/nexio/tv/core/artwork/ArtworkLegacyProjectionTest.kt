@@ -30,6 +30,20 @@ class ArtworkLegacyProjectionTest {
     }
 
     @Test
+    fun `runtime asset display hints default to no rating overlay`() {
+        val ref = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("artwork-decision:thumbnail:imdb:tt0137523:S1E1"),
+            assetKey = ArtworkAssetKey("artwork-asset:tmdb:thumbnail:imdb:tt0137523:S1E1"),
+            imageType = ArtworkType.THUMBNAIL,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            sourceRole = ArtworkSourceRole.PRIMARY,
+            trace = ArtworkTrace.empty()
+        )
+
+        assertEquals(false, ref.displayHints.embedsRatingOverlay)
+    }
+
+    @Test
     fun `runtime asset projects to decision URI when asset key is missing`() {
         val ref = ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("artwork-decision:poster:preview:row1"),
@@ -55,5 +69,34 @@ class ArtworkLegacyProjectionTest {
         )
 
         assertEquals("nexio-placeholder://poster", ref.toLegacyArtworkString())
+    }
+
+    @Test
+    fun `placeholder display hints default to no rating overlay`() {
+        val ref = ArtworkDisplayRef.Placeholder(
+            placeholderType = PlaceholderType.THUMBNAIL,
+            imageType = ArtworkType.THUMBNAIL,
+            trace = ArtworkTrace.empty()
+        )
+
+        assertEquals(false, ref.displayHints.embedsRatingOverlay)
+    }
+
+    @Test
+    fun `display hints do not affect legacy projection`() {
+        val ref = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("artwork-decision:thumbnail:imdb:tt0137523:S1E1"),
+            assetKey = ArtworkAssetKey("artwork-asset:TOP_POSTERS:thumbnail:imdb:tt0137523:S1E1"),
+            imageType = ArtworkType.THUMBNAIL,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace.empty(),
+            displayHints = ArtworkDisplayHints(embedsRatingOverlay = true)
+        )
+
+        assertEquals(
+            "nexio-artwork://asset/artwork-asset:TOP_POSTERS:thumbnail:imdb:tt0137523:S1E1",
+            ref.toLegacyArtworkString()
+        )
     }
 }

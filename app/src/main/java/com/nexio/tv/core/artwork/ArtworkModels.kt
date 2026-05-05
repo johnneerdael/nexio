@@ -93,9 +93,14 @@ data class ArtworkBundle(
     val thumbnail: ArtworkDisplayRef? = null
 )
 
+data class ArtworkDisplayHints(
+    val embedsRatingOverlay: Boolean = false
+)
+
 sealed interface ArtworkDisplayRef {
     val imageType: ArtworkType
     val trace: ArtworkTrace
+    val displayHints: ArtworkDisplayHints
 
     data class RuntimeAsset(
         val decisionKey: ArtworkDecisionKey,
@@ -103,13 +108,15 @@ sealed interface ArtworkDisplayRef {
         override val imageType: ArtworkType,
         val selectedProvider: ArtworkProviderId?,
         val sourceRole: ArtworkSourceRole,
-        override val trace: ArtworkTrace
+        override val trace: ArtworkTrace,
+        override val displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
     ) : ArtworkDisplayRef
 
     data class Placeholder(
         val placeholderType: PlaceholderType,
         override val imageType: ArtworkType,
-        override val trace: ArtworkTrace
+        override val trace: ArtworkTrace,
+        override val displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
     ) : ArtworkDisplayRef
 }
 
