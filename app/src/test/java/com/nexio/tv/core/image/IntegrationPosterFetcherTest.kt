@@ -122,6 +122,29 @@ class IntegrationPosterFetcherTest {
     }
 
     @Test
+    fun `factory rejects providerless top posters thumbnail model without throwing`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val providerlessModel = "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&apiKey=key" +
+            "&idType=imdb" +
+            "&mediaId=tt0137523" +
+            "&season=1" +
+            "&episode=5" +
+            "&credentialHash=credential-hash"
+
+        assertNull(TopPostersThumbnailRequest.fromModel(providerlessModel))
+        assertNull(registry.newFetcher(Uri.parse(providerlessModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
     fun `factory rejects top posters thumbnail model with invalid poster provider without throwing`() {
         val factory = IntegrationPosterFetcher.Factory(
             rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),

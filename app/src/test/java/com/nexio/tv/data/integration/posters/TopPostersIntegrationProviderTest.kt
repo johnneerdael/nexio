@@ -113,6 +113,7 @@ class TopPostersIntegrationProviderTest {
             TopPostersThumbnailRequest.fromModel(
                 "integration-poster://fetch?" +
                     "type=topposters-thumbnail" +
+                    "&provider=TOP_POSTERS" +
                     "&apiKey=key" +
                     "&idType=imdb" +
                     "&mediaId=tt15940132" +
@@ -154,6 +155,39 @@ class TopPostersIntegrationProviderTest {
         assertFalse(request.toModel().contains("large"))
         assertFalse(request.toModel().contains("blur=true"))
         verify(exactly = 1) { transport.execute(forcedRemoteUrl) }
+    }
+
+    @Test
+    fun `thumbnail toModel serializes explicit top posters provider`() {
+        val model = TopPostersThumbnailRequest(
+            apiKey = "key",
+            idType = "imdb",
+            mediaId = "tt15940132",
+            season = 1,
+            episode = 5,
+            credentialHash = "credential-hash"
+        ).toModel()
+
+        assertTrue(model.contains("&provider=TOP_POSTERS"))
+    }
+
+    @Test
+    fun `fromModel rejects thumbnail model when provider is omitted`() {
+        assertNull(TopPostersThumbnailRequest.fromModel(thumbnailModel(provider = null)))
+    }
+
+    @Test
+    fun `fromModel keeps thumbnail cache policy defaults when serialized ttl and stale differ`() {
+        val request = requireNotNull(
+            TopPostersThumbnailRequest.fromModel(
+                thumbnailModel(provider = "TOP_POSTERS") +
+                    "&ttlMs=1" +
+                    "&staleAfterExpiryMs=2"
+            )
+        )
+
+        assertEquals(24L * 60L * 60L * 1000L, request.ttlMs)
+        assertEquals(7L * 24L * 60L * 60L * 1000L, request.staleAfterExpiryMs)
     }
 
     @Test
@@ -577,7 +611,7 @@ class TopPostersIntegrationProviderTest {
 
     private fun thumbnailModel(
         apiKey: String = "key",
-        provider: String? = null,
+        provider: String? = "TOP_POSTERS",
         idType: String = "imdb",
         mediaId: String = "tt15940132",
         season: String = "1",

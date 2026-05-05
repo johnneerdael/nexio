@@ -129,6 +129,8 @@ data class TopPostersThumbnailRequest(
     override fun toModel(): String = buildString {
         append("integration-poster://fetch?")
         append("type=topposters-thumbnail")
+        append("&provider=")
+        append(provider.name)
         append("&apiKey=")
         append(encode(apiKey))
         append("&idType=")
@@ -166,9 +168,7 @@ data class TopPostersThumbnailRequest(
             if (!model.startsWith("integration-poster://fetch?")) return null
             val params = parseQuery(model)
             if (params["type"] != "topposters-thumbnail") return null
-            params["provider"]?.let { provider ->
-                if (provider != IntegrationProvider.TOP_POSTERS.name) return null
-            }
+            if (params["provider"] != IntegrationProvider.TOP_POSTERS.name) return null
             val idType = params["idType"]?.takeIf { it.isNotBlank() } ?: return null
             val mediaId = params["mediaId"]?.takeIf { it.isNotBlank() } ?: return null
             val season = params["season"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
@@ -181,8 +181,6 @@ data class TopPostersThumbnailRequest(
                 season = season,
                 episode = episode,
                 credentialHash = credentialHash,
-                ttlMs = params["ttlMs"]?.toLongOrNull() ?: DEFAULT_TTL_MS,
-                staleAfterExpiryMs = params["staleAfterExpiryMs"]?.toLongOrNull() ?: DEFAULT_STALE_AFTER_EXPIRY_MS,
                 mimeType = params["mimeType"] ?: "image/jpeg"
             )
         }.getOrNull()
