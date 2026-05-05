@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.posters
 
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
@@ -24,7 +25,7 @@ class PremiumPosterStableContentIdTest {
             )
         )
 
-        assertEquals("tt0137523", route.premiumPosterStableContentId())
+        assertEquals("imdb:tt0137523", route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -36,7 +37,7 @@ class PremiumPosterStableContentIdTest {
             targetIds = mapOf(MetadataPrimaryProvider.IMDB to "imdb:tt0137523")
         )
 
-        assertEquals("tt0137523", route.premiumPosterStableContentId())
+        assertEquals("imdb:tt0137523", route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -48,7 +49,7 @@ class PremiumPosterStableContentIdTest {
             targetIds = mapOf(MetadataPrimaryProvider.TMDB to "550")
         )
 
-        assertEquals("tmdb:550", route.premiumPosterStableContentId())
+        assertEquals("tmdb:movie-550", route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -60,7 +61,7 @@ class PremiumPosterStableContentIdTest {
             targetIds = mapOf(MetadataPrimaryProvider.IMDB to "imdb:not-a-title-id")
         )
 
-        assertNull(route.premiumPosterStableContentId())
+        assertNull(route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -72,7 +73,7 @@ class PremiumPosterStableContentIdTest {
             targetIds = mapOf(MetadataPrimaryProvider.TMDB to "spotify:abc123")
         )
 
-        assertNull(route.premiumPosterStableContentId())
+        assertNull(route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -84,7 +85,7 @@ class PremiumPosterStableContentIdTest {
             targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:series-121361")
         )
 
-        assertNull(route.premiumPosterStableContentId())
+        assertNull(route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -99,7 +100,7 @@ class PremiumPosterStableContentIdTest {
             )
         )
 
-        assertEquals("tmdb:550", route.premiumPosterStableContentId())
+        assertEquals("tmdb:movie-550", route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -115,11 +116,11 @@ class PremiumPosterStableContentIdTest {
             )
         )
 
-        assertEquals("tvdb:121361", route.premiumPosterStableContentId())
+        assertEquals("tvdb:series-121361", route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
-    fun `kitsu only anime route does not resolve a premium poster stable id`() {
+    fun `kitsu only anime route resolves for top posters but not rpdb`() {
         val route = route(
             provider = MetadataPrimaryProvider.KITSU,
             mediaKind = MetadataMediaKind.ANIME,
@@ -127,7 +128,8 @@ class PremiumPosterStableContentIdTest {
             targetIds = mapOf(MetadataPrimaryProvider.KITSU to "kitsu:7442")
         )
 
-        assertNull(route.premiumPosterStableContentId())
+        assertEquals("kitsu:7442", route.premiumPosterStableContentId(IntegrationProvider.TOP_POSTERS))
+        assertNull(route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
@@ -142,7 +144,8 @@ class PremiumPosterStableContentIdTest {
             )
         )
 
-        assertEquals("tt0388629", route.premiumPosterStableContentId())
+        assertEquals("kitsu:7442", route.premiumPosterStableContentId(IntegrationProvider.TOP_POSTERS))
+        assertEquals("imdb:tt0388629", route.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     private fun route(

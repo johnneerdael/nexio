@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.posters
 
 import com.nexio.tv.core.integration.PosterApiShapes
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.FieldOwner
 import com.nexio.tv.core.metadata.router.FieldValue
 import com.nexio.tv.core.metadata.router.MetadataCandidate
@@ -44,7 +45,7 @@ class RpdbMetadataProviderAdapter @Inject constructor(
     ): ProviderStepResult {
         val activeProvider = posterResolver.getActiveProvider()
             ?.takeIf { it.provider == com.nexio.tv.domain.model.PosterRatingsProvider.RPDB }
-        val stableContentId = route.premiumPosterStableContentId()
+        val stableContentId = route.premiumPosterStableContentId(IntegrationProvider.RPDB)
 
         val posterUrl = if (activeProvider != null && stableContentId != null) {
             posterResolver.resolvePosterUrl(
