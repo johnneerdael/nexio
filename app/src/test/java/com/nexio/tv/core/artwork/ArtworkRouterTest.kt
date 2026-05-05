@@ -103,6 +103,34 @@ class ArtworkRouterTest {
     }
 
     @Test
+    fun `selected rpdb poster without api key rejects with configuration reason and primary wins`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20
+                )
+            ),
+            policy = policy(
+                ArtworkProviderSettings(
+                    selection = ArtworkProviderSelectionSettings(
+                        posterProvider = ArtworkProviderChoiceKey.RPDB
+                    )
+                )
+            )
+        )
+
+        assertEquals("TMDB", decision.selectedCandidate.provider?.key)
+        assertEquals("rpdb_not_configured", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
     fun `unsupported premium falls back to placeholder when no primary exists`() {
         val decision = router.select(
             candidates = listOf(
@@ -252,7 +280,87 @@ class ArtworkRouterTest {
         )
 
         assertEquals("TMDB", decision.selectedCandidate.provider?.key)
-        assertEquals("inactive_premium_artwork_provider_for_thumbnail", decision.rejectedCandidates.single().reason)
+        assertEquals("topposters_entitlement_missing", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
+    fun `top posters thumbnail selected with inactive entitlement rejects and primary wins`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    imageType = ArtworkType.THUMBNAIL
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    imageType = ArtworkType.THUMBNAIL
+                )
+            ),
+            policy = policy(
+                ArtworkProviderSettings(
+                    topPostersApiKey = "top-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                    ),
+                    topPostersEntitlement = TopPostersEntitlementSnapshot(
+                        valid = true,
+                        isActive = false,
+                        tier = 1,
+                        tierName = "Premium",
+                        episodeThumbnails = true,
+                        verifiedAtMs = 1_000L,
+                        expiresAtMs = System.currentTimeMillis() + 86_400_000L
+                    )
+                )
+            )
+        )
+
+        assertEquals("TMDB", decision.selectedCandidate.provider?.key)
+        assertEquals("topposters_entitlement_inactive", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
+    fun `top posters thumbnail selected with expired entitlement rejects and primary wins`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    imageType = ArtworkType.THUMBNAIL
+                ),
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                    role = ArtworkSourceRole.PRIMARY,
+                    priority = 20,
+                    imageType = ArtworkType.THUMBNAIL
+                )
+            ),
+            policy = policy(
+                ArtworkProviderSettings(
+                    topPostersApiKey = "top-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                    ),
+                    topPostersEntitlement = TopPostersEntitlementSnapshot(
+                        valid = true,
+                        isActive = true,
+                        tier = 1,
+                        tierName = "Premium",
+                        episodeThumbnails = true,
+                        verifiedAtMs = 1_000L,
+                        expiresAtMs = System.currentTimeMillis() - 1_000L
+                    )
+                )
+            )
+        )
+
+        assertEquals("TMDB", decision.selectedCandidate.provider?.key)
+        assertEquals("topposters_entitlement_inactive", decision.rejectedCandidates.single().reason)
     }
 
     @Test

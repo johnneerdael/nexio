@@ -24,19 +24,20 @@ class ArtworkRouter(
     ): ArtworkSelectionResult {
         require(candidates.isNotEmpty()) { "ArtworkRouter requires at least one candidate" }
 
+        val context = SelectionContext.from(policy, registry)
         val rejectedBeforeSelection = candidates
-            .mapNotNull { candidate -> candidate.unsupportedPremiumRejection(policy) }
+            .mapNotNull { candidate -> candidate.unsupportedPremiumRejection(context) }
 
         val selected = candidates
-            .filterNot { it.sourceRole == ArtworkSourceRole.PREMIUM && !it.isActiveSupportedPremium(policy) }
-            .minWithOrNull(candidateOrdering(policy))
+            .filterNot { it.sourceRole == ArtworkSourceRole.PREMIUM && !it.isActiveSupportedPremium(context) }
+            .minWithOrNull(candidateOrdering(context))
             ?: throw IllegalArgumentException("ArtworkRouter has no selectable candidate")
 
-        val selectedRank = selected.routingRank(policy)
+        val selectedRank = selected.routingRank(context)
         val rejectedAfterSelection = candidates
             .filterNot { it === selected }
             .filterNot { candidate ->
-                candidate.sourceRole == ArtworkSourceRole.PREMIUM && !candidate.isActiveSupportedPremium(policy)
+                candidate.sourceRole == ArtworkSourceRole.PREMIUM && !candidate.isActiveSupportedPremium(context)
             }
             .map { candidate ->
                 candidate.rejected(candidate.rejectionReasonForSelected(selectedRank))
@@ -48,17 +49,17 @@ class ArtworkRouter(
         )
     }
 
-    private fun candidateOrdering(policy: ArtworkRoutingPolicy): Comparator<ArtworkCandidate> =
-        compareBy<ArtworkCandidate> { it.routingRank(policy).precedence }
+    private fun candidateOrdering(context: SelectionContext): Comparator<ArtworkCandidate> =
+        compareBy<ArtworkCandidate> { it.routingRank(context).precedence }
             .thenBy { it.priority }
             .thenBy { it.provider?.key.orEmpty() }
             .thenBy { it.sourceRole.name }
             .thenBy { it.canonicalContentId.orEmpty() }
 
-    private fun ArtworkCandidate.routingRank(policy: ArtworkRoutingPolicy): RoutingRank =
+    private fun ArtworkCandidate.routingRank(context: SelectionContext): RoutingRank =
         when {
             sourceRole == ArtworkSourceRole.PREMIUM &&
-                isActiveSupportedPremium(policy) -> RoutingRank.PREMIUM
+                isActiveSupportedPremium(context) -> RoutingRank.PREMIUM
             sourceRole == ArtworkSourceRole.PRIMARY -> RoutingRank.PRIMARY
             sourceRole == ArtworkSourceRole.CURRENT_PREVIEW -> RoutingRank.CURRENT_PREVIEW
             sourceRole == ArtworkSourceRole.OTHER_PREVIEW ||
@@ -70,21 +71,21 @@ class ArtworkRouter(
             else -> RoutingRank.FALLBACK
         }
 
-    private fun ArtworkCandidate.isActiveSupportedPremium(policy: ArtworkRoutingPolicy): Boolean {
+    private fun ArtworkCandidate.isActiveSupportedPremium(context: SelectionContext): Boolean {
         val candidateProvider = provider ?: return false
-        return candidateProvider == policy.selectedProviderFor(imageType) &&
-            candidateProvider.evaluatePremiumCandidate(this, policy).supported
+        return candidateProvider == context.selectedProviderFor(imageType) &&
+            candidateProvider.evaluatePremiumCandidate(this, context.policy).supported
     }
 
-    private fun ArtworkCandidate.unsupportedPremiumRejection(policy: ArtworkRoutingPolicy): RejectedArtworkCandidate? {
+    private fun ArtworkCandidate.unsupportedPremiumRejection(context: SelectionContext): RejectedArtworkCandidate? {
         if (sourceRole != ArtworkSourceRole.PREMIUM) return null
 
         val candidateProvider = provider
-        if (candidateProvider == null || candidateProvider != policy.selectedProviderFor(imageType)) {
+        if (candidateProvider == null || candidateProvider != context.selectedProviderFor(imageType)) {
             return rejected("inactive_premium_artwork_provider_for_${imageType.name.lowercase()}")
         }
 
-        val capability = candidateProvider.evaluatePremiumCandidate(this, policy)
+        val capability = candidateProvider.evaluatePremiumCandidate(this, context.policy)
         if (capability.supported) return null
         return rejected(capability.reason ?: "unsupported_premium_artwork_provider")
     }
@@ -100,13 +101,6 @@ class ArtworkRouter(
             mediaKind = candidate.mediaKind,
             settings = policy.settings
         )
-
-    private fun ArtworkRoutingPolicy.selectedProviderFor(imageType: ArtworkType): ArtworkProviderId? {
-        val choice = settings.selection.providerFor(imageType.toSettingsKey())
-        if (choice == ArtworkProviderChoiceKey.DEFAULT) return null
-        if (choice !in registry.availableChoices(imageType, settings)) return null
-        return registry.providerIdFor(choice)
-    }
 
     private fun ArtworkCandidate.rejectionReasonForSelected(selectedRank: RoutingRank): String =
         when (selectedRank) {
@@ -132,5 +126,36 @@ class ArtworkRouter(
         OTHER_PREVIEW(3),
         FALLBACK(4),
         PLACEHOLDER(5)
+    }
+
+    private data class SelectionContext(
+        val policy: ArtworkRoutingPolicy,
+        val selectedProviders: Map<ArtworkType, ArtworkProviderId?>
+    ) {
+        fun selectedProviderFor(imageType: ArtworkType): ArtworkProviderId? =
+            selectedProviders[imageType]
+
+        companion object {
+            fun from(
+                policy: ArtworkRoutingPolicy,
+                registry: ArtworkProviderRegistry
+            ): SelectionContext =
+                SelectionContext(
+                    policy = policy,
+                    selectedProviders = listOf(
+                        ArtworkType.POSTER,
+                        ArtworkType.BACKDROP,
+                        ArtworkType.LOGO,
+                        ArtworkType.THUMBNAIL
+                    ).associateWith { type ->
+                        val choice = policy.settings.selection.providerFor(type.toSettingsKey())
+                        if (choice == ArtworkProviderChoiceKey.DEFAULT) {
+                            null
+                        } else {
+                            registry.providerIdFor(choice)
+                        }
+                    }
+                )
+        }
     }
 }
