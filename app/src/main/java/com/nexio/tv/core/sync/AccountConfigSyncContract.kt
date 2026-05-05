@@ -332,9 +332,15 @@ internal suspend fun applyAccountConfigSyncSettings(
     simklSettingsDataStore: SimklSettingsDataStore,
     playerSettingsDataStore: PlayerSettingsDataStore
 ) {
-    layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
-    layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
-    layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
+    // Null catalog sections / null inner fields = absent in payload, leave target unchanged.
+    // Empty list ([]) = present and intentionally empty, apply as cleared.
+    applyCatalogsSection(
+        payload = settings,
+        layoutPreferenceDataStore = layoutPreferenceDataStore,
+        traktSettingsDataStore = traktSettingsDataStore,
+        simklSettingsDataStore = simklSettingsDataStore,
+        mdbListSettingsDataStore = mdbListSettingsDataStore
+    )
 
     tmdbSettingsDataStore.setEnabled(true)
     tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
@@ -355,11 +361,6 @@ internal suspend fun applyAccountConfigSyncSettings(
     mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
     mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
     mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
-    mdbListSettingsDataStore.setCatalogPreferences(
-        hiddenPersonalListKeys = settings.catalogs.mdblist.hiddenPersonalListKeys.toSet(),
-        selectedTopListKeys = settings.catalogs.mdblist.selectedTopListKeys.toSet(),
-        catalogOrder = settings.catalogs.mdblist.catalogOrder
-    )
 
     omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
 
@@ -382,16 +383,6 @@ internal suspend fun applyAccountConfigSyncSettings(
     posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
     posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
 
-    traktSettingsDataStore.setCatalogPreferences(
-        enabledCatalogs = settings.catalogs.trakt.catalogEnabledSet.toSet(),
-        catalogOrder = settings.catalogs.trakt.catalogOrder,
-        selectedPopularListKeys = settings.catalogs.trakt.selectedPopularListKeys.toSet()
-    )
-    simklSettingsDataStore.setCatalogPreferences(
-        enabledCatalogs = settings.catalogs.simkl.catalogEnabledSet.toSet(),
-        catalogOrder = settings.catalogs.simkl.catalogOrder
-    )
-
     playerSettingsDataStore.setTrackingProvider(
         runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
             .getOrDefault(TrackingProvider.TRAKT)
@@ -405,4 +396,75 @@ internal suspend fun applyAccountConfigSyncSettings(
         descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
         badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
     )
+}
+
+/**
+ * Apply the catalog-section subtree of an [AccountConfigSyncPayload] to the
+ * relevant on-device DataStores. Presence semantics:
+ *
+ *  - Null sub-section (e.g. `payload.catalogs.home == null`) = absent in
+ *    payload, leave target state unchanged.
+ *  - Null inner field (e.g. `home.homeCatalogOrderKeys == null`) = absent in
+ *    payload, leave target state unchanged.
+ *  - Empty list (e.g. `home.homeCatalogOrderKeys == emptyList()`) = present
+ *    and intentionally cleared, apply as a write of the empty value.
+ *
+ * Multi-field setters (`Trakt.setCatalogPreferences`,
+ * `Simkl.setCatalogPreferences`, `MDBList.setCatalogPreferences`) are atomic;
+ * we only invoke them when every inner field that the setter consumes is
+ * present (non-null). If any of the bundled inner fields is null, the whole
+ * write is skipped — null-vs-empty fidelity is preserved per call rather than
+ * per field.
+ */
+internal suspend fun applyCatalogsSection(
+    payload: AccountConfigSyncPayload,
+    layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    traktSettingsDataStore: TraktSettingsDataStore,
+    simklSettingsDataStore: SimklSettingsDataStore,
+    mdbListSettingsDataStore: MDBListSettingsDataStore
+) {
+    val catalogs = payload.catalogs
+
+    catalogs.home?.let { home ->
+        home.heroCatalogKeys?.let { layoutPreferenceDataStore.setHeroCatalogKeys(it) }
+        home.homeCatalogOrderKeys?.let { layoutPreferenceDataStore.setHomeCatalogOrderKeys(it) }
+        home.disabledHomeCatalogKeys?.let { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(it) }
+    }
+
+    catalogs.trakt?.let { trakt ->
+        val enabled = trakt.catalogEnabledSet
+        val order = trakt.catalogOrder
+        val popular = trakt.selectedPopularListKeys
+        if (enabled != null && order != null && popular != null) {
+            traktSettingsDataStore.setCatalogPreferences(
+                enabledCatalogs = enabled.toSet(),
+                catalogOrder = order,
+                selectedPopularListKeys = popular.toSet()
+            )
+        }
+    }
+
+    catalogs.simkl?.let { simkl ->
+        val enabled = simkl.catalogEnabledSet
+        val order = simkl.catalogOrder
+        if (enabled != null && order != null) {
+            simklSettingsDataStore.setCatalogPreferences(
+                enabledCatalogs = enabled.toSet(),
+                catalogOrder = order
+            )
+        }
+    }
+
+    catalogs.mdblist?.let { mdblist ->
+        val hidden = mdblist.hiddenPersonalListKeys
+        val selected = mdblist.selectedTopListKeys
+        val order = mdblist.catalogOrder
+        if (hidden != null && selected != null && order != null) {
+            mdbListSettingsDataStore.setCatalogPreferences(
+                hiddenPersonalListKeys = hidden.toSet(),
+                selectedTopListKeys = selected.toSet(),
+                catalogOrder = order
+            )
+        }
+    }
 }

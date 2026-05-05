@@ -3,6 +3,10 @@ package com.nexio.tv.core.auth
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.SimklCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
@@ -49,7 +53,30 @@ fun stockAccountConfigSyncPayload(): AccountConfigSyncPayload =
                 lastFailure = ""
             )
         ),
-        catalogs = CatalogSyncSettings(),
+        // Stock/reset payload uses present-but-empty catalog sections so that
+        // reset-to-defaults intentionally clears local catalog state (rather
+        // than leaving it untouched, which is the meaning of `null`).
+        catalogs = CatalogSyncSettings(
+            home = HomeCatalogSyncSettings(
+                heroCatalogKeys = emptyList(),
+                homeCatalogOrderKeys = emptyList(),
+                disabledHomeCatalogKeys = emptyList()
+            ),
+            trakt = TraktCatalogSyncSettings(
+                catalogEnabledSet = emptyList(),
+                catalogOrder = emptyList(),
+                selectedPopularListKeys = emptyList()
+            ),
+            simkl = SimklCatalogSyncSettings(
+                catalogEnabledSet = emptyList(),
+                catalogOrder = emptyList()
+            ),
+            mdblist = MDBListCatalogSyncSettings(
+                hiddenPersonalListKeys = emptyList(),
+                selectedTopListKeys = emptyList(),
+                catalogOrder = emptyList()
+            )
+        ),
         playback = PlaybackConfigSyncSettings(
             streamSelection = StreamSelectionConfigSyncSettings(trackingProvider = "TRAKT")
         ),

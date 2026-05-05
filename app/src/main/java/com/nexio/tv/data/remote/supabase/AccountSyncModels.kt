@@ -148,39 +148,46 @@ data class CustomFormatterSyncTemplate(
 
 @Serializable
 data class CatalogSyncSettings(
-    val home: HomeCatalogSyncSettings = HomeCatalogSyncSettings(),
-    val trakt: TraktCatalogSyncSettings = TraktCatalogSyncSettings(),
-    val simkl: SimklCatalogSyncSettings = SimklCatalogSyncSettings(),
-    val mdblist: MDBListCatalogSyncSettings = MDBListCatalogSyncSettings()
+    val home: HomeCatalogSyncSettings? = null,
+    val trakt: TraktCatalogSyncSettings? = null,
+    val simkl: SimklCatalogSyncSettings? = null,
+    val mdblist: MDBListCatalogSyncSettings? = null
 )
 
 @Serializable
 data class HomeCatalogSyncSettings(
-    val heroCatalogKeys: List<String> = emptyList(),
-    val homeCatalogOrderKeys: List<String> = emptyList(),
-    val disabledHomeCatalogKeys: List<String> = emptyList()
+    val heroCatalogKeys: List<String>? = null,
+    val homeCatalogOrderKeys: List<String>? = null,
+    val disabledHomeCatalogKeys: List<String>? = null
 )
 
 @Serializable
 data class TraktCatalogSyncSettings(
-    val catalogEnabledSet: List<String> = emptyList(),
-    val catalogOrder: List<String> = emptyList(),
-    val selectedPopularListKeys: List<String> = emptyList(),
+    val catalogEnabledSet: List<String>? = null,
+    val catalogOrder: List<String>? = null,
+    val selectedPopularListKeys: List<String>? = null,
+    // pinnedListOptions is a typed-object list (not an ORDER/ENABLED key list)
+    // and is only mirrored into in-memory remote-state tracking, not applied as
+    // a clobbering write. Kept non-nullable for the nullability migration.
     val pinnedListOptions: List<TraktPinnedListOptionSync> = emptyList()
 )
 
 @Serializable
 data class SimklCatalogSyncSettings(
-    val catalogEnabledSet: List<String> = emptyList(),
-    val catalogOrder: List<String> = emptyList()
+    val catalogEnabledSet: List<String>? = null,
+    val catalogOrder: List<String>? = null
 )
 
 @Serializable
 data class MDBListCatalogSyncSettings(
-    val hiddenPersonalListKeys: List<String> = emptyList(),
-    val selectedTopListKeys: List<String> = emptyList(),
+    val hiddenPersonalListKeys: List<String>? = null,
+    val selectedTopListKeys: List<String>? = null,
+    // pinnedTopListOptions is a typed-object list (not an ORDER/ENABLED key
+    // list) and is only mirrored into in-memory remote-state tracking, not
+    // applied as a clobbering write. Kept non-nullable for the nullability
+    // migration.
     val pinnedTopListOptions: List<MDBListPinnedListOptionSync> = emptyList(),
-    val catalogOrder: List<String> = emptyList()
+    val catalogOrder: List<String>? = null
 )
 
 @Serializable
