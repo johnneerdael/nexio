@@ -118,6 +118,81 @@ class ArtworkExternalIdSelectorTest {
     }
 
     @Test
+    fun `selector trims ids and ignores blanks`() {
+        val ids = selector.selectIds(
+            provider = IntegrationProvider.TOP_POSTERS,
+            imageType = ArtworkType.POSTER,
+            mediaKind = MetadataMediaKind.MOVIE,
+            providerIds = ProviderIds(
+                tvdb = "  ",
+                tmdb = " 550 ",
+                imdb = " tt0137523 ",
+                trakt = "\n123\n"
+            )
+        )
+
+        assertEquals(
+            listOf(
+                ArtworkProviderExternalId("tmdb", "movie-550"),
+                ArtworkProviderExternalId("imdb", "tt0137523"),
+                ArtworkProviderExternalId("trakt", "123")
+            ),
+            ids
+        )
+    }
+
+    @Test
+    fun `rpdb thumbnail returns empty even with valid episode context`() {
+        val ids = selector.selectIds(
+            provider = IntegrationProvider.RPDB,
+            imageType = ArtworkType.THUMBNAIL,
+            mediaKind = MetadataMediaKind.SERIES,
+            providerIds = ProviderIds(imdb = "tt0944947", tmdb = "1399", tvdb = "121361"),
+            episodeContext = EpisodeArtworkContext(season = 1, episode = 1)
+        )
+
+        assertTrue(ids.isEmpty())
+    }
+
+    @Test
+    fun `selector does not double prefix tmdb or tvdb ids`() {
+        val topPostersMovie = selector.selectIds(
+            provider = IntegrationProvider.TOP_POSTERS,
+            imageType = ArtworkType.POSTER,
+            mediaKind = MetadataMediaKind.MOVIE,
+            providerIds = ProviderIds(tmdb = "movie-550")
+        )
+        val rpdbSeries = selector.selectIds(
+            provider = IntegrationProvider.RPDB,
+            imageType = ArtworkType.POSTER,
+            mediaKind = MetadataMediaKind.SERIES,
+            providerIds = ProviderIds(tvdb = "121361")
+        )
+
+        assertEquals(listOf(ArtworkProviderExternalId("tmdb", "movie-550")), topPostersMovie)
+        assertEquals(listOf(ArtworkProviderExternalId("tvdb", "series-121361")), rpdbSeries)
+    }
+
+    @Test
+    fun `unsupported provider or image combo returns empty`() {
+        val unsupportedProvider = selector.selectIds(
+            provider = IntegrationProvider.TMDB,
+            imageType = ArtworkType.POSTER,
+            mediaKind = MetadataMediaKind.MOVIE,
+            providerIds = ProviderIds(tmdb = "550")
+        )
+        val unsupportedImageType = selector.selectIds(
+            provider = IntegrationProvider.TOP_POSTERS,
+            imageType = ArtworkType.BACKDROP,
+            mediaKind = MetadataMediaKind.MOVIE,
+            providerIds = ProviderIds(tmdb = "550")
+        )
+
+        assertTrue(unsupportedProvider.isEmpty())
+        assertTrue(unsupportedImageType.isEmpty())
+    }
+
+    @Test
     fun `rpdb formats tmdb and tvdb with required media prefixes and ignores anime only ids`() {
         val ids = selector.selectIds(
             provider = IntegrationProvider.RPDB,
