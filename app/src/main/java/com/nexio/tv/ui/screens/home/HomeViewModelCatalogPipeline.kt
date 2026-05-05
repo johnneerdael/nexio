@@ -2409,18 +2409,20 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             .toMap(linkedMapOf())
 
         val syntheticKitsuGroups = currentPreferencePersistedKitsuSyntheticGroups.toSyntheticCatalogOrderGroups()
-        val persistedSyntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups + syntheticKitsuGroups + syntheticTmdbGroups
-        val persistedSyntheticOrderKeys = persistedSyntheticGroups.mapTo(mutableSetOf()) { it.orderKey }
-        val syntheticGroups = persistedSyntheticGroups + liveSyntheticGroups.filterNot { it.orderKey in persistedSyntheticOrderKeys }
-        val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
-            syntheticGroups.forEach { group -> put(group.orderKey, group.rows) }
-        }
-        val existingRowsByOrderKey = linkedMapOf<String, CatalogRow>().apply {
-            putAll(rawRowsByKey)
-            syntheticGroups.forEach { group ->
-                group.rows.firstOrNull()?.let { row -> put(group.orderKey, row) }
-            }
-        }
+        val persistedSyntheticGroupsByKey: Map<String, List<CatalogRow>> = (
+            syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups +
+                syntheticKitsuGroups + syntheticTmdbGroups
+        ).associate { it.orderKey to it.rows }
+        val liveSyntheticGroupsByKey: Map<String, List<CatalogRow>> =
+            liveSyntheticGroups.associate { it.orderKey to it.rows }
+        val syntheticContent = buildSyntheticGroupContentMaps(
+            persistedSyntheticGroupsByKey = persistedSyntheticGroupsByKey,
+            liveSyntheticGroupsByKey = liveSyntheticGroupsByKey,
+            rawRowsByOrderKey = rawRowsByKey,
+            homeCatalogGlobalKey = ::homeCatalogGlobalKey,
+        )
+        val syntheticRowsByKey = syntheticContent.syntheticRowsByKey
+        val existingRowsByOrderKey = syntheticContent.existingRowsByOrderKey
         val pendingRowsByKey = buildConfiguredCatalogPlan(
             addons = addonsCache,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
@@ -2442,13 +2444,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 descriptor.orderKey in rawRowsByKey || descriptor.orderKey in syntheticRowsByKey
             }
             .associate { descriptor -> descriptor.orderKey to descriptor.toLoadingCatalogRow() }
-        val rowOrderKeyByGlobalKey = linkedMapOf<String, String>().apply {
-            rawRowsByKey.keys.forEach { globalKey -> put(globalKey, globalKey) }
-            syntheticGroups.forEach { group ->
-                group.rows.forEach { row ->
-                    put(homeCatalogGlobalKey(row), group.orderKey)
-                }
-            }
+        val rowOrderKeyByGlobalKey: Map<String, String> = buildMap {
+            putAll(syntheticContent.rowOrderKeyByGlobalKey)
             pendingRowsByKey.forEach { (orderKey, row) ->
                 put(homeCatalogGlobalKey(row), orderKey)
             }
