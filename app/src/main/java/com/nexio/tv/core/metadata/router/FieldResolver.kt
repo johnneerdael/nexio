@@ -225,7 +225,7 @@ class FieldResolver @Inject constructor(
             val resolverReplacedRailPreview = rejectedByField[field]
                 ?.any { it["reason"] == "dedicated resolver field replaces rail preview" } == true
             val premiumArtworkOverride = field == ResolvedField.POSTER && rejectedByField[field]
-                ?.any { it["reason"] == "premium artwork provider has precedence" } == true
+                ?.any { it["reason"] == "premium_artwork_provider_precedence" } == true
             val rule = if (premiumArtworkOverride) {
                 "premium artwork may override poster only"
             } else if (replacedPreview != null) {
@@ -460,7 +460,7 @@ class FieldResolver @Inject constructor(
         fieldValue: FieldValue
     ): String {
         if (canReplacePosterWithPremiumArtwork(field, candidate, fieldValue)) {
-            return "premium artwork provider has precedence"
+            return "premium_artwork_provider_precedence"
         }
         return if (existingSourceRole == SourceRole.RAIL_PREVIEW) {
             "dedicated resolver field replaces rail preview"

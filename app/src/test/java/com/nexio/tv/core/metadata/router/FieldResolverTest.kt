@@ -155,7 +155,7 @@ class FieldResolverTest {
         assertEquals(primaryPoster, request?.fallbackUrl)
         assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
         assertEquals(
-            "premium artwork provider has precedence",
+            "premium_artwork_provider_precedence",
             document.rejectedCandidatesByField.getValue(ResolvedField.POSTER).single()["reason"]
         )
         assertTrue(document.poster!!.startsWith("integration-poster://fetch?"))
@@ -224,7 +224,7 @@ class FieldResolverTest {
                     "provider" to "TMDB",
                     "sourceProvider" to "TMDB",
                     "sourceRole" to "PRIMARY",
-                    "reason" to "premium artwork provider has precedence"
+                    "reason" to "premium_artwork_provider_precedence"
                 )
             ),
             document.rejectedCandidatesByField.getValue(ResolvedField.POSTER)

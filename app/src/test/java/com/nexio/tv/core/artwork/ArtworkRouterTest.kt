@@ -7,6 +7,7 @@ import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ArtworkRouterTest {
@@ -34,7 +35,7 @@ class ArtworkRouterTest {
         )
 
         assertEquals("TOP_POSTERS", decision.selectedCandidate.provider?.key)
-        assertEquals("premium artwork provider has precedence", decision.rejectedCandidates.single().reason)
+        assertEquals("premium_artwork_provider_precedence", decision.rejectedCandidates.single().reason)
     }
 
     @Test
@@ -104,7 +105,7 @@ class ArtworkRouterTest {
         )
 
         assertEquals("TMDB", decision.selectedCandidate.provider?.key)
-        assertEquals("inactive premium artwork provider", decision.rejectedCandidates.single().reason)
+        assertEquals("inactive_premium_artwork_provider", decision.rejectedCandidates.single().reason)
     }
 
     @Test
@@ -225,7 +226,126 @@ class ArtworkRouterTest {
         )
 
         assertEquals("TOP_POSTERS", decision.selectedCandidate.provider?.key)
-        assertEquals("premium artwork provider has precedence", decision.rejectedCandidates.single().reason)
+        assertEquals("premium_artwork_provider_precedence", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
+    fun `router rejection reasons are stable codes without spaces`() {
+        val decisions = listOf(
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                        role = ArtworkSourceRole.PRIMARY,
+                        priority = 20
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                        role = ArtworkSourceRole.PREMIUM,
+                        priority = 10
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(
+                    activePremiumProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    artworkProviderSettings = topPostersPosterSettings()
+                )
+            ),
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                        role = ArtworkSourceRole.PRIMARY,
+                        priority = 10
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.AddonPreview,
+                        role = ArtworkSourceRole.CURRENT_PREVIEW,
+                        priority = 20
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(activePremiumProvider = null)
+            ),
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.AddonPreview,
+                        role = ArtworkSourceRole.CURRENT_PREVIEW,
+                        priority = 10
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.RailPreview,
+                        role = ArtworkSourceRole.OTHER_PREVIEW,
+                        priority = 20
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(activePremiumProvider = null)
+            ),
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.RailPreview,
+                        role = ArtworkSourceRole.OTHER_PREVIEW,
+                        priority = 10
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                        role = ArtworkSourceRole.FALLBACK,
+                        priority = 20
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(activePremiumProvider = null)
+            ),
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                        role = ArtworkSourceRole.FALLBACK,
+                        priority = 10
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.Placeholder,
+                        role = ArtworkSourceRole.PLACEHOLDER,
+                        priority = 20
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(activePremiumProvider = null)
+            ),
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.Placeholder,
+                        role = ArtworkSourceRole.PLACEHOLDER,
+                        priority = 10
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.Placeholder,
+                        role = ArtworkSourceRole.PLACEHOLDER,
+                        priority = 20
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(activePremiumProvider = null)
+            ),
+            router.select(
+                candidates = listOf(
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+                        role = ArtworkSourceRole.PREMIUM,
+                        priority = 10
+                    ),
+                    candidate(
+                        provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+                        role = ArtworkSourceRole.PRIMARY,
+                        priority = 20
+                    )
+                ),
+                policy = ArtworkRoutingPolicy(activePremiumProvider = null)
+            )
+        )
+        val reasons = decisions.flatMap { decision ->
+            decision.rejectedCandidates.map { rejected -> rejected.reason }
+        }
+
+        assertFalse(reasons.any { reason -> reason.any(Char::isWhitespace) })
     }
 
     private fun candidate(
