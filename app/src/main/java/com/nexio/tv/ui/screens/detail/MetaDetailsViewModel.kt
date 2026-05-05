@@ -2004,6 +2004,7 @@ class MetaDetailsViewModel @Inject constructor(
                         video.localReleaseInfo
                     },
                     thumbnail = ep?.thumbnail ?: video.thumbnail,
+                    thumbnailArtwork = ep?.thumbnailArtwork ?: video.thumbnailArtwork,
                     runtime = ep?.runtimeMinutes ?: video.runtime,
                     tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
                 )
@@ -3553,7 +3554,8 @@ internal fun buildKitsuEpisodeVideos(
                 episode = episodeNumber,
                 overview = episode.overview,
                 runtime = episode.runtimeMinutes,
-                tvdbEpisodeOrder = episode.tvdbEpisodeOrder
+                tvdbEpisodeOrder = episode.tvdbEpisodeOrder,
+                thumbnailArtwork = episode.thumbnailArtwork
             )
         }
 }

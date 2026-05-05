@@ -99,6 +99,7 @@ import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TvdbValidationStatus
@@ -730,8 +731,10 @@ class AccountSettingsSyncService @Inject constructor(
                     enabled = wyzieSettingsDataStore.settings.first().enabled,
                 ),
                 posterRatings = PosterRatingsSyncSettings(
-                    rpdbEnabled = posterRatings.rpdbEnabled,
-                    topPostersEnabled = posterRatings.topPostersEnabled
+                    rpdbEnabled = posterRatings.selection.posterProvider ==
+                        ArtworkProviderChoiceKey.RPDB,
+                    topPostersEnabled = posterRatings.selection.posterProvider ==
+                        ArtworkProviderChoiceKey.TOP_POSTERS
                 ),
                 kitsuAuth = KitsuAuthSyncSettings(
                     enabled = true,
@@ -899,8 +902,10 @@ class AccountSettingsSyncService @Inject constructor(
             wyzieSettingsDataStore.setApiKey(it)
         }
 
-        posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
-        posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+        applyPosterRatingsProviderSelection(
+            settings = settings.integrations.posterRatings,
+            posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
+        )
 
         val remoteKitsu = settings.integrations.kitsuAuth
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
@@ -1049,8 +1054,10 @@ class AccountSettingsSyncService @Inject constructor(
             wyzieSettingsDataStore.setApiKey(it)
         }
 
-        posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
-        posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+        applyPosterRatingsProviderSelection(
+            settings = settings.integrations.posterRatings,
+            posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
+        )
 
         val remoteKitsu = settings.integrations.kitsuAuth
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()

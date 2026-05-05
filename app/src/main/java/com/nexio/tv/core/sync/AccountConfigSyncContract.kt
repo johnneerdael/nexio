@@ -24,12 +24,15 @@ import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
+import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
 import com.nexio.tv.data.remote.supabase.SimklCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.MDBListPinnedListOptionSync
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.TrackingProvider
@@ -392,8 +395,10 @@ internal suspend fun applyAccountConfigSyncSettings(
         baseUrl = remoteTranslation.baseUrl
     )
 
-    posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
-    posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+    applyPosterRatingsProviderSelection(
+        settings = settings.integrations.posterRatings,
+        posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
+    )
 
     playerSettingsDataStore.setTrackingProvider(
         runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
@@ -408,6 +413,19 @@ internal suspend fun applyAccountConfigSyncSettings(
         descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
         badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
     )
+}
+
+internal suspend fun applyPosterRatingsProviderSelection(
+    settings: PosterRatingsSyncSettings,
+    posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore
+) {
+    val provider = when {
+        settings.rpdbEnabled -> ArtworkProviderChoiceKey.RPDB
+        settings.topPostersEnabled -> ArtworkProviderChoiceKey.TOP_POSTERS
+        else -> ArtworkProviderChoiceKey.DEFAULT
+    }
+
+    posterRatingsSettingsDataStore.setProviderSelection(ArtworkTypeKey.POSTER, provider)
 }
 
 /**

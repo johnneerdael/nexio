@@ -780,8 +780,6 @@ topposters.poster_template:
 topposters.thumbnail:
   provider: TOP_POSTERS
   headerPolicy: topposters-thumbnail-v1
-  active: false
-  reviewStatus: documented-unused-template
   method: GET
   path: "/{api_key}/{id_type}/thumbnail/{media_id}/S{season}E{episode}.jpg"
   bulkShape: thumbnail template

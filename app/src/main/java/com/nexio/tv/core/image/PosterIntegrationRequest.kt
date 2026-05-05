@@ -5,17 +5,33 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+sealed interface IntegrationPosterRequest {
+    val provider: IntegrationProvider
+    val cacheKey: String
+    val apiKey: String
+    val ttlMs: Long
+    val staleAfterExpiryMs: Long
+    val mimeType: String?
+
+    fun toModel(): String
+
+    companion object {
+        fun fromModel(model: String): IntegrationPosterRequest? =
+            PosterIntegrationRequest.fromModel(model) ?: TopPostersThumbnailRequest.fromModel(model)
+    }
+}
+
 data class PosterIntegrationRequest(
-    val provider: IntegrationProvider,
-    val cacheKey: String,
-    val apiKey: String,
+    override val provider: IntegrationProvider,
+    override val cacheKey: String,
+    override val apiKey: String,
     val path: String,
     val fallbackUrl: String? = null,
-    val ttlMs: Long = DEFAULT_TTL_MS,
-    val staleAfterExpiryMs: Long = DEFAULT_STALE_AFTER_EXPIRY_MS,
-    val mimeType: String? = null
-) {
-    fun toModel(): String = buildString {
+    override val ttlMs: Long = DEFAULT_TTL_MS,
+    override val staleAfterExpiryMs: Long = DEFAULT_STALE_AFTER_EXPIRY_MS,
+    override val mimeType: String? = null
+) : IntegrationPosterRequest {
+    override fun toModel(): String = buildString {
         append("integration-poster://fetch?")
         append("provider=")
         append(provider.name)
@@ -46,16 +62,15 @@ data class PosterIntegrationRequest(
     }
 
     companion object {
-        fun fromModel(model: String): PosterIntegrationRequest? {
+        fun fromModel(model: String): PosterIntegrationRequest? = runCatching {
             if (!model.startsWith("integration-poster://fetch?")) return null
-            val query = model.substringAfter('?', "")
-            val params = query.split('&')
-                .mapNotNull { part ->
-                    val idx = part.indexOf('=')
-                    if (idx <= 0) null else part.substring(0, idx) to decode(part.substring(idx + 1))
-                }
-                .toMap()
-            val provider = params["provider"]?.let(IntegrationProvider::valueOf) ?: return null
+            val params = parseQuery(model)
+            params["type"]?.let { type ->
+                if (type != "poster") return null
+            }
+            val provider = params["provider"]
+                ?.let { runCatching { IntegrationProvider.valueOf(it) }.getOrNull() }
+                ?: return null
             val cacheKey = params["cacheKey"] ?: return null
             val apiKey = params["apiKey"] ?: return null
             val path = params["path"] ?: return null
@@ -71,7 +86,7 @@ data class PosterIntegrationRequest(
                 staleAfterExpiryMs = staleAfterExpiryMs,
                 mimeType = params["mimeType"]
             )
-        }
+        }.getOrNull()
 
         private const val DEFAULT_TTL_MS = 24L * 60L * 60L * 1000L
         private const val DEFAULT_STALE_AFTER_EXPIRY_MS = 7L * 24L * 60L * 60L * 1000L
@@ -83,3 +98,110 @@ data class PosterIntegrationRequest(
             URLDecoder.decode(value, StandardCharsets.UTF_8.name())
     }
 }
+
+data class TopPostersThumbnailRequest(
+    override val apiKey: String,
+    val idType: String,
+    val mediaId: String,
+    val season: Int,
+    val episode: Int,
+    val credentialHash: String,
+    override val ttlMs: Long = DEFAULT_TTL_MS,
+    override val staleAfterExpiryMs: Long = DEFAULT_STALE_AFTER_EXPIRY_MS,
+    override val mimeType: String? = "image/jpeg"
+) : IntegrationPosterRequest {
+    init {
+        require(idType.isNotBlank()) { "idType must not be blank" }
+        require(mediaId.isNotBlank()) { "mediaId must not be blank" }
+        require(season > 0) { "season must be positive" }
+        require(episode > 0) { "episode must be positive" }
+        require(credentialHash.isNotBlank()) { "credentialHash must not be blank" }
+    }
+
+    override val provider: IntegrationProvider = IntegrationProvider.TOP_POSTERS
+    val badgePosition: String = BADGE_POSITION
+    val badgeSize: String = BADGE_SIZE
+    val blur: Boolean = BLUR
+    val episodePath: String = "S${season}E${episode}"
+    override val cacheKey: String =
+        "artwork-asset:TOP_POSTERS:thumbnail:$idType:$mediaId:$episodePath:badgeSize:$badgeSize:badgePos:$badgePosition:blur:$blur:credential:$credentialHash:imageLang:en:policy:1"
+
+    override fun toModel(): String = buildString {
+        append("integration-poster://fetch?")
+        append("type=topposters-thumbnail")
+        append("&provider=")
+        append(provider.name)
+        append("&apiKey=")
+        append(encode(apiKey))
+        append("&idType=")
+        append(encode(idType))
+        append("&mediaId=")
+        append(encode(mediaId))
+        append("&season=")
+        append(season)
+        append("&episode=")
+        append(episode)
+        append("&credentialHash=")
+        append(encode(credentialHash))
+        append("&badgePosition=")
+        append(encode(badgePosition))
+        append("&badgeSize=")
+        append(encode(badgeSize))
+        append("&blur=")
+        append(blur)
+        append("&ttlMs=")
+        append(ttlMs)
+        append("&staleAfterExpiryMs=")
+        append(staleAfterExpiryMs)
+        mimeType?.let {
+            append("&mimeType=")
+            append(encode(it))
+        }
+    }
+
+    companion object {
+        const val BADGE_POSITION: String = "top-right"
+        const val BADGE_SIZE: String = "small"
+        const val BLUR: Boolean = false
+
+        fun fromModel(model: String): TopPostersThumbnailRequest? = runCatching {
+            if (!model.startsWith("integration-poster://fetch?")) return null
+            val params = parseQuery(model)
+            if (params["type"] != "topposters-thumbnail") return null
+            if (params["provider"] != IntegrationProvider.TOP_POSTERS.name) return null
+            val idType = params["idType"]?.takeIf { it.isNotBlank() } ?: return null
+            val mediaId = params["mediaId"]?.takeIf { it.isNotBlank() } ?: return null
+            val season = params["season"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+            val episode = params["episode"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+            val credentialHash = params["credentialHash"]?.takeIf { it.isNotBlank() } ?: return null
+            return TopPostersThumbnailRequest(
+                apiKey = params["apiKey"] ?: return null,
+                idType = idType,
+                mediaId = mediaId,
+                season = season,
+                episode = episode,
+                credentialHash = credentialHash,
+                mimeType = params["mimeType"] ?: "image/jpeg"
+            )
+        }.getOrNull()
+    }
+}
+
+private const val DEFAULT_TTL_MS = 24L * 60L * 60L * 1000L
+private const val DEFAULT_STALE_AFTER_EXPIRY_MS = 7L * 24L * 60L * 60L * 1000L
+
+private fun parseQuery(model: String): Map<String, String> {
+    val query = model.substringAfter('?', "")
+    return query.split('&')
+        .mapNotNull { part ->
+            val idx = part.indexOf('=')
+            if (idx <= 0) null else part.substring(0, idx) to decode(part.substring(idx + 1))
+        }
+        .toMap()
+}
+
+private fun encode(value: String): String =
+    URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+
+private fun decode(value: String): String =
+    URLDecoder.decode(value, StandardCharsets.UTF_8.name())

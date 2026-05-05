@@ -21,6 +21,7 @@ import com.nexio.tv.data.integration.posters.transport.PosterTransportResult
 import com.nexio.tv.data.remote.api.RpdbApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -99,6 +100,115 @@ class IntegrationPosterFetcherTest {
     }
 
     @Test
+    fun `factory rejects malformed top posters thumbnail model without throwing`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val malformedModel = "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&apiKey=key" +
+            "&idType=imdb" +
+            "&mediaId=tt0137523" +
+            "&season=0" +
+            "&episode=5" +
+            "&credentialHash=credential-hash"
+
+        assertNull(registry.newFetcher(Uri.parse(malformedModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
+    fun `factory rejects providerless top posters thumbnail model without throwing`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val providerlessModel = "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&apiKey=key" +
+            "&idType=imdb" +
+            "&mediaId=tt0137523" +
+            "&season=1" +
+            "&episode=5" +
+            "&credentialHash=credential-hash"
+
+        assertNull(TopPostersThumbnailRequest.fromModel(providerlessModel))
+        assertNull(registry.newFetcher(Uri.parse(providerlessModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
+    fun `factory rejects top posters thumbnail model with invalid poster provider without throwing`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val malformedModel = "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&provider=BOGUS" +
+            "&apiKey=key" +
+            "&idType=imdb" +
+            "&mediaId=tt0137523" +
+            "&season=0" +
+            "&episode=5" +
+            "&credentialHash=credential-hash"
+
+        assertNull(registry.newFetcher(Uri.parse(malformedModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
+    fun `factory rejects thumbnail typed poster fields without dispatching poster fetch`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val malformedModel = "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&provider=TOP_POSTERS" +
+            "&cacheKey=topposters:imdb:tt0137523:poster-default" +
+            "&apiKey=key" +
+            "&path=imdb/poster-default/tt0137523.jpg"
+
+        assertNull(PosterIntegrationRequest.fromModel(malformedModel))
+        assertNull(registry.newFetcher(Uri.parse(malformedModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
+    fun `factory rejects malformed percent encoded poster model without throwing`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val malformedModel = "integration-poster://fetch?" +
+            "type=poster" +
+            "&provider=TOP_POSTERS" +
+            "&cacheKey=topposters%ZZ" +
+            "&apiKey=key" +
+            "&path=imdb/poster-default/tt0137523.jpg"
+
+        assertNull(registry.newFetcher(Uri.parse(malformedModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
     fun `poster fetcher converts poster request into runtime cache key instead of remote url pass through`() = runTest {
         val runtime = RecordingIntegrationRuntime(successValue = "poster".toByteArray())
         val fetcher = IntegrationPosterFetcher(
@@ -118,6 +228,41 @@ class IntegrationPosterFetcherTest {
 
         assertEquals(listOf("rpdb:imdb:tt0137523:poster-default"), runtime.keys)
         assertTrue(result is SourceResult)
+    }
+
+    @Test
+    fun `poster fetcher dispatches top posters thumbnail model to thumbnail runtime request`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val topPostersProvider = mockk<TopPostersIntegrationProvider>()
+        val fallbackTransport = mockk<PosterTransport>(relaxed = true)
+        val request = TopPostersThumbnailRequest(
+            apiKey = "key",
+            idType = "imdb",
+            mediaId = "tt0137523",
+            season = 1,
+            episode = 5,
+            credentialHash = "credential-hash"
+        )
+        val fetcher = IntegrationPosterFetcher(
+            request = requireNotNull(IntegrationPosterRequest.fromModel(request.toModel())),
+            options = Options(context = context, diskCacheKey = request.cacheKey),
+            rpdbProvider = mockk<RpdbIntegrationProvider>(relaxed = true),
+            topPostersProvider = topPostersProvider,
+            fallbackTransport = fallbackTransport
+        )
+
+        coEvery { topPostersProvider.fetchThumbnail(request) } returns "thumbnail".toByteArray()
+
+        val result = fetcher.fetch()
+
+        assertTrue(result is SourceResult)
+        assertEquals(
+            "artwork-asset:TOP_POSTERS:thumbnail:imdb:tt0137523:S1E5:badgeSize:small:badgePos:top-right:blur:false:credential:credential-hash:imageLang:en:policy:1",
+            request.cacheKey
+        )
+        coVerify(exactly = 1) { topPostersProvider.fetchThumbnail(request) }
+        coVerify(exactly = 0) { topPostersProvider.fetchPoster(any()) }
+        verify(exactly = 0) { fallbackTransport.execute(any()) }
     }
 
     @Test

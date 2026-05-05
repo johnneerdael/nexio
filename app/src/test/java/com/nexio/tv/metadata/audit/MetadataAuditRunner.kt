@@ -35,6 +35,9 @@ import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.data.integration.posters.RpdbMetadataProviderAdapter
 import com.nexio.tv.data.integration.posters.TopPostersMetadataProviderAdapter
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
@@ -112,24 +115,43 @@ class MetadataAuditRunner private constructor(
         val premium = scenario.premiumArtworkProvider?.uppercase()
         when (premium) {
             "RPDB" -> {
+                val settings = ArtworkProviderSettings(
+                    rpdbApiKey = "test-rpdb-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        posterProvider = ArtworkProviderChoiceKey.RPDB
+                    )
+                )
                 val activeProvider = PosterRatingsUrlResolver.ActiveProvider(
                     provider = PosterRatingsProvider.RPDB,
                     apiKey = "test-rpdb-key"
                 )
+                coEvery { posterResolver.currentSettings() } returns settings
                 coEvery { posterResolver.getActiveProvider() } returns activeProvider
+                every { posterResolver.resolvePosterArtworkString(any(), any(), any(), any(), any()) } returns
+                    if (scenario.premiumArtworkFetchFails) null else "nexio-artwork://asset/audit-rpdb-poster"
                 every { posterResolver.resolvePosterUrl(any(), any(), any(), any()) } returns
                     if (scenario.premiumArtworkFetchFails) null else "https://example.test/rpdb-poster.jpg"
             }
             "TOP_POSTERS" -> {
+                val settings = ArtworkProviderSettings(
+                    topPostersApiKey = "test-top-posters-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        posterProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                    )
+                )
                 val activeProvider = PosterRatingsUrlResolver.ActiveProvider(
                     provider = PosterRatingsProvider.TOP_POSTERS,
                     apiKey = "test-top_posters-key"
                 )
+                coEvery { posterResolver.currentSettings() } returns settings
                 coEvery { posterResolver.getActiveProvider() } returns activeProvider
+                every { posterResolver.resolvePosterArtworkString(any(), any(), any(), any(), any()) } returns
+                    if (scenario.premiumArtworkFetchFails) null else "nexio-artwork://asset/audit-topposters-poster"
                 every { posterResolver.resolvePosterUrl(any(), any(), any(), any()) } returns
                     if (scenario.premiumArtworkFetchFails) null else "https://example.test/top_posters-poster.jpg"
             }
             else -> {
+                coEvery { posterResolver.currentSettings() } returns ArtworkProviderSettings()
                 coEvery { posterResolver.getActiveProvider() } returns null
             }
         }
@@ -1091,9 +1113,10 @@ class MetadataAuditRunner private constructor(
             // Starts with getActiveProvider() returning null (no-op) until a scenario with
             // premiumArtworkProvider overrides it.
             val posterResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
+            coEvery { posterResolver.currentSettings() } returns ArtworkProviderSettings()
             coEvery { posterResolver.getActiveProvider() } returns null
             val rpdbAdapter = RpdbMetadataProviderAdapter(posterResolver)
-            val topPostersAdapter = TopPostersMetadataProviderAdapter(posterResolver, mockk(relaxed = true))
+            val topPostersAdapter = TopPostersMetadataProviderAdapter(posterResolver)
             val allAdapters: Set<MetadataProviderAdapter> = adapters.toSet() + rpdbAdapter + topPostersAdapter
             val router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),

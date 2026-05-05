@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkDisplayHints
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
@@ -189,7 +190,7 @@ class HomeDisplayMetadataTest {
             id = "tt123",
             type = ContentType.MOVIE,
             name = "Movie",
-            poster = "https://api.ratingposterdb.com/key/imdb/poster-default/tt123.jpg",
+            poster = "nexio-artwork://asset/rpdbPosterAsset",
             posterShape = PosterShape.POSTER,
             background = "background",
             logo = "logo",
@@ -401,6 +402,47 @@ class HomeDisplayMetadataTest {
     }
 
     @Test
+    fun `Video reports whether thumbnail artwork embeds rating overlay`() {
+        val video = Video(
+            id = "episode-1",
+            title = "Episode 1",
+            released = null,
+            thumbnail = "legacyThumbnail",
+            season = 1,
+            episode = 1,
+            overview = null,
+            thumbnailArtwork = artworkRef(
+                decisionKey = "thumbnailDecision",
+                assetKey = "thumbnailAsset",
+                imageType = ArtworkType.THUMBNAIL,
+                displayHints = ArtworkDisplayHints(embedsRatingOverlay = true)
+            )
+        )
+
+        assertEquals(true, video.thumbnailArtworkEmbedsRatingOverlay)
+    }
+
+    @Test
+    fun `Video reports no rating overlay when thumbnail artwork is absent or default`() {
+        val missingArtwork = Video(
+            id = "episode-1",
+            title = "Episode 1",
+            released = null,
+            thumbnail = "legacyThumbnail",
+            season = 1,
+            episode = 1,
+            overview = null,
+            thumbnailArtwork = null
+        )
+        val defaultArtwork = missingArtwork.copy(
+            thumbnailArtwork = artworkRef("thumbnailDecision", "thumbnailAsset", ArtworkType.THUMBNAIL)
+        )
+
+        assertEquals(false, missingArtwork.thumbnailArtworkEmbedsRatingOverlay)
+        assertEquals(false, defaultArtwork.thumbnailArtworkEmbedsRatingOverlay)
+    }
+
+    @Test
     fun `Gson persistence ignores transient typed artwork on metadata models`() {
         val gson = Gson()
         val artwork = ArtworkBundle(
@@ -475,7 +517,8 @@ class HomeDisplayMetadataTest {
     private fun artworkRef(
         decisionKey: String,
         assetKey: String,
-        imageType: ArtworkType
+        imageType: ArtworkType,
+        displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
     ): ArtworkDisplayRef.RuntimeAsset {
         return ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey(decisionKey),
@@ -483,7 +526,8 @@ class HomeDisplayMetadataTest {
             imageType = imageType,
             selectedProvider = null,
             sourceRole = ArtworkSourceRole.PREMIUM,
-            trace = ArtworkTrace.empty()
+            trace = ArtworkTrace.empty(),
+            displayHints = displayHints
         )
     }
 

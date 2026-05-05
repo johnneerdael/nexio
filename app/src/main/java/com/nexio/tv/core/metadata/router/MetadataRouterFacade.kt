@@ -1,10 +1,15 @@
 package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkOwnerKey
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.EpisodeArtworkContext
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.resolver.OrganizationPersonResolver
 import com.nexio.tv.core.metadata.router.resolver.RecommendationResolver
 import com.nexio.tv.core.metadata.router.resolver.ReviewResolver
 import com.nexio.tv.core.metadata.router.resolver.TrailerResolver
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.core.tmdb.TmdbEnrichment
@@ -30,6 +35,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.PersonDetail
 import com.nexio.tv.domain.model.ProviderId
+import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,7 +68,8 @@ class MetadataRouterFacade(
     private val reviewResolver: ReviewResolver? = null,
     private val recommendationResolver: RecommendationResolver? = null,
     private val organizationPersonResolver: OrganizationPersonResolver? = null,
-    private val tmdbOrganizationService: TmdbOrganizationService? = null
+    private val tmdbOrganizationService: TmdbOrganizationService? = null,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
 ) {
     @Inject
     constructor(
@@ -81,7 +88,8 @@ class MetadataRouterFacade(
         reviewResolver: ReviewResolver? = null,
         recommendationResolver: RecommendationResolver? = null,
         organizationPersonResolver: OrganizationPersonResolver? = null,
-        tmdbOrganizationService: TmdbOrganizationService? = null
+        tmdbOrganizationService: TmdbOrganizationService? = null,
+        posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
     ) : this(
         router = router,
         providerPlanExecutor = providerPlanExecutor,
@@ -100,7 +108,8 @@ class MetadataRouterFacade(
         reviewResolver = reviewResolver,
         recommendationResolver = recommendationResolver,
         organizationPersonResolver = organizationPersonResolver,
-        tmdbOrganizationService = tmdbOrganizationService
+        tmdbOrganizationService = tmdbOrganizationService,
+        posterRatingsUrlResolver = posterRatingsUrlResolver
     )
 
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
@@ -138,7 +147,6 @@ class MetadataRouterFacade(
                 itemType = request.contentType,
                 routeProvider = route.provider,
                 knownIds = request.sourceContext.previewStableIds,
-                routedTargetIds = route.targetIds,
                 sourceProvider = request.sourceContext.previewSourceProvider
                     ?.let { raw -> ProviderId.entries.firstOrNull { it.name == raw } },
                 sourceItemId = request.sourceContext.previewSourceItemId,
@@ -745,8 +753,9 @@ class MetadataRouterFacade(
                 providerPlanRunner.run(plan).stepResults.flatMap { stepResult ->
                     stepResult.episodeMetadata.entries
                 }
-            }.associate { it.toPair() }
-        }
+            }
+            .associate { it.toPair() }
+        }.withRoutedEpisodeThumbnailArtwork(route)
     }
 
     private suspend fun fallbackRouteForDistinctContentId(
@@ -763,6 +772,75 @@ class MetadataRouterFacade(
             )
         )
         return identityResolver.resolve(fallbackRoute)
+    }
+
+    private suspend fun Map<Pair<Int, Int>, TvEpisodeMetadata>.withRoutedEpisodeThumbnailArtwork(
+        route: MetadataRoute
+    ): Map<Pair<Int, Int>, TvEpisodeMetadata> {
+        val resolver = posterRatingsUrlResolver ?: return this
+        if (isEmpty()) return this
+
+        val settings = resolver.currentSettings()
+        val providerIds = route.targetIds.toProviderIds()
+        val primaryArtworkProvider = route.provider.toArtworkProviderId()
+        return mapValues { (key, episodeMetadata) ->
+            val season = episodeMetadata.seasonNumber ?: key.first
+            val episode = episodeMetadata.episodeNumber ?: key.second
+            val episodeContext = EpisodeArtworkContext(season = season, episode = episode)
+            val artworkRef = resolver.resolveEpisodeThumbnailArtworkRef(
+                settings = settings,
+                providerIds = providerIds,
+                mediaKind = route.mediaKind,
+                ownerKey = ArtworkOwnerKey.CanonicalContent(
+                    "${route.parentId}:S${episodeContext.season}E${episodeContext.episode}"
+                ),
+                episodeContext = episodeContext,
+                fallbackThumbnailUrl = episodeMetadata.thumbnail,
+                primaryProvider = primaryArtworkProvider
+            )
+            if (artworkRef == null) episodeMetadata else episodeMetadata.copy(thumbnailArtwork = artworkRef)
+        }
+    }
+
+    private fun MetadataPrimaryProvider.toArtworkProviderId(): ArtworkProviderId =
+        when (this) {
+            MetadataPrimaryProvider.TMDB -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+            MetadataPrimaryProvider.TVDB -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB)
+            MetadataPrimaryProvider.KITSU -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.KITSU)
+            MetadataPrimaryProvider.TRAKT -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.TRAKT)
+            MetadataPrimaryProvider.SIMKL -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.SIMKL)
+            MetadataPrimaryProvider.RPDB -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB)
+            MetadataPrimaryProvider.TOP_POSTERS -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS)
+            MetadataPrimaryProvider.IMDB -> ArtworkProviderId.RuntimeProvider(IntegrationProvider.CUSTOM_IMDB)
+        }
+
+    private fun Map<MetadataPrimaryProvider, String>.toProviderIds(): ProviderIds =
+        ProviderIds(
+            imdb = imdbTargetId(this[MetadataPrimaryProvider.IMDB]),
+            tmdb = numericTargetId(this[MetadataPrimaryProvider.TMDB], "tmdb"),
+            tvdb = numericTargetId(this[MetadataPrimaryProvider.TVDB], "tvdb"),
+            trakt = numericTargetId(this[MetadataPrimaryProvider.TRAKT], "trakt"),
+            kitsu = numericTargetId(this[MetadataPrimaryProvider.KITSU], "kitsu")
+        )
+
+    private fun imdbTargetId(raw: String?): String? {
+        val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val candidate = when {
+            value.startsWith("imdb:", ignoreCase = true) -> value.substringAfter(':').trim()
+            ':' in value -> return null
+            else -> value
+        }
+        return candidate.takeIf { it.matches(IMDB_ID_REGEX) }
+    }
+
+    private fun numericTargetId(raw: String?, prefix: String): String? {
+        val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val candidate = when {
+            value.startsWith("$prefix:", ignoreCase = true) -> value.substringAfter(':').trim()
+            ':' in value -> return null
+            else -> value
+        }
+        return candidate.takeIf { it.matches(NUMERIC_ID_REGEX) }
     }
 
     suspend fun fetchTvSeasonEpisodes(
@@ -783,6 +861,11 @@ class MetadataRouterFacade(
         val runResult = providerPlanRunner.run(plan)
         val episodes = runResult.stepResults
             .flatMap { stepResult -> stepResult.episodeMetadata.values }
+            .associateBy { episodeMetadata ->
+                (episodeMetadata.seasonNumber ?: seasonNumber) to (episodeMetadata.episodeNumber ?: Int.MAX_VALUE)
+            }
+            .withRoutedEpisodeThumbnailArtwork(route)
+            .values
             .map { episodeMetadata ->
                 TvSeasonEpisode(
                     episodeNumber = episodeMetadata.episodeNumber,
@@ -971,5 +1054,7 @@ class MetadataRouterFacade(
     private companion object {
         const val DEFAULT_REVIEWS_PAGE = 1
         const val DEFAULT_REVIEWS_LIMIT = 20
+        val IMDB_ID_REGEX = Regex("tt\\d+", RegexOption.IGNORE_CASE)
+        val NUMERIC_ID_REGEX = Regex("\\d+")
     }
 }
