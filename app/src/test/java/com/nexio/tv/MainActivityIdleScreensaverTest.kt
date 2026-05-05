@@ -1,13 +1,17 @@
 package com.nexio.tv
 
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
+import com.nexio.tv.data.trailer.TrailerResolutionResult
+import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.ui.navigation.Screen
 import com.nexio.tv.ui.screensaver.IdleScreensaverPresentationMode
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverPlayback
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverSessionStart
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
+import com.nexio.tv.ui.screensaver.RESOLVE_TRAILER_BY_ITEM_SENTINEL
 import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -232,7 +236,76 @@ class MainActivityIdleScreensaverTest {
         assertTrue(message.contains("trailerSessionReady=false"))
     }
 
+    @Test
+    fun `idle trailer resolver uses item context and stable ids when trailer id is sentinel`() = runBlocking {
+        val candidate = buildTrailerCandidate(
+            itemId = "source:breaking-bad",
+            trailerIds = emptyList(),
+            stableIds = ProviderIds(tvdb = "81189", tmdb = "1396", imdb = "tt0903747", kitsu = "7442")
+        )
+        val requests = mutableListOf<IdleTrailerResolverRequest>()
+
+        val source = resolveIdleTrailerScreensaverPlaybackSource(
+            candidate = candidate,
+            trailerId = RESOLVE_TRAILER_BY_ITEM_SENTINEL
+        ) { request ->
+            requests += request
+            TrailerResolutionResult.Playback(
+                TrailerPlaybackSource(videoUrl = "https://video.example.com/breaking-bad.m3u8")
+            )
+        }
+
+        assertEquals("https://video.example.com/breaking-bad.m3u8", source?.videoUrl)
+        assertEquals(
+            IdleTrailerResolverRequest(
+                title = "Example source:breaking-bad",
+                year = "2024",
+                tmdbId = "1396",
+                type = "movie",
+                contentId = "tvdb:81189",
+                fallbackYtIds = emptyList()
+            ),
+            requests.single()
+        )
+    }
+
+    @Test
+    fun `idle trailer resolver passes explicit fallback youtube id without building a youtube url`() = runBlocking {
+        val candidate = buildTrailerCandidate(
+            itemId = "source:movie",
+            trailerIds = listOf("abc123def45"),
+            stableIds = ProviderIds(tmdb = "550")
+        )
+        val requests = mutableListOf<IdleTrailerResolverRequest>()
+
+        resolveIdleTrailerScreensaverPlaybackSource(
+            candidate = candidate,
+            trailerId = "abc123def45"
+        ) { request ->
+            requests += request
+            TrailerResolutionResult.Playback(
+                TrailerPlaybackSource(videoUrl = "https://video.example.com/movie.m3u8")
+            )
+        }
+
+        assertEquals(listOf("abc123def45"), requests.single().fallbackYtIds)
+        assertFalse(requests.single().fallbackYtIds.single().startsWith("https://www.youtube.com/watch"))
+        assertEquals("tmdb:550", requests.single().contentId)
+    }
+
     private fun buildTrailerCandidate(itemId: String): IdleTrailerScreensaverCandidate {
+        return buildTrailerCandidate(
+            itemId = itemId,
+            trailerIds = listOf("abc123def45"),
+            stableIds = ProviderIds()
+        )
+    }
+
+    private fun buildTrailerCandidate(
+        itemId: String,
+        trailerIds: List<String>,
+        stableIds: ProviderIds
+    ): IdleTrailerScreensaverCandidate {
         return IdleTrailerScreensaverCandidate(
             itemId = itemId,
             itemType = "movie",
@@ -247,7 +320,8 @@ class MainActivityIdleScreensaverTest {
             runtime = null,
             imdbRating = null,
             tomatoesRating = null,
-            trailerYtIds = listOf("abc123def45")
+            trailerYtIds = trailerIds,
+            stableIds = stableIds
         )
     }
 }

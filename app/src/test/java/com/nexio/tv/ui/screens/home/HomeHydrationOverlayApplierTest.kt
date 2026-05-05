@@ -104,6 +104,30 @@ class HomeHydrationOverlayApplierTest {
         assertFalse(applierSource.contains("ProviderId."))
     }
 
+    @Test
+    fun `rowsForResolvedDisplaySurface returns final overlay applied rows`() {
+        val item = preview("tmdb:550", "Preview title")
+        val overlay = overlay(
+            itemKey = "movie:tmdb:550",
+            fields = HomeDisplayMetadata(
+                title = "Resolved title",
+                poster = "resolved-poster",
+                backdrop = "resolved-backdrop",
+                imdbRating = 8.8f,
+                ratingSource = TitleRatingSource.IMDB
+            )
+        )
+
+        val publishedRows = rowsForResolvedDisplaySurface(
+            rows = listOf(row(listOf(item))),
+            overlaysByItemKey = mapOf("movie:tmdb:550" to overlay)
+        )
+
+        assertEquals("Resolved title", publishedRows.single().items.single().name)
+        assertEquals("resolved-poster", publishedRows.single().items.single().poster)
+        assertEquals(8.8f, publishedRows.single().items.single().imdbRating ?: 0f, 0f)
+    }
+
     private fun preview(id: String, title: String) = MetaPreview(
         id = id,
         type = ContentType.MOVIE,

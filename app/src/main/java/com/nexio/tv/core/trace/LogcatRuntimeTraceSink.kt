@@ -140,6 +140,25 @@ class LogcatRuntimeTraceSink(
             "reason" to payload["reason"],
             "trigger" to payload["trigger"]
         )
+        "screensaver.candidate_pool_built" -> linkedMapOf(
+            "profile" to payload["profileHash"],
+            "source" to payload["source"],
+            "imageCandidateCount" to payload["imageCandidateCount"],
+            "trailerCandidateCount" to payload["trailerCandidateCount"]
+        )
+        "screensaver.slide_selected" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "source" to payload["source"],
+            "ratingSource" to payload["ratingSource"],
+            "artworkSource" to payload["artworkSource"],
+            "matchesHomeSurface" to payload["matchesHomeSurface"]
+        )
+        "screensaver.trailer_candidate_selected" -> linkedMapOf(
+            "itemKey" to payload["itemKey"],
+            "source" to payload["source"],
+            "trailerSource" to payload["trailerSource"],
+            "fallbackYouTubeIdsOnly" to payload["fallbackYouTubeIdsOnly"]
+        )
         "runtime.operation_start" -> linkedMapOf(
             "provider" to payload["provider"],
             "operationKey" to payload["operationKey"],

@@ -2251,6 +2251,7 @@ internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addon
 
 internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     catalogRowsComputationMutex.withLock {
+    val profileSessionForSurface = profileManager.activeProfileSession.value
     val orderedKeys = catalogOrder.toList()
     val catalogSnapshot = catalogsMap.toMap()
     val heroCatalogKeys = currentHeroCatalogKeys
@@ -2460,7 +2461,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         // migration for the new profile if its persisted state is empty and legacy keys exist.
         // Subsequent ticks skip this; onLiveDefinitionsArrived is cheap and runs every tick to
         // upgrade MIGRATION_SYNTHETIC_FALLBACK -> MIGRATION once live definitions arrive.
-        val currentProfileId = profileManager.activeProfileId.value
+        val currentProfileId = profileSessionForSurface.profileId
         if (currentProfileId !in migrationAttempted) {
             homeRailOrderStore.tryMigrate(
                 persistedSyntheticOrder = collectPersistedSyntheticOrderKeys(
@@ -2715,6 +2716,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             orderedGroupKeys = orderedGroupKeys
         )
         applyHomeSnapshotToUiPipeline(transientSnapshot)
+        val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+            rows = _uiState.value.catalogRows,
+            overlaysByItemKey = currentHydratedHomeOverlays
+        )
+        resolvedDisplaySurfaceRepository.publishResolvedItems(
+            profileSession = profileSessionForSurface,
+            items = resolvedItemsForSurface
+        )
         if (!hasTransientLoadingRows) {
             hasPersistedCatalogSnapshot = persistAndApplyHomeSnapshotPipeline(transientSnapshot)
         }
