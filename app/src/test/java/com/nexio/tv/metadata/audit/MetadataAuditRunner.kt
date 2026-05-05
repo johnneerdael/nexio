@@ -1093,7 +1093,7 @@ class MetadataAuditRunner private constructor(
             val posterResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
             coEvery { posterResolver.getActiveProvider() } returns null
             val rpdbAdapter = RpdbMetadataProviderAdapter(posterResolver)
-            val topPostersAdapter = TopPostersMetadataProviderAdapter(posterResolver)
+            val topPostersAdapter = TopPostersMetadataProviderAdapter(posterResolver, mockk(relaxed = true))
             val allAdapters: Set<MetadataProviderAdapter> = adapters.toSet() + rpdbAdapter + topPostersAdapter
             val router = MetadataRouter(
                 normalizer = MetadataRequestNormalizer(traceEvents = TraceMetadataEvents(RecordingTraceSink()) { null }),
