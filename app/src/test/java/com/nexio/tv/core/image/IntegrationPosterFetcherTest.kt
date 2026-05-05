@@ -166,6 +166,26 @@ class IntegrationPosterFetcherTest {
     }
 
     @Test
+    fun `factory rejects malformed percent encoded poster model without throwing`() {
+        val factory = IntegrationPosterFetcher.Factory(
+            rpdbProvider = RpdbIntegrationProvider(mockk(), mockk<RpdbApi>(), mockk<PosterTransport>()),
+            topPostersProvider = TopPostersIntegrationProvider(mockk(), mockk<TopPostersApi>(), mockk<PosterTransport>()),
+            fallbackTransport = mockk()
+        )
+        val registry = ComponentRegistry.Builder()
+            .add(factory)
+            .build()
+        val malformedModel = "integration-poster://fetch?" +
+            "type=poster" +
+            "&provider=TOP_POSTERS" +
+            "&cacheKey=topposters%ZZ" +
+            "&apiKey=key" +
+            "&path=imdb/poster-default/tt0137523.jpg"
+
+        assertNull(registry.newFetcher(Uri.parse(malformedModel), mockk(relaxed = true), mockk(relaxed = true)))
+    }
+
+    @Test
     fun `poster fetcher converts poster request into runtime cache key instead of remote url pass through`() = runTest {
         val runtime = RecordingIntegrationRuntime(successValue = "poster".toByteArray())
         val fetcher = IntegrationPosterFetcher(
