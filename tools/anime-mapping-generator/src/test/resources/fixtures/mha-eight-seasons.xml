@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<anime-list>
+  <anime anidbid="11739" tvdbid="305074" defaulttvdbseason="1" tmdbtv="65930" tmdbseason="1">
+    <name>Boku no Hero Academia</name>
+  </anime>
+  <anime anidbid="12233" tvdbid="305074" defaulttvdbseason="2" tmdbtv="65930" tmdbseason="2">
+    <name>Boku no Hero Academia (2017)</name>
+    <mapping-list>
+      <mapping anidbseason="0" tvdbseason="0">;1-2;</mapping>
+    </mapping-list>
+  </anime>
+  <anime anidbid="13485" tvdbid="305074" defaulttvdbseason="3" tmdbtv="65930" tmdbseason="3">
+    <name>Boku no Hero Academia (2018)</name>
+  </anime>
+  <anime anidbid="11742" tvdbid="79654" defaulttvdbseason="0" episodeoffset="23" tmdbtv="30623" tmdbseason="0" tmdboffset="23" imdbid="tt5526456">
+    <name>Eiga Crayon Shin-chan</name>
+  </anime>
+  <anime anidbid="16797" tvdbid="hentai">
+    <name>Some Hentai Title</name>
+  </anime>
+  <anime anidbid="" tvdbid="">
+    <name></name>
+  </anime>
+</anime-list>
