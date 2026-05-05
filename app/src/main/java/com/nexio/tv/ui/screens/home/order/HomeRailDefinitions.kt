@@ -23,10 +23,7 @@ internal fun CatalogPlan.toHomeRailDefinitions(): List<HomeRailDefinition> {
             family = family,
             source = inferSource(family),
             title = descriptor.catalogName,
-            // ConfiguredHomeCatalogDescriptor has no enabled field; CatalogPlan only surfaces
-            // enabled rails (filtered upstream by isSyntheticHomeCatalogDisabled / addon-disable
-            // checks), so hardcoding true is safe at this boundary.
-            enabled = true,
+            enabled = descriptor.enabled,
             defaultSortKey = DefaultSortKey(family.familyRank, intra),
             publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
         )

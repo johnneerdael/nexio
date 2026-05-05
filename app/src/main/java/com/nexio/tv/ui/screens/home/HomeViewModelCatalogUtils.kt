@@ -49,7 +49,8 @@ internal data class ConfiguredHomeCatalogDescriptor(
     val catalogId: String,
     val catalogName: String,
     val type: ContentType,
-    val rawType: String = type.toApiString()
+    val rawType: String = type.toApiString(),
+    val enabled: Boolean = true,
 ) {
     fun toLoadingCatalogRow(): CatalogRow {
         return CatalogRow(
