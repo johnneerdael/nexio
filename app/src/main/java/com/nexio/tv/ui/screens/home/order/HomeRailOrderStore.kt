@@ -15,6 +15,19 @@ import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Per-profile authoritative store for Modern Home rail order.
+ *
+ * `state` is sourced from DataStore and is eventually-consistent; `updateOrder` and
+ * `setEnabled` use an in-memory `lastWrittenState` cache so back-to-back mutations
+ * within the DataStore round-trip window each see the most recently written state.
+ *
+ * Callers that invoke `updateOrder(...)` without an explicit `knownLiveKeys` rely on
+ * the `knownLiveKeysCache` populated by `effectiveOrder(...)`'s `combine` transform.
+ * Production callers (the home pipeline) hold a long-lived `effectiveOrder` collection
+ * before any user-initiated reorder, so the cache is always populated. Tests and any
+ * caller that mutates without first subscribing should pass `knownLiveKeys` explicitly.
+ */
 @Singleton
 class HomeRailOrderStore @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -25,6 +38,7 @@ class HomeRailOrderStore @Inject constructor(
 ) {
     private val mutationLock = Mutex()
     private val knownLiveKeysCache = MutableStateFlow<Set<HomeRailKey>>(emptySet())
+    private var lastWrittenState: HomeRailOrderState? = null
 
     val state: StateFlow<HomeRailOrderState> = layoutPreferenceDataStore.homeRailOrderStateJson
         .map { codec.decode(it) }
@@ -43,7 +57,7 @@ class HomeRailOrderStore @Inject constructor(
         source: RailOrderMutationSource,
         knownLiveKeys: Set<HomeRailKey> = knownLiveKeysCache.value,
     ) = mutationLock.withLock {
-        val current = state.value
+        val current = currentForMutation()
         val unknownInCurrent = current.orderedKeys.filter {
             it !in knownLiveKeys && it !in orderedKeys
         }
@@ -61,7 +75,7 @@ class HomeRailOrderStore @Inject constructor(
         enabled: Boolean,
         source: RailOrderMutationSource,
     ) = mutationLock.withLock {
-        val current = state.value
+        val current = currentForMutation()
         val newDisabled = if (enabled) current.disabledKeys - key else current.disabledKeys + key
         if (newDisabled == current.disabledKeys) return@withLock
         persist(current.copy(
@@ -72,7 +86,10 @@ class HomeRailOrderStore @Inject constructor(
         ))
     }
 
+    private fun currentForMutation(): HomeRailOrderState = lastWrittenState ?: state.value
+
     private suspend fun persist(state: HomeRailOrderState) {
         layoutPreferenceDataStore.setHomeRailOrderStateJson(codec.encode(state))
+        lastWrittenState = state
     }
 }

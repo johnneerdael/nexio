@@ -73,4 +73,45 @@ class HomeRailOrderStoreTest {
         assertEquals(RailOrderMutationSource.ANDROID_ORDER_SCREEN, state.lastMutationSource)
         coVerify { layout.setHomeRailOrderStateJson(any()) }
     }
+
+    @Test
+    fun `back-to-back updateOrder calls each see the most recent in-memory state`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        // The flow does NOT update on writes — simulating DataStore I/O latency.
+        // Without the in-memory cache, both updateOrder calls read the initial null state.
+        coEvery { layout.homeRailOrderStateJson } returns flowOf(null)
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } returns Unit
+
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+        )
+
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("a")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("a")),
+        )
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("a"), HomeRailKey("b")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("a"), HomeRailKey("b")),
+        )
+        advanceUntilIdle()
+
+        // Capture all persisted JSON values across both updateOrder invocations.
+        // Using mutableListOf (rather than slot, which only stores the last and errors
+        // on multi-invocation in MockK 1.13+) so we can decode the LAST persisted JSON
+        // and confirm version was bumped to 2 (not 1).
+        val captured = mutableListOf<String>()
+        coVerify(atLeast = 1) { layout.setHomeRailOrderStateJson(capture(captured)) }
+        // Decode the LAST persisted JSON and verify version reflects two mutations.
+        val lastPersisted = codec.decode(captured.last())
+        assertEquals(2L, lastPersisted.version)
+        assertEquals(listOf(HomeRailKey("a"), HomeRailKey("b")), lastPersisted.orderedKeys)
+    }
 }
