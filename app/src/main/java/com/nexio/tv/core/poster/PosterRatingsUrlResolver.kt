@@ -1,6 +1,7 @@
 package com.nexio.tv.core.poster
 
 import com.nexio.tv.core.artwork.ArtworkCacheKeys
+import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkCandidate
 import com.nexio.tv.core.artwork.ArtworkDecision
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
@@ -127,7 +128,7 @@ class PosterRatingsUrlResolver @Inject constructor(
         if (candidates.isEmpty()) return null
 
         val selection = artworkRouter.select(candidates, policy)
-        val selected = selection.selectedCandidate
+        val selected = selection.selectedCandidateOrNull ?: return null
         val settingsHash = settings.stableSettingsHash()
         val credentialHash = settings.credentialHash()
         val now = System.currentTimeMillis()
@@ -214,8 +215,10 @@ class PosterRatingsUrlResolver @Inject constructor(
         if (candidates.isEmpty()) return null
 
         val selection = artworkRouter.select(candidates, policy)
-        val selected = selection.selectedCandidate
+        val selected = selection.selectedCandidateOrNull ?: return null
         val rejectedCandidates = missingRejections + selection.rejectedCandidates
+        val persistedSelected = selected.toPersistedCandidate(policy.policyVersion)
+        val selectedAssetKey = selected.assetKeyForRuntimeRef(policy.policyVersion)
         val settingsHash = settings.stableSettingsHash(ArtworkType.THUMBNAIL)
         val credentialHash = settings.credentialHash(settings.selection.thumbnailProvider)
         val now = System.currentTimeMillis()
@@ -233,7 +236,7 @@ class PosterRatingsUrlResolver @Inject constructor(
             ownerKey = ownerKey,
             canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
             imageType = ArtworkType.THUMBNAIL,
-            selectedCandidate = selected.toPersistedCandidate(policy.policyVersion),
+            selectedCandidate = persistedSelected,
             rejectedCandidates = rejectedCandidates,
             policyVersion = policy.policyVersion,
             imageLanguage = selected.imageLanguage,
@@ -247,7 +250,7 @@ class PosterRatingsUrlResolver @Inject constructor(
 
         return ArtworkDisplayRef.RuntimeAsset(
             decisionKey = decisionKey,
-            assetKey = null,
+            assetKey = selectedAssetKey,
             imageType = ArtworkType.THUMBNAIL,
             selectedProvider = selected.provider,
             sourceRole = selected.sourceRole,
@@ -505,6 +508,25 @@ class PosterRatingsUrlResolver @Inject constructor(
             priority = priority
         )
     }
+
+    private fun ArtworkCandidate.assetKeyForRuntimeRef(policyVersion: Int): ArtworkAssetKey? =
+        when (val candidateSource = source) {
+            is ArtworkSource.ProviderTemplate ->
+                toPersistedCandidate(policyVersion).providerTemplate
+                    ?.let(ArtworkCacheKeys::assetKeyForProviderTemplate)
+            is ArtworkSource.RemoteUrl ->
+                provider?.let { selectedProvider ->
+                    ArtworkCacheKeys.assetKeyForRemoteUrl(
+                        provider = selectedProvider,
+                        imageType = imageType,
+                        normalizedUrlHash = candidateSource.normalizedUrlHash,
+                        variant = null,
+                        policyVersion = policyVersion
+                    )
+                }
+            is ArtworkSource.LocalAsset -> candidateSource.assetKey
+            else -> null
+        }
 
     private fun fallbackProviderFor(url: String): ArtworkProviderId =
         when {

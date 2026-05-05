@@ -388,6 +388,32 @@ class ArtworkRouterTest {
     }
 
     @Test
+    fun `only unsupported premium candidate returns no selected candidate with rejection trace`() {
+        val decision = router.select(
+            candidates = listOf(
+                candidate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    role = ArtworkSourceRole.PREMIUM,
+                    priority = 10,
+                    imageType = ArtworkType.THUMBNAIL
+                )
+            ),
+            policy = policy(
+                ArtworkProviderSettings(
+                    topPostersApiKey = "top-key",
+                    selection = ArtworkProviderSelectionSettings(
+                        thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+                    ),
+                    topPostersEntitlement = null
+                )
+            )
+        )
+
+        assertEquals(null, decision.selectedCandidateOrNull)
+        assertEquals("topposters_entitlement_missing", decision.rejectedCandidates.single().reason)
+    }
+
+    @Test
     fun `router rejection reasons are stable codes without spaces`() {
         val decisions = listOf(
             router.select(

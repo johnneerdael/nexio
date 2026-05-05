@@ -9,9 +9,13 @@ data class ArtworkRoutingPolicy(
 )
 
 data class ArtworkSelectionResult(
-    val selectedCandidate: ArtworkCandidate,
+    val selectedCandidateOrNull: ArtworkCandidate?,
     val rejectedCandidates: List<RejectedArtworkCandidate>
-)
+) {
+    val selectedCandidate: ArtworkCandidate
+        get() = selectedCandidateOrNull
+            ?: throw IllegalArgumentException("ArtworkRouter has no selectable candidate")
+}
 
 class ArtworkRouter(
     private val capabilityResolver: ArtworkProviderCapabilityResolver = ArtworkProviderCapabilityResolver()
@@ -31,7 +35,10 @@ class ArtworkRouter(
         val selected = candidates
             .filterNot { it.sourceRole == ArtworkSourceRole.PREMIUM && !it.isActiveSupportedPremium(context) }
             .minWithOrNull(candidateOrdering(context))
-            ?: throw IllegalArgumentException("ArtworkRouter has no selectable candidate")
+            ?: return ArtworkSelectionResult(
+                selectedCandidateOrNull = null,
+                rejectedCandidates = rejectedBeforeSelection
+            )
 
         val selectedRank = selected.routingRank(context)
         val rejectedAfterSelection = candidates
@@ -44,7 +51,7 @@ class ArtworkRouter(
             }
 
         return ArtworkSelectionResult(
-            selectedCandidate = selected,
+            selectedCandidateOrNull = selected,
             rejectedCandidates = rejectedBeforeSelection + rejectedAfterSelection
         )
     }
