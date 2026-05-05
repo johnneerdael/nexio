@@ -902,8 +902,10 @@ class AccountSettingsSyncService @Inject constructor(
             wyzieSettingsDataStore.setApiKey(it)
         }
 
-        posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
-        posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+        applyPosterRatingsProviderSelection(
+            settings = settings.integrations.posterRatings,
+            posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
+        )
 
         val remoteKitsu = settings.integrations.kitsuAuth
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
@@ -1052,8 +1054,10 @@ class AccountSettingsSyncService @Inject constructor(
             wyzieSettingsDataStore.setApiKey(it)
         }
 
-        posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
-        posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+        applyPosterRatingsProviderSelection(
+            settings = settings.integrations.posterRatings,
+            posterRatingsSettingsDataStore = posterRatingsSettingsDataStore
+        )
 
         val remoteKitsu = settings.integrations.kitsuAuth
         val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
