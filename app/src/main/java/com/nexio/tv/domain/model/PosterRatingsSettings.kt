@@ -22,8 +22,8 @@ data class PosterRatingsSettings(
 
 fun PosterRatingsSettings.toArtworkProviderSettings(): ArtworkProviderSettings {
     val selectedPosterProvider = when {
-        rpdbEnabled && rpdbApiKey.isNotBlank() -> ArtworkProviderChoiceKey.RPDB
-        topPostersEnabled && topPostersApiKey.isNotBlank() -> ArtworkProviderChoiceKey.TOP_POSTERS
+        rpdbEnabled -> ArtworkProviderChoiceKey.RPDB
+        topPostersEnabled -> ArtworkProviderChoiceKey.TOP_POSTERS
         else -> ArtworkProviderChoiceKey.DEFAULT
     }
 
