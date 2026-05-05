@@ -27,14 +27,15 @@ import org.junit.Test
 class PremiumPosterMetadataProviderAdapterStableIdTest {
 
     @Test
-    fun `top posters candidate request uses stable imdb target id instead of route parent id`() = runTest {
+    fun `top posters candidate request uses provider native tmdb target id instead of route parent id`() = runTest {
         val adapter = TopPostersMetadataProviderAdapter(
             posterResolver = resolver(
                 PosterRatingsSettings(
                     topPostersEnabled = true,
                     topPostersApiKey = "top-key"
                 )
-            )
+            ),
+            animeSeasonProjectionResolver = mockk(relaxed = true),
         )
         val route = route(
             provider = MetadataPrimaryProvider.TMDB,
@@ -53,7 +54,7 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
 
         val request = posterRequest(result.candidate?.fields?.get(ResolvedField.POSTER)?.value)
         assertEquals(IntegrationProvider.TOP_POSTERS, request?.provider)
-        assertEquals("imdb/poster/tt0137523.jpg", request?.path)
+        assertEquals("tmdb/poster/movie-550.jpg", request?.path)
         assertFalse(request?.path.orEmpty().contains(route.parentId))
     }
 
@@ -86,7 +87,7 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
     }
 
     @Test
-    fun `kitsu only anime route does not produce premium poster requests`() = runTest {
+    fun `kitsu only anime route uses top posters kitsu id but not rpdb`() = runTest {
         val route = route(
             provider = MetadataPrimaryProvider.KITSU,
             mediaKind = MetadataMediaKind.ANIME,
@@ -111,14 +112,17 @@ class PremiumPosterMetadataProviderAdapterStableIdTest {
                     topPostersEnabled = true,
                     topPostersApiKey = "top-key"
                 )
-            )
+            ),
+            animeSeasonProjectionResolver = mockk(relaxed = true),
         ).execute(
             route = route,
             step = posterStep(MetadataPrimaryProvider.TOP_POSTERS, PosterApiShapes.TOP_POSTERS_POSTER_TEMPLATE)
         )
 
+        val topPostersRequest = posterRequest(topPostersResult.candidate?.fields?.get(ResolvedField.POSTER)?.value)
         assertNull(rpdbResult.candidate?.fields?.get(ResolvedField.POSTER))
-        assertNull(topPostersResult.candidate?.fields?.get(ResolvedField.POSTER))
+        assertEquals(IntegrationProvider.TOP_POSTERS, topPostersRequest?.provider)
+        assertEquals("kitsu/poster/7442.jpg", topPostersRequest?.path)
     }
 
     private fun resolver(settings: PosterRatingsSettings): PosterRatingsUrlResolver {
