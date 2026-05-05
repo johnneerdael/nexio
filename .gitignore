@@ -54,7 +54,6 @@ HOME_UI_OPTIMIZATION_NOTES.local.md
 bugs/
 .worktrees/
 d
-docs/
 nexio-web/ecosystem.config.cjs
 nexio-web/.env
 openspec/
@@ -79,5 +78,4 @@ tools/
 .claude/
 .tmp/
 state/
-docs/superpowers/
 .openrouter.env
