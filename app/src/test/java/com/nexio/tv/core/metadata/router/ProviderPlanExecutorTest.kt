@@ -465,11 +465,13 @@ class ProviderPlanExecutorTest {
     }
 
     @Test
-    fun `SEASON depth requires season number for each provider`() {
+    fun `SEASON depth requires season number for TMDB and TVDB providers`() {
+        // TMDB and TVDB always require a seasonNumber at SEASON depth — they do not support
+        // unconstrained season fetches. KITSU is intentionally excluded: it supports null
+        // seasonNumber to fetch all episodes across all seasons (unconstrained path).
         listOf(
             MetadataPrimaryProvider.TMDB to MetadataMediaKind.SERIES,
-            MetadataPrimaryProvider.TVDB to MetadataMediaKind.SERIES,
-            MetadataPrimaryProvider.KITSU to MetadataMediaKind.ANIME
+            MetadataPrimaryProvider.TVDB to MetadataMediaKind.SERIES
         ).forEach { (provider, mediaKind) ->
             val error = assertThrows("provider=$provider", IllegalStateException::class.java) {
                 executor.buildPlan(
@@ -483,6 +485,21 @@ class ProviderPlanExecutorTest {
 
             assertTrue(error.message!!.contains("SEASON provider plan requires seasonNumber"))
         }
+    }
+
+    @Test
+    fun `SEASON depth with null seasonNumber is allowed for KITSU (unconstrained fetch)`() {
+        // Kitsu supports unconstrained episode fetches — null seasonNumber means
+        // "return all episodes across all seasons". This is the path that fixes MHA S3.
+        val plan = executor.buildPlan(
+            route = route(
+                provider = MetadataPrimaryProvider.KITSU,
+                mediaKind = MetadataMediaKind.ANIME
+            ),
+            depth = MetadataDepth.SEASON
+        )
+
+        assertTrue(plan.steps.isNotEmpty())
     }
 
     @Test
