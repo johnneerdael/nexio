@@ -7,7 +7,10 @@ import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.ActiveProfileSession
+import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydratedHomeFieldTrace
 import com.nexio.tv.domain.model.HydrationState
@@ -30,7 +33,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `image candidates are projected from resolved display surface with artwork refs rating stable ids and trace`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         val trace = HydratedHomeFieldTrace(
             field = "title",
             selectedProvider = "TMDB",
@@ -71,7 +74,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `image candidates fall back to poster when backdrop artwork is absent`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         val poster = artworkRef(key = "poster-550", imageType = ArtworkType.POSTER)
         surface.replaceForTest(
             profileId = 1,
@@ -92,7 +95,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `image candidates exclude items without poster or backdrop artwork`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -110,7 +113,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `image candidates exclude items without a display title`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -125,7 +128,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `trailer candidates come from resolved items even when trailer ids are empty`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -153,7 +156,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `trailer candidates normalize fallback ids by trimming blanks and duplicates`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -173,7 +176,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `trailer candidates treat blank fallback ids as empty for lazy sentinel resolution`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -193,7 +196,7 @@ class ScreensaverCandidateRepositoryTest {
     @Test
     fun `candidate snapshot projects image and trailer candidates from one surface read`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -212,9 +215,43 @@ class ScreensaverCandidateRepositoryTest {
     }
 
     @Test
+    fun `candidate snapshot emits pool built trace with profile hash source and candidate counts`() = runTest {
+        val surface = testSurface()
+        val sink = RecordingTraceSink()
+        val repository = testScreensaverCandidates(
+            surface = surface,
+            traceEvents = TraceMetadataEvents(sink, sessionId = { "screensaver-session" }),
+            profileHashForTrace = { profileId -> "profile-hash-$profileId" }
+        )
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(itemKey = "movie:tmdb:550", title = "Fight Club"),
+                resolvedItem(
+                    itemKey = "movie:tmdb:551",
+                    title = "No Art",
+                    artwork = ArtworkBundle()
+                )
+            )
+        )
+
+        val snapshot = repository.getCandidatesSnapshot(profileId = 1)
+
+        assertEquals(1, snapshot.imageCandidates.size)
+        assertEquals(1, snapshot.trailerCandidates.size)
+        val event = sink.events.single()
+        assertEquals("screensaver.candidate_pool_built", event.eventType)
+        val payload = event.payload as Map<*, *>
+        assertEquals("profile-hash-1", payload["profileHash"])
+        assertEquals("RESOLVED_DISPLAY_SURFACE", payload["source"])
+        assertEquals(1, payload["imageCandidateCount"])
+        assertEquals(1, payload["trailerCandidateCount"])
+    }
+
+    @Test
     fun `trailer candidates exclude items without title or artwork`() = runTest {
         val surface = testSurface()
-        val repository = ScreensaverCandidateRepository(surface)
+        val repository = testScreensaverCandidates(surface)
         surface.replaceForTest(
             profileId = 1,
             items = listOf(
@@ -226,6 +263,16 @@ class ScreensaverCandidateRepositoryTest {
 
         assertEquals(emptyList<ScreensaverTrailerCandidate>(), repository.observeTrailerCandidates(1).first())
     }
+
+    private fun testScreensaverCandidates(
+        surface: ResolvedDisplaySurfaceRepository,
+        traceEvents: TraceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink, sessionId = { null }),
+        profileHashForTrace: (Int) -> String? = { "test-profile-hash" }
+    ) = ScreensaverCandidateRepository(
+        surfaceRepository = surface,
+        traceEvents = traceEvents,
+        profileHashForTrace = profileHashForTrace
+    )
 
     private fun resolvedItem(
         itemKey: String,

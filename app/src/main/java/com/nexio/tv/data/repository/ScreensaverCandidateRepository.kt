@@ -1,6 +1,9 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.trace.TraceHash
+import com.nexio.tv.core.trace.TraceMetadataEvents
 import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
@@ -15,9 +18,29 @@ data class ScreensaverCandidatesSnapshot(
 )
 
 @Singleton
-class ScreensaverCandidateRepository @Inject constructor(
-    private val surfaceRepository: ResolvedDisplaySurfaceRepository
+class ScreensaverCandidateRepository(
+    private val surfaceRepository: ResolvedDisplaySurfaceRepository,
+    private val traceEvents: TraceMetadataEvents,
+    private val profileHashForTrace: (Int) -> String?
 ) {
+    @Inject
+    constructor(
+        surfaceRepository: ResolvedDisplaySurfaceRepository,
+        traceEvents: TraceMetadataEvents,
+        profileManager: ProfileManager
+    ) : this(
+        surfaceRepository = surfaceRepository,
+        traceEvents = traceEvents,
+        profileHashForTrace = { profileId ->
+            val session = profileManager.activeProfileSession.value
+            if (session.profileId == profileId) {
+                TraceHash.of(session.sessionId, session.profileId.toString())
+            } else {
+                null
+            }
+        }
+    )
+
     fun observeImageCandidates(profileId: Int): Flow<List<ScreensaverSlideCandidate>> =
         surfaceRepository.observeHomeSurface(profileId).map { items ->
             items.toImageCandidates()
@@ -30,9 +53,17 @@ class ScreensaverCandidateRepository @Inject constructor(
 
     suspend fun getCandidatesSnapshot(profileId: Int): ScreensaverCandidatesSnapshot {
         val items = surfaceRepository.getSnapshot(profileId)
+        val imageCandidates = items.toImageCandidates()
+        val trailerCandidates = items.toTrailerCandidates()
+        traceEvents.emitScreensaverCandidatePoolBuilt(
+            profileHash = profileHashForTrace(profileId),
+            source = RESOLVED_DISPLAY_SURFACE_SOURCE,
+            imageCandidateCount = imageCandidates.size,
+            trailerCandidateCount = trailerCandidates.size
+        )
         return ScreensaverCandidatesSnapshot(
-            imageCandidates = items.toImageCandidates(),
-            trailerCandidates = items.toTrailerCandidates()
+            imageCandidates = imageCandidates,
+            trailerCandidates = trailerCandidates
         )
     }
 
@@ -82,4 +113,8 @@ class ScreensaverCandidateRepository @Inject constructor(
 
     private fun ResolvedDisplayItem.preferredScreensaverArtwork(): ArtworkDisplayRef? =
         artwork.backdrop ?: artwork.poster
+
+    private companion object {
+        const val RESOLVED_DISPLAY_SURFACE_SOURCE = "RESOLVED_DISPLAY_SURFACE"
+    }
 }
