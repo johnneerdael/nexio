@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.ui.screens.home.order.EffectiveHomeRailOrder
 import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -27,6 +28,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = mapOf(keyA to listOf(persistedRowA)),
             rawRowsByKey = emptyMap(),
             pendingRowsByKey = emptyMap(),
+            publishPolicyByKey = emptyMap(),
         )
 
         assertEquals(listOf(liveRowA), result)
@@ -44,6 +46,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = mapOf(keyA to listOf(persistedRowA)),
             rawRowsByKey = emptyMap(),
             pendingRowsByKey = emptyMap(),
+            publishPolicyByKey = emptyMap(),
         )
 
         assertEquals(listOf(persistedRowA), result)
@@ -67,6 +70,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = emptyMap(),
             rawRowsByKey = mapOf(keyC to rowC),
             pendingRowsByKey = emptyMap(),
+            publishPolicyByKey = emptyMap(),
         )
 
         // Effective order says B, A, C — so output is B, A, C (not the input maps' order).
@@ -88,6 +92,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = mapOf(keyA to listOf(persistedRow)),
             rawRowsByKey = mapOf(keyA to rawRow),
             pendingRowsByKey = mapOf(keyA to pendingRow),
+            publishPolicyByKey = emptyMap(),
         )
         assertEquals(listOf(liveRow), withLive)
 
@@ -98,6 +103,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = mapOf(keyA to listOf(persistedRow)),
             rawRowsByKey = mapOf(keyA to rawRow),
             pendingRowsByKey = mapOf(keyA to pendingRow),
+            publishPolicyByKey = emptyMap(),
         )
         assertEquals(listOf(rawRow), withRaw)
 
@@ -108,6 +114,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = mapOf(keyA to listOf(persistedRow)),
             rawRowsByKey = emptyMap(),
             pendingRowsByKey = mapOf(keyA to pendingRow),
+            publishPolicyByKey = emptyMap(),
         )
         assertEquals(listOf(persistedRow), withPersisted)
 
@@ -118,6 +125,7 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = emptyMap(),
             rawRowsByKey = emptyMap(),
             pendingRowsByKey = mapOf(keyA to pendingRow),
+            publishPolicyByKey = emptyMap(),
         )
         assertEquals(listOf(pendingRow), withPending)
     }
@@ -135,8 +143,44 @@ class HomeRowMaterializerTest {
             persistedSyntheticGroupsByKey = emptyMap(),
             rawRowsByKey = mapOf(keyB to rowB),
             pendingRowsByKey = emptyMap(),
+            publishPolicyByKey = emptyMap(),
         )
 
         assertEquals(listOf(rowB), result)
+    }
+
+    @Test
+    fun `pending row is published only when publishPolicy is PUBLISH_ON_FIRST_PAINT`() {
+        val keyAlways = HomeRailKey("key_always")
+        val keyOnFirstPaint = HomeRailKey("key_first_paint")
+        val keyWhenNonEmpty = HomeRailKey("key_when_non_empty")
+
+        val pendingRow = mockk<CatalogRow>(relaxed = true)
+        val effective = EffectiveHomeRailOrder.Empty.copy(
+            visibleKeys = listOf(keyAlways, keyOnFirstPaint, keyWhenNonEmpty),
+        )
+        val pending = mapOf(
+            keyAlways to pendingRow,
+            keyOnFirstPaint to pendingRow,
+            keyWhenNonEmpty to pendingRow,
+        )
+        val policyByKey = mapOf(
+            keyAlways to RailPublishPolicy.PUBLISH_ALWAYS,
+            keyOnFirstPaint to RailPublishPolicy.PUBLISH_ON_FIRST_PAINT,
+            keyWhenNonEmpty to RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+        )
+
+        val result = materializeHomeRows(
+            effectiveOrder = effective,
+            liveSyntheticGroupsByKey = emptyMap(),
+            persistedSyntheticGroupsByKey = emptyMap(),
+            rawRowsByKey = emptyMap(),
+            pendingRowsByKey = pending,
+            publishPolicyByKey = policyByKey,
+        )
+
+        // Only the PUBLISH_ON_FIRST_PAINT rail produces a pending row;
+        // the other two are skipped (policy doesn't permit a placeholder).
+        assertEquals(listOf(pendingRow), result)
     }
 }

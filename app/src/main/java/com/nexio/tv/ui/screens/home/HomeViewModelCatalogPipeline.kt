@@ -29,6 +29,7 @@ import com.nexio.tv.domain.model.applyTo
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.RailPublishPolicy
 import com.nexio.tv.ui.screens.home.order.toHomeRailDefinitions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -2493,6 +2494,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             rawRowsByKey.mapKeys { HomeRailKey(it.key) }
         val pendingRowsByRailKey: Map<HomeRailKey, CatalogRow> =
             pendingRowsByKey.mapKeys { HomeRailKey(it.key) }
+        val publishPolicyByKey: Map<HomeRailKey, RailPublishPolicy> =
+            liveDefinitions.associate { it.key to it.publishPolicy }
 
         val combinedRows = materializeHomeRows(
             effectiveOrder = effectiveOrder,
@@ -2500,6 +2503,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             persistedSyntheticGroupsByKey = persistedSyntheticByKey,
             rawRowsByKey = rawRowsByRailKey,
             pendingRowsByKey = pendingRowsByRailKey,
+            publishPolicyByKey = publishPolicyByKey,
         )
         val liveOrderedRows = combinedRows
 
