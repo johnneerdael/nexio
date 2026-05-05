@@ -107,9 +107,6 @@ data class TopPostersThumbnailRequest(
     val season: Int,
     val episode: Int,
     val credentialHash: String,
-    val badgePosition: String = "top-right",
-    val badgeSize: String = "small",
-    val blur: Boolean = false,
     override val ttlMs: Long = DEFAULT_TTL_MS,
     override val staleAfterExpiryMs: Long = DEFAULT_STALE_AFTER_EXPIRY_MS,
     override val mimeType: String? = "image/jpeg"
@@ -123,6 +120,9 @@ data class TopPostersThumbnailRequest(
     }
 
     override val provider: IntegrationProvider = IntegrationProvider.TOP_POSTERS
+    val badgePosition: String = BADGE_POSITION
+    val badgeSize: String = BADGE_SIZE
+    val blur: Boolean = BLUR
     val episodePath: String = "S${season}E${episode}"
     override val cacheKey: String =
         "artwork-asset:TOP_POSTERS:thumbnail:$idType:$mediaId:$episodePath:badgeSize:$badgeSize:badgePos:$badgePosition:blur:$blur:credential:$credentialHash:imageLang:en:policy:1"
@@ -159,6 +159,10 @@ data class TopPostersThumbnailRequest(
     }
 
     companion object {
+        const val BADGE_POSITION: String = "top-right"
+        const val BADGE_SIZE: String = "small"
+        const val BLUR: Boolean = false
+
         fun fromModel(model: String): TopPostersThumbnailRequest? {
             if (!model.startsWith("integration-poster://fetch?")) return null
             val params = parseQuery(model)
@@ -170,9 +174,6 @@ data class TopPostersThumbnailRequest(
                 season = params["season"]?.toIntOrNull() ?: return null,
                 episode = params["episode"]?.toIntOrNull() ?: return null,
                 credentialHash = params["credentialHash"] ?: return null,
-                badgePosition = params["badgePosition"] ?: "top-right",
-                badgeSize = params["badgeSize"] ?: "small",
-                blur = params["blur"]?.toBooleanStrictOrNull() ?: false,
                 ttlMs = params["ttlMs"]?.toLongOrNull() ?: DEFAULT_TTL_MS,
                 staleAfterExpiryMs = params["staleAfterExpiryMs"]?.toLongOrNull() ?: DEFAULT_STALE_AFTER_EXPIRY_MS,
                 mimeType = params["mimeType"] ?: "image/jpeg"

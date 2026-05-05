@@ -106,6 +106,57 @@ class TopPostersIntegrationProviderTest {
     }
 
     @Test
+    fun `fetchThumbnail coerces serialized thumbnail badge and blur params to Android TV values`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val transport = mockk<PosterTransport>()
+        val request = requireNotNull(
+            TopPostersThumbnailRequest.fromModel(
+                "integration-poster://fetch?" +
+                    "type=topposters-thumbnail" +
+                    "&apiKey=key" +
+                    "&idType=imdb" +
+                    "&mediaId=tt15940132" +
+                    "&season=1" +
+                    "&episode=5" +
+                    "&credentialHash=credential-hash" +
+                    "&badgePosition=bottom-left" +
+                    "&badgeSize=large" +
+                    "&blur=true"
+            )
+        )
+        val forcedRemoteUrl = "https://api.top-posters.com/key/imdb/thumbnail/tt15940132/S1E5.jpg?badge_size=small&badge_position=top-right&blur=false"
+        val specSlot = slot<IntegrationSpec<ByteArray>>()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } coAnswers {
+            specSlot.captured.load()
+            IntegrationFetchResult.Missing
+        }
+        every { transport.execute(forcedRemoteUrl) } returns PosterTransportResult(
+            statusCode = 404,
+            isSuccessful = false,
+            body = "missing".toByteArray()
+        )
+
+        val provider = TopPostersIntegrationProvider(runtime, mockk<TopPostersApi>(), transport)
+        provider.fetchThumbnail(request)
+
+        assertEquals(
+            "artwork-asset:TOP_POSTERS:thumbnail:imdb:tt15940132:S1E5:badgeSize:small:badgePos:top-right:blur:false:credential:credential-hash:imageLang:en:policy:1",
+            request.cacheKey
+        )
+        assertTrue(specSlot.captured.operationKey.contains("badgePos:top-right"))
+        assertTrue(specSlot.captured.operationKey.contains("badgeSize:small"))
+        assertTrue(specSlot.captured.operationKey.contains("blur:false"))
+        assertFalse(specSlot.captured.operationKey.contains("bottom-left"))
+        assertFalse(specSlot.captured.operationKey.contains("large"))
+        assertFalse(specSlot.captured.operationKey.contains("blur:true"))
+        assertFalse(request.toModel().contains("bottom-left"))
+        assertFalse(request.toModel().contains("large"))
+        assertFalse(request.toModel().contains("blur=true"))
+        verify(exactly = 1) { transport.execute(forcedRemoteUrl) }
+    }
+
+    @Test
     fun `fetchThumbnail maps http failures and missing bodies to thumbnail reasons`() = runTest {
         val runtime = mockk<IntegrationRuntime>()
         val transport = mockk<PosterTransport>()
