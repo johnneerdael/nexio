@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screensaver
 
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
+import com.nexio.tv.domain.model.ProviderIds
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -144,6 +145,44 @@ class IdleTrailerScreensaverSessionTest {
         }
 
         assertNull(playback)
+    }
+
+    @Test
+    fun `prepare trailer screensaver session can resolve candidate without preexisting youtube ids`() = runBlocking {
+        val candidates = listOf(
+            IdleTrailerScreensaverCandidate(
+                itemId = "tvdb:81189",
+                itemType = "series",
+                addonBaseUrl = "",
+                title = "Breaking Bad",
+                logoUrl = null,
+                backgroundUrl = "nexio-artwork://decision/backdrop-81189",
+                fallbackArtworkUrls = listOf("nexio-artwork://decision/backdrop-81189"),
+                genres = emptyList(),
+                description = "A chemistry teacher...",
+                releaseInfo = "2008",
+                runtime = null,
+                imdbRating = 9.5f,
+                tomatoesRating = null,
+                trailerYtIds = emptyList(),
+                stableIds = ProviderIds(tvdb = "81189", imdb = "tt0903747")
+            )
+        )
+
+        val session = prepareIdleTrailerScreensaverSessionFromCandidates(
+            candidates = candidates,
+            shuffleCandidates = { it }
+        ) { candidate, trailerId ->
+            if (candidate.itemId == "tvdb:81189" && trailerId == RESOLVE_TRAILER_BY_ITEM_SENTINEL) {
+                TrailerPlaybackSource(videoUrl = "https://video.example/breaking-bad.m3u8")
+            } else {
+                null
+            }
+        }
+
+        requireNotNull(session)
+        assertEquals("tvdb:81189", session.initialPlayback.candidate.itemId)
+        assertEquals(RESOLVE_TRAILER_BY_ITEM_SENTINEL, session.initialPlayback.trailerId)
     }
 
     @Test

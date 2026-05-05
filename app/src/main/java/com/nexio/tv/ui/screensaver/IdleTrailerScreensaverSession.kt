@@ -30,6 +30,8 @@ internal enum class IdleTrailerRemoteKeyAction {
 
 private val IdleTrailerYearRegex = Regex("\\b(19|20)\\d{2}\\b")
 
+internal const val RESOLVE_TRAILER_BY_ITEM_SENTINEL = "__resolve_by_item__"
+
 internal fun collectIdleTrailerScreensaverCandidates(
     slides: List<IdleScreensaverSlide>
 ): List<IdleTrailerScreensaverCandidate> {
@@ -106,7 +108,6 @@ internal suspend fun prepareIdleTrailerScreensaverSessionFromCandidates(
 ): IdleTrailerScreensaverSessionStart? {
     val orderedCandidates = shuffleCandidates(
         candidates
-            .filter { it.trailerYtIds.isNotEmpty() }
             .distinctBy { "${it.itemType}:${it.itemId}" }
     )
     if (orderedCandidates.isEmpty()) return null
@@ -192,7 +193,9 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
 ): IdleTrailerScreensaverPlayback? {
     orderedIndices.forEach { index ->
         val candidate = candidates.getOrNull(index) ?: return@forEach
-        candidate.trailerYtIds.forEach { trailerId ->
+        val trailerIds = candidate.trailerYtIds.takeIf { it.isNotEmpty() }
+            ?: listOf(RESOLVE_TRAILER_BY_ITEM_SENTINEL)
+        trailerIds.forEach { trailerId ->
             if (idleTrailerPlaybackKey(candidate, trailerId) in skippedPlaybackKeys) {
                 return@forEach
             }

@@ -44,15 +44,21 @@ class IdleScreensaverRepository(
 
     private suspend fun refreshFromResolvedSurface(logPrefix: String) {
         refreshMutex.withLock {
-            _slides.value = screensaverCandidateRepository
-                .observeImageCandidates(activeProfileId())
+            val profileId = activeProfileId()
+            val imageCandidates = screensaverCandidateRepository
+                .observeImageCandidates(profileId)
                 .first()
-                .mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
-            _trailerCandidates.value = emptyList()
+            val trailerCandidates = screensaverCandidateRepository
+                .observeTrailerCandidates(profileId)
+                .first()
+            _slides.value = imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
+            _trailerCandidates.value = trailerCandidates.mapNotNull { candidate ->
+                candidate.toIdleTrailerScreensaverCandidate()
+            }
             Log.d(
                 TAG,
                 "$logPrefix ${_slides.value.size} idle screensaver slides and " +
-                    "${_trailerCandidates.value.size} trailer candidates"
+                    "${_trailerCandidates.value.size} trailer candidates from resolved display surface"
             )
         }
     }
