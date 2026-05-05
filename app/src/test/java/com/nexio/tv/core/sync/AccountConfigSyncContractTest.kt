@@ -1,6 +1,7 @@
 package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
+import com.nexio.tv.data.local.KitsuCatalogSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -8,8 +9,10 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
+import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
@@ -782,6 +785,9 @@ class AccountConfigSyncContractTest {
         )
 
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        val tmdbCatalogSettingsDataStore = mockk<TmdbCatalogSettingsDataStore>(relaxed = true)
+        val kitsuCatalogSettingsDataStore = mockk<KitsuCatalogSettingsDataStore>(relaxed = true)
+        val homeRailOrderStore = mockk<HomeRailOrderStore>(relaxed = true)
 
         applyAccountConfigSyncSettings(
             settings = settings,
@@ -795,6 +801,9 @@ class AccountConfigSyncContractTest {
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
             simklSettingsDataStore = simklSettingsDataStore,
+            tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
+            kitsuCatalogSettingsDataStore = kitsuCatalogSettingsDataStore,
+            homeRailOrderStore = homeRailOrderStore,
             playerSettingsDataStore = playerSettingsDataStore
         )
 
