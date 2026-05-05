@@ -31,9 +31,23 @@ class ScreensaverSurfaceBoundaryTest {
     )
 
     private val candidateRepositoryBannedImportPrefixes = listOf(
+        "com.nexio.tv.core.anime.",
+        "com.nexio.tv.core.poster.",
+        "com.nexio.tv.core.tmdb.",
+        "com.nexio.tv.core.tvdb.",
         "com.nexio.tv.data.integration.metadata.",
+        "com.nexio.tv.data.integration.imdb.",
+        "com.nexio.tv.data.integration.omdb.",
+        "com.nexio.tv.data.integration.posters.",
         "com.nexio.tv.data.integration.trailer.",
         "com.nexio.tv.data.integration.youtube.",
+        "com.nexio.tv.data.local.Metadata",
+        "com.nexio.tv.data.local.Poster",
+        "com.nexio.tv.data.local.Trailer",
+        "com.nexio.tv.data.remote.api.Poster",
+        "com.nexio.tv.data.remote.api.Trailer",
+        "com.nexio.tv.data.remote.dto.mdblist.",
+        "com.nexio.tv.data.trailer.",
         "com.nexio.tv.core.metadata.router.resolver.TrailerResolver"
     )
 
@@ -41,8 +55,24 @@ class ScreensaverSurfaceBoundaryTest {
         "MetadataRepository",
         "RatingsRepository",
         "PosterRepository",
+        "EpisodeRatingsSelectionRepository",
         "MetadataSecondaryRepository",
+        "ProviderLocalizedMetadataResolver",
+        "ProviderMetadataRouter",
+        "TvMetadataRouter",
+        "TvdbAdvancedMetadataMapper",
+        "TvdbMetadataService",
+        "TvdbTrailerMapper",
+        "TvdbTrailerResolver",
+        "TmdbMetadataService",
+        "ImdbPosterLookupService",
+        "KitsuMetadataService",
         "PosterRatingsUrlResolver",
+        "PosterRatingsApi",
+        "TrailerApi",
+        "TrailerSettingsDataStore",
+        "MetadataDiskCacheStore",
+        "PosterRatingsSettingsDataStore",
         "TrailerBackendProvider",
         "TrailerTmdbProvider",
         "TrailerResolver",
@@ -66,6 +96,13 @@ class ScreensaverSurfaceBoundaryTest {
         "CustomImdbEpisodeRatingsRepository",
         "CustomImdbTitleRatingsRepository",
         "OmdbEpisodeRatingsRepository"
+    )
+
+    private val candidateRepositoryBannedIdentifierPatterns = listOf(
+        Regex(
+            """\b[A-Za-z0-9_]*(Metadata|Trailer|Rating|Ratings|Poster|Artwork)""" +
+                """[A-Za-z0-9_]*(Repository|Service|Resolver|Provider|Adapter|Router|Api|DataStore|Transport|Fetcher|Mapper|Lookup)\b"""
+        )
     )
 
     private val candidateRepositoryBannedCalls = providerMetadataRatingArtworkCalls + setOf(
@@ -137,6 +174,11 @@ class ScreensaverSurfaceBoundaryTest {
             "ScreensaverCandidateRepository must project from ResolvedDisplaySurfaceRepository, not reference provider-specific services.",
             emptyList<String>(),
             identifierReferences(source, candidateRepositoryBannedDependencies)
+        )
+        assertEquals(
+            "ScreensaverCandidateRepository must not reference provider-style metadata, rating, artwork, or trailer pipeline classes.",
+            emptyList<String>(),
+            patternReferences(source, candidateRepositoryBannedIdentifierPatterns)
         )
         assertEquals(
             "ScreensaverCandidateRepository must not call provider enrichment, source-pool, artwork, metadata, rating, or trailer resolution APIs.",
@@ -233,6 +275,14 @@ class ScreensaverSurfaceBoundaryTest {
         val code = source.withoutImports().withoutCommentsAndStrings()
         return names
             .filter { name -> Regex("""\b${Regex.escape(name)}\b""").containsMatchIn(code) }
+            .sorted()
+    }
+
+    private fun patternReferences(source: String, patterns: List<Regex>): List<String> {
+        val code = source.withoutImports().withoutCommentsAndStrings()
+        return patterns
+            .flatMap { pattern -> pattern.findAll(code).map { match -> match.value } }
+            .distinct()
             .sorted()
     }
 
