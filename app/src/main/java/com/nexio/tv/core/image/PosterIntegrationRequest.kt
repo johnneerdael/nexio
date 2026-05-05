@@ -163,22 +163,27 @@ data class TopPostersThumbnailRequest(
         const val BADGE_SIZE: String = "small"
         const val BLUR: Boolean = false
 
-        fun fromModel(model: String): TopPostersThumbnailRequest? {
+        fun fromModel(model: String): TopPostersThumbnailRequest? = runCatching {
             if (!model.startsWith("integration-poster://fetch?")) return null
             val params = parseQuery(model)
             if (params["type"] != "topposters-thumbnail") return null
+            val idType = params["idType"]?.takeIf { it.isNotBlank() } ?: return null
+            val mediaId = params["mediaId"]?.takeIf { it.isNotBlank() } ?: return null
+            val season = params["season"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+            val episode = params["episode"]?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+            val credentialHash = params["credentialHash"]?.takeIf { it.isNotBlank() } ?: return null
             return TopPostersThumbnailRequest(
                 apiKey = params["apiKey"] ?: return null,
-                idType = params["idType"] ?: return null,
-                mediaId = params["mediaId"] ?: return null,
-                season = params["season"]?.toIntOrNull() ?: return null,
-                episode = params["episode"]?.toIntOrNull() ?: return null,
-                credentialHash = params["credentialHash"] ?: return null,
+                idType = idType,
+                mediaId = mediaId,
+                season = season,
+                episode = episode,
+                credentialHash = credentialHash,
                 ttlMs = params["ttlMs"]?.toLongOrNull() ?: DEFAULT_TTL_MS,
                 staleAfterExpiryMs = params["staleAfterExpiryMs"]?.toLongOrNull() ?: DEFAULT_STALE_AFTER_EXPIRY_MS,
                 mimeType = params["mimeType"] ?: "image/jpeg"
             )
-        }
+        }.getOrNull()
     }
 }
 

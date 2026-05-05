@@ -157,6 +157,21 @@ class TopPostersIntegrationProviderTest {
     }
 
     @Test
+    fun `fromModel rejects malformed thumbnail models without throwing`() {
+        listOf(
+            thumbnailModel(season = "0"),
+            thumbnailModel(season = "-1"),
+            thumbnailModel(episode = "0"),
+            thumbnailModel(episode = "-1"),
+            thumbnailModel(mediaId = ""),
+            thumbnailModel(idType = ""),
+            thumbnailModel(credentialHash = "")
+        ).forEach { model ->
+            assertNull(TopPostersThumbnailRequest.fromModel(model))
+        }
+    }
+
+    @Test
     fun `fetchThumbnail maps http failures and missing bodies to thumbnail reasons`() = runTest {
         val runtime = mockk<IntegrationRuntime>()
         val transport = mockk<PosterTransport>()
@@ -533,4 +548,21 @@ class TopPostersIntegrationProviderTest {
 
         assertEquals(IntegrationCachePolicy.Disabled, specSlot.captured.cachePolicy)
     }
+
+    private fun thumbnailModel(
+        apiKey: String = "key",
+        idType: String = "imdb",
+        mediaId: String = "tt15940132",
+        season: String = "1",
+        episode: String = "5",
+        credentialHash: String = "credential-hash"
+    ): String =
+        "integration-poster://fetch?" +
+            "type=topposters-thumbnail" +
+            "&apiKey=$apiKey" +
+            "&idType=$idType" +
+            "&mediaId=$mediaId" +
+            "&season=$season" +
+            "&episode=$episode" +
+            "&credentialHash=$credentialHash"
 }
