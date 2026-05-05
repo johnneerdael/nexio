@@ -6,7 +6,8 @@ enum class RailFamily(val familyRank: Int) {
     MDBLIST(2),
     TMDB(3),
     KITSU(4),
-    ADDON(5),
+    ADDON(5);
+    companion object
 }
 
 enum class RailSource {
