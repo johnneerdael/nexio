@@ -2500,6 +2500,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         )
         val liveOrderedRows = combinedRows
 
+        // Emit a diagnostics event whenever a visible key falls back to persisted synthetic
+        // content because no live synthetic group nor live raw row is available for that key.
+        effectiveOrder.visibleKeys.forEach { key ->
+            if (key !in liveSyntheticByKey && key !in rawRowsByRailKey && key in persistedSyntheticByKey) {
+                homeRailOrderStore.emitPersistedSyntheticFallback(key)
+            }
+        }
+
         // Preserve diagnostics signatures for downstream call sites - same shape as before,
         // computed from the new effective order so CatalogUpdateResult continues to populate.
         // (Phase 9/Task 20 will replace these with home.rail_order_reconciled events.)

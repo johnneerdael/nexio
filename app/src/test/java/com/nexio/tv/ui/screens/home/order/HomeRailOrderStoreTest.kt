@@ -37,6 +37,7 @@ class HomeRailOrderStoreTest {
             codec = codec,
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
         )
 
         assertEquals(HomeRailOrderState.Empty, store.state.first())
@@ -58,6 +59,7 @@ class HomeRailOrderStoreTest {
             codec = codec,
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
         )
 
         store.updateOrder(
@@ -89,6 +91,7 @@ class HomeRailOrderStoreTest {
             codec = codec,
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
         )
 
         store.updateOrder(
@@ -127,7 +130,7 @@ class HomeRailOrderStoreTest {
         coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
 
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val store = HomeRailOrderStore(layout, codec, fixedClock, testScope)
+        val store = HomeRailOrderStore(layout, codec, fixedClock, testScope, CapturingHomeRailOrderDiagnosticsSink())
 
         val live = MutableStateFlow(
             listOf(
@@ -172,6 +175,7 @@ class HomeRailOrderStoreTest {
             codec = codec,
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
         )
 
         store.updateOrder(
@@ -201,7 +205,8 @@ class HomeRailOrderStoreTest {
         coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
-            TestScope(StandardTestDispatcher(testScheduler)))
+            TestScope(StandardTestDispatcher(testScheduler)),
+            CapturingHomeRailOrderDiagnosticsSink())
 
         store.updateOrder(
             orderedKeys = listOf(HomeRailKey("A"), HomeRailKey("C")),
@@ -226,7 +231,8 @@ class HomeRailOrderStoreTest {
         coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
-            TestScope(StandardTestDispatcher(testScheduler)))
+            TestScope(StandardTestDispatcher(testScheduler)),
+            CapturingHomeRailOrderDiagnosticsSink())
 
         store.updateOrder(
             orderedKeys = listOf(HomeRailKey("k1"), HomeRailKey("k2")),
@@ -260,7 +266,8 @@ class HomeRailOrderStoreTest {
         coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
-            TestScope(StandardTestDispatcher(testScheduler)))
+            TestScope(StandardTestDispatcher(testScheduler)),
+            CapturingHomeRailOrderDiagnosticsSink())
 
         val live = listOf(
             HomeRailDefinition(
@@ -294,7 +301,8 @@ class HomeRailOrderStoreTest {
         coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
 
         val store = HomeRailOrderStore(layout, codec, fixedClock,
-            TestScope(StandardTestDispatcher(testScheduler)))
+            TestScope(StandardTestDispatcher(testScheduler)),
+            CapturingHomeRailOrderDiagnosticsSink())
 
         // Seed the cache by calling onLiveDefinitionsArrived with a TMDB definition list.
         val live = listOf(
@@ -335,6 +343,37 @@ class HomeRailOrderStoreTest {
     }
 
     @Test
+    fun `updateOrder emits rail_order_mutation diagnostics event`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(null)
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val sink = CapturingHomeRailOrderDiagnosticsSink()
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = sink,
+        )
+
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("a"), HomeRailKey("b")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("a"), HomeRailKey("b")),
+        )
+        advanceUntilIdle()
+
+        val mutationEvent = sink.events.firstOrNull { it.eventType == "home.rail_order_mutation" }
+        assertEquals("home.rail_order_mutation", mutationEvent?.eventType)
+        assertEquals(true, mutationEvent?.payload?.contains("ANDROID_ORDER_SCREEN"))
+        assertEquals(true, mutationEvent?.payload?.contains("after=[HomeRailKey(value=a), HomeRailKey(value=b)]"))
+    }
+
+    @Test
     fun `tryMigrate seeds from legacy when state json is null`() = runTest {
         val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val persisted = MutableStateFlow<String?>(null)
@@ -348,6 +387,7 @@ class HomeRailOrderStoreTest {
             codec = codec,
             clock = fixedClock,
             scope = TestScope(StandardTestDispatcher(testScheduler)),
+            diagnostics = CapturingHomeRailOrderDiagnosticsSink(),
         )
 
         store.tryMigrate(

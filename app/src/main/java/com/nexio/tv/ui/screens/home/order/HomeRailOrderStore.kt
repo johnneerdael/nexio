@@ -46,6 +46,7 @@ class HomeRailOrderStore @Inject constructor(
     private val codec: HomeRailOrderStateCodec,
     private val clock: Clock,
     @ApplicationScope private val scope: CoroutineScope,
+    private val diagnostics: HomeRailOrderDiagnosticsSink,
     private val reconciler: HomeRailOrderReconciler = HomeRailOrderReconciler(),
 ) {
     private val mutationLock = Mutex()
@@ -62,8 +63,29 @@ class HomeRailOrderStore @Inject constructor(
     ): StateFlow<EffectiveHomeRailOrder> =
         combine(state, liveDefinitions) { s, defs ->
             knownLiveKeysCache.value = defs.map { it.key }.toSet()
-            reconciler.reconcile(s.orderedKeys, s.disabledKeys, defs)
+            val result = reconciler.reconcile(s.orderedKeys, s.disabledKeys, defs)
+            emitReconciledDiagnostics(s, defs, result)
+            result
         }.stateIn(scope, SharingStarted.Eagerly, EffectiveHomeRailOrder.Empty)
+
+    private fun emitReconciledDiagnostics(
+        current: HomeRailOrderState,
+        liveDefinitions: List<HomeRailDefinition>,
+        result: EffectiveHomeRailOrder,
+    ) {
+        diagnostics.emitReconciled(
+            savedGlobalOrder = current.orderedKeys,
+            providerOrders = liveDefinitions.groupBy({ it.family }, { it.key }),
+            persistedSyntheticOrder = emptyList(),
+            liveDefinitionOrder = liveDefinitions.map { it.key },
+            effectiveOrder = result.visibleKeys,
+            disabledKeys = result.disabledKeys,
+            newlyDiscoveredKeys = result.newlyDiscoveredKeys,
+            ignoredOrderSources = listOf("persistedSyntheticOrder"),
+            mutationSource = current.lastMutationSource,
+        )
+        result.newlyDiscoveredKeys.forEach { diagnostics.emitAddedFromMissingDefault(it) }
+    }
 
     suspend fun updateOrder(
         orderedKeys: List<HomeRailKey>,
@@ -75,12 +97,14 @@ class HomeRailOrderStore @Inject constructor(
             it !in knownLiveKeys && it !in orderedKeys
         }
         val merged = orderedKeys + unknownInCurrent
+        val before = current.orderedKeys
         persist(current.copy(
             orderedKeys = merged,
             version = current.version + 1,
             updatedAtMs = clock.millis(),
             lastMutationSource = source,
         ))
+        diagnostics.emitMutation(source = source, before = before, after = merged)
     }
 
     suspend fun setEnabled(
@@ -91,12 +115,16 @@ class HomeRailOrderStore @Inject constructor(
         val current = currentForMutation()
         val newDisabled = if (enabled) current.disabledKeys - key else current.disabledKeys + key
         if (newDisabled == current.disabledKeys) return@withLock
+        val before = current.orderedKeys
         persist(current.copy(
             disabledKeys = newDisabled,
             version = current.version + 1,
             updatedAtMs = clock.millis(),
             lastMutationSource = source,
         ))
+        diagnostics.emitEnabledChanged(key = key, enabled = enabled, source = source)
+        if (!enabled) diagnostics.emitHiddenDueToDisabled(key)
+        diagnostics.emitMutation(source = source, before = before, after = before)
     }
 
     suspend fun reorderProviderKeys(
@@ -119,12 +147,14 @@ class HomeRailOrderStore @Inject constructor(
             liveDefinitions = liveDefinitions,
         )
         if (merged == current.orderedKeys) return@withLock
+        val before = current.orderedKeys
         persist(current.copy(
             orderedKeys = merged,
             version = current.version + 1,
             updatedAtMs = clock.millis(),
             lastMutationSource = source,
         ))
+        diagnostics.emitMutation(source = source, before = before, after = merged)
     }
 
     suspend fun tryMigrate(
@@ -171,7 +201,17 @@ class HomeRailOrderStore @Inject constructor(
     fun reconcileNow(liveDefinitions: List<HomeRailDefinition>): EffectiveHomeRailOrder {
         lastKnownLiveDefinitions = liveDefinitions
         val current = lastWrittenState ?: state.value
-        return reconciler.reconcile(current.orderedKeys, current.disabledKeys, liveDefinitions)
+        val result = reconciler.reconcile(current.orderedKeys, current.disabledKeys, liveDefinitions)
+        emitReconciledDiagnostics(current, liveDefinitions, result)
+        return result
+    }
+
+    /**
+     * Pipeline-friendly pass-through to emit a `persisted_synthetic_used_as_content_only`
+     * event for [key] without exposing the diagnostics sink directly.
+     */
+    fun emitPersistedSyntheticFallback(key: HomeRailKey) {
+        diagnostics.emitPersistedSyntheticUsedAsContentOnly(key)
     }
 
     private suspend fun currentForMutation(): HomeRailOrderState {
