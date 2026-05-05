@@ -13,11 +13,11 @@ import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
-import io.mockk.verify
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -35,16 +35,16 @@ class IdleScreensaverRepositoryTest {
     fun `warmFromCache publishes image slides from screensaver candidates`() = runTest {
         val candidateRepository = mockk<ScreensaverCandidateRepository>()
         val artwork = artworkRef(assetKey = "fight-club-backdrop", imageType = ArtworkType.BACKDROP)
-        every { candidateRepository.observeImageCandidates(2) } returns flowOf(
-            listOf(
+        coEvery { candidateRepository.getCandidatesSnapshot(2) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = listOf(
                 candidate(
                     preferredImage = artwork,
                     title = "Fight Club",
                     rating = TitleRating(8.8, TitleRatingSource.IMDB)
                 )
-            )
+            ),
+            trailerCandidates = emptyList()
         )
-        every { candidateRepository.observeTrailerCandidates(2) } returns flowOf(emptyList())
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = candidateRepository,
             activeProfileId = { 2 }
@@ -61,15 +61,14 @@ class IdleScreensaverRepositoryTest {
         assertEquals(8.8f, slide.imdbRating ?: 0f, 0.0f)
         assertNull(slide.modeData.trailer)
         assertEquals(emptyList<Any>(), repository.trailerCandidates.value)
-        verify(exactly = 1) { candidateRepository.observeImageCandidates(2) }
-        verify(exactly = 1) { candidateRepository.observeTrailerCandidates(2) }
+        coVerify(exactly = 1) { candidateRepository.getCandidatesSnapshot(2) }
     }
 
     @Test
     fun `refreshOnColdBoot refreshes image slides from active profile candidates`() = runTest {
         val candidateRepository = mockk<ScreensaverCandidateRepository>()
-        every { candidateRepository.observeImageCandidates(3) } returns flowOf(
-            listOf(
+        coEvery { candidateRepository.getCandidatesSnapshot(3) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = listOf(
                 candidate(
                     itemKey = "series:tmdb:1399",
                     contentId = "tmdb:1399",
@@ -78,9 +77,9 @@ class IdleScreensaverRepositoryTest {
                     title = "Game of Thrones",
                     rating = TitleRating(9.2, TitleRatingSource.IMDB)
                 )
-            )
+            ),
+            trailerCandidates = emptyList()
         )
-        every { candidateRepository.observeTrailerCandidates(3) } returns flowOf(emptyList())
         val repository = IdleScreensaverRepository(
             screensaverCandidateRepository = candidateRepository,
             activeProfileId = { 3 }
@@ -94,16 +93,15 @@ class IdleScreensaverRepositoryTest {
         assertEquals("Game of Thrones", slide.title)
         assertEquals("nexio-artwork://asset/got-poster", slide.backgroundUrl)
         assertEquals(9.2f, slide.imdbRating ?: 0f, 0.0f)
-        verify(exactly = 1) { candidateRepository.observeImageCandidates(3) }
-        verify(exactly = 1) { candidateRepository.observeTrailerCandidates(3) }
+        coVerify(exactly = 1) { candidateRepository.getCandidatesSnapshot(3) }
     }
 
     @Test
     fun `warmFromCache populates trailer candidates from resolved display surface`() = runTest {
         val candidateRepository = mockk<ScreensaverCandidateRepository>()
-        every { candidateRepository.observeImageCandidates(profileId = 1) } returns flowOf(emptyList())
-        every { candidateRepository.observeTrailerCandidates(profileId = 1) } returns flowOf(
-            listOf(
+        coEvery { candidateRepository.getCandidatesSnapshot(profileId = 1) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = emptyList(),
+            trailerCandidates = listOf(
                 ScreensaverTrailerCandidate(
                     itemKey = "series:tvdb:81189",
                     contentId = "tvdb:81189",
@@ -132,6 +130,45 @@ class IdleScreensaverRepositoryTest {
         assertEquals(1, repository.trailerCandidates.value.size)
         assertEquals("Breaking Bad", repository.trailerCandidates.value.single().title)
         assertEquals("81189", repository.trailerCandidates.value.single().stableIds.tvdb)
+    }
+
+    @Test
+    fun `warmFromCache carries distinct trailer backdrop and poster fallback artwork refs`() = runTest {
+        val candidateRepository = mockk<ScreensaverCandidateRepository>()
+        coEvery { candidateRepository.getCandidatesSnapshot(profileId = 1) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = emptyList(),
+            trailerCandidates = listOf(
+                ScreensaverTrailerCandidate(
+                    itemKey = "movie:tmdb:550",
+                    contentId = "tmdb:550",
+                    itemType = "movie",
+                    title = "Fight Club",
+                    releaseInfo = "1999",
+                    overview = "Overview",
+                    rating = null,
+                    artwork = ArtworkBundle(
+                        backdrop = artworkRef("fight-backdrop", ArtworkType.BACKDROP),
+                        poster = artworkRef("fight-poster", ArtworkType.POSTER)
+                    ),
+                    fallbackTrailerYtIds = emptyList(),
+                    stableIds = ProviderIds(tmdb = "550", imdb = "tt0137523")
+                )
+            )
+        )
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = candidateRepository,
+            activeProfileId = { 1 }
+        )
+
+        repository.warmFromCache()
+
+        assertEquals(
+            listOf(
+                "nexio-artwork://asset/fight-backdrop",
+                "nexio-artwork://asset/fight-poster"
+            ),
+            repository.trailerCandidates.value.single().fallbackArtworkUrls
+        )
     }
 
     private fun candidate(
