@@ -1,6 +1,11 @@
 package com.nexio.tv.ui.screensaver
 
 import androidx.compose.runtime.Immutable
+import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.domain.model.HydratedHomeFieldTrace
+import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TitleRating
 
 @Immutable
 data class IdleScreensaverSlide(
@@ -103,9 +108,9 @@ data class ScreensaverSlideCandidate(
     val title: String?,
     val subtitle: String?,
     val overview: String?,
-    val rating: com.nexio.tv.domain.model.TitleRating?,
-    val artwork: com.nexio.tv.core.artwork.ArtworkBundle,
-    val preferredImage: com.nexio.tv.core.artwork.ArtworkDisplayRef?,
-    val stableIds: com.nexio.tv.domain.model.ProviderIds,
-    val trace: List<com.nexio.tv.domain.model.HydratedHomeFieldTrace>
+    val rating: TitleRating?,
+    val artwork: ArtworkBundle,
+    val preferredImage: ArtworkDisplayRef,
+    val stableIds: ProviderIds,
+    val trace: List<HydratedHomeFieldTrace>
 )

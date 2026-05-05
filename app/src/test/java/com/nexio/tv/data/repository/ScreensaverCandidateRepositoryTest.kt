@@ -105,9 +105,24 @@ class ScreensaverCandidateRepositoryTest {
         assertEquals(emptyList<ScreensaverSlideCandidate>(), repository.observeImageCandidates(1).first())
     }
 
+    @Test
+    fun `image candidates exclude items without a display title`() = runTest {
+        val surface = testSurface()
+        val repository = ScreensaverCandidateRepository(surface)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(itemKey = "movie:tmdb:551", title = null),
+                resolvedItem(itemKey = "movie:tmdb:552", title = "   ")
+            )
+        )
+
+        assertEquals(emptyList<ScreensaverSlideCandidate>(), repository.observeImageCandidates(1).first())
+    }
+
     private fun resolvedItem(
         itemKey: String,
-        title: String,
+        title: String?,
         artwork: ArtworkBundle = ArtworkBundle(backdrop = artworkRef("backdrop-550", ArtworkType.BACKDROP)),
         sourceTrace: List<HydratedHomeFieldTrace> = emptyList()
     ) = ResolvedDisplayItem(
