@@ -30,6 +30,66 @@ class ScreensaverSurfaceBoundaryTest {
         "hydrateAddonOriginItem"
     )
 
+    private val candidateRepositoryBannedImportPrefixes = listOf(
+        "com.nexio.tv.data.integration.metadata.",
+        "com.nexio.tv.data.integration.trailer.",
+        "com.nexio.tv.data.integration.youtube.",
+        "com.nexio.tv.core.metadata.router.resolver.TrailerResolver"
+    )
+
+    private val candidateRepositoryBannedDependencies = providerMetadataRatingArtworkDependencies + setOf(
+        "MetadataRepository",
+        "RatingsRepository",
+        "PosterRepository",
+        "MetadataSecondaryRepository",
+        "PosterRatingsUrlResolver",
+        "TrailerBackendProvider",
+        "TrailerTmdbProvider",
+        "TrailerResolver",
+        "TrailerService",
+        "TrailerRepository",
+        "TrailerMetadataRepository",
+        "YouTubeTrailerIntegrationProvider",
+        "KitsuMetadataProviderAdapter",
+        "MetadataAdapterCandidates",
+        "MetadataProviderTargetIds",
+        "RuntimeMetadataIdentityLookup",
+        "TmdbMetadataProviderAdapter",
+        "TmdbOrganizationPersonAdapter",
+        "TmdbRecommendationMetadataAdapter",
+        "TmdbReviewMetadataAdapter",
+        "TmdbTrailerMetadataAdapter",
+        "TraktReviewMetadataAdapter",
+        "TvdbMetadataProviderAdapter",
+        "TvdbOrganizationPersonAdapter",
+        "TvdbTrailerMetadataAdapter",
+        "CustomImdbEpisodeRatingsRepository",
+        "CustomImdbTitleRatingsRepository",
+        "OmdbEpisodeRatingsRepository"
+    )
+
+    private val candidateRepositoryBannedCalls = providerMetadataRatingArtworkCalls + setOf(
+        "resolveTrailer",
+        "resolveIdleTrailerScreensaverPlaybackSource",
+        "buildIdleTrailerYouTubeUrl",
+        "resolveYouTubePlaybackSource",
+        "resolveLatestAiredSeasonNumber",
+        "fetchMovieVideos",
+        "fetchTvVideos",
+        "fetchSeasonVideos",
+        "fetchTmdbEnrichment",
+        "fetchMoreLikeThis",
+        "fetchReviews",
+        "fetchMovieCollection",
+        "fetchSeasonEpisodes",
+        "fetchKitsuAdvancedDetail",
+        "findPersonIdByExactName",
+        "resolvePosterArtworkRef",
+        "resolvePosterUrl",
+        "getActiveProvider",
+        "currentSettings"
+    )
+
     @Test
     fun `idle screensaver repository does not depend on provider metadata rating artwork or source pools`() {
         val source = sourceOf("app/src/main/java/com/nexio/tv/data/repository/IdleScreensaverRepository.kt")
@@ -58,34 +118,32 @@ class ScreensaverSurfaceBoundaryTest {
     @Test
     fun `screensaver candidate repository only projects resolved display surface state`() {
         val source = sourceOf("app/src/main/java/com/nexio/tv/data/repository/ScreensaverCandidateRepository.kt")
-        val bannedDependencies = providerMetadataRatingArtworkDependencies + setOf(
-            "TrailerService",
-            "TrailerRepository",
-            "TrailerMetadataRepository",
-            "TmdbTrailerMetadataAdapter",
-            "TvdbTrailerMetadataAdapter"
-        )
 
+        assertEquals(
+            "ScreensaverCandidateRepository must not import provider metadata, rating, artwork, or trailer packages.",
+            emptyList<String>(),
+            bannedQualifiedImports(
+                source = source,
+                bannedPrefixes = candidateRepositoryBannedImportPrefixes,
+                bannedSimpleNames = candidateRepositoryBannedDependencies
+            )
+        )
         assertEquals(
             "ScreensaverCandidateRepository must not import provider-specific metadata, rating, artwork, source-pool, or trailer services.",
             emptyList<String>(),
-            importedSimpleNames(source).intersect(bannedDependencies).sorted()
+            importedSimpleNames(source).intersect(candidateRepositoryBannedDependencies).sorted()
         )
         assertEquals(
             "ScreensaverCandidateRepository must project from ResolvedDisplaySurfaceRepository, not reference provider-specific services.",
             emptyList<String>(),
-            identifierReferences(source, bannedDependencies)
+            identifierReferences(source, candidateRepositoryBannedDependencies)
         )
         assertEquals(
             "ScreensaverCandidateRepository must not call provider enrichment, source-pool, artwork, metadata, rating, or trailer resolution APIs.",
             emptyList<String>(),
             callReferences(
                 source = source,
-                names = providerMetadataRatingArtworkCalls + setOf(
-                    "resolveTrailer",
-                    "resolveIdleTrailerScreensaverPlaybackSource",
-                    "buildIdleTrailerYouTubeUrl"
-                )
+                names = candidateRepositoryBannedCalls
             )
         )
     }
@@ -145,6 +203,24 @@ class ScreensaverSurfaceBoundaryTest {
             .findAll(source)
             .map { match -> match.groupValues[1].substringAfterLast('.') }
             .toSet()
+
+    private fun importedQualifiedNames(source: String): Set<String> =
+        Regex("""(?m)^\s*import\s+([A-Za-z0-9_.]+)""")
+            .findAll(source)
+            .map { match -> match.groupValues[1] }
+            .toSet()
+
+    private fun bannedQualifiedImports(
+        source: String,
+        bannedPrefixes: List<String>,
+        bannedSimpleNames: Set<String>
+    ): List<String> =
+        importedQualifiedNames(source)
+            .filter { imported ->
+                bannedPrefixes.any(imported::startsWith) ||
+                    imported.substringAfterLast('.') in bannedSimpleNames
+            }
+            .sorted()
 
     private fun callReferences(source: String, names: Set<String>): List<String> {
         val code = source.withoutCommentsAndStrings()
