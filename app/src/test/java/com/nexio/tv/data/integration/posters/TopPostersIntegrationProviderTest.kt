@@ -172,6 +172,25 @@ class TopPostersIntegrationProviderTest {
     }
 
     @Test
+    fun `fromModel rejects thumbnail model with invalid provider without throwing`() {
+        val model = thumbnailModel(provider = "BOGUS")
+
+        assertNull(TopPostersThumbnailRequest.fromModel(model))
+    }
+
+    @Test
+    fun `poster fromModel rejects malformed percent encoding without throwing`() {
+        val model = "integration-poster://fetch?" +
+            "type=poster" +
+            "&provider=TOP_POSTERS" +
+            "&cacheKey=topposters%ZZ" +
+            "&apiKey=key" +
+            "&path=imdb/poster/tt15940132.jpg"
+
+        assertNull(PosterIntegrationRequest.fromModel(model))
+    }
+
+    @Test
     fun `fetchThumbnail maps http failures and missing bodies to thumbnail reasons`() = runTest {
         val runtime = mockk<IntegrationRuntime>()
         val transport = mockk<PosterTransport>()
@@ -551,6 +570,7 @@ class TopPostersIntegrationProviderTest {
 
     private fun thumbnailModel(
         apiKey: String = "key",
+        provider: String? = null,
         idType: String = "imdb",
         mediaId: String = "tt15940132",
         season: String = "1",
@@ -559,6 +579,7 @@ class TopPostersIntegrationProviderTest {
     ): String =
         "integration-poster://fetch?" +
             "type=topposters-thumbnail" +
+            (provider?.let { "&provider=$it" } ?: "") +
             "&apiKey=$apiKey" +
             "&idType=$idType" +
             "&mediaId=$mediaId" +
