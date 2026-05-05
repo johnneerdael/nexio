@@ -219,6 +219,7 @@ class PosterRatingsUrlResolverTest {
             decision!!.selectedCandidate.providerTemplate!!
         )
         assertEquals(expectedAssetKey, runtimeRef.assetKey)
+        assertTrue(runtimeRef.displayHints.embedsRatingOverlay)
         assertEquals("nexio-artwork://asset/${expectedAssetKey.value}", resolved.toLegacyArtworkString())
     }
 
@@ -252,6 +253,7 @@ class PosterRatingsUrlResolverTest {
             policyVersion = 1
         )
         assertEquals(expectedAssetKey, runtimeRef.assetKey)
+        assertFalse(runtimeRef.displayHints.embedsRatingOverlay)
         assertEquals("nexio-artwork://asset/${expectedAssetKey.value}", resolved.toLegacyArtworkString())
     }
 

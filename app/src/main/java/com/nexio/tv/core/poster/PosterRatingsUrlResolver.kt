@@ -5,6 +5,7 @@ import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkCandidate
 import com.nexio.tv.core.artwork.ArtworkDecision
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkDisplayHints
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.EpisodeArtworkContext
 import com.nexio.tv.core.artwork.ArtworkExternalIdSelector
@@ -259,7 +260,8 @@ class PosterRatingsUrlResolver @Inject constructor(
                 sourceRole = selected.sourceRole.name,
                 reason = "thumbnail_artwork_provider_selection",
                 rejectedCandidates = rejectedCandidates
-            )
+            ),
+            displayHints = selected.displayHints()
         )
     }
 
@@ -527,6 +529,16 @@ class PosterRatingsUrlResolver @Inject constructor(
             is ArtworkSource.LocalAsset -> candidateSource.assetKey
             else -> null
         }
+
+    private fun ArtworkCandidate.displayHints(): ArtworkDisplayHints =
+        ArtworkDisplayHints(
+            embedsRatingOverlay = imageType == ArtworkType.THUMBNAIL &&
+                selectedTopPostersThumbnailProvider()
+        )
+
+    private fun ArtworkCandidate.selectedTopPostersThumbnailProvider(): Boolean =
+        (provider as? ArtworkProviderId.RuntimeProvider)?.providerId == IntegrationProvider.TOP_POSTERS &&
+            sourceRole == ArtworkSourceRole.PREMIUM
 
     private fun fallbackProviderFor(url: String): ArtworkProviderId =
         when {
