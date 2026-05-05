@@ -4,6 +4,7 @@ import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.integration.IntegrationCachePolicy
 import com.nexio.tv.core.integration.IntegrationFetchOptions
 import com.nexio.tv.core.integration.IntegrationFetchResult
+import com.nexio.tv.core.integration.IntegrationHeaderPolicies
 import com.nexio.tv.core.integration.IntegrationLoadResult
 import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.IntegrationRuntime
@@ -192,6 +193,7 @@ class TopPostersIntegrationProviderTest {
         assertEquals(snapshot.verifiedAtMs + TopPostersIntegrationProvider.TOP_POSTERS_ENTITLEMENT_TTL_MS, snapshot.expiresAtMs)
         assertEquals(IntegrationProvider.TOP_POSTERS, specSlot.captured.provider)
         assertEquals(PosterApiShapes.TOP_POSTERS_KEY_VALIDATION, specSlot.captured.apiShapeId)
+        assertEquals(IntegrationHeaderPolicies.TOP_POSTERS_IMAGE_PATH_KEY_V1, specSlot.captured.headerPolicyId)
         assertEquals("topposters.key.validate", specSlot.captured.operationKey)
         assertEquals(StringIntegrationCodec, specSlot.captured.codec)
         assertEquals(IntegrationWorkClass.USER_VISIBLE, specSlot.captured.workClass)
@@ -209,6 +211,57 @@ class TopPostersIntegrationProviderTest {
             )
         )
         coVerify(exactly = 1) { topPostersApi.verifyApiKey(trimmedApiKey) }
+    }
+
+    @Test
+    fun `validateApiKey load maps non successful response to validation http error`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val specSlot = slot<IntegrationSpec<String>>()
+        val errorBody = """{"error":"invalid"}""".toResponseBody("application/json".toMediaType())
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } returns IntegrationFetchResult.Missing
+        coEvery { topPostersApi.verifyApiKey("top-secret-key") } returns Response.error(403, errorBody)
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, mockk<PosterTransport>())
+        val snapshot = provider.validateApiKey("top-secret-key")
+        val loadResult = specSlot.captured.load()
+
+        assertNull(snapshot)
+        assertTrue(loadResult is IntegrationLoadResult.HttpError)
+        loadResult as IntegrationLoadResult.HttpError
+        assertEquals(403, loadResult.statusCode)
+        assertEquals("topposters_key_validation_failed", loadResult.reason)
+    }
+
+    @Test
+    fun `validateApiKey returns cached validation body without loading from network`() = runTest {
+        val runtime = mockk<IntegrationRuntime>()
+        val topPostersApi = mockk<TopPostersApi>()
+        val specSlot = slot<IntegrationSpec<String>>()
+        val cachedJson = """
+            {
+              "valid": true,
+              "is_active": true,
+              "tier": 1,
+              "tier_name": "Premium",
+              "tier_info": {
+                "features": {
+                  "episode_thumbnails": true
+                }
+              }
+            }
+        """.trimIndent()
+
+        coEvery { runtime.get(capture(specSlot), any<IntegrationFetchOptions>()) } returns IntegrationFetchResult.Fresh(cachedJson)
+
+        val provider = TopPostersIntegrationProvider(runtime, topPostersApi, mockk<PosterTransport>())
+        val snapshot = provider.validateApiKey("top-secret-key")
+
+        requireNotNull(snapshot)
+        assertTrue(snapshot.valid)
+        assertTrue(snapshot.episodeThumbnails)
+        coVerify(exactly = 0) { topPostersApi.verifyApiKey(any()) }
     }
 
     @Test
