@@ -1,6 +1,5 @@
 package com.nexio.tv.core.artwork
 
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
@@ -82,15 +81,26 @@ class ArtworkProviderRegistryTest {
     }
 
     @Test
+    fun `configured provider choices follow descriptor order after default`() {
+        val settings = ArtworkProviderSettings(
+            rpdbApiKey = "rpdb-key",
+            topPostersApiKey = "top-key"
+        )
+
+        assertEquals(
+            listOf(ArtworkProviderChoiceKey.DEFAULT) + artworkProviderDescriptors.map { it.choice },
+            registry.availableChoices(ArtworkType.POSTER, settings)
+        )
+    }
+
+    @Test
     fun `provider choice maps to runtime provider id for rpdb and top posters`() {
-        assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
-            registry.providerIdFor(ArtworkProviderChoiceKey.RPDB)
-        )
-        assertEquals(
-            ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
-            registry.providerIdFor(ArtworkProviderChoiceKey.TOP_POSTERS)
-        )
+        artworkProviderDescriptors.forEach { descriptor ->
+            assertEquals(
+                ArtworkProviderId.RuntimeProvider(descriptor.provider),
+                registry.providerIdFor(descriptor.choice)
+            )
+        }
     }
 
     @Test
