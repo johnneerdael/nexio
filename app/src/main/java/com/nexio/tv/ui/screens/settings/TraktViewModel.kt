@@ -16,6 +16,10 @@ import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktSettingsAuthGateway
 import com.nexio.tv.data.repository.TraktTokenPollResult
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.ui.screens.home.order.RailFamily
+import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -67,6 +72,7 @@ class TraktViewModel @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
+    private val homeRailOrderStore: HomeRailOrderStore,
     private val profileManager: ProfileManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -315,6 +321,12 @@ class TraktViewModel @Inject constructor(
         if (direction == 0) return
         viewModelScope.launch {
             traktSettingsDataStore.moveCatalog(catalogId, direction)
+            val newOrder = traktSettingsDataStore.catalogPreferences.first().catalogOrder
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.TRAKT,
+                providerOrder = newOrder.map(::HomeRailKey),
+                source = RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN,
+            )
             _uiState.update {
                 it.copy(statusMessage = context.getString(R.string.trakt_catalogs_updated))
             }

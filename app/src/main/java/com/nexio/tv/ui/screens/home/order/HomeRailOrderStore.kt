@@ -51,6 +51,7 @@ class HomeRailOrderStore @Inject constructor(
     private val mutationLock = Mutex()
     private val knownLiveKeysCache = MutableStateFlow<Set<HomeRailKey>>(emptySet())
     private var lastWrittenState: HomeRailOrderState? = null
+    private var lastKnownLiveDefinitions: List<HomeRailDefinition> = emptyList()
 
     val state: StateFlow<HomeRailOrderState> = layoutPreferenceDataStore.homeRailOrderStateJson
         .map { codec.decode(it) }
@@ -102,6 +103,12 @@ class HomeRailOrderStore @Inject constructor(
         family: RailFamily,
         providerOrder: List<HomeRailKey>,
         source: RailOrderMutationSource,
+    ) = reorderProviderKeys(family, providerOrder, source, lastKnownLiveDefinitions)
+
+    suspend fun reorderProviderKeys(
+        family: RailFamily,
+        providerOrder: List<HomeRailKey>,
+        source: RailOrderMutationSource,
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
         val current = currentForMutation()
@@ -124,6 +131,7 @@ class HomeRailOrderStore @Inject constructor(
         persistedSyntheticOrder: List<HomeRailKey>,
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
+        lastKnownLiveDefinitions = liveDefinitions
         val current = state.value
         val legacyOrder = layoutPreferenceDataStore.homeCatalogOrderKeys.first().map(::HomeRailKey)
         val legacyDisabled = layoutPreferenceDataStore.disabledHomeCatalogKeys.first().map(::HomeRailKey)
@@ -141,6 +149,7 @@ class HomeRailOrderStore @Inject constructor(
     suspend fun onLiveDefinitionsArrived(
         liveDefinitions: List<HomeRailDefinition>,
     ) = mutationLock.withLock {
+        lastKnownLiveDefinitions = liveDefinitions
         val current = state.value
         val finalized = finalizeSyntheticFallback(
             current = current,
@@ -160,6 +169,7 @@ class HomeRailOrderStore @Inject constructor(
      * `withContext(Dispatchers.Default)` block) avoid the `combine`/`stateIn` round-trip.
      */
     fun reconcileNow(liveDefinitions: List<HomeRailDefinition>): EffectiveHomeRailOrder {
+        lastKnownLiveDefinitions = liveDefinitions
         val current = lastWrittenState ?: state.value
         return reconciler.reconcile(current.orderedKeys, current.disabledKeys, liveDefinitions)
     }

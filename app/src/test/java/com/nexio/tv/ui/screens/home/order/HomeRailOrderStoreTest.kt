@@ -285,6 +285,56 @@ class HomeRailOrderStoreTest {
     }
 
     @Test
+    fun `reorderProviderKeys overload uses cached liveDefinitions`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(null)
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(layout, codec, fixedClock,
+            TestScope(StandardTestDispatcher(testScheduler)))
+
+        // Seed the cache by calling onLiveDefinitionsArrived with a TMDB definition list.
+        val live = listOf(
+            HomeRailDefinition(
+                HomeRailKey("tmdb_popular"), RailFamily.TMDB, RailSource.PROVIDER_PUBLIC,
+                "tmdb_popular", enabled = true, defaultSortKey = DefaultSortKey(3, 0),
+                publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+            ),
+            HomeRailDefinition(
+                HomeRailKey("tmdb_top"), RailFamily.TMDB, RailSource.PROVIDER_PUBLIC,
+                "tmdb_top", enabled = true, defaultSortKey = DefaultSortKey(3, 1),
+                publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+            ),
+        )
+        // Seed the order so we can verify a swap.
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("tmdb_popular"), HomeRailKey("tmdb_top")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("tmdb_popular"), HomeRailKey("tmdb_top")),
+        )
+        advanceUntilIdle()
+
+        // Populate the cached liveDefinitions via reconcileNow.
+        store.reconcileNow(live)
+
+        // Now call the no-arg overload — it should swap to [tmdb_top, tmdb_popular].
+        store.reorderProviderKeys(
+            family = RailFamily.TMDB,
+            providerOrder = listOf(HomeRailKey("tmdb_top"), HomeRailKey("tmdb_popular")),
+            source = RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN,
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(HomeRailKey("tmdb_top"), HomeRailKey("tmdb_popular")),
+            store.state.first().orderedKeys,
+        )
+    }
+
+    @Test
     fun `tryMigrate seeds from legacy when state json is null`() = runTest {
         val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val persisted = MutableStateFlow<String?>(null)

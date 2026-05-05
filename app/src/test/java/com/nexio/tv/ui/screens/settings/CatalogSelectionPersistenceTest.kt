@@ -87,6 +87,7 @@ class CatalogSelectionPersistenceTest {
             traktScrobbleService = traktScrobbleService,
             traktSettingsDataStore = traktSettingsDataStore,
             catalogPriorityHydrationNotifier = mockk(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true),
             profileManager = testProfileManager(),
             context = context
         )
@@ -116,7 +117,8 @@ class CatalogSelectionPersistenceTest {
             dataStore = dataStore,
             providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true),
             mdbListDiscoveryService = discoveryService,
-            catalogPriorityHydrationNotifier = mockk(relaxed = true)
+            catalogPriorityHydrationNotifier = mockk(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true)
         )
 
         viewModel.onEvent(MDBListSettingsEvent.ToggleTopList(listKey = "top:thrillers", enabled = true))
