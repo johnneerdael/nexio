@@ -11,9 +11,13 @@ import com.nexio.tv.domain.model.ResolvedDisplayItem
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.TrailerDisplayState
+import java.lang.reflect.Modifier
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,11 +68,12 @@ class ResolvedDisplaySurfaceRepositoryTest {
             overview = "Already final overview"
         )
 
-        repository.publishResolvedItems(
+        val published = repository.publishResolvedItems(
             profileSession = activeSession.value,
             items = listOf(item)
         )
 
+        assertTrue(published)
         val snapshot = repository.getSnapshot(profileId = 1)
         assertEquals(1, snapshot.size)
         assertEquals("Already Final Home Title", snapshot.single().display.title)
@@ -81,11 +86,12 @@ class ResolvedDisplaySurfaceRepositoryTest {
         val activeSession = MutableStateFlow(profileSession(profileId = 2, sessionId = "session-b"))
         val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
 
-        repository.publishResolvedItems(
+        val published = repository.publishResolvedItems(
             profileSession = staleSession,
             items = listOf(resolvedItem(itemKey = "movie:tmdb:550", title = "Stale item"))
         )
 
+        assertFalse(published)
         assertEquals(emptyList<ResolvedDisplayItem>(), repository.getSnapshot(profileId = 1))
         assertEquals(emptyList<ResolvedDisplayItem>(), repository.getSnapshot(profileId = 2))
     }
@@ -95,7 +101,7 @@ class ResolvedDisplaySurfaceRepositoryTest {
         val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
         val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
 
-        repository.publishResolvedItems(
+        val published = repository.publishResolvedItems(
             profileSession = activeSession.value,
             items = listOf(
                 resolvedItem(itemKey = "movie:tmdb:550", title = "Rail A Title"),
@@ -103,8 +109,42 @@ class ResolvedDisplaySurfaceRepositoryTest {
             )
         )
 
+        assertTrue(published)
         assertEquals(1, repository.getSnapshot(profileId = 1).size)
         assertEquals("Rail A Title", repository.getSnapshot(profileId = 1).single().display.title)
+    }
+
+    @Test
+    fun `observeItem emits the stored resolved item for the requested profile and key`() = runTest {
+        val activeSession = MutableStateFlow(profileSession(profileId = 1, sessionId = "session-a"))
+        val repository = ResolvedDisplaySurfaceRepository(activeProfileSession = { activeSession.value })
+        val expectedItem = resolvedItem(itemKey = "movie:tmdb:550", title = "Observed Title")
+
+        val published = repository.publishResolvedItems(
+            profileSession = activeSession.value,
+            items = listOf(
+                expectedItem,
+                resolvedItem(itemKey = "movie:tmdb:551", title = "Other Title")
+            )
+        )
+
+        assertTrue(published)
+        assertEquals(
+            expectedItem,
+            repository.observeItem(profileId = 1, itemKey = "movie:tmdb:550").first()
+        )
+        assertNull(repository.observeItem(profileId = 2, itemKey = "movie:tmdb:550").first())
+    }
+
+    @Test
+    fun `publishResolvedItems is synchronized to keep profile validation coupled to state mutation`() {
+        val method = ResolvedDisplaySurfaceRepository::class.java.getDeclaredMethod(
+            "publishResolvedItems",
+            ActiveProfileSession::class.java,
+            List::class.java
+        )
+
+        assertTrue(Modifier.isSynchronized(method.modifiers))
     }
 
     private fun profileSession(

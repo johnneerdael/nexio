@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import androidx.annotation.VisibleForTesting
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.ResolvedDisplayItem
@@ -30,6 +31,7 @@ class ResolvedDisplaySurfaceRepository(
     suspend fun getSnapshot(profileId: Int): List<ResolvedDisplayItem> =
         surfaces.value[profileId].orEmpty()
 
+    @Synchronized
     fun publishResolvedItems(
         profileSession: ActiveProfileSession,
         items: List<ResolvedDisplayItem>
@@ -45,6 +47,8 @@ class ResolvedDisplaySurfaceRepository(
         return true
     }
 
+    // Test-only seed path for repository projection tests that provide final display items directly.
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun replaceForTest(
         profileId: Int,
         items: List<ResolvedDisplayItem>
