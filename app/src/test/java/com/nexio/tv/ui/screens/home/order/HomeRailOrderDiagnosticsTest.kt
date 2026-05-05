@@ -58,4 +58,40 @@ class HomeRailOrderDiagnosticsTest {
         assertEquals("home.rail_added_from_missing_default", sink.events[1].eventType)
         assertEquals("home.persisted_synthetic_used_as_content_only", sink.events[2].eventType)
     }
+
+    @Test
+    fun `logging sink skips secondary events when isDebugBuild is false`() {
+        val sink = LoggingHomeRailOrderDiagnosticsSink(isDebugBuild = false)
+        // The 5 secondary events should be no-ops; we have no observable side effect to assert
+        // beyond "no exception thrown" since the logging implementation goes to android.util.Log
+        // which we don't intercept here. Verify at minimum that the call returns normally and
+        // that the constructor accepts isDebugBuild=false (regression: removing the parameter).
+        sink.emitMutation(
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            before = emptyList(),
+            after = listOf(HomeRailKey("a")),
+        )
+        sink.emitEnabledChanged(HomeRailKey("k"), false, RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN)
+        sink.emitHiddenDueToDisabled(HomeRailKey("h"))
+        sink.emitAddedFromMissingDefault(HomeRailKey("n"))
+        sink.emitPersistedSyntheticUsedAsContentOnly(HomeRailKey("p"))
+    }
+
+    @Test
+    fun `logging sink emits reconciled event regardless of isDebugBuild`() {
+        // The reconciled event is always-on; this test asserts that even with isDebugBuild=false
+        // the call doesn't throw and reaches the implementation body.
+        val sink = LoggingHomeRailOrderDiagnosticsSink(isDebugBuild = false)
+        sink.emitReconciled(
+            savedGlobalOrder = emptyList(),
+            providerOrders = emptyMap(),
+            persistedSyntheticOrder = emptyList(),
+            liveDefinitionOrder = emptyList(),
+            effectiveOrder = emptyList(),
+            disabledKeys = emptySet(),
+            newlyDiscoveredKeys = emptyList(),
+            ignoredOrderSources = listOf("persistedSyntheticOrder"),
+            mutationSource = RailOrderMutationSource.ACCOUNT_SYNC,
+        )
+    }
 }

@@ -1,7 +1,12 @@
 package com.nexio.tv.ui.screens.home.order
 
 import javax.inject.Inject
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class IsDebugBuild
 
 data class HomeRailOrderDiagnosticEvent(
     val eventType: String,
@@ -47,7 +52,9 @@ interface HomeRailOrderDiagnosticsSink {
 }
 
 @Singleton
-class LoggingHomeRailOrderDiagnosticsSink @Inject constructor() : HomeRailOrderDiagnosticsSink {
+class LoggingHomeRailOrderDiagnosticsSink @Inject constructor(
+    @IsDebugBuild private val isDebugBuild: Boolean,
+) : HomeRailOrderDiagnosticsSink {
     override fun emitReconciled(
         savedGlobalOrder: List<HomeRailKey>,
         providerOrders: Map<RailFamily, List<HomeRailKey>>,
@@ -72,7 +79,7 @@ class LoggingHomeRailOrderDiagnosticsSink @Inject constructor() : HomeRailOrderD
         before: List<HomeRailKey>,
         after: List<HomeRailKey>,
     ) {
-        if (com.nexio.tv.BuildConfig.DEBUG) {
+        if (isDebugBuild) {
             android.util.Log.d(
                 "HomeRailOrder",
                 "rail_order_mutation source=$source beforeSize=${before.size} afterSize=${after.size}",
@@ -81,25 +88,25 @@ class LoggingHomeRailOrderDiagnosticsSink @Inject constructor() : HomeRailOrderD
     }
 
     override fun emitEnabledChanged(key: HomeRailKey, enabled: Boolean, source: RailOrderMutationSource) {
-        if (com.nexio.tv.BuildConfig.DEBUG) {
+        if (isDebugBuild) {
             android.util.Log.d("HomeRailOrder", "rail_enabled_changed key=${key.value} enabled=$enabled source=$source")
         }
     }
 
     override fun emitHiddenDueToDisabled(key: HomeRailKey) {
-        if (com.nexio.tv.BuildConfig.DEBUG) {
+        if (isDebugBuild) {
             android.util.Log.d("HomeRailOrder", "rail_hidden_due_to_disabled key=${key.value}")
         }
     }
 
     override fun emitAddedFromMissingDefault(key: HomeRailKey) {
-        if (com.nexio.tv.BuildConfig.DEBUG) {
+        if (isDebugBuild) {
             android.util.Log.d("HomeRailOrder", "rail_added_from_missing_default key=${key.value}")
         }
     }
 
     override fun emitPersistedSyntheticUsedAsContentOnly(key: HomeRailKey) {
-        if (com.nexio.tv.BuildConfig.DEBUG) {
+        if (isDebugBuild) {
             android.util.Log.d("HomeRailOrder", "persisted_synthetic_used_as_content_only key=${key.value}")
         }
     }

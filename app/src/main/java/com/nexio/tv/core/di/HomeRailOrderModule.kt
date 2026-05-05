@@ -3,6 +3,7 @@ package com.nexio.tv.core.di
 import com.google.gson.Gson
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderDiagnosticsSink
 import com.nexio.tv.ui.screens.home.order.HomeRailOrderStateCodec
+import com.nexio.tv.ui.screens.home.order.IsDebugBuild
 import com.nexio.tv.ui.screens.home.order.LoggingHomeRailOrderDiagnosticsSink
 import dagger.Module
 import dagger.Provides
@@ -37,4 +38,9 @@ object HomeRailOrderModule {
     fun provideHomeRailOrderDiagnosticsSink(
         impl: LoggingHomeRailOrderDiagnosticsSink,
     ): HomeRailOrderDiagnosticsSink = impl
+
+    @Provides
+    @Singleton
+    @IsDebugBuild
+    fun provideIsDebugBuild(): Boolean = com.nexio.tv.BuildConfig.DEBUG
 }
