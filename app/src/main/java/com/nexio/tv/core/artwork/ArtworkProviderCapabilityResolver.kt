@@ -164,7 +164,7 @@ class ArtworkProviderCapabilityResolver {
         if (imageType == ArtworkType.THUMBNAIL) {
             settings.topPostersEntitlement.thumbnailRejectionReason()?.let { return it }
         }
-        if (!ids.hasAnyOf(topPostersDescriptor.supportedIdTypes)) {
+        if (!ids.hasValidTopPostersId()) {
             return "missing_supported_provider_id"
         }
         return null
@@ -199,9 +199,47 @@ class ArtworkProviderCapabilityResolver {
             ArtworkProviderStableIdType.ANIDB -> anidb.isPresent()
         }
 
+    private fun ProviderIds.hasValidTopPostersId(): Boolean =
+        tvdb.isNumericId("tvdb") ||
+            tmdb.isValidTopPostersTmdbId() ||
+            imdb.isValidImdbId() ||
+            trakt.isNumericId("trakt") ||
+            kitsu.isNumericId("kitsu") ||
+            mal.isNumericId("mal") ||
+            anilist.isNumericId("anilist") ||
+            anidb.isNumericId("anidb")
+
+    private fun String?.isNumericId(idType: String): Boolean =
+        cleanedProviderValue(idType)?.matches(NUMERIC_ID_REGEX) == true
+
+    private fun String?.isValidImdbId(): Boolean =
+        cleanedProviderValue("imdb")?.matches(IMDB_ID_REGEX) == true
+
+    private fun String?.isValidTopPostersTmdbId(): Boolean {
+        val value = cleanedProviderValue("tmdb") ?: return false
+        val numericPart = value.substringAfter('-', missingDelimiterValue = value)
+        return numericPart.matches(NUMERIC_ID_REGEX) &&
+            (
+                '-' !in value ||
+                    value.startsWith("movie-", ignoreCase = true) ||
+                    value.startsWith("series-", ignoreCase = true)
+                )
+    }
+
+    private fun String?.cleanedProviderValue(idType: String): String? {
+        val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return when {
+            raw.startsWith("$idType:", ignoreCase = true) -> raw.substringAfter(':').trim()
+            ':' in raw -> null
+            else -> raw
+        }?.takeIf { it.isNotBlank() }
+    }
+
     private fun String?.isPresent(): Boolean = !isNullOrBlank()
 
     private companion object {
         const val TOP_POSTERS_PREMIUM_TIER = 1
+        val NUMERIC_ID_REGEX = Regex("""\d+""")
+        val IMDB_ID_REGEX = Regex("""tt\d+""")
     }
 }

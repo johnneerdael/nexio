@@ -199,8 +199,6 @@ class PosterRatingsUrlResolver @Inject constructor(
         fallbackThumbnailUrl: String?,
         primaryProvider: ArtworkProviderId
     ): ArtworkDisplayRef? {
-        if (!episodeContext.isValid) return null
-
         val policy = ArtworkRoutingPolicy(settings = settings)
         val missingRejections = mutableListOf<RejectedArtworkCandidate>()
         val candidates = buildEpisodeThumbnailArtworkCandidates(
@@ -396,21 +394,32 @@ class PosterRatingsUrlResolver @Inject constructor(
             if (selectedThumbnailProvider == ArtworkProviderChoiceKey.TOP_POSTERS &&
                 runtimeProvider == IntegrationProvider.TOP_POSTERS
             ) {
-                val id = externalIdSelector
-                    .selectIds(
-                        provider = runtimeProvider,
-                        imageType = ArtworkType.THUMBNAIL,
-                        mediaKind = mediaKind,
-                        providerIds = providerIds,
-                        episodeContext = episodeContext
-                    )
-                    .firstOrNull()
-                if (id == null) {
+                val id = if (episodeContext.isValid) {
+                    externalIdSelector
+                        .selectIds(
+                            provider = runtimeProvider,
+                            imageType = ArtworkType.THUMBNAIL,
+                            mediaKind = mediaKind,
+                            providerIds = providerIds,
+                            episodeContext = episodeContext
+                        )
+                        .firstOrNull()
+                } else {
                     missingRejections += RejectedArtworkCandidate(
                         provider = premiumProvider,
                         sourceRole = ArtworkSourceRole.PREMIUM,
-                        reason = "missing_supported_id"
+                        reason = "topposters_invalid_episode_context"
                     )
+                    null
+                }
+                if (id == null) {
+                    if (episodeContext.isValid) {
+                        missingRejections += RejectedArtworkCandidate(
+                            provider = premiumProvider,
+                            sourceRole = ArtworkSourceRole.PREMIUM,
+                            reason = "missing_supported_provider_id"
+                        )
+                    }
                 } else {
                     val pathParams = topPostersThumbnailPathParams(episodeContext)
                     val providerPathHash = ArtworkCacheKeys.providerTemplatePathHash(

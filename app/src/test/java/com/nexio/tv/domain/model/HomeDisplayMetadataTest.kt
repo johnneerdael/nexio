@@ -190,7 +190,7 @@ class HomeDisplayMetadataTest {
             id = "tt123",
             type = ContentType.MOVIE,
             name = "Movie",
-            poster = "https://api.ratingposterdb.com/key/imdb/poster-default/tt123.jpg",
+            poster = "nexio-artwork://asset/rpdbPosterAsset",
             posterShape = PosterShape.POSTER,
             background = "background",
             logo = "logo",

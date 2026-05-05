@@ -711,9 +711,13 @@ class MetadataExecutionAuditGoldenTest {
         assertEquals("HIT", artwork.getString("assetCacheDecision"))
         assertFalse(artwork.getBoolean("networkExecuted"))
         assertFalse(artwork.getBoolean("rawRemoteUrlUsedByUi"))
+        assertFalse(artwork.getBoolean("embedsRatingOverlay"))
+        assertFalse(artwork.getBoolean("suppressesLocalRatingOverlay"))
         assertTrue(markdown.contains("Artwork Cache Audit"))
         assertTrue(markdown.contains("topposters.poster_template"))
         assertTrue(markdown.contains("nexio-artwork://"))
+        assertTrue(markdown.contains("Embeds rating overlay"))
+        assertTrue(markdown.contains("Suppress local rating"))
     }
 
     @Test

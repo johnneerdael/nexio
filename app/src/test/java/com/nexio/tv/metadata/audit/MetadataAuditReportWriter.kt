@@ -373,10 +373,10 @@ class MetadataAuditReportWriter {
     private fun StringBuilder.appendArtworkAudit(entries: List<ArtworkAuditEntry>, heading: String) {
         if (entries.isEmpty()) return
         appendLine(heading)
-        appendLine("| Field | Provider | Role | API shape | Cache | Network | Coil model | Raw remote URL | Rejected candidates |")
-        appendLine("|---|---|---|---|---|---:|---|---:|---|")
+        appendLine("| Field | Provider | Role | API shape | Cache | Network | Coil model | Raw remote URL | Embeds rating overlay | Suppress local rating | Rejected candidates |")
+        appendLine("|---|---|---|---|---|---:|---|---:|---:|---:|---|")
         entries.forEach {
-            appendLine("| `${it.field}` | `${it.selectedProvider.orEmpty()}` | `${it.sourceRole}` | `${it.runtimeApiShapeId.orEmpty()}` | `${it.assetCacheDecision.orEmpty()}` | `${it.networkExecuted}` | `${it.coilModel.orEmpty()}` | `${it.rawRemoteUrlUsedByUi}` | `${it.rejectedCandidates.joinToString { rejected -> artworkRejectedCandidateMarkdown(rejected) }}` |")
+            appendLine("| `${it.field}` | `${it.selectedProvider.orEmpty()}` | `${it.sourceRole}` | `${it.runtimeApiShapeId.orEmpty()}` | `${it.assetCacheDecision.orEmpty()}` | `${it.networkExecuted}` | `${it.coilModel.orEmpty()}` | `${it.rawRemoteUrlUsedByUi}` | `${it.embedsRatingOverlay}` | `${it.suppressesLocalRatingOverlay}` | `${it.rejectedCandidates.joinToString { rejected -> artworkRejectedCandidateMarkdown(rejected) }}` |")
         }
         appendLine()
     }
@@ -460,7 +460,7 @@ class MetadataAuditReportWriter {
         """{"field":${jsonString(field.field)},"selectedProvider":${jsonString(field.selectedProvider)},"sourceRole":${jsonString(field.sourceRole)},"valuePreview":${jsonString(field.valuePreview.orEmpty())},"ownershipRule":${jsonString(field.ownershipRule)},"rejectedCandidates":[${field.rejectedCandidates.joinToString { rejected -> rejectedCandidateJson(rejected) }}]}"""
 
     private fun artworkAuditJson(entry: ArtworkAuditEntry): String =
-        """{"field":${jsonString(entry.field)},"selectedProvider":${nullableStringJson(entry.selectedProvider)},"sourceRole":${jsonString(entry.sourceRole)},"decisionKey":${nullableStringJson(entry.decisionKey)},"assetKey":${nullableStringJson(entry.assetKey)},"assetCacheDecision":${nullableStringJson(entry.assetCacheDecision)},"runtimeApiShapeId":${nullableStringJson(entry.runtimeApiShapeId)},"networkExecuted":${entry.networkExecuted},"coilModel":${nullableStringJson(entry.coilModel)},"rawRemoteUrlUsedByUi":${entry.rawRemoteUrlUsedByUi},"rejectedCandidates":[${entry.rejectedCandidates.joinToString { rejected -> nullableStringMapJson(rejected) }}]}"""
+        """{"field":${jsonString(entry.field)},"selectedProvider":${nullableStringJson(entry.selectedProvider)},"sourceRole":${jsonString(entry.sourceRole)},"decisionKey":${nullableStringJson(entry.decisionKey)},"assetKey":${nullableStringJson(entry.assetKey)},"assetCacheDecision":${nullableStringJson(entry.assetCacheDecision)},"runtimeApiShapeId":${nullableStringJson(entry.runtimeApiShapeId)},"networkExecuted":${entry.networkExecuted},"coilModel":${nullableStringJson(entry.coilModel)},"rawRemoteUrlUsedByUi":${entry.rawRemoteUrlUsedByUi},"embedsRatingOverlay":${entry.embedsRatingOverlay},"suppressesLocalRatingOverlay":${entry.suppressesLocalRatingOverlay},"rejectedCandidates":[${entry.rejectedCandidates.joinToString { rejected -> nullableStringMapJson(rejected) }}]}"""
 
     private fun rejectedCandidateJson(rejected: RejectedCandidateReport): String =
         buildString {
