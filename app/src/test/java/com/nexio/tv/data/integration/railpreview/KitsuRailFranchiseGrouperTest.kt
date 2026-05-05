@@ -12,7 +12,6 @@ import com.nexio.tv.domain.model.RailRankingMetadata
 import com.nexio.tv.domain.model.RailSource
 import com.nexio.tv.domain.model.SourcePayloadQuality
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class KitsuRailFranchiseGrouperTest {
@@ -108,6 +107,7 @@ class KitsuRailFranchiseGrouperTest {
         val result = grouper.group(listOf(item))
 
         assertEquals(1, result.size)
+        assertEquals(item, result.single())
     }
 
     @Test
