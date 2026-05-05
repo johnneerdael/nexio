@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mapping-list>
+  <mapping anidbseason="0" tvdbseason="0">;1-0;2-0;</mapping>
+  <mapping anidbseason="1" tvdbseason="1" start="1" end="26" offset="0"/>
+</mapping-list>
