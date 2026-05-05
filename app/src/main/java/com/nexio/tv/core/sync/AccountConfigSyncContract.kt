@@ -49,7 +49,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 8
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 9
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,

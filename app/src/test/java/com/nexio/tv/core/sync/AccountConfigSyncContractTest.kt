@@ -16,7 +16,10 @@ import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
+import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
+import com.nexio.tv.data.remote.supabase.KitsuCatalogSyncSettings
+import com.nexio.tv.data.remote.supabase.TmdbCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
@@ -202,7 +205,7 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "playback", "formatter"), json.keys)
-        assertEquals(8, json["schemaVersion"]?.toString()?.toInt())
+        assertEquals(9, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals(
             "\"[[chip:cached]]\"",
@@ -347,7 +350,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 8`() {
+    fun `build account config sync rpc params includes contract version 9`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -372,7 +375,38 @@ class AccountConfigSyncContractTest {
         assertEquals("\"app\"", pushParams["p_source"].toString())
         assertTrue(pushParams.containsKey("p_settings_payload"))
         assertEquals(ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION, pullParams["p_contract_version"]?.toString()?.toInt())
-        assertEquals(8, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
+        assertEquals(9, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
+    }
+
+    @Test
+    fun `current contract emits version 9`() {
+        assertEquals(9, ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
+    }
+
+    @Test
+    fun `version 9 payload includes tmdb and kitsu sections when set`() {
+        val payload = AccountConfigSyncPayload(
+            schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
+            catalogs = CatalogSyncSettings(
+                tmdb = TmdbCatalogSyncSettings(catalogOrder = listOf("tmdb_popular_movies")),
+                kitsu = KitsuCatalogSyncSettings(catalogOrder = listOf("kitsu_trending_anime")),
+            ),
+        )
+        val json = Json { encodeDefaults = false; ignoreUnknownKeys = true }
+            .encodeToString(AccountConfigSyncPayload.serializer(), payload)
+        assertTrue(json.contains("\"tmdb\""))
+        assertTrue(json.contains("\"kitsu\""))
+        assertTrue(json.contains("\"schemaVersion\":9"))
+    }
+
+    @Test
+    fun `older payload without tmdb or kitsu fields is accepted`() {
+        val text = """{"schemaVersion":8,"catalogs":{"home":null}}"""
+        val payload = Json { ignoreUnknownKeys = true }
+            .decodeFromString(AccountConfigSyncPayload.serializer(), text)
+        assertNull(payload.catalogs.tmdb)
+        assertNull(payload.catalogs.kitsu)
+        assertEquals(8, payload.schemaVersion)
     }
 
     @Test

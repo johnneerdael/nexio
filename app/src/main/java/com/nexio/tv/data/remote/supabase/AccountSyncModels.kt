@@ -113,7 +113,7 @@ data class AccountTvdbCredentialSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 7,
+    val schemaVersion: Int = 9,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val playback: PlaybackConfigSyncSettings = PlaybackConfigSyncSettings(),
