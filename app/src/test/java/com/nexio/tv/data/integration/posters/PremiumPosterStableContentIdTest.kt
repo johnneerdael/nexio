@@ -77,6 +77,18 @@ class PremiumPosterStableContentIdTest {
     }
 
     @Test
+    fun `poster stable id rejects api formatted tmdb route target id`() {
+        val route = route(
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = MetadataMediaKind.MOVIE,
+            parentId = "catalog-row-item-99",
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:movie-550")
+        )
+
+        assertNull(route.premiumPosterStableContentId(IntegrationProvider.TOP_POSTERS))
+    }
+
+    @Test
     fun `poster stable id rejects malformed tvdb target id`() {
         val route = route(
             provider = MetadataPrimaryProvider.TVDB,
@@ -86,6 +98,18 @@ class PremiumPosterStableContentIdTest {
         )
 
         assertNull(route.premiumPosterStableContentId(IntegrationProvider.RPDB))
+    }
+
+    @Test
+    fun `poster stable id rejects malformed prefixed kitsu target id`() {
+        val route = route(
+            provider = MetadataPrimaryProvider.KITSU,
+            mediaKind = MetadataMediaKind.ANIME,
+            parentId = "catalog-row-item-101",
+            targetIds = mapOf(MetadataPrimaryProvider.KITSU to "kitsu:not-numeric")
+        )
+
+        assertNull(route.premiumPosterStableContentId(IntegrationProvider.TOP_POSTERS))
     }
 
     @Test
@@ -130,6 +154,25 @@ class PremiumPosterStableContentIdTest {
 
         assertEquals("kitsu:7442", route.premiumPosterStableContentId(IntegrationProvider.TOP_POSTERS))
         assertNull(route.premiumPosterStableContentId(IntegrationProvider.RPDB))
+    }
+
+    @Test
+    fun `poster stable id does not double prefix tmdb or tvdb target ids`() {
+        val movieRoute = route(
+            provider = MetadataPrimaryProvider.TMDB,
+            mediaKind = MetadataMediaKind.MOVIE,
+            parentId = "catalog-row-item-99",
+            targetIds = mapOf(MetadataPrimaryProvider.TMDB to "tmdb:550")
+        )
+        val seriesRoute = route(
+            provider = MetadataPrimaryProvider.TVDB,
+            mediaKind = MetadataMediaKind.SERIES,
+            parentId = "catalog-row-item-100",
+            targetIds = mapOf(MetadataPrimaryProvider.TVDB to "tvdb:121361")
+        )
+
+        assertEquals("tmdb:movie-550", movieRoute.premiumPosterStableContentId(IntegrationProvider.TOP_POSTERS))
+        assertEquals("tvdb:series-121361", seriesRoute.premiumPosterStableContentId(IntegrationProvider.RPDB))
     }
 
     @Test
