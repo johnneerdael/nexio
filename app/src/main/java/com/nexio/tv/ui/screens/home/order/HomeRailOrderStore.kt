@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
@@ -18,15 +19,25 @@ import javax.inject.Singleton
 /**
  * Per-profile authoritative store for Modern Home rail order.
  *
- * `state` is sourced from DataStore and is eventually-consistent; `updateOrder` and
- * `setEnabled` use an in-memory `lastWrittenState` cache so back-to-back mutations
- * within the DataStore round-trip window each see the most recently written state.
+ * `state` is sourced from DataStore via `stateIn` and is eventually-consistent.
+ * Mutations route through a mutex-guarded path that uses `lastWrittenState` as
+ * the in-memory authoritative copy: the first mutation seeds the cache by
+ * awaiting `homeRailOrderStateJson.first()` (so the persisted state is observed
+ * before any merge logic runs), and subsequent mutations read directly from the
+ * cache. This handles two race classes:
+ *  - Initial-load race: `state.value` may still be the initial Empty when the
+ *    first mutation runs, before the `stateIn` upstream has decoded its first
+ *    emission. Seeding from the flow avoids overwriting persisted state.
+ *  - Back-to-back race: DataStore writes round-trip asynchronously, so
+ *    `state.value` between two locked mutations may not yet reflect the prior
+ *    write. The cache holds the just-written value.
  *
- * Callers that invoke `updateOrder(...)` without an explicit `knownLiveKeys` rely on
- * the `knownLiveKeysCache` populated by `effectiveOrder(...)`'s `combine` transform.
- * Production callers (the home pipeline) hold a long-lived `effectiveOrder` collection
- * before any user-initiated reorder, so the cache is always populated. Tests and any
- * caller that mutates without first subscribing should pass `knownLiveKeys` explicitly.
+ * Callers that invoke `updateOrder(...)` without an explicit `knownLiveKeys`
+ * rely on the `knownLiveKeysCache` populated by `effectiveOrder(...)`'s
+ * `combine` transform. Production callers (the home pipeline) hold a long-lived
+ * `effectiveOrder` collection before any user-initiated reorder, so the cache
+ * is always populated. Tests and any caller that mutates without first
+ * subscribing should pass `knownLiveKeys` explicitly.
  */
 @Singleton
 class HomeRailOrderStore @Inject constructor(
@@ -86,7 +97,12 @@ class HomeRailOrderStore @Inject constructor(
         ))
     }
 
-    private fun currentForMutation(): HomeRailOrderState = lastWrittenState ?: state.value
+    private suspend fun currentForMutation(): HomeRailOrderState {
+        lastWrittenState?.let { return it }
+        val initial = codec.decode(layoutPreferenceDataStore.homeRailOrderStateJson.first())
+        lastWrittenState = initial
+        return initial
+    }
 
     private suspend fun persist(state: HomeRailOrderState) {
         layoutPreferenceDataStore.setHomeRailOrderStateJson(codec.encode(state))
