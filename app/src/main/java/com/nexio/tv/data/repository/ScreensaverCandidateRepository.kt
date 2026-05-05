@@ -19,11 +19,12 @@ class ScreensaverCandidateRepository @Inject constructor(
 
     private fun ResolvedDisplayItem.toImageCandidate(): ScreensaverSlideCandidate? {
         val preferredImage = preferredScreensaverArtwork() ?: return null
+        val title = display.title?.takeIf { it.isNotBlank() } ?: return null
         return ScreensaverSlideCandidate(
             itemKey = itemKey,
             contentId = contentId,
             itemType = itemType.toApiString(),
-            title = display.title,
+            title = title,
             subtitle = display.releaseDate,
             overview = display.overview,
             rating = rating,
