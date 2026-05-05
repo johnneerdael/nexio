@@ -266,7 +266,7 @@ data class MapIndexes(
     @Json(name = "byTvdb") val byTvdb: Map<String, List<String>> = emptyMap(),
     @Json(name = "byTmdbTv") val byTmdbTv: Map<String, List<String>> = emptyMap(),
     @Json(name = "byTmdbMovie") val byTmdbMovie: Map<String, String> = emptyMap(),
-    @Json(name = "byImdb") val byImdb: Map<String, String> = emptyMap()
+    @Json(name = "byImdb") val byImdb: Map<String, List<String>> = emptyMap()
 )
 ```
 
@@ -1787,7 +1787,7 @@ class IndexBuilderTest {
         assertEquals(listOf("12"), ix.byTvdb["81797"])
     }
 
-    @Test fun `byMal byAnilist byAnidb byImdb are single value`() {
+    @Test fun `byMal byAnilist byAnidb are single value`() {
         val identity = mapOf(
             "11469" to IdentityRecord(
                 kitsu = "11469", anidb = "11739", tvdb = "305074",
@@ -1798,7 +1798,18 @@ class IndexBuilderTest {
         assertEquals("11469", ix.byMal["31964"])
         assertEquals("11469", ix.byAnilist["21459"])
         assertEquals("11469", ix.byAnidb["11739"])
-        assertEquals("11469", ix.byImdb["tt5626028"])
+    }
+
+    @Test fun `byImdb groups Kitsu IDs sharing the same imdb`() {
+        val identity = mapOf(
+            "11469" to IdentityRecord(kitsu = "11469", anidb = "11739", tvdb = "305074", imdb = "tt5626028"),
+            "13881" to IdentityRecord(kitsu = "13881", anidb = "13485", tvdb = "305074", imdb = "tt5626028"),
+            "12" to IdentityRecord(kitsu = "12", anidb = "69", tvdb = "81797", imdb = "tt0388629")
+        )
+        val ix = IndexBuilder().build(identity)
+        val mha = ix.byImdb["tt5626028"]!!
+        assertEquals(setOf("11469", "13881"), mha.toSet())
+        assertEquals(listOf("12"), ix.byImdb["tt0388629"])
     }
 
     @Test fun `tmdb routing splits by mediaType`() {
@@ -1841,14 +1852,14 @@ class IndexBuilder {
         val byTvdb = mutableMapOf<String, MutableList<String>>()
         val byTmdbTv = mutableMapOf<String, MutableList<String>>()
         val byTmdbMovie = mutableMapOf<String, String>()
-        val byImdb = mutableMapOf<String, String>()
+        val byImdb = mutableMapOf<String, MutableList<String>>()
 
         for ((kitsu, rec) in identity) {
             rec.mal?.let { byMal.putIfAbsent(it, kitsu) }
             rec.anilist?.let { byAnilist.putIfAbsent(it, kitsu) }
             rec.anidb?.let { byAnidb.putIfAbsent(it, kitsu) }
             rec.tvdb?.let { byTvdb.getOrPut(it) { mutableListOf() }.add(kitsu) }
-            rec.imdb?.let { byImdb.putIfAbsent(it, kitsu) }
+            rec.imdb?.let { byImdb.getOrPut(it) { mutableListOf() }.add(kitsu) }
             rec.tmdb?.let { tmdb ->
                 if (rec.mediaType == "movie") byTmdbMovie.putIfAbsent(tmdb, kitsu)
                 else byTmdbTv.getOrPut(tmdb) { mutableListOf() }.add(kitsu)
@@ -1863,7 +1874,7 @@ class IndexBuilder {
             byTvdb = byTvdb.mapValues { it.value.toList() },
             byTmdbTv = byTmdbTv.mapValues { it.value.toList() },
             byTmdbMovie = byTmdbMovie.toMap(),
-            byImdb = byImdb.toMap()
+            byImdb = byImdb.mapValues { it.value.toList() }
         )
     }
 }
@@ -2277,186 +2288,31 @@ git commit -m "feat(anime-mapping-generator): wire CLI Main and add end-to-end f
 
 ---
 
-## Task 13: Gradle wiring (fetch + generate tasks, app preBuild dependency, delete inline Fribb)
+## Task 13: Gradle wiring (fetch + generate + check tasks, delete inline Fribb)
 
 **Files:**
 - Modify: `tools/anime-mapping-generator/build.gradle.kts`
+- Modify: `tools/anime-mapping-generator/src/main/kotlin/com/nexio/animemap/Main.kt`
 - Modify: `app/build.gradle.kts`
 - Delete: `app/src/main/assets/anime/anime-id-map.json`
 
-This task atomically swaps the inline Fribb generator for the new `:tools:anime-mapping-generator`-driven pipeline. The runtime app code still expects the OLD schema after this task, so the build will compile but resolver tests in `:app` will FAIL until Task 16 is complete. We take this trade off because keeping both pipelines side-by-side adds more complexity than the green-build cost saves.
+**Design contract this task implements (do NOT deviate):**
 
-- [ ] **Step 1: Add Gradle tasks to the generator module**
+- The committed `nexio-anime-map-v1.json` is the source of truth for normal builds.
+- `:app:preBuild` does **NOT** depend on `generateAnimeMappingAsset`. App builds never touch upstream.
+- A single `:app:checkAnimeMappingAsset` task runs in PR builds and validates that the committed asset parses as `schemaVersion = 2`.
+- `fetchAnimeMappingSources` and `generateAnimeMappingAsset` are explicit-invocation tasks, intended for the regeneration CI workflow or manual local refresh.
 
-Append to `tools/anime-mapping-generator/build.gradle.kts`:
+There is exactly one Gradle implementation in this task. Do not preserve any earlier doLast/buildscript/Exec experiments — they are not part of the plan.
 
-```kotlin
-val fribbRawUrl = "https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-full.json"
-val fribbCommitUrl = "https://api.github.com/repos/Fribb/anime-lists/commits/master"
-val scudleeRawUrl = "https://raw.githubusercontent.com/Anime-Lists/anime-lists/refs/heads/master/anime-list-full.xml"
-val scudleeCommitUrl = "https://api.github.com/repos/Anime-Lists/anime-lists/commits/master"
+- [ ] **Step 1: Add the FetchMain and GenerateMain entry points to the generator**
 
-val cacheDir = layout.buildDirectory.dir("cache")
-val fribbCache = cacheDir.map { it.file("fribb.json") }
-val scudleeCache = cacheDir.map { it.file("scudlee.xml") }
-val sourceShasFile = cacheDir.map { it.file("source-shas.json") }
-
-val overlayFile = layout.projectDirectory.file("src/main/resources/nexio-anime-overlay.json")
-val rootProjectDir = rootProject.layout.projectDirectory
-val assetOutput = rootProjectDir.file("app/src/main/assets/anime/nexio-anime-map-v1.json")
-val provenanceOutput = rootProjectDir.file("app/src/main/assets/anime/nexio-anime-map-provenance.json")
-
-tasks.register("fetchAnimeMappingSources") {
-    group = "anime-mapping"
-    description = "Fetch Fribb + ScudLee upstream files into build/cache. Pass --rerun to force refresh."
-    outputs.file(fribbCache)
-    outputs.file(scudleeCache)
-    outputs.file(sourceShasFile)
-    doLast {
-        val fetcher = com.nexio.animemap.fetch.UpstreamFetcher()
-        val fribb = fetcher.fetchSource(fribbRawUrl, fribbCommitUrl, fribbCache.get().asFile)
-        val scudlee = fetcher.fetchSource(scudleeRawUrl, scudleeCommitUrl, scudleeCache.get().asFile)
-        val moshi = com.squareup.moshi.Moshi.Builder().build()
-        val mapType = com.squareup.moshi.Types.newParameterizedType(
-            Map::class.java, String::class.java, Any::class.java
-        )
-        @Suppress("UNCHECKED_CAST")
-        val adapter = moshi.adapter<Map<String, Any?>>(mapType)
-        sourceShasFile.get().asFile.parentFile.mkdirs()
-        sourceShasFile.get().asFile.writeText(adapter.indent("  ").toJson(mapOf(
-            "fribb" to mapOf("url" to fribbRawUrl, "commit" to fribb.commit, "fetchedAt" to fribb.fetchedAt),
-            "scudlee" to mapOf("url" to scudleeRawUrl, "commit" to scudlee.commit, "fetchedAt" to scudlee.fetchedAt)
-        )))
-    }
-}
-
-tasks.register("generateAnimeMappingAsset") {
-    group = "anime-mapping"
-    description = "Generate nexio-anime-map-v1.json from cached upstream sources + overlay"
-    inputs.file(fribbCache)
-    inputs.file(scudleeCache)
-    inputs.file(sourceShasFile)
-    inputs.file(overlayFile)
-    outputs.file(assetOutput)
-    outputs.file(provenanceOutput)
-
-    val fribbCacheFile = fribbCache
-    val scudleeCacheFile = scudleeCache
-    val shasFile = sourceShasFile
-    val overlayResolved = overlayFile
-    val assetOut = assetOutput
-    val provOut = provenanceOutput
-    val fribbUrl = fribbRawUrl
-    val scudleeUrl = scudleeRawUrl
-
-    doLast {
-        if (!fribbCacheFile.get().asFile.exists() || !scudleeCacheFile.get().asFile.exists()) {
-            error("upstream cache missing — run :tools:anime-mapping-generator:fetchAnimeMappingSources first")
-        }
-        val moshi = com.squareup.moshi.Moshi.Builder().build()
-        val shas = if (shasFile.get().asFile.exists()) {
-            @Suppress("UNCHECKED_CAST")
-            moshi.adapter(Map::class.java).fromJson(shasFile.get().asFile.readText()) as? Map<String, Any?>
-                ?: emptyMap()
-        } else emptyMap()
-        val fribbCommit = ((shas["fribb"] as? Map<*, *>)?.get("commit") as? String)
-        val scudleeCommit = ((shas["scudlee"] as? Map<*, *>)?.get("commit") as? String)
-
-        com.nexio.animemap.Generator.run(com.nexio.animemap.Generator.Args(
-            fribbInput = fribbCacheFile.get().asFile,
-            scudleeInput = scudleeCacheFile.get().asFile,
-            overlayInput = overlayResolved.asFile,
-            assetOutput = assetOut.asFile,
-            provenanceOutput = provOut.asFile,
-            fribbUrl = fribbUrl, fribbCommit = fribbCommit,
-            scudleeUrl = scudleeUrl, scudleeCommit = scudleeCommit
-        ))
-    }
-}
-```
-
-The buildscript needs the generator module's classes on its classpath. Add to the top of the file:
-
-```kotlin
-buildscript {
-    dependencies {
-        classpath(files("build/libs/anime-mapping-generator.jar"))
-    }
-}
-```
-
-This is awkward. Replace the approach with a JavaExec task instead — simpler:
-
-Replace the two `tasks.register(...)` blocks above with:
-
-```kotlin
-tasks.register<Exec>("fetchAnimeMappingSources") {
-    group = "anime-mapping"
-    description = "Fetch Fribb + ScudLee upstream files. Run with --rerun to force refresh."
-    val classpathTask = tasks.named<Jar>("jar")
-    dependsOn(classpathTask)
-    val cacheDirFile = cacheDir.get().asFile
-    outputs.file(File(cacheDirFile, "fribb.json"))
-    outputs.file(File(cacheDirFile, "scudlee.xml"))
-    outputs.file(File(cacheDirFile, "source-shas.json"))
-    workingDir = projectDir
-    commandLine("sh", "-c",
-        "java -cp \"${classpathTask.get().archiveFile.get().asFile}:\$(./gradlew -q :tools:anime-mapping-generator:dependencies --configuration runtimeClasspath | tail -n +1)\" com.nexio.animemap.FetchMainKt"
-    )
-}
-```
-
-That gets complicated. **Simpler approach** — use `JavaExec` task with `runtimeClasspath` directly:
-
-Replace BOTH register blocks with this clean version:
-
-```kotlin
-val animeMappingFetch = tasks.register<JavaExec>("fetchAnimeMappingSources") {
-    group = "anime-mapping"
-    description = "Fetch Fribb + ScudLee upstream files."
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("com.nexio.animemap.FetchMainKt")
-    args(
-        fribbRawUrl, fribbCommitUrl, fribbCache.get().asFile.absolutePath,
-        scudleeRawUrl, scudleeCommitUrl, scudleeCache.get().asFile.absolutePath,
-        sourceShasFile.get().asFile.absolutePath
-    )
-    outputs.file(fribbCache)
-    outputs.file(scudleeCache)
-    outputs.file(sourceShasFile)
-}
-
-val animeMappingGenerate = tasks.register<JavaExec>("generateAnimeMappingAsset") {
-    group = "anime-mapping"
-    description = "Generate nexio-anime-map-v1.json"
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("com.nexio.animemap.GenerateMainKt")
-    args(
-        fribbCache.get().asFile.absolutePath,
-        scudleeCache.get().asFile.absolutePath,
-        overlayFile.asFile.absolutePath,
-        sourceShasFile.get().asFile.absolutePath,
-        assetOutput.asFile.absolutePath,
-        provenanceOutput.asFile.absolutePath,
-        fribbRawUrl, scudleeRawUrl
-    )
-    inputs.file(fribbCache)
-    inputs.file(scudleeCache)
-    inputs.file(sourceShasFile)
-    inputs.file(overlayFile)
-    outputs.file(assetOutput)
-    outputs.file(provenanceOutput)
-}
-```
-
-- [ ] **Step 2: Create FetchMain and GenerateMain entry points**
-
-Add to `tools/anime-mapping-generator/src/main/kotlin/com/nexio/animemap/Main.kt` (append below existing `main` function):
+Append to the end of `tools/anime-mapping-generator/src/main/kotlin/com/nexio/animemap/Main.kt`:
 
 ```kotlin
 object FetchMain {
     @JvmStatic fun main(args: Array<String>) {
-        require(args.size == 7)
+        require(args.size == 7) { "expected 7 args: fribbRawUrl fribbCommitsUrl fribbCachePath scudleeRawUrl scudleeCommitsUrl scudleeCachePath shasOutputPath" }
         val fetcher = com.nexio.animemap.fetch.UpstreamFetcher()
         val fribb = fetcher.fetchSource(args[0], args[1], java.io.File(args[2]))
         val scudlee = fetcher.fetchSource(args[3], args[4], java.io.File(args[5]))
@@ -2477,13 +2333,13 @@ object FetchMain {
 
 object GenerateMain {
     @JvmStatic fun main(args: Array<String>) {
-        require(args.size == 8)
+        require(args.size == 8) { "expected 8 args: fribbInput scudleeInput overlayInput shasFile assetOutput provenanceOutput fribbUrl scudleeUrl" }
         val moshi = com.squareup.moshi.Moshi.Builder().build()
         val mapType = com.squareup.moshi.Types.newParameterizedType(
             Map::class.java, String::class.java, Any::class.java
         )
-        @Suppress("UNCHECKED_CAST")
         val shasFile = java.io.File(args[3])
+        @Suppress("UNCHECKED_CAST")
         val shas: Map<String, Any?> = if (shasFile.exists())
             (moshi.adapter<Map<String, Any?>>(mapType).fromJson(shasFile.readText()) ?: emptyMap())
         else emptyMap()
@@ -2500,35 +2356,130 @@ object GenerateMain {
         ))
     }
 }
-```
 
-The original generic `main(args)` function remains for direct CLI usage. Update its `args.size == 8` check to require 9 args (it now also needs scudlee commit) — actually leave the original alone; the new entry points are what Gradle uses.
-
-- [ ] **Step 3: Wire `:app:preBuild` dependency in app/build.gradle.kts**
-
-Find the `tasks.register("generateAnimeIdMapAsset") {...}` block in `app/build.gradle.kts` (around line 85-260). Replace the entire block — and any `tasks.named("preBuild") { dependsOn(...) }` reference — with:
-
-```kotlin
-tasks.named("preBuild") {
-    dependsOn(":tools:anime-mapping-generator:generateAnimeMappingAsset")
+object CheckMain {
+    @JvmStatic fun main(args: Array<String>) {
+        require(args.size == 1) { "expected 1 arg: assetPath" }
+        val file = java.io.File(args[0])
+        check(file.exists()) { "anime mapping asset missing: ${file.absolutePath}" }
+        val moshi = com.squareup.moshi.Moshi.Builder().build()
+        val asset = com.nexio.animemap.model.NexioAnimeMapJsonAdapter(moshi)
+            .fromJson(file.readText())
+            ?: error("failed to parse anime mapping asset at ${file.absolutePath}")
+        check(asset.schemaVersion == 2) {
+            "expected schemaVersion=2 but got ${asset.schemaVersion}"
+        }
+        check(asset.identityRecordsByKitsu.isNotEmpty()) {
+            "anime mapping asset has zero identity records"
+        }
+        println("anime mapping asset OK: ${asset.counts.identityRecords} identity, ${asset.counts.episodeMappingRecords} mapping records")
+    }
 }
 ```
 
-And delete:
-- The `animeIdMapOutput` val
-- The `animeIdMapSources` map
-- All related `tasks.register(...)` blocks for asset generation
-- The helper functions `normalizeFribbAnimeRecord`, `buildAnimeIdMapAsset`, `fetchJson`, `mediaTypeFromAnimeListType`, `positiveId`, `normalizedString`, `normalizedImdb`, `sortedRecord`, `indexAnimeRecord` (these are the inline pipeline being retired).
+The original `fun main(args: Array<String>)` in the same file remains for direct CLI use; the new entry points are what Gradle invokes.
 
-Use `grep -n "animeIdMap\|fribbAnimeList" app/build.gradle.kts` to find exact line ranges before deleting.
+- [ ] **Step 2: Append the three Gradle tasks to the generator's build.gradle.kts**
 
-- [ ] **Step 4: Delete the old anime-id-map.json asset**
+Append to `tools/anime-mapping-generator/build.gradle.kts`:
+
+```kotlin
+val fribbRawUrl = "https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-full.json"
+val fribbCommitsUrl = "https://api.github.com/repos/Fribb/anime-lists/commits/master"
+val scudleeRawUrl = "https://raw.githubusercontent.com/Anime-Lists/anime-lists/refs/heads/master/anime-list-full.xml"
+val scudleeCommitsUrl = "https://api.github.com/repos/Anime-Lists/anime-lists/commits/master"
+
+val cacheDir = layout.buildDirectory.dir("cache")
+val fribbCache = cacheDir.map { it.file("fribb.json") }
+val scudleeCache = cacheDir.map { it.file("scudlee.xml") }
+val sourceShasFile = cacheDir.map { it.file("source-shas.json") }
+
+val overlayFile = layout.projectDirectory.file("src/main/resources/nexio-anime-overlay.json")
+val rootProjectDir = rootProject.layout.projectDirectory
+val assetOutput = rootProjectDir.file("app/src/main/assets/anime/nexio-anime-map-v1.json")
+val provenanceOutput = rootProjectDir.file("app/src/main/assets/anime/nexio-anime-map-provenance.json")
+
+tasks.register<JavaExec>("fetchAnimeMappingSources") {
+    group = "anime-mapping"
+    description = "Fetch Fribb + ScudLee upstream files into build/cache. Explicit-invocation only."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.nexio.animemap.FetchMain")
+    args = listOf(
+        fribbRawUrl, fribbCommitsUrl, fribbCache.get().asFile.absolutePath,
+        scudleeRawUrl, scudleeCommitsUrl, scudleeCache.get().asFile.absolutePath,
+        sourceShasFile.get().asFile.absolutePath
+    )
+    outputs.file(fribbCache)
+    outputs.file(scudleeCache)
+    outputs.file(sourceShasFile)
+}
+
+tasks.register<JavaExec>("generateAnimeMappingAsset") {
+    group = "anime-mapping"
+    description = "Generate nexio-anime-map-v1.json from cached upstream sources + overlay. Explicit-invocation only — :app:preBuild does NOT depend on this."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.nexio.animemap.GenerateMain")
+    args = listOf(
+        fribbCache.get().asFile.absolutePath,
+        scudleeCache.get().asFile.absolutePath,
+        overlayFile.asFile.absolutePath,
+        sourceShasFile.get().asFile.absolutePath,
+        assetOutput.asFile.absolutePath,
+        provenanceOutput.asFile.absolutePath,
+        fribbRawUrl, scudleeRawUrl
+    )
+    inputs.file(fribbCache)
+    inputs.file(scudleeCache)
+    inputs.file(sourceShasFile)
+    inputs.file(overlayFile)
+    outputs.file(assetOutput)
+    outputs.file(provenanceOutput)
+    doFirst {
+        val missing = listOfNotNull(
+            fribbCache.get().asFile.takeIf { !it.exists() },
+            scudleeCache.get().asFile.takeIf { !it.exists() }
+        )
+        if (missing.isNotEmpty()) {
+            error("upstream cache missing: ${missing.joinToString { it.name }}. " +
+                  "Run :tools:anime-mapping-generator:fetchAnimeMappingSources first.")
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Add the `:app:checkAnimeMappingAsset` validation task**
+
+In `app/build.gradle.kts`, replace the entire previous inline-Fribb generation block (lines ~85–296: the `animeIdMapOutput` val, `animeIdMapSources` map, `tasks.register("generateAnimeIdMapAsset")`, and the helper functions `normalizeFribbAnimeRecord`, `buildAnimeIdMapAsset`, `fetchJson`, `mediaTypeFromAnimeListType`, `positiveId`, `normalizedString`, `normalizedImdb`, `sortedRecord`, `indexAnimeRecord`) with the following block.
+
+Use `grep -n "animeIdMap\|fribbAnimeList\|normalizeFribbAnimeRecord\|buildAnimeIdMapAsset" app/build.gradle.kts` first to confirm the line range you are deleting.
+
+```kotlin
+val animeMappingAsset = layout.projectDirectory.file("src/main/assets/anime/nexio-anime-map-v1.json")
+
+tasks.register<JavaExec>("checkAnimeMappingAsset") {
+    group = "anime-mapping"
+    description = "Validate that the committed nexio-anime-map-v1.json parses with schemaVersion=2."
+    val genProject = project(":tools:anime-mapping-generator")
+    classpath = genProject.extensions.getByType<SourceSetContainer>()["main"].runtimeClasspath
+    mainClass.set("com.nexio.animemap.CheckMain")
+    args = listOf(animeMappingAsset.asFile.absolutePath)
+    inputs.file(animeMappingAsset)
+}
+
+tasks.named("check") {
+    dependsOn("checkAnimeMappingAsset")
+}
+```
+
+This binds the validator to the standard `check` lifecycle, so PR builds running `./gradlew :app:check` will catch a missing or corrupt asset. It does **not** trigger generation.
+
+- [ ] **Step 4: Delete the old `anime-id-map.json` asset**
 
 ```bash
 git rm app/src/main/assets/anime/anime-id-map.json
 ```
 
-- [ ] **Step 5: Run a partial fetch + generate to verify wiring**
+- [ ] **Step 5: Run the generator manually to produce the first committed asset**
 
 ```bash
 ./gradlew :tools:anime-mapping-generator:fetchAnimeMappingSources --rerun-tasks 2>&1 | tail -20
@@ -2538,7 +2489,23 @@ ls -la app/src/main/assets/anime/
 
 Expected: `nexio-anime-map-v1.json` and `nexio-anime-map-provenance.json` exist; `anime-id-map.json` is gone.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Verify the validator passes against the freshly generated asset**
+
+```bash
+./gradlew :app:checkAnimeMappingAsset 2>&1 | tail -10
+```
+
+Expected: `BUILD SUCCESSFUL` with a stdout line like `anime mapping asset OK: 10668 identity, 412 mapping records`.
+
+- [ ] **Step 7: Verify a normal app build does NOT touch the network**
+
+```bash
+./gradlew :app:assembleUniversalDebug --offline 2>&1 | tail -5
+```
+
+Expected: `BUILD SUCCESSFUL`. The `--offline` flag proves no upstream fetch is wired into `:app:preBuild`.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add tools/anime-mapping-generator/build.gradle.kts \
@@ -2547,7 +2514,7 @@ git add tools/anime-mapping-generator/build.gradle.kts \
         app/src/main/assets/anime/nexio-anime-map-v1.json \
         app/src/main/assets/anime/nexio-anime-map-provenance.json
 git rm app/src/main/assets/anime/anime-id-map.json
-git commit -m "build(anime-mapping): swap inline Fribb generator for :tools:anime-mapping-generator pipeline"
+git commit -m "build(anime-mapping): wire :tools:anime-mapping-generator + checkAnimeMappingAsset; retire inline Fribb"
 ```
 
 ---
@@ -2593,7 +2560,7 @@ Create `app/src/test/resources/fixtures/nexio-anime-map-v1-test.json` with MHA +
     "byMal":{},"byAnilist":{},"byAnidb":{"11739":"11469","13485":"13881","69":"12"},
     "byTvdb":{"305074":["11469","13881"],"81797":["12"]},
     "byTmdbTv":{"65930":["11469","13881"],"37854":["12"]},
-    "byTmdbMovie":{},"byImdb":{"tt5626028":"11469","tt0388629":"12"}
+    "byTmdbMovie":{},"byImdb":{"tt5626028":["11469","13881"],"tt0388629":["12"]}
   }
 }
 ```
@@ -2791,7 +2758,7 @@ data class AnimeIdMapIndexes(
     @Json(name = "byTvdb") val byTvdb: Map<String, List<String>> = emptyMap(),
     @Json(name = "byTmdbTv") val byTmdbTv: Map<String, List<String>> = emptyMap(),
     @Json(name = "byTmdbMovie") val byTmdbMovie: Map<String, String> = emptyMap(),
-    @Json(name = "byImdb") val byImdb: Map<String, String> = emptyMap()
+    @Json(name = "byImdb") val byImdb: Map<String, List<String>> = emptyMap()
 )
 
 enum class ContentMediaKind { MOVIE, SERIES }
@@ -2827,6 +2794,13 @@ class AnimeIdMappingService @Inject constructor(
 
     fun episodeMappingForAnidb(anidbId: String): AnimeEpisodeMappingRecord? =
         asset.episodeMappingsByAnidb[anidbId]
+
+    fun recordsForImdbId(imdbId: String): List<AnimeIdMapRecord> {
+        val kitsuIds = asset.indexes.byImdb[imdbId] ?: return emptyList()
+        return kitsuIds.mapNotNull { asset.identityRecordsByKitsu[it] }
+    }
+
+    fun isAnimeImdbId(imdbId: String): Boolean = recordsForImdbId(imdbId).isNotEmpty()
 
     fun allSeriesRecordsSharingTvdb(record: AnimeIdMapRecord): List<AnimeIdMapRecord> {
         val tvdb = record.tvdb ?: return listOf(record)
@@ -3396,7 +3370,59 @@ The grouper uses `AnimeIdMappingService.allSeriesRecordsSharingTvdb` and `record
 
 If failures occur, update the test's `AnimeIdMapRecord` constructions to include any newly-required fields (e.g. `mediaType = "series"` if the grouper requires it). Each test stays functionally the same.
 
-- [ ] **Step 4: Run all consumer tests**
+- [ ] **Step 4: Add IMDb-multi-record routing tests**
+
+Create or extend `app/src/test/java/com/nexio/tv/core/anime/AnimeIdMappingServiceImdbTest.kt`:
+
+```kotlin
+package com.nexio.tv.core.anime
+
+import com.squareup.moshi.Moshi
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class AnimeIdMappingServiceImdbTest {
+
+    private fun service(): AnimeIdMappingService {
+        val json = javaClass.getResource("/fixtures/nexio-anime-map-v1-test.json")!!.readText()
+        val asset = AnimeIdMapAssetJsonAdapter(Moshi.Builder().build()).fromJson(json)!!
+        return AnimeIdMappingService(assetProvider = { asset })
+    }
+
+    @Test fun `byImdb groups all MHA Kitsu ids that share tt5626028`() {
+        val records = service().recordsForImdbId("tt5626028")
+        val kitsuIds = records.map { it.kitsu }.toSet()
+        assertTrue("MHA S1 must be present", "11469" in kitsuIds)
+        assertTrue("MHA S3 must be present", "13881" in kitsuIds)
+    }
+
+    @Test fun `imdb anime detection works with multiple Kitsu candidates`() {
+        assertTrue(service().isAnimeImdbId("tt5626028"))
+        assertTrue(service().isAnimeImdbId("tt0388629"))
+    }
+
+    @Test fun `imdb to kitsu does not silently choose season 1 when multiple records exist`() {
+        // recordsForImdbId returns the full list — caller must not just take first()
+        val records = service().recordsForImdbId("tt5626028")
+        assertTrue("must return all members, not just one", records.size >= 2)
+    }
+
+    @Test fun `unmapped imdb id returns empty list`() {
+        assertEquals(emptyList<AnimeIdMapRecord>(), service().recordsForImdbId("tt9999999"))
+    }
+}
+```
+
+Run:
+
+```bash
+./gradlew :app:testUniversalDebugUnitTest --tests "com.nexio.tv.core.anime.AnimeIdMappingServiceImdbTest" 2>&1 | grep -E "PASSED|FAILED|tests|BUILD"
+```
+
+Expected: `BUILD SUCCESSFUL`, 4 tests pass.
+
+- [ ] **Step 5: Run all consumer tests**
 
 ```bash
 ./gradlew :app:testUniversalDebugUnitTest \
@@ -3408,10 +3434,11 @@ If failures occur, update the test's `AnimeIdMapRecord` constructions to include
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add app/src/test/java/com/nexio/tv/data/
+git add app/src/test/java/com/nexio/tv/data/ \
+        app/src/test/java/com/nexio/tv/core/anime/AnimeIdMappingServiceImdbTest.kt
 git commit -m "test(anime): update consumers for projected One Piece coordinates and v2 schema"
 ```
 

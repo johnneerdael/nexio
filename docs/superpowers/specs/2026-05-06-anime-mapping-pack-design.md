@@ -114,15 +114,17 @@ tools/anime-mapping-generator/
 |---|---|---|---|
 | `fetchAnimeMappingSources` | Source URLs (configurable) | `build/cache/fribb.json`, `build/cache/scudlee.xml`, `build/cache/source-shas.json` | UP-TO-DATE if cache exists; force via `--rerun` |
 | `generateAnimeMappingAsset` | cache files + `nexio-anime-overlay.json` | `app/src/main/assets/anime/nexio-anime-map-v1.json`, `nexio-anime-map-provenance.json` | UP-TO-DATE on file hashes |
+| `checkAnimeMappingAsset` | `app/src/main/assets/anime/nexio-anime-map-v1.json` | none (validation) | runs in PR builds; fails if asset is missing or `schemaVersion != 2` |
 
-`:app:preBuild` depends on `:tools:anime-mapping-generator:generateAnimeMappingAsset`. The existing inline Fribb generator code at `app/build.gradle.kts:158-296` is deleted in this PR.
+**The committed `nexio-anime-map-v1.json` is the source of truth for normal builds.** Neither `:app:preBuild` nor any normal app build task depends on `generateAnimeMappingAsset` — the generator only runs when explicitly invoked, either manually or by the regeneration CI job. PR builds use the asset committed on the branch and run `checkAnimeMappingAsset` to verify it parses. The existing inline Fribb generator code at `app/build.gradle.kts:158-296` is deleted in this PR.
 
 ### Local dev vs CI
 
-- **Local dev:** `fetchAnimeMappingSources` is UP-TO-DATE if cache exists; no network unless explicitly run with `--rerun`.
-- **PR builds:** run `:tools:anime-mapping-generator:test` only. No upstream fetch. The committed asset on the branch is used.
-- **Main-branch CI / release builds:** `fetchAnimeMappingSources --rerun`, regenerate, commit the regenerated asset back to main. Driven by a weekly cron job and on-demand release tags.
-- **Provenance JSON** captures resolved commit SHAs at fetch time — forensic record without giving up freshness.
+- **Local dev:** the committed asset is used. `fetchAnimeMappingSources` and `generateAnimeMappingAsset` only run when explicitly invoked (`./gradlew :tools:anime-mapping-generator:generateAnimeMappingAsset --rerun`). No network during normal builds.
+- **PR builds:** `:tools:anime-mapping-generator:test` and `:app:checkAnimeMappingAsset` run. No upstream fetch. The committed asset on the branch is used.
+- **Regeneration CI job (separate workflow):** on-demand triggers run `fetchAnimeMappingSources --rerun` followed by `generateAnimeMappingAsset`, then opens a PR or directly commits the regenerated asset back to main. This is the *only* path that touches upstream. A weekly cron triggering this same flow is desired but is an **ops follow-up** outside this PR's code scope; until it lands, regeneration is manual.
+- **Release builds:** use whatever asset is committed at the release tag — same as PR builds, just with release flags.
+- **Provenance JSON** is committed alongside the asset and captures resolved commit SHAs at fetch time — forensic record of which upstream snapshot a given release shipped.
 
 ### Provenance file
 
@@ -254,8 +256,13 @@ Same shape as v1 with one breaking change:
 
 - `byTvdb` becomes `Map<String, List<String>>` (TVDB series ID → list of member Kitsu IDs). Reflects the one-to-many reality (one TVDB series ↔ many Kitsu seasonal resources). Existing single-value callers must update.
 - `byTmdbSeries` is renamed to `byTmdbTv` to match ScudLee terminology and becomes `Map<String, List<String>>` for the same one-to-many reason.
+- **`byImdb` becomes `Map<String, List<String>>`** for the same one-to-many reason — empirically all eight MHA Kitsu resources share `imdb=tt5626028`. A single-value index would silently pick whichever record was inserted first (typically S1) and drop the other seven.
 - `byTmdbMovie` stays `Map<String, String>` (movies are 1:1).
-- All other indexes (`byKitsu`, `byMal`, `byAnilist`, `byAnidb`, `byImdb`) remain `Map<String, String>`.
+- All other indexes (`byKitsu`, `byMal`, `byAnilist`, `byAnidb`) remain `Map<String, String>` (anime-side IDs are unique-per-resource by construction).
+
+Lookup callers should expose:
+- `recordsForImdbId(imdbId): List<AnimeIdMapRecord>` — for "is this anime?" routing checks (any non-empty result means yes).
+- For scrobble/detail-side resolution that needs to pick a *specific* season, the caller must pass additional context (e.g. season-number hint from the source) via the resolver — never just take the first list element.
 
 ### Resolution order
 
@@ -553,11 +560,11 @@ Engineering can prototype, run CI, validate the generator, and merge to a featur
 
 ### CI integration
 
-- **PR builds:** `:tools:anime-mapping-generator:test` only. No upstream fetch. Existing committed asset is used.
-- **Main-branch CI (post-merge):** on-demand triggers run the full pipeline including `fetchAnimeMappingSources --rerun`, then commit the regenerated asset back to main. A weekly cron triggering this same flow is desired but is an **ops follow-up** outside this PR's code scope; until it lands, regeneration is manual.
-- **Release builds:** same pipeline; asset is a release artifact.
+- **PR builds:** `:tools:anime-mapping-generator:test` + `:app:checkAnimeMappingAsset`. No upstream fetch. The committed asset on the branch is the source of truth. App builds do not depend on the generator running.
+- **Regeneration CI job (separate workflow, not part of normal app builds):** on-demand or scheduled trigger runs `fetchAnimeMappingSources --rerun` + `generateAnimeMappingAsset`, then opens a PR (or directly commits) the regenerated asset back to main. The PR includes the updated `nexio-anime-map-v1.json` and `nexio-anime-map-provenance.json`. This is the **only** path that touches upstream.
+- **Release builds:** use whatever asset is committed at the release tag — same as PR builds.
 
-The cron (once it lands) is the lever that delivers freshness. Per-PR builds are fast and hermetic.
+A weekly cron triggering the regeneration job is desired but is an **ops follow-up** outside this PR's code scope; until it lands, regeneration is manual. The cron (once it lands) is the lever that delivers freshness without making any normal build network-dependent.
 
 ### Rollout
 
