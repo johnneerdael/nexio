@@ -150,6 +150,20 @@ class HomeRailOrderStore @Inject constructor(
         if (finalized != current) persist(finalized)
     }
 
+    /**
+     * Synchronously reconcile the current state with the given live definitions.
+     *
+     * Reads `lastWrittenState` if populated (the in-memory authoritative copy after any
+     * mutation), otherwise falls back to `state.value` (the StateFlow's last decoded value
+     * or `HomeRailOrderState.Empty` if the upstream hasn't decoded yet). This is the
+     * pipeline-friendly version: callers that need the result inline (e.g., within a
+     * `withContext(Dispatchers.Default)` block) avoid the `combine`/`stateIn` round-trip.
+     */
+    fun reconcileNow(liveDefinitions: List<HomeRailDefinition>): EffectiveHomeRailOrder {
+        val current = lastWrittenState ?: state.value
+        return reconciler.reconcile(current.orderedKeys, current.disabledKeys, liveDefinitions)
+    }
+
     private suspend fun currentForMutation(): HomeRailOrderState {
         lastWrittenState?.let { return it }
         val initial = codec.decode(layoutPreferenceDataStore.homeRailOrderStateJson.first())

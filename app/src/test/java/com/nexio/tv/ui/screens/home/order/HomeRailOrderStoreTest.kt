@@ -217,6 +217,74 @@ class HomeRailOrderStoreTest {
     }
 
     @Test
+    fun `reconcileNow uses lastWrittenState cache when available`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(null)
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(layout, codec, fixedClock,
+            TestScope(StandardTestDispatcher(testScheduler)))
+
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("k1"), HomeRailKey("k2")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("k1"), HomeRailKey("k2")),
+        )
+        advanceUntilIdle()
+
+        val live = listOf(
+            HomeRailDefinition(
+                HomeRailKey("k1"), RailFamily.TMDB, RailSource.PROVIDER_PUBLIC, "k1",
+                enabled = true, defaultSortKey = DefaultSortKey(3, 0),
+                publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+            ),
+            HomeRailDefinition(
+                HomeRailKey("k2"), RailFamily.TMDB, RailSource.PROVIDER_PUBLIC, "k2",
+                enabled = true, defaultSortKey = DefaultSortKey(3, 1),
+                publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+            ),
+        )
+
+        val result = store.reconcileNow(live)
+        assertEquals(listOf(HomeRailKey("k1"), HomeRailKey("k2")), result.visibleKeys)
+    }
+
+    @Test
+    fun `reconcileNow falls back to live default order when no state and no cache`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        coEvery { layout.homeRailOrderStateJson } returns flowOf(null)
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+
+        val store = HomeRailOrderStore(layout, codec, fixedClock,
+            TestScope(StandardTestDispatcher(testScheduler)))
+
+        val live = listOf(
+            HomeRailDefinition(
+                HomeRailKey("simkl_x"), RailFamily.SIMKL, RailSource.PROVIDER_PUBLIC, "simkl_x",
+                enabled = true, defaultSortKey = DefaultSortKey(1, 0),
+                publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+            ),
+            HomeRailDefinition(
+                HomeRailKey("trakt_x"), RailFamily.TRAKT, RailSource.PROVIDER_PUBLIC, "trakt_x",
+                enabled = true, defaultSortKey = DefaultSortKey(0, 0),
+                publishPolicy = RailPublishPolicy.PUBLISH_WHEN_NON_EMPTY,
+            ),
+        )
+
+        val result = store.reconcileNow(live)
+        // Both keys are "newly discovered" (no saved order), so they sort by family rank.
+        // Trakt rank 0 < Simkl rank 1, so trakt first.
+        assertEquals(
+            listOf(HomeRailKey("trakt_x"), HomeRailKey("simkl_x")),
+            result.visibleKeys,
+        )
+    }
+
+    @Test
     fun `tryMigrate seeds from legacy when state json is null`() = runTest {
         val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val persisted = MutableStateFlow<String?>(null)
