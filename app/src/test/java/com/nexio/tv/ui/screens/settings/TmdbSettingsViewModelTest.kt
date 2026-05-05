@@ -110,7 +110,8 @@ class TmdbSettingsViewModelTest {
         return TmdbSettingsViewModel(
             dataStore = tmdbSettingsDataStore,
             tmdbCatalogSettingsDataStore = catalogSettingsDataStore,
-            providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true)
+            providerSettingsRepository = mockk<ProviderSettingsRepository>(relaxed = true),
+            homeRailOrderStore = mockk(relaxed = true)
         )
     }
 }

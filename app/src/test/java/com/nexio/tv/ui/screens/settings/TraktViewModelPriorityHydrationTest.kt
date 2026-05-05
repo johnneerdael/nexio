@@ -63,7 +63,8 @@ class TraktViewModelPriorityHydrationTest {
 
         return TraktViewModel(
             TraktSettingsAuthGateway(authService), authDataStore, progressService, discoveryService,
-            scrobbleService, settingsDataStore, notifier, testProfileManager(), context
+            scrobbleService, settingsDataStore, notifier, mockk(relaxed = true),
+            testProfileManager(), context
         )
     }
 

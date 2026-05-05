@@ -8,6 +8,10 @@ import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListListOption
 import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.MDBListSettings
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.ui.screens.home.order.RailFamily
+import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +21,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,7 +31,8 @@ class MDBListSettingsViewModel @Inject constructor(
     private val dataStore: MDBListSettingsDataStore,
     private val providerSettingsRepository: ProviderSettingsRepository,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
-    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
+    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
+    private val homeRailOrderStore: HomeRailOrderStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MDBListSettingsUiState())
@@ -122,6 +128,12 @@ class MDBListSettingsViewModel @Inject constructor(
         if (listKey !in activeKeys) return
         viewModelScope.launch {
             dataStore.moveCatalog(listKey = listKey, direction = direction, availableKeys = activeKeys)
+            val newOrder = dataStore.catalogPreferences.first().catalogOrder
+            homeRailOrderStore.reorderProviderKeys(
+                family = RailFamily.MDBLIST,
+                providerOrder = newOrder.map(::HomeRailKey),
+                source = RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN,
+            )
         }
     }
 }

@@ -40,7 +40,7 @@ class MDBListSettingsViewModelPriorityHydrationTest {
         every { dataStore.catalogPreferences } returns MutableStateFlow(MDBListCatalogPreferences())
         every { discoveryService.observeSnapshot() } returns MutableStateFlow(MDBListDiscoverySnapshot())
 
-        return MDBListSettingsViewModel(dataStore, providerSettingsRepository, discoveryService, notifier)
+        return MDBListSettingsViewModel(dataStore, providerSettingsRepository, discoveryService, notifier, mockk(relaxed = true))
     }
 
     @Test

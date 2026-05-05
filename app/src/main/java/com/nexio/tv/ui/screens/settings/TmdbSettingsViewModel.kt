@@ -8,6 +8,10 @@ import com.nexio.tv.data.local.TmdbCatalogSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.ProviderSettingsRepository
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.ui.screens.home.order.RailFamily
+import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,7 +29,8 @@ import javax.inject.Inject
 class TmdbSettingsViewModel @Inject constructor(
     private val dataStore: TmdbSettingsDataStore,
     private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
-    private val providerSettingsRepository: ProviderSettingsRepository
+    private val providerSettingsRepository: ProviderSettingsRepository,
+    private val homeRailOrderStore: HomeRailOrderStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TmdbSettingsUiState())
@@ -67,9 +73,21 @@ class TmdbSettingsViewModel @Inject constructor(
             }
             is TmdbSettingsEvent.MoveCatalogUp -> update {
                 tmdbCatalogSettingsDataStore.moveCatalog(event.catalogId, -1)
+                val newOrder = tmdbCatalogSettingsDataStore.catalogPreferences.first().catalogOrder
+                homeRailOrderStore.reorderProviderKeys(
+                    family = RailFamily.TMDB,
+                    providerOrder = newOrder.map(::HomeRailKey),
+                    source = RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN,
+                )
             }
             is TmdbSettingsEvent.MoveCatalogDown -> update {
                 tmdbCatalogSettingsDataStore.moveCatalog(event.catalogId, 1)
+                val newOrder = tmdbCatalogSettingsDataStore.catalogPreferences.first().catalogOrder
+                homeRailOrderStore.reorderProviderKeys(
+                    family = RailFamily.TMDB,
+                    providerOrder = newOrder.map(::HomeRailKey),
+                    source = RailOrderMutationSource.PROVIDER_SETTINGS_SCREEN,
+                )
             }
             is TmdbSettingsEvent.ToggleAdultContent -> update {
                 tmdbCatalogSettingsDataStore.setIncludeAdult(event.enabled)
