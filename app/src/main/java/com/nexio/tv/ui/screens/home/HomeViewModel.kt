@@ -71,6 +71,7 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -132,6 +133,7 @@ class HomeViewModel @Inject constructor(
     internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val metadataDiskCacheStore: MetadataDiskCacheStore,
     internal val syntheticHomeCatalogStore: SyntheticHomeCatalogStore,
+    internal val homeRailOrderStore: HomeRailOrderStore,
     internal val profileManager: ProfileManager,
     internal val profileModeRouter: ProfileModeRouter,
     internal val profileBoundary: ProfileBoundary,
@@ -221,6 +223,7 @@ class HomeViewModel @Inject constructor(
     internal var catalogsLoadInProgress: Boolean = false
     internal var lastCatalogComputationSignature: String? = null
     internal var lastCatalogOrderDiagnosticsSignature: String? = null
+    internal var migrationAttempted: Boolean = false
     internal data class TruncatedRowCacheEntry(
         val sourceRow: CatalogRow,
         val truncatedRow: CatalogRow
