@@ -3,6 +3,8 @@ package com.nexio.tv.core.anime.projection
 import com.nexio.tv.core.anime.AnimeIdMapAsset
 import com.nexio.tv.core.anime.AnimeIdMapRecord
 import com.nexio.tv.core.anime.AnimeIdMappingService
+import com.nexio.tv.core.anime.KitsuMetadataService
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,7 +24,7 @@ class DefaultAnimeSeasonProjectionResolverWorkTest {
             )
         )
         val service = AnimeIdMappingService(assetProvider = { asset })
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service)
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true))
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "13881", animeStremioId = null))
 
@@ -42,7 +44,7 @@ class DefaultAnimeSeasonProjectionResolverWorkTest {
             )
         )
         val service = AnimeIdMappingService(assetProvider = { asset })
-        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service)
+        val resolver = DefaultAnimeSeasonProjectionResolver(idMappingService = service, kitsuMetadataService = mockk(relaxed = true))
 
         val work = resolver.resolveWork(AnimeSourceIdentity(sourceKitsuId = "11469", animeStremioId = null))
 
