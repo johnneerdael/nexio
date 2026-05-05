@@ -1,6 +1,7 @@
 package com.nexio.tv.core.anime
 
 import android.content.Context
+import com.nexio.tv.domain.model.ProviderIds
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -51,6 +52,57 @@ class AnimeIdMappingService(
                 ContentMediaKind.MOVIE -> asset.byTmdbMovie[id.value]
                 ContentMediaKind.SERIES -> asset.byTmdbSeries[id.value]
             }
+        }
+    }
+
+    fun resolveProviderIdsForKitsu(kitsuId: String, mediaKind: ContentMediaKind): ProviderIds {
+        val cleanKitsuId = kitsuId
+            .trim()
+            .removePrefix("kitsu:")
+            .takeIf { it.isNotBlank() }
+            ?: return ProviderIds()
+        val record = asset.recordsByKitsu[cleanKitsuId]
+            ?.takeIf { it.matches(mediaKind) }
+            ?: return ProviderIds(kitsu = cleanKitsuId)
+
+        return ProviderIds(
+            imdb = record.imdb,
+            tmdb = record.tmdb,
+            tvdb = record.tvdb,
+            kitsu = record.kitsu,
+            mal = record.mal,
+            anilist = record.anilist,
+            anidb = record.anidb
+        )
+    }
+
+    fun recordForKitsuId(kitsuId: String): AnimeIdMapRecord? =
+        asset.recordsByKitsu[kitsuId.removePrefix("kitsu:")]
+
+    /**
+     * Returns every SERIES TV record sharing the same tvdb id as [record].
+     * Excludes movies, OVAs, ONAs, specials, and music — they share TVDB ids
+     * with their parent series in the asset but must NOT be grouped into the
+     * series work identity.
+     */
+    fun allSeriesRecordsSharingTvdb(record: AnimeIdMapRecord): List<AnimeIdMapRecord> {
+        val tvdb = record.tvdb?.takeIf { it.isNotBlank() } ?: return listOf(record)
+        return asset.recordsByKitsu.values.filter { other ->
+            other.tvdb == tvdb && isSeriesTvEntry(other)
+        }
+    }
+
+    private fun isSeriesTvEntry(record: AnimeIdMapRecord): Boolean {
+        val mediaType = record.mediaType?.lowercase() ?: return true
+        val sourceType = record.sourceType?.lowercase() ?: ""
+        return mediaType == "series" && sourceType in setOf("tv", "")
+    }
+
+    private fun AnimeIdMapRecord.matches(mediaKind: ContentMediaKind): Boolean {
+        val type = mediaType?.trim()?.lowercase() ?: return true
+        return when (mediaKind) {
+            ContentMediaKind.MOVIE -> type == "movie"
+            ContentMediaKind.SERIES -> type != "movie"
         }
     }
 
