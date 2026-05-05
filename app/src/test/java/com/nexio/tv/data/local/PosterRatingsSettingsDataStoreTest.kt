@@ -2,6 +2,8 @@ package com.nexio.tv.data.local
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.core.sync.applyPosterRatingsProviderSelection
+import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
@@ -70,5 +72,42 @@ class PosterRatingsSettingsDataStoreTest {
         store.setTopPostersEntitlement(snapshot)
 
         assertEquals(snapshot, store.settings.first().topPostersEntitlement)
+    }
+
+    @Test
+    fun `remote legacy booleans update poster selection without clearing keys`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = PosterRatingsSettingsDataStore(context)
+
+        store.setRpdbApiKey("rpdb-key")
+        store.setTopPostersApiKey("TP-key")
+
+        applyPosterRatingsProviderSelection(
+            settings = PosterRatingsSyncSettings(
+                rpdbEnabled = false,
+                topPostersEnabled = true
+            ),
+            posterRatingsSettingsDataStore = store
+        )
+
+        val settings = store.settings.first()
+
+        assertEquals("rpdb-key", settings.rpdbApiKey)
+        assertEquals("TP-key", settings.topPostersApiKey)
+        assertEquals(ArtworkProviderChoiceKey.TOP_POSTERS, settings.selection.posterProvider)
+
+        applyPosterRatingsProviderSelection(
+            settings = PosterRatingsSyncSettings(
+                rpdbEnabled = false,
+                topPostersEnabled = false
+            ),
+            posterRatingsSettingsDataStore = store
+        )
+
+        val defaultSettings = store.settings.first()
+
+        assertEquals("rpdb-key", defaultSettings.rpdbApiKey)
+        assertEquals("TP-key", defaultSettings.topPostersApiKey)
+        assertEquals(ArtworkProviderChoiceKey.DEFAULT, defaultSettings.selection.posterProvider)
     }
 }
