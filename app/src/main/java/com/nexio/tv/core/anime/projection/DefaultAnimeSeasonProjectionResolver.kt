@@ -3,6 +3,7 @@ package com.nexio.tv.core.anime.projection
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.trace.AnimeProjectionTraceEvents
 import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ProviderIds
 import javax.inject.Inject
@@ -13,6 +14,7 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
     private val idMappingService: AnimeIdMappingService,
     private val kitsuMetadataService: KitsuMetadataService,
     private val store: AnimeEpisodeCoordinateStore,
+    private val traceEvents: AnimeProjectionTraceEvents,
 ) : AnimeSeasonProjectionResolver {
 
     override suspend fun resolveWork(source: AnimeSourceIdentity): AnimeWorkIdentity {
@@ -36,7 +38,7 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
             !record.imdb.isNullOrBlank() -> AnimeGroupingConfidence.MEDIUM
             else -> AnimeGroupingConfidence.LOW
         }
-        return AnimeWorkIdentity(
+        val result = AnimeWorkIdentity(
             groupKey = groupKey,
             primaryKitsuId = primary,
             memberKitsuIds = memberIds,
@@ -56,6 +58,8 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
                 record.tmdb?.let { "kitsu.tmdb=$it" },
             ),
         )
+        traceEvents.emitWorkResolved(result)
+        return result
     }
 
     override suspend fun resolveSeasonPresentation(
@@ -107,13 +111,15 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
                 )
             }
 
-        return AnimeSeasonPresentation(
+        val presentation = AnimeSeasonPresentation(
             work = work,
             seasons = tabs,
             selectedSeason = defaultSelected,
             source = source,
             confidence = if (isFlatFranchise) CoordinateConfidence.LOW else CoordinateConfidence.HIGH,
         )
+        traceEvents.emitSeasonProjectionBuilt(presentation)
+        return presentation
     }
 
     private companion object {
@@ -128,6 +134,17 @@ class DefaultAnimeSeasonProjectionResolver @Inject constructor(
         store.get(work.groupKey, sourceEpisode, target)?.let { return it }
         val computed = computeEpisodeProjection(work, sourceEpisode, target)
         store.put(work.groupKey, sourceEpisode, target, computed)
+        if (computed.scrobbleCoordinate != null || target != EpisodeProjectionTarget.TRAKT_SCROBBLE) {
+            traceEvents.emitEpisodeCoordinateResolved(computed, target)
+        } else {
+            traceEvents.emitEpisodeCoordinateUnresolved(
+                sourceKitsuId = sourceEpisode.sourceKitsuId,
+                season = sourceEpisode.season,
+                episode = sourceEpisode.episode,
+                target = target,
+                fallbackReason = computed.fallbackReason,
+            )
+        }
         return computed
     }
 

@@ -39,7 +39,7 @@ class TraceMetadataEventsLocalizationPlanTest {
     }
 
     @Test
-    fun `emitLocalizationPlan is no-op when sessionId returns null`() {
+    fun `emitLocalizationPlan emits with logcat-only session id when sessionId returns null`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { null })
 
@@ -55,6 +55,7 @@ class TraceMetadataEventsLocalizationPlanTest {
             perEpisodeFallbacksAllowed = 8
         )
 
-        assertEquals(0, sink.events.size)
+        assertEquals(1, sink.events.size)
+        assertEquals("logcat-only", sink.events.single().traceSessionId)
     }
 }

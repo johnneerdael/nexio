@@ -443,6 +443,180 @@ class TraceMetadataEvents(
         )
     }
 
+    fun emitAnimeWorkResolved(
+        sourceKitsuId: String,
+        groupKey: String,
+        memberCount: Int,
+        confidence: String,
+        evidence: List<String>,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "anime.work_resolved",
+                payload = mapOf(
+                    "sourceKitsuId" to sourceKitsuId,
+                    "groupKey" to groupKey,
+                    "memberCount" to memberCount,
+                    "confidence" to confidence,
+                    "evidence" to evidence,
+                )
+            )
+        )
+    }
+
+    fun emitAnimeSeasonProjectionBuilt(
+        groupKey: String,
+        selectedSeason: Int,
+        seasonCount: Int,
+        source: String,
+        confidence: String,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "anime.season_projection_built",
+                payload = mapOf(
+                    "groupKey" to groupKey,
+                    "selectedSeason" to selectedSeason,
+                    "seasonCount" to seasonCount,
+                    "source" to source,
+                    "confidence" to confidence,
+                )
+            )
+        )
+    }
+
+    fun emitAnimeEpisodeCoordinateResolved(
+        sourceKitsuId: String,
+        sourceSeason: Int,
+        sourceEpisode: Int,
+        targetProvider: String,
+        targetSeriesId: String,
+        targetSeason: Int,
+        targetEpisode: Int,
+        confidence: String,
+        uses: List<String>,
+        evidence: List<String>,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "anime.episode_coordinate_resolved",
+                payload = mapOf(
+                    "sourceKitsuId" to sourceKitsuId,
+                    "sourceSeason" to sourceSeason,
+                    "sourceEpisode" to sourceEpisode,
+                    "targetProvider" to targetProvider,
+                    "targetSeriesId" to targetSeriesId,
+                    "targetSeason" to targetSeason,
+                    "targetEpisode" to targetEpisode,
+                    "confidence" to confidence,
+                    "uses" to uses,
+                    "evidence" to evidence,
+                )
+            )
+        )
+    }
+
+    fun emitAnimeEpisodeCoordinateUnresolved(
+        sourceKitsuId: String,
+        sourceSeason: Int,
+        sourceEpisode: Int,
+        target: String,
+        fallbackReason: String,
+        confidence: String,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "anime.episode_coordinate_unresolved",
+                payload = mapOf(
+                    "sourceKitsuId" to sourceKitsuId,
+                    "sourceSeason" to sourceSeason,
+                    "sourceEpisode" to sourceEpisode,
+                    "target" to target,
+                    "fallbackReason" to fallbackReason,
+                    "confidence" to confidence,
+                )
+            )
+        )
+    }
+
+    fun emitAnimeScrobbleRejected(
+        contentId: String,
+        reason: String,
+        provider: String,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "tracking.scrobble_rejected",
+                payload = mapOf(
+                    "contentId" to contentId,
+                    "reason" to reason,
+                    "provider" to provider,
+                )
+            )
+        )
+    }
+
+    fun emitAnimePremiumThumbnailCoordinateSelected(
+        sourceKitsuId: String,
+        selectedProvider: String?,
+        selectedSeriesId: String?,
+        selectedSeason: Int?,
+        selectedEpisode: Int?,
+        confidence: String,
+        fallbackToPrimary: Boolean,
+    ) {
+        val sid = traceSessionIdForEmission()
+        sink.emit(
+            TraceEventEnvelope(
+                traceSessionId = sid,
+                sequence = seq.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = "premium.thumbnail_coordinate_selected",
+                payload = mapOf(
+                    "sourceKitsuId" to sourceKitsuId,
+                    "selectedProvider" to selectedProvider,
+                    "selectedSeriesId" to selectedSeriesId,
+                    "selectedSeason" to selectedSeason,
+                    "selectedEpisode" to selectedEpisode,
+                    "confidence" to confidence,
+                    "fallbackToPrimary" to fallbackToPrimary,
+                )
+            )
+        )
+    }
+
     private fun emitHomeHydrationEvent(
         eventType: String,
         payload: Map<String, Any?>

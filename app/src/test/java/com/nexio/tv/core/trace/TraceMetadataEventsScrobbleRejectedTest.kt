@@ -2,7 +2,6 @@ package com.nexio.tv.core.trace
 
 import com.nexio.tv.core.integration.RecordingTraceSink
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TraceMetadataEventsScrobbleRejectedTest {
@@ -29,7 +28,7 @@ class TraceMetadataEventsScrobbleRejectedTest {
     }
 
     @Test
-    fun `emitScrobbleRejected is a no-op when sessionId returns null`() {
+    fun `emitScrobbleRejected emits with logcat-only session id when sessionId returns null`() {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { null })
 
@@ -40,6 +39,7 @@ class TraceMetadataEventsScrobbleRejectedTest {
             reason = "STALE_SESSION_WRITE_REJECTED"
         )
 
-        assertTrue("must not emit when no active session", sink.events.isEmpty())
+        assertEquals(1, sink.events.size)
+        assertEquals("logcat-only", sink.events.single().traceSessionId)
     }
 }

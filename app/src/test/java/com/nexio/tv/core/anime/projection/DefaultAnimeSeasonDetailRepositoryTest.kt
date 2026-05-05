@@ -5,6 +5,7 @@ import com.nexio.tv.core.anime.AnimeIdMapRecord
 import com.nexio.tv.core.anime.AnimeIdMappingService
 import com.nexio.tv.core.anime.ContentMediaKind
 import com.nexio.tv.core.anime.KitsuMetadataService
+import com.nexio.tv.core.trace.AnimeProjectionTraceEvents
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
@@ -47,6 +48,7 @@ class DefaultAnimeSeasonDetailRepositoryTest {
             idMappingService = mapping,
             kitsuMetadataService = kitsu,
             store = InMemoryAnimeEpisodeCoordinateStore(),
+            traceEvents = mockk(relaxed = true),
         )
         val repository = DefaultAnimeSeasonDetailRepository(
             animeSeasonProjectionResolver = resolver,
@@ -88,6 +90,7 @@ class DefaultAnimeSeasonDetailRepositoryTest {
             idMappingService = mapping,
             kitsuMetadataService = kitsu,
             store = InMemoryAnimeEpisodeCoordinateStore(),
+            traceEvents = mockk(relaxed = true),
         )
         val repository = DefaultAnimeSeasonDetailRepository(
             animeSeasonProjectionResolver = resolver,
