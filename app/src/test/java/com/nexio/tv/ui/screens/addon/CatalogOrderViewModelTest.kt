@@ -22,6 +22,9 @@ import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.repository.AddonRepository
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -107,6 +110,44 @@ class CatalogOrderViewModelTest {
     }
 
     @Test
+    fun `reorder routes through HomeRailOrderStore updateOrder`() = runTest(dispatcher) {
+        val notifier = CatalogPriorityHydrationNotifier()
+        val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
+        val homeRailOrderStore = mockk<HomeRailOrderStore>(relaxed = true)
+        every { layoutPreferenceDataStore.homeCatalogOrderKeys } returns MutableStateFlow(emptyList())
+        every { layoutPreferenceDataStore.disabledHomeCatalogKeys } returns MutableStateFlow(emptyList())
+        every { traktSettingsDataStore.catalogPreferences } returns MutableStateFlow(
+            TraktCatalogPreferences(
+                enabledCatalogs = setOf(
+                    TraktCatalogIds.TRENDING_MOVIES,
+                    TraktCatalogIds.TRENDING_SHOWS
+                ),
+                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+            )
+        )
+
+        val viewModel = buildViewModel(
+            layoutPreferenceDataStore = layoutPreferenceDataStore,
+            notifier = notifier,
+            traktSettingsDataStore = traktSettingsDataStore,
+            homeRailOrderStore = homeRailOrderStore
+        )
+        advanceUntilIdle()
+
+        viewModel.moveDown(TraktCatalogIds.TRENDING_MOVIES)
+        advanceUntilIdle()
+
+        coVerify {
+            homeRailOrderStore.updateOrder(
+                orderedKeys = any(),
+                source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+                knownLiveKeys = any(),
+            )
+        }
+    }
+
+    @Test
     fun `enabling a kitsu rail uses kitsu settings store and leaves layout disabled keys alone`() = runTest(dispatcher) {
         val notifier = CatalogPriorityHydrationNotifier()
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
@@ -136,11 +177,20 @@ class CatalogOrderViewModelTest {
     private fun buildViewModel(
         layoutPreferenceDataStore: LayoutPreferenceDataStore,
         notifier: CatalogPriorityHydrationNotifier,
-        kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore = mockk(relaxed = true)
+        kitsuCatalogSettingsDataStore: KitsuCatalogSettingsDataStore = mockk(relaxed = true),
+        traktSettingsDataStore: TraktSettingsDataStore? = null,
+        homeRailOrderStore: HomeRailOrderStore = mockk(relaxed = true)
     ): CatalogOrderViewModel {
         val addonRepository = mockk<AddonRepository>(relaxed = true)
         val traktDiscoveryService = mockk<TraktDiscoveryService>(relaxed = true)
-        val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
+        val resolvedTraktSettingsDataStore = traktSettingsDataStore ?: mockk<TraktSettingsDataStore>(relaxed = true).also {
+            every { it.catalogPreferences } returns MutableStateFlow(
+                TraktCatalogPreferences(
+                    enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+                    catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+                )
+            )
+        }
         val simklSettingsDataStore = mockk<SimklSettingsDataStore>(relaxed = true)
         val mdbListDiscoveryService = mockk<MDBListDiscoveryService>(relaxed = true)
         val mdbListSettingsDataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
@@ -150,12 +200,6 @@ class CatalogOrderViewModelTest {
 
         every { addonRepository.getInstalledAddons() } returns MutableStateFlow(emptyList())
         every { traktDiscoveryService.observeSnapshot(any()) } returns MutableStateFlow(TraktDiscoverySnapshot())
-        every { traktSettingsDataStore.catalogPreferences } returns MutableStateFlow(
-            TraktCatalogPreferences(
-                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
-                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
-            )
-        )
         every { simklSettingsDataStore.catalogPreferences } returns MutableStateFlow(SimklCatalogPreferences())
         every { mdbListDiscoveryService.observeSnapshot() } returns MutableStateFlow(MDBListDiscoverySnapshot())
         every { mdbListSettingsDataStore.catalogPreferences } returns MutableStateFlow(MDBListCatalogPreferences())
@@ -170,7 +214,7 @@ class CatalogOrderViewModelTest {
             addonRepository = addonRepository,
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             traktDiscoveryService = traktDiscoveryService,
-            traktSettingsDataStore = traktSettingsDataStore,
+            traktSettingsDataStore = resolvedTraktSettingsDataStore,
             simklSettingsDataStore = simklSettingsDataStore,
             mdbListDiscoveryService = mdbListDiscoveryService,
             mdbListSettingsDataStore = mdbListSettingsDataStore,
@@ -178,7 +222,8 @@ class CatalogOrderViewModelTest {
             tmdbCatalogSettingsDataStore = tmdbCatalogSettingsDataStore,
             androidTvRecommendationsDataStore = androidTvRecommendationsDataStore,
             androidTvFeedCatalogService = androidTvFeedCatalogService,
-            catalogPriorityHydrationNotifier = notifier
+            catalogPriorityHydrationNotifier = notifier,
+            homeRailOrderStore = homeRailOrderStore
         )
     }
 }

@@ -32,6 +32,9 @@ import com.nexio.tv.data.repository.tmdbCatalogTitle
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.repository.AddonRepository
+import com.nexio.tv.ui.screens.home.order.HomeRailKey
+import com.nexio.tv.ui.screens.home.order.HomeRailOrderStore
+import com.nexio.tv.ui.screens.home.order.RailOrderMutationSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,7 +58,8 @@ class CatalogOrderViewModel @Inject constructor(
     private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
     private val androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore,
     private val androidTvFeedCatalogService: AndroidTvFeedCatalogService,
-    private val catalogPriorityHydrationNotifier: CatalogPriorityHydrationNotifier
+    private val catalogPriorityHydrationNotifier: CatalogPriorityHydrationNotifier,
+    private val homeRailOrderStore: HomeRailOrderStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CatalogOrderUiState())
@@ -139,7 +143,11 @@ class CatalogOrderViewModel @Inject constructor(
                 .distinct()
                 .filter { it !in reordered }
                 .toList()
-            layoutPreferenceDataStore.setHomeCatalogOrderKeys(reordered + hiddenKeys)
+            homeRailOrderStore.updateOrder(
+                orderedKeys = (reordered + hiddenKeys).map(::HomeRailKey),
+                source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+                knownLiveKeys = visibleKeySet.map(::HomeRailKey).toSet(),
+            )
         }
     }
 
