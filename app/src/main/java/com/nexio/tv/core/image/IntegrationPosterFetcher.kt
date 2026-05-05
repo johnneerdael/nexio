@@ -2,8 +2,10 @@ package com.nexio.tv.core.image
 
 import android.net.Uri
 import coil.ImageLoader
+import coil.annotation.ExperimentalCoilApi
 import coil.decode.DataSource
 import coil.decode.ImageSource
+import coil.disk.DiskCache
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.fetch.SourceResult
@@ -11,29 +13,29 @@ import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.data.integration.posters.RpdbIntegrationProvider
 import com.nexio.tv.data.integration.posters.TopPostersIntegrationProvider
 import com.nexio.tv.data.integration.posters.transport.PosterTransport
+import java.io.Closeable
 import java.io.File
 import java.net.URI
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
-import okio.Buffer
+import okio.Path.Companion.toOkioPath
 
 class IntegrationPosterFetcher(
     private val request: PosterIntegrationRequest,
     private val options: coil.request.Options,
     private val rpdbProvider: RpdbIntegrationProvider,
     private val topPostersProvider: TopPostersIntegrationProvider,
-    private val fallbackTransport: PosterTransport
+    private val fallbackTransport: PosterTransport,
+    private val diskCache: DiskCache? = null
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? {
         val bytes = premiumBytes() ?: fallbackBytes() ?: return null
-        val file = File.createTempFile("integration-poster-", ".img")
-        file.writeBytes(bytes)
-        val source = createImageSource(bytes, file)
+        val source = writeDiskCache(bytes) ?: createTempFileSource(bytes)
         return SourceResult(
             source = source,
             mimeType = request.mimeType ?: "image/jpeg",
-            dataSource = DataSource.DISK
+            dataSource = DataSource.NETWORK
         )
     }
 
@@ -65,10 +67,39 @@ class IntegrationPosterFetcher(
         return host != "api.ratingposterdb.com" && host != "api.top-posters.com"
     }
 
-    private fun createImageSource(bytes: ByteArray, file: File): ImageSource {
-        val factory = Class.forName("coil.decode.ImageSources")
-        val create = factory.getMethod("create", okio.BufferedSource::class.java, File::class.java)
-        return create.invoke(null, Buffer().write(bytes), file) as ImageSource
+    @OptIn(ExperimentalCoilApi::class)
+    private fun writeDiskCache(bytes: ByteArray): ImageSource? {
+        val cache = diskCache ?: return null
+        if (!options.diskCachePolicy.writeEnabled) return null
+        val key = options.diskCacheKey?.takeIf { it.isNotBlank() } ?: return null
+        val editor = cache.openEditor(key) ?: return null
+        return try {
+            cache.fileSystem.write(editor.metadata) {
+                writeUtf8("")
+            }
+            cache.fileSystem.write(editor.data) {
+                write(bytes)
+            }
+            val snapshot = editor.commitAndOpenSnapshot() ?: return null
+            ImageSource(
+                file = snapshot.data,
+                fileSystem = cache.fileSystem,
+                diskCacheKey = key,
+                closeable = snapshot
+            )
+        } catch (error: Throwable) {
+            runCatching { editor.abort() }
+            null
+        }
+    }
+
+    private fun createTempFileSource(bytes: ByteArray): ImageSource {
+        val file = File.createTempFile("integration-poster-", ".img")
+        file.writeBytes(bytes)
+        return ImageSource(
+            file = file.toOkioPath(),
+            closeable = Closeable { file.delete() }
+        )
     }
 
     @Singleton
@@ -88,7 +119,8 @@ class IntegrationPosterFetcher(
                 options = options,
                 rpdbProvider = rpdbProvider,
                 topPostersProvider = topPostersProvider,
-                fallbackTransport = fallbackTransport
+                fallbackTransport = fallbackTransport,
+                diskCache = imageLoader.diskCache
             )
         }
     }
