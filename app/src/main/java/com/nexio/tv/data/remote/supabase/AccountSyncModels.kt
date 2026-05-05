@@ -151,7 +151,9 @@ data class CatalogSyncSettings(
     val home: HomeCatalogSyncSettings? = null,
     val trakt: TraktCatalogSyncSettings? = null,
     val simkl: SimklCatalogSyncSettings? = null,
-    val mdblist: MDBListCatalogSyncSettings? = null
+    val mdblist: MDBListCatalogSyncSettings? = null,
+    val tmdb: TmdbCatalogSyncSettings? = null,
+    val kitsu: KitsuCatalogSyncSettings? = null
 )
 
 @Serializable
@@ -174,6 +176,18 @@ data class TraktCatalogSyncSettings(
 
 @Serializable
 data class SimklCatalogSyncSettings(
+    val catalogEnabledSet: List<String>? = null,
+    val catalogOrder: List<String>? = null
+)
+
+@Serializable
+data class TmdbCatalogSyncSettings(
+    val catalogEnabledSet: List<String>? = null,
+    val catalogOrder: List<String>? = null
+)
+
+@Serializable
+data class KitsuCatalogSyncSettings(
     val catalogEnabledSet: List<String>? = null,
     val catalogOrder: List<String>? = null
 )
