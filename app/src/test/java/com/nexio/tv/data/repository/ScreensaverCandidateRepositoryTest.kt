@@ -151,6 +151,67 @@ class ScreensaverCandidateRepositoryTest {
     }
 
     @Test
+    fun `trailer candidates normalize fallback ids by trimming blanks and duplicates`() = runTest {
+        val surface = testSurface()
+        val repository = ScreensaverCandidateRepository(surface)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "movie:tmdb:550",
+                    title = "Fight Club",
+                    fallbackTrailerYtIds = listOf(" abc123 ", "", "abc123", "   ", "def456")
+                )
+            )
+        )
+
+        val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
+
+        assertEquals(listOf("abc123", "def456"), candidate.fallbackTrailerYtIds)
+    }
+
+    @Test
+    fun `trailer candidates treat blank fallback ids as empty for lazy sentinel resolution`() = runTest {
+        val surface = testSurface()
+        val repository = ScreensaverCandidateRepository(surface)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "movie:tmdb:550",
+                    title = "Fight Club",
+                    fallbackTrailerYtIds = listOf("", "   ", "\t")
+                )
+            )
+        )
+
+        val candidate = repository.observeTrailerCandidates(profileId = 1).first().single()
+
+        assertTrue(candidate.fallbackTrailerYtIds.isEmpty())
+    }
+
+    @Test
+    fun `candidate snapshot projects image and trailer candidates from one surface read`() = runTest {
+        val surface = testSurface()
+        val repository = ScreensaverCandidateRepository(surface)
+        surface.replaceForTest(
+            profileId = 1,
+            items = listOf(
+                resolvedItem(
+                    itemKey = "movie:tmdb:550",
+                    title = "Fight Club",
+                    fallbackTrailerYtIds = listOf(" abc123 ", "abc123")
+                )
+            )
+        )
+
+        val snapshot = repository.getCandidatesSnapshot(profileId = 1)
+
+        assertEquals(listOf("movie:tmdb:550"), snapshot.imageCandidates.map { it.itemKey })
+        assertEquals(listOf("abc123"), snapshot.trailerCandidates.single().fallbackTrailerYtIds)
+    }
+
+    @Test
     fun `trailer candidates exclude items without title or artwork`() = runTest {
         val surface = testSurface()
         val repository = ScreensaverCandidateRepository(surface)
@@ -170,7 +231,8 @@ class ScreensaverCandidateRepositoryTest {
         itemKey: String,
         title: String?,
         artwork: ArtworkBundle = ArtworkBundle(backdrop = artworkRef("backdrop-550", ArtworkType.BACKDROP)),
-        sourceTrace: List<HydratedHomeFieldTrace> = emptyList()
+        sourceTrace: List<HydratedHomeFieldTrace> = emptyList(),
+        fallbackTrailerYtIds: List<String> = emptyList()
     ) = ResolvedDisplayItem(
         itemKey = itemKey,
         contentId = "tmdb:550",
@@ -192,7 +254,7 @@ class ScreensaverCandidateRepositoryTest {
         ),
         artwork = artwork,
         rating = TitleRating(8.8, TitleRatingSource.IMDB),
-        trailer = TrailerDisplayState(fallbackTrailerYtIds = emptyList()),
+        trailer = TrailerDisplayState(fallbackTrailerYtIds = fallbackTrailerYtIds),
         hydrationState = HydrationState.CANONICAL_READY,
         sourceTrace = sourceTrace,
         updatedAtMs = 1L

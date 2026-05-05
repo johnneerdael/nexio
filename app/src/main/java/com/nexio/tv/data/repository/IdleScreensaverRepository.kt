@@ -8,7 +8,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -45,14 +44,9 @@ class IdleScreensaverRepository(
     private suspend fun refreshFromResolvedSurface(logPrefix: String) {
         refreshMutex.withLock {
             val profileId = activeProfileId()
-            val imageCandidates = screensaverCandidateRepository
-                .observeImageCandidates(profileId)
-                .first()
-            val trailerCandidates = screensaverCandidateRepository
-                .observeTrailerCandidates(profileId)
-                .first()
-            _slides.value = imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
-            _trailerCandidates.value = trailerCandidates.mapNotNull { candidate ->
+            val snapshot = screensaverCandidateRepository.getCandidatesSnapshot(profileId)
+            _slides.value = snapshot.imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
+            _trailerCandidates.value = snapshot.trailerCandidates.mapNotNull { candidate ->
                 candidate.toIdleTrailerScreensaverCandidate()
             }
             Log.d(

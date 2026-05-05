@@ -40,6 +40,10 @@ internal fun ScreensaverTrailerCandidate.toIdleTrailerScreensaverCandidate(): Id
     val imageUrl = artwork.backdrop.toLegacyArtworkString()
         ?: artwork.poster.toLegacyArtworkString()
         ?: return null
+    val fallbackArtworkUrls = listOfNotNull(
+        artwork.backdrop.toLegacyArtworkString(),
+        artwork.poster.toLegacyArtworkString()
+    ).distinct()
     return IdleTrailerScreensaverCandidate(
         itemId = contentId,
         itemType = itemType,
@@ -47,7 +51,7 @@ internal fun ScreensaverTrailerCandidate.toIdleTrailerScreensaverCandidate(): Id
         title = title,
         logoUrl = artwork.logo.toLegacyArtworkString(),
         backgroundUrl = imageUrl,
-        fallbackArtworkUrls = listOf(imageUrl),
+        fallbackArtworkUrls = fallbackArtworkUrls,
         genres = emptyList(),
         description = overview?.takeIf { it.isNotBlank() },
         releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
