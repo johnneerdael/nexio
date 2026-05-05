@@ -149,4 +149,70 @@ class HomeRailOrderStoreTest {
         advanceUntilIdle()
         assertEquals(emptyList<HomeRailKey>(), effective.value.visibleKeys)
     }
+
+    @Test
+    fun `updateOrder preserves keys currently unknown to liveDefinitions`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(
+            codec.encode(HomeRailOrderState.Empty.copy(
+                orderedKeys = listOf(
+                    HomeRailKey("A"),
+                    HomeRailKey("addon:offline:catalog"),
+                    HomeRailKey("B"),
+                ),
+            ))
+        )
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(
+            layoutPreferenceDataStore = layout,
+            codec = codec,
+            clock = fixedClock,
+            scope = TestScope(StandardTestDispatcher(testScheduler)),
+        )
+
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("B"), HomeRailKey("A")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("A"), HomeRailKey("B")), // addon is currently unknown
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(HomeRailKey("B"), HomeRailKey("A"), HomeRailKey("addon:offline:catalog")),
+            store.state.first().orderedKeys,
+        )
+    }
+
+    @Test
+    fun `updateOrder treats omitted-known keys as explicit removal`() = runTest {
+        val layout = mockk<LayoutPreferenceDataStore>(relaxed = true)
+        val persisted = MutableStateFlow<String?>(
+            codec.encode(HomeRailOrderState.Empty.copy(
+                orderedKeys = listOf(HomeRailKey("A"), HomeRailKey("B"), HomeRailKey("C")),
+            ))
+        )
+        coEvery { layout.homeRailOrderStateJson } returns persisted
+        coEvery { layout.homeCatalogOrderKeys } returns flowOf(emptyList())
+        coEvery { layout.disabledHomeCatalogKeys } returns flowOf(emptyList())
+        coEvery { layout.setHomeRailOrderStateJson(any()) } answers { persisted.value = firstArg() }
+
+        val store = HomeRailOrderStore(layout, codec, fixedClock,
+            TestScope(StandardTestDispatcher(testScheduler)))
+
+        store.updateOrder(
+            orderedKeys = listOf(HomeRailKey("A"), HomeRailKey("C")),
+            source = RailOrderMutationSource.ANDROID_ORDER_SCREEN,
+            knownLiveKeys = setOf(HomeRailKey("A"), HomeRailKey("B"), HomeRailKey("C")),
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(HomeRailKey("A"), HomeRailKey("C")),
+            store.state.first().orderedKeys,
+        )
+    }
 }
