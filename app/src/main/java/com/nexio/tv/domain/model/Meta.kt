@@ -132,6 +132,9 @@ data class Video(
 ) {
     val displayThumbnail: String?
         get() = thumbnailArtwork.toLegacyArtworkString() ?: thumbnail
+
+    val thumbnailArtworkEmbedsRatingOverlay: Boolean
+        get() = thumbnailArtwork?.displayHints?.embedsRatingOverlay == true
 }
 
 @Immutable

@@ -2,23 +2,36 @@ package com.nexio.tv.core.metadata.router
 
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkBundle
+import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.integration.PosterApiShapes
 import com.nexio.tv.core.integration.RecordingTraceSink
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
-import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.data.integration.tmdb.TmdbExternalIdLookupProvider
+import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.ProviderIds
+import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -540,6 +553,113 @@ class MetadataRouterFacadeTest {
         assertTrue(identityLookup.calls.isEmpty())
     }
 
+    @Test
+    fun `top posters premium episode thumbnail wins over primary thumbnail with valid entitlement`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val result = facade(
+            RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB),
+            posterResolver = posterResolver(topPostersThumbnailSettings(), cache)
+        ).fetchTvEpisodeEnrichment(
+            metadataRequest = MetadataRequest(
+                contentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 1,
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                seasonNumbers = listOf(1)
+            )
+        )
+
+        val episode = result.value?.get(1 to 1)
+        val artwork = episode?.thumbnailArtwork as? ArtworkDisplayRef.RuntimeAsset
+        assertNotNull(artwork)
+        artwork!!
+        assertEquals("primaryThumbnail", episode.thumbnail)
+        assertEquals("TOP_POSTERS", artwork.selectedProvider?.key)
+        assertEquals(ArtworkSourceRole.PREMIUM, artwork.sourceRole)
+        assertEquals("premium_artwork_provider_precedence", artwork.trace.rejectedCandidates.single().reason)
+
+        val decision = cache.get(artwork.decisionKey)
+        val template = decision?.selectedCandidate?.providerTemplate
+        assertEquals("TOP_POSTERS", template?.provider?.key)
+        assertEquals(ArtworkType.THUMBNAIL, template?.imageType)
+        assertEquals("tvdb", template?.idType)
+        assertEquals("1399", template?.mediaId)
+        assertFalse("mediaId must not carry SxEy episode path", template?.mediaId.orEmpty().contains("S1E1"))
+        assertEquals("1", template?.pathParams?.get("season"))
+        assertEquals("1", template?.pathParams?.get("episode"))
+        assertEquals("small", template?.pathParams?.get("badgeSize"))
+        assertEquals("top-right", template?.pathParams?.get("badgePosition"))
+        assertEquals("false", template?.pathParams?.get("blur"))
+    }
+
+    @Test
+    fun `top posters episode thumbnail missing entitlement falls back to primary with rejection trace`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val result = facade(
+            RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB),
+            posterResolver = posterResolver(topPostersThumbnailSettings(entitlement = null), cache)
+        ).fetchTvEpisodeEnrichment(
+            metadataRequest = MetadataRequest(
+                contentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 1,
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = "tvdb:1399",
+                contentType = ContentType.SERIES,
+                seasonNumbers = listOf(1)
+            )
+        )
+
+        val episode = result.value?.get(1 to 1)
+        val artwork = episode?.thumbnailArtwork as? ArtworkDisplayRef.RuntimeAsset
+        assertNotNull(artwork)
+        artwork!!
+        assertEquals("primaryThumbnail", episode.thumbnail)
+        assertEquals("TVDB", artwork.selectedProvider?.key)
+        assertEquals(ArtworkSourceRole.PRIMARY, artwork.sourceRole)
+        assertEquals("topposters_entitlement_missing", artwork.trace.rejectedCandidates.single().reason)
+        assertEquals("TVDB", cache.get(artwork.decisionKey)?.selectedCandidate?.provider?.key)
+    }
+
+    @Test
+    fun `top posters episode thumbnail missing supported id falls back to primary with rejection trace`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val result = facade(
+            RecordingMetadataProviderAdapter(MetadataPrimaryProvider.TVDB),
+            posterResolver = posterResolver(topPostersThumbnailSettings(), cache)
+        ).fetchTvEpisodeEnrichment(
+            metadataRequest = MetadataRequest(
+                contentId = "addon-series-id",
+                contentType = ContentType.SERIES,
+                sourceContext = MetadataSourceContext(),
+                seasonNumber = 1,
+                depth = MetadataDepth.SEASON
+            ),
+            tvRequest = TvMetadataRequest(
+                contentId = "addon-series-id",
+                contentType = ContentType.SERIES,
+                seasonNumbers = listOf(1)
+            )
+        )
+
+        val episode = result.value?.get(1 to 1)
+        val artwork = episode?.thumbnailArtwork as? ArtworkDisplayRef.RuntimeAsset
+        assertNotNull(artwork)
+        artwork!!
+        assertEquals("primaryThumbnail", episode.thumbnail)
+        assertEquals("TVDB", artwork.selectedProvider?.key)
+        assertEquals(ArtworkSourceRole.PRIMARY, artwork.sourceRole)
+        assertEquals("missing_supported_provider_id", artwork.trace.rejectedCandidates.single().reason)
+    }
+
     private fun facade(
         vararg adapters: MetadataProviderAdapter,
         identityLookup: MetadataIdentityResolver.Lookup = object : MetadataIdentityResolver.Lookup {
@@ -547,7 +667,8 @@ class MetadataRouterFacadeTest {
             override suspend fun tvdbToTmdb(tvdbId: String): String? = null
         },
         tmdbExternalIdLookup: TmdbExternalIdLookupProvider? = null,
-        fieldResolver: FieldResolver = FieldResolver()
+        fieldResolver: FieldResolver = FieldResolver(),
+        posterResolver: PosterRatingsUrlResolver? = null
     ): MetadataRouterFacade =
         MetadataRouterFacade(
             router = MetadataRouter(
@@ -560,7 +681,39 @@ class MetadataRouterFacadeTest {
             resolverOrchestrator = ResolverOrchestrator(),
             identityResolver = MetadataIdentityResolver(identityLookup),
             providerPlanRunner = ProviderPlanRunner(adapters.toSet()),
-            fieldResolver = fieldResolver
+            fieldResolver = fieldResolver,
+            posterRatingsUrlResolver = posterResolver
+        )
+
+    private fun posterResolver(
+        settings: ArtworkProviderSettings,
+        cache: ArtworkDecisionCache = InMemoryArtworkDecisionCache()
+    ): PosterRatingsUrlResolver {
+        val dataStore = mockk<PosterRatingsSettingsDataStore>()
+        every { dataStore.settings } returns flowOf(settings)
+        return PosterRatingsUrlResolver(dataStore, cache)
+    }
+
+    private fun topPostersThumbnailSettings(
+        entitlement: TopPostersEntitlementSnapshot? = premiumThumbnailEntitlement()
+    ): ArtworkProviderSettings =
+        ArtworkProviderSettings(
+            topPostersApiKey = "top-key",
+            selection = ArtworkProviderSelectionSettings(
+                thumbnailProvider = ArtworkProviderChoiceKey.TOP_POSTERS
+            ),
+            topPostersEntitlement = entitlement
+        )
+
+    private fun premiumThumbnailEntitlement(): TopPostersEntitlementSnapshot =
+        TopPostersEntitlementSnapshot(
+            valid = true,
+            isActive = true,
+            tier = 1,
+            tierName = "Premium",
+            episodeThumbnails = true,
+            verifiedAtMs = 1_000L,
+            expiresAtMs = System.currentTimeMillis() + 86_400_000L
         )
 
     private fun selectedTracePayload(
@@ -607,6 +760,7 @@ class MetadataRouterFacadeTest {
                         seasonNumber = seasonNumber,
                         episodeNumber = 1,
                         title = "Runtime episode",
+                        thumbnail = "primaryThumbnail",
                         airDate = "2024-01-01"
                     )
                 )

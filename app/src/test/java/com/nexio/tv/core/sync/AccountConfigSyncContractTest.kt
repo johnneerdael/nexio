@@ -38,6 +38,8 @@ import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktPinnedListOptionSync
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkTypeKey
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.TrackingProvider
@@ -791,7 +793,7 @@ class AccountConfigSyncContractTest {
                     baseUrl = "https://openrouter.ai/api/v1"
                 ),
                 gemini = GeminiSyncSettings(enabled = true),
-                posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = false)
+                posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = true)
             ),
             heroCatalogKeys = listOf("hero-a"),
             homeCatalogOrderKeys = listOf("row-a", "row-b"),
@@ -873,6 +875,14 @@ class AccountConfigSyncContractTest {
                 catalogOrder = listOf("simkl_tv_trending_today", "simkl_movie_trending_today")
             )
         }
+        coVerify(exactly = 1) {
+            posterRatingsSettingsDataStore.setProviderSelection(
+                ArtworkTypeKey.POSTER,
+                ArtworkProviderChoiceKey.RPDB
+            )
+        }
+        coVerify(exactly = 0) { posterRatingsSettingsDataStore.setRpdbEnabled(any()) }
+        coVerify(exactly = 0) { posterRatingsSettingsDataStore.setTopPostersEnabled(any()) }
         coVerify(exactly = 1) { playerSettingsDataStore.setTrackingProvider(TrackingProvider.SIMKL) }
         coVerify(exactly = 1) { playerSettingsDataStore.setSyncedFormatterEnabled(true) }
         coVerify(exactly = 1) { playerSettingsDataStore.setSyncedFormatterSelectedTemplateId("custom") }

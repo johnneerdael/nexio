@@ -1,9 +1,13 @@
 package com.nexio.tv.data.integration.posters
 
+import com.nexio.tv.core.artwork.ArtworkExternalIdSelector
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.core.metadata.router.MetadataPrimaryProvider
 import com.nexio.tv.core.metadata.router.MetadataRoute
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.ProviderIds
 
 /**
  * Shared utilities for poster provider adapters.
@@ -17,37 +21,47 @@ internal fun MetadataMediaKind.toContentType(): ContentType = when (this) {
     MetadataMediaKind.UNKNOWN -> ContentType.UNKNOWN
 }
 
-internal fun MetadataRoute.premiumPosterStableContentId(): String? =
-    imdbStableId(targetIds[MetadataPrimaryProvider.IMDB])
-        ?: numericProviderStableId(targetIds[MetadataPrimaryProvider.TMDB], "tmdb")
-        ?: numericProviderStableId(targetIds[MetadataPrimaryProvider.TVDB], "tvdb")
+internal fun MetadataRoute.premiumPosterStableContentId(provider: IntegrationProvider): String? =
+    ArtworkExternalIdSelector()
+        .selectIds(
+            provider = provider,
+            imageType = ArtworkType.POSTER,
+            mediaKind = mediaKind,
+            providerIds = targetIds.toProviderIds()
+        )
+        .firstOrNull()
+        ?.let { "${it.idType}:${it.mediaId}" }
 
-private fun imdbStableId(raw: String?): String? {
-    val value = raw
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?: return null
-    val candidate = if (value.startsWith("imdb:", ignoreCase = true)) {
-        value.substringAfter(':').trim()
-    } else {
-        value
+internal fun MetadataRoute.premiumPosterProviderIds(): ProviderIds =
+    targetIds.toProviderIds()
+
+private fun Map<MetadataPrimaryProvider, String>.toProviderIds(): ProviderIds =
+    ProviderIds(
+        imdb = imdbTargetId(this[MetadataPrimaryProvider.IMDB]),
+        tmdb = numericTargetId(this[MetadataPrimaryProvider.TMDB], "tmdb"),
+        tvdb = numericTargetId(this[MetadataPrimaryProvider.TVDB], "tvdb"),
+        trakt = numericTargetId(this[MetadataPrimaryProvider.TRAKT], "trakt"),
+        kitsu = numericTargetId(this[MetadataPrimaryProvider.KITSU], "kitsu")
+    )
+
+private fun imdbTargetId(raw: String?): String? {
+    val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val candidate = when {
+        value.startsWith("imdb:", ignoreCase = true) -> value.substringAfter(':').trim()
+        ':' in value -> return null
+        else -> value
     }
     return candidate.takeIf { it.matches(IMDB_ID_REGEX) }
 }
 
-private fun numericProviderStableId(raw: String?, prefix: String): String? {
-    val value = raw
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?: return null
+private fun numericTargetId(raw: String?, prefix: String): String? {
+    val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
     val candidate = when {
         value.startsWith("$prefix:", ignoreCase = true) -> value.substringAfter(':').trim()
         ':' in value -> return null
         else -> value
     }
-    return candidate
-        .takeIf { it.matches(NUMERIC_ID_REGEX) }
-        ?.let { "$prefix:$it" }
+    return candidate.takeIf { it.matches(NUMERIC_ID_REGEX) }
 }
 
 private val IMDB_ID_REGEX = Regex("tt\\d+", RegexOption.IGNORE_CASE)

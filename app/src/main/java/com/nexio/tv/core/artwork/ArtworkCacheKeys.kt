@@ -78,21 +78,56 @@ object ArtworkCacheKeys {
 
     fun assetKeyForProviderTemplate(template: PersistedProviderTemplate): ArtworkAssetKey =
         ArtworkAssetKey(
-            listOf(
-                "artwork-asset",
-                template.provider.keyPart(),
-                template.imageType.keyPart(),
-                template.idType.safeRequiredPart("idType"),
-                template.mediaId.safeRequiredPart("mediaId"),
-                "settings",
-                template.settingsHash.safeOptionalPart(),
-                "credential",
-                template.credentialHash.safeOptionalPart(),
-                "imageLang",
-                IMAGE_LANGUAGE,
-                "policy",
-                template.policyVersion.toString()
-            ).flattenParts()
+            buildList {
+                add("artwork-asset")
+                add(template.provider.keyPart())
+                add(template.imageType.keyPart())
+                add(template.idType.safeRequiredPart("idType"))
+                add(template.mediaId.safeRequiredPart("mediaId"))
+                template.pathParams.toSortedMap().forEach { (key, value) ->
+                    add(key.safeRequiredPart("pathParamKey"))
+                    add(value.safeRequiredPart("pathParamValue"))
+                }
+                add("settings")
+                add(template.settingsHash.safeOptionalPart())
+                add("credential")
+                add(template.credentialHash.safeOptionalPart())
+                add("imageLang")
+                add(IMAGE_LANGUAGE)
+                add("policy")
+                add(template.policyVersion.toString())
+            }.flattenParts()
+        )
+
+    fun providerTemplatePathHash(
+        provider: ArtworkProviderId,
+        imageType: ArtworkType,
+        idType: String,
+        mediaId: String,
+        pathParams: Map<String, String> = emptyMap()
+    ): String =
+        sha256(
+            buildList {
+                add(provider.keyPart())
+                add(imageType.keyPart())
+                add(idType.safeRequiredPart("idType"))
+                add(mediaId.safeRequiredPart("mediaId"))
+                pathParams.toSortedMap().forEach { (key, value) ->
+                    add(key.safeRequiredPart("pathParamKey"))
+                    add(value.safeRequiredPart("pathParamValue"))
+                }
+            }.flattenParts()
+        )
+
+    fun providerTemplateSettingsHash(
+        imageType: ArtworkType,
+        settingsParts: Iterable<String>
+    ): String =
+        sha256(
+            buildList {
+                add(imageType.keyPart())
+                settingsParts.forEach { part -> add(part.safeRequiredPart("settingsPart")) }
+            }.flattenParts()
         )
 
     fun normalizedUrlHash(rawUrl: String): String = sha256(normalizeUrl(rawUrl))

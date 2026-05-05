@@ -93,9 +93,14 @@ data class ArtworkBundle(
     val thumbnail: ArtworkDisplayRef? = null
 )
 
+data class ArtworkDisplayHints(
+    val embedsRatingOverlay: Boolean = false
+)
+
 sealed interface ArtworkDisplayRef {
     val imageType: ArtworkType
     val trace: ArtworkTrace
+    val displayHints: ArtworkDisplayHints
 
     data class RuntimeAsset(
         val decisionKey: ArtworkDecisionKey,
@@ -103,13 +108,15 @@ sealed interface ArtworkDisplayRef {
         override val imageType: ArtworkType,
         val selectedProvider: ArtworkProviderId?,
         val sourceRole: ArtworkSourceRole,
-        override val trace: ArtworkTrace
+        override val trace: ArtworkTrace,
+        override val displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
     ) : ArtworkDisplayRef
 
     data class Placeholder(
         val placeholderType: PlaceholderType,
         override val imageType: ArtworkType,
-        override val trace: ArtworkTrace
+        override val trace: ArtworkTrace,
+        override val displayHints: ArtworkDisplayHints = ArtworkDisplayHints()
     ) : ArtworkDisplayRef
 }
 
@@ -170,7 +177,8 @@ sealed interface ArtworkSource {
         val mediaId: String,
         val providerPathHash: String?,
         val settingsHash: String?,
-        val credentialHash: String?
+        val credentialHash: String?,
+        val pathParams: Map<String, String> = emptyMap()
     ) : ArtworkSource
 
     data class LocalAsset(val assetKey: ArtworkAssetKey) : ArtworkSource
@@ -211,7 +219,8 @@ data class PersistedProviderTemplate(
     val settingsHash: String?,
     val credentialHash: String?,
     val imageLanguage: String = "en",
-    val policyVersion: Int
+    val policyVersion: Int,
+    val pathParams: Map<String, String> = emptyMap()
 )
 
 data class RejectedArtworkCandidate(

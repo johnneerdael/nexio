@@ -96,6 +96,27 @@ class ArtworkAssetRepositoryTest {
     }
 
     @Test
+    fun `top posters thumbnail provider template materializes thumbnail shape and path params asset key`() = runTest {
+        val runtime = RecordingIntegrationRuntime(successValue = "thumbnail".toByteArray())
+        val repository = ArtworkAssetRepository(
+            runtime = runtime,
+            diskCache = ArtworkAssetDiskCache(temp.root),
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap())
+        )
+        val decision = topPostersThumbnailDecision()
+
+        val result = repository.getOrFetch(decision)
+
+        assertNotNull(result)
+        assertEquals(ArtworkApiShapes.TOP_POSTERS_THUMBNAIL, runtime.lastSpec!!.apiShapeId)
+        assertEquals(ArtworkApiShapes.TOP_POSTERS_THUMBNAIL, result!!.runtimeApiShapeId)
+        assertEquals(
+            "artwork-asset:TOP_POSTERS:thumbnail:tvdb:1399:badgePosition:top-right:badgeSize:small:blur:false:episode:1:season:1:settings:settingshash:credential:credentialhash:imageLang:en:policy:1",
+            runtime.lastSpec!!.cacheKey
+        )
+    }
+
+    @Test
     fun `remote preview materialization recovers raw source by source hash without persisting raw url`() = runTest {
         val runtime = LoadingIntegrationRuntime()
         val loadedSources = mutableListOf<ArtworkSource>()
@@ -260,6 +281,45 @@ class ArtworkAssetRepositoryTest {
             policyVersion = 1,
             settingsHash = null,
             credentialHash = null,
+            createdAtMs = 100L,
+            expiresAtMs = 200L,
+            staleUntilMs = 300L
+        )
+
+    private fun topPostersThumbnailDecision(): ArtworkDecision =
+        ArtworkDecision(
+            decisionKey = ArtworkDecisionKey("thumbnail-decision"),
+            ownerKey = ArtworkOwnerKey.CanonicalContent("tvdb:1399:S1E1"),
+            canonicalContentId = "tvdb:1399",
+            imageType = ArtworkType.THUMBNAIL,
+            selectedCandidate = PersistedArtworkCandidate(
+                provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                sourceRole = ArtworkSourceRole.PREMIUM,
+                sourceHash = "template-hash",
+                redactedSourceForTrace = null,
+                providerTemplate = PersistedProviderTemplate(
+                    provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TOP_POSTERS),
+                    imageType = ArtworkType.THUMBNAIL,
+                    idType = "tvdb",
+                    mediaId = "1399",
+                    providerPathHash = "pathhash",
+                    settingsHash = "settingshash",
+                    credentialHash = "credentialhash",
+                    policyVersion = 1,
+                    pathParams = mapOf(
+                        "season" to "1",
+                        "episode" to "1",
+                        "badgeSize" to "small",
+                        "badgePosition" to "top-right",
+                        "blur" to "false"
+                    )
+                ),
+                priority = 0
+            ),
+            rejectedCandidates = emptyList(),
+            policyVersion = 1,
+            settingsHash = "settingshash",
+            credentialHash = "credentialhash",
             createdAtMs = 100L,
             expiresAtMs = 200L,
             staleUntilMs = 300L

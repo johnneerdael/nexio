@@ -239,6 +239,8 @@ data class ArtworkAuditEntry(
     val networkExecuted: Boolean,
     val coilModel: String?,
     val rawRemoteUrlUsedByUi: Boolean,
+    val embedsRatingOverlay: Boolean = false,
+    val suppressesLocalRatingOverlay: Boolean = false,
     val rejectedCandidates: List<Map<String, String?>> = emptyList()
 )
 

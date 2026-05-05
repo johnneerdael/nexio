@@ -1,25 +1,60 @@
 package com.nexio.tv.core.poster
 
+import com.nexio.tv.core.artwork.ArtworkCacheKeys
+import com.nexio.tv.core.artwork.ArtworkAssetKey
+import com.nexio.tv.core.artwork.ArtworkCandidate
+import com.nexio.tv.core.artwork.ArtworkDecision
+import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkDisplayHints
+import com.nexio.tv.core.artwork.ArtworkDisplayRef
+import com.nexio.tv.core.artwork.EpisodeArtworkContext
+import com.nexio.tv.core.artwork.ArtworkExternalIdSelector
+import com.nexio.tv.core.artwork.ArtworkOwnerKey
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkProviderRegistry
+import com.nexio.tv.core.artwork.ArtworkRoutingPolicy
+import com.nexio.tv.core.artwork.ArtworkRouter
+import com.nexio.tv.core.artwork.ArtworkSource
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkTrace
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.PersistedArtworkCandidate
+import com.nexio.tv.core.artwork.PersistedProviderTemplate
+import com.nexio.tv.core.artwork.RejectedArtworkCandidate
+import com.nexio.tv.core.artwork.SensitiveArtworkUrl
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.core.image.PosterIntegrationRequest
+import com.nexio.tv.core.image.TopPostersThumbnailRequest
 import com.nexio.tv.core.integration.IntegrationProvider
+import com.nexio.tv.core.metadata.router.MetadataMediaKind
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
-import com.nexio.tv.domain.model.PosterRatingsSettings
+import com.nexio.tv.domain.model.ProviderIds
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PosterRatingsUrlResolver @Inject constructor(
-    private val settingsDataStore: PosterRatingsSettingsDataStore
+    private val settingsDataStore: PosterRatingsSettingsDataStore,
+    private val artworkDecisionCache: ArtworkDecisionCache
 ) {
+    private val artworkRouter = ArtworkRouter()
+    private val providerRegistry = ArtworkProviderRegistry()
+    private val externalIdSelector = ArtworkExternalIdSelector()
+
     data class ActiveProvider(
         val provider: PosterRatingsProvider,
         val apiKey: String
     )
+
+    suspend fun currentSettings(): ArtworkProviderSettings =
+        settingsDataStore.settings.first()
 
     suspend fun getActiveProvider(): ActiveProvider? {
         val settings = settingsDataStore.settings.first()
@@ -54,20 +89,184 @@ class PosterRatingsUrlResolver @Inject constructor(
         )
     }
 
-    private fun resolveProvider(settings: PosterRatingsSettings): ActiveProvider? {
-        return when (settings.activeProvider) {
-            PosterRatingsProvider.RPDB -> ActiveProvider(
-                provider = PosterRatingsProvider.RPDB,
-                apiKey = settings.rpdbApiKey.trim()
-            )
-            PosterRatingsProvider.TOP_POSTERS -> ActiveProvider(
-                provider = PosterRatingsProvider.TOP_POSTERS,
-                apiKey = settings.topPostersApiKey.trim()
-            )
-            PosterRatingsProvider.NONE -> null
+    private fun resolveProvider(settings: ArtworkProviderSettings): ActiveProvider? {
+        return when (settings.selection.posterProvider) {
+            ArtworkProviderChoiceKey.RPDB -> settings.rpdbApiKey.trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { apiKey ->
+                    ActiveProvider(
+                        provider = PosterRatingsProvider.RPDB,
+                        apiKey = apiKey
+                    )
+                }
+            ArtworkProviderChoiceKey.TOP_POSTERS -> settings.topPostersApiKey.trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { apiKey ->
+                    ActiveProvider(
+                        provider = PosterRatingsProvider.TOP_POSTERS,
+                        apiKey = apiKey
+                    )
+                }
+            else -> null
         }
     }
 
+    fun resolvePosterArtworkRef(
+        settings: ArtworkProviderSettings,
+        providerIds: ProviderIds,
+        mediaKind: MetadataMediaKind,
+        ownerKey: ArtworkOwnerKey,
+        fallbackPosterUrl: String? = null
+    ): ArtworkDisplayRef? {
+        val policy = ArtworkRoutingPolicy(settings = settings)
+        val candidates = buildPosterArtworkCandidates(
+            settings = settings,
+            providerIds = providerIds,
+            mediaKind = mediaKind,
+            ownerKey = ownerKey,
+            fallbackPosterUrl = fallbackPosterUrl
+        )
+        if (candidates.isEmpty()) return null
+
+        val selection = artworkRouter.select(candidates, policy)
+        val selected = selection.selectedCandidateOrNull ?: return null
+        val settingsHash = settings.stableSettingsHash()
+        val credentialHash = settings.credentialHash()
+        val now = System.currentTimeMillis()
+        val decisionKey = ArtworkCacheKeys.decisionKey(
+            ownerKey = ownerKey,
+            imageType = ArtworkType.POSTER,
+            provider = selected.provider,
+            premiumEnabled = settings.selection.posterProvider != ArtworkProviderChoiceKey.DEFAULT,
+            settingsHash = settingsHash,
+            credentialHash = credentialHash,
+            policyVersion = policy.policyVersion
+        )
+        val decision = ArtworkDecision(
+            decisionKey = decisionKey,
+            ownerKey = ownerKey,
+            canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
+            imageType = ArtworkType.POSTER,
+            selectedCandidate = selected.toPersistedCandidate(policy.policyVersion),
+            rejectedCandidates = selection.rejectedCandidates,
+            policyVersion = policy.policyVersion,
+            imageLanguage = selected.imageLanguage,
+            settingsHash = settingsHash,
+            credentialHash = credentialHash,
+            createdAtMs = now,
+            expiresAtMs = now + DECISION_TTL_MS,
+            staleUntilMs = now + DECISION_STALE_TTL_MS
+        )
+        artworkDecisionCache.put(decision)
+
+        return ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = decisionKey,
+            assetKey = null,
+            imageType = ArtworkType.POSTER,
+            selectedProvider = selected.provider,
+            sourceRole = selected.sourceRole,
+            trace = ArtworkTrace(
+                selectedProvider = selected.provider?.key,
+                sourceRole = selected.sourceRole.name,
+                reason = "poster_artwork_provider_selection",
+                rejectedCandidates = selection.rejectedCandidates
+            )
+        )
+    }
+
+    fun resolvePosterArtworkString(
+        settings: ArtworkProviderSettings,
+        providerIds: ProviderIds,
+        mediaKind: MetadataMediaKind,
+        ownerKey: ArtworkOwnerKey,
+        fallbackPosterUrl: String? = null
+    ): String? =
+        resolvePosterArtworkRef(
+            settings = settings,
+            providerIds = providerIds,
+            mediaKind = mediaKind,
+            ownerKey = ownerKey,
+            fallbackPosterUrl = fallbackPosterUrl
+        ).toLegacyArtworkString()
+            ?: fallbackPosterUrl?.takeIf { it.isNotBlank() && !it.isPremiumProviderRawUrl() }
+
+    fun resolveEpisodeThumbnailArtworkRef(
+        settings: ArtworkProviderSettings,
+        providerIds: ProviderIds,
+        mediaKind: MetadataMediaKind,
+        ownerKey: ArtworkOwnerKey,
+        episodeContext: EpisodeArtworkContext,
+        fallbackThumbnailUrl: String?,
+        primaryProvider: ArtworkProviderId
+    ): ArtworkDisplayRef? {
+        val policy = ArtworkRoutingPolicy(settings = settings)
+        val missingRejections = mutableListOf<RejectedArtworkCandidate>()
+        val candidates = buildEpisodeThumbnailArtworkCandidates(
+            settings = settings,
+            providerIds = providerIds,
+            mediaKind = mediaKind,
+            ownerKey = ownerKey,
+            episodeContext = episodeContext,
+            fallbackThumbnailUrl = fallbackThumbnailUrl,
+            primaryProvider = primaryProvider,
+            missingRejections = missingRejections
+        )
+        if (candidates.isEmpty()) return null
+
+        val selection = artworkRouter.select(candidates, policy)
+        val selected = selection.selectedCandidateOrNull ?: return null
+        val rejectedCandidates = missingRejections + selection.rejectedCandidates
+        val persistedSelected = selected.toPersistedCandidate(policy.policyVersion)
+        val selectedAssetKey = selected.assetKeyForRuntimeRef(policy.policyVersion)
+        val settingsHash = settings.stableSettingsHash(ArtworkType.THUMBNAIL)
+        val credentialHash = settings.credentialHash(settings.selection.thumbnailProvider)
+        val now = System.currentTimeMillis()
+        val decisionKey = ArtworkCacheKeys.decisionKey(
+            ownerKey = ownerKey,
+            imageType = ArtworkType.THUMBNAIL,
+            provider = selected.provider,
+            premiumEnabled = settings.selection.thumbnailProvider != ArtworkProviderChoiceKey.DEFAULT,
+            settingsHash = settingsHash,
+            credentialHash = credentialHash,
+            policyVersion = policy.policyVersion
+        )
+        val decision = ArtworkDecision(
+            decisionKey = decisionKey,
+            ownerKey = ownerKey,
+            canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
+            imageType = ArtworkType.THUMBNAIL,
+            selectedCandidate = persistedSelected,
+            rejectedCandidates = rejectedCandidates,
+            policyVersion = policy.policyVersion,
+            imageLanguage = selected.imageLanguage,
+            settingsHash = settingsHash,
+            credentialHash = credentialHash,
+            createdAtMs = now,
+            expiresAtMs = now + DECISION_TTL_MS,
+            staleUntilMs = now + DECISION_STALE_TTL_MS
+        )
+        artworkDecisionCache.put(decision)
+
+        return ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = decisionKey,
+            assetKey = selectedAssetKey,
+            imageType = ArtworkType.THUMBNAIL,
+            selectedProvider = selected.provider,
+            sourceRole = selected.sourceRole,
+            trace = ArtworkTrace(
+                selectedProvider = selected.provider?.key,
+                sourceRole = selected.sourceRole.name,
+                reason = "thumbnail_artwork_provider_selection",
+                rejectedCandidates = rejectedCandidates
+            ),
+            displayHints = selected.displayHints()
+        )
+    }
+
+    /**
+     * Legacy raw compat path for older metadata services. UI-facing metadata adapters must use
+     * resolvePosterArtworkRef/resolvePosterArtworkString so premium providers remain internal refs.
+     */
     fun resolvePosterUrl(
         originalPosterUrl: String?,
         contentId: String,
@@ -96,6 +295,325 @@ class PosterRatingsUrlResolver @Inject constructor(
         }
     }
 
+    private fun buildPosterArtworkCandidates(
+        settings: ArtworkProviderSettings,
+        providerIds: ProviderIds,
+        mediaKind: MetadataMediaKind,
+        ownerKey: ArtworkOwnerKey,
+        fallbackPosterUrl: String?
+    ): List<ArtworkCandidate> =
+        buildList {
+            val premiumProvider = providerRegistry.providerIdFor(settings.selection.posterProvider)
+            val runtimeProvider = (premiumProvider as? ArtworkProviderId.RuntimeProvider)?.providerId
+            if (runtimeProvider != null) {
+                externalIdSelector
+                    .selectIds(
+                        provider = runtimeProvider,
+                        imageType = ArtworkType.POSTER,
+                        mediaKind = mediaKind,
+                        providerIds = providerIds
+                    )
+                    .firstOrNull()
+                    ?.let { id ->
+                        val providerPathHash = stableHashHex(
+                            "${runtimeProvider.name.lowercase()}:poster:${id.idType}:${id.mediaId}"
+                        )
+                        add(
+                            ArtworkCandidate(
+                                ownerKey = ownerKey,
+                                canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
+                                providerIds = providerIds,
+                                mediaKind = mediaKind,
+                                imageType = ArtworkType.POSTER,
+                                provider = premiumProvider,
+                                sourceRole = ArtworkSourceRole.PREMIUM,
+                                source = ArtworkSource.ProviderTemplate(
+                                    provider = premiumProvider,
+                                    idType = id.idType,
+                                    mediaId = id.mediaId,
+                                    providerPathHash = providerPathHash,
+                                    settingsHash = settings.stableSettingsHash(),
+                                    credentialHash = settings.credentialHash()
+                                ),
+                                priority = 10,
+                                requiresRuntimeFetch = true,
+                                trace = ArtworkTrace(
+                                    selectedProvider = premiumProvider.key,
+                                    sourceRole = ArtworkSourceRole.PREMIUM.name,
+                                    reason = "premium_poster_template_candidate"
+                                )
+                            )
+                        )
+                    }
+            }
+
+            fallbackPosterUrl
+                ?.takeIf { it.isNotBlank() }
+                ?.let { rawUrl ->
+                    val normalizedUrlHash = ArtworkCacheKeys.normalizedUrlHash(rawUrl)
+                    val fallbackProvider = fallbackProviderFor(rawUrl)
+                    add(
+                        ArtworkCandidate(
+                            ownerKey = ownerKey,
+                            canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
+                            providerIds = providerIds,
+                            mediaKind = mediaKind,
+                            imageType = ArtworkType.POSTER,
+                            provider = fallbackProvider,
+                            sourceRole = ArtworkSourceRole.PRIMARY,
+                            source = ArtworkSource.RemoteUrl.of(
+                                rawUrl = SensitiveArtworkUrl.of(rawUrl),
+                                normalizedUrlHash = normalizedUrlHash
+                            ),
+                            priority = 20,
+                            requiresRuntimeFetch = true,
+                            trace = ArtworkTrace(
+                                selectedProvider = fallbackProvider.key,
+                                sourceRole = ArtworkSourceRole.PRIMARY.name,
+                                reason = "fallback_poster_url_candidate"
+                            )
+                        )
+                    )
+                }
+        }
+
+    private fun buildEpisodeThumbnailArtworkCandidates(
+        settings: ArtworkProviderSettings,
+        providerIds: ProviderIds,
+        mediaKind: MetadataMediaKind,
+        ownerKey: ArtworkOwnerKey,
+        episodeContext: EpisodeArtworkContext,
+        fallbackThumbnailUrl: String?,
+        primaryProvider: ArtworkProviderId,
+        missingRejections: MutableList<RejectedArtworkCandidate>
+    ): List<ArtworkCandidate> =
+        buildList {
+            val selectedThumbnailProvider = settings.selection.thumbnailProvider
+            val premiumProvider = providerRegistry.providerIdFor(selectedThumbnailProvider)
+            val runtimeProvider = (premiumProvider as? ArtworkProviderId.RuntimeProvider)?.providerId
+            if (selectedThumbnailProvider == ArtworkProviderChoiceKey.TOP_POSTERS &&
+                runtimeProvider == IntegrationProvider.TOP_POSTERS
+            ) {
+                val id = if (episodeContext.isValid) {
+                    externalIdSelector
+                        .selectIds(
+                            provider = runtimeProvider,
+                            imageType = ArtworkType.THUMBNAIL,
+                            mediaKind = mediaKind,
+                            providerIds = providerIds,
+                            episodeContext = episodeContext
+                        )
+                        .firstOrNull()
+                } else {
+                    missingRejections += RejectedArtworkCandidate(
+                        provider = premiumProvider,
+                        sourceRole = ArtworkSourceRole.PREMIUM,
+                        reason = "topposters_invalid_episode_context"
+                    )
+                    null
+                }
+                if (id == null) {
+                    if (episodeContext.isValid) {
+                        missingRejections += RejectedArtworkCandidate(
+                            provider = premiumProvider,
+                            sourceRole = ArtworkSourceRole.PREMIUM,
+                            reason = "missing_supported_provider_id"
+                        )
+                    }
+                } else {
+                    val pathParams = topPostersThumbnailPathParams(episodeContext)
+                    val providerPathHash = ArtworkCacheKeys.providerTemplatePathHash(
+                        provider = premiumProvider,
+                        imageType = ArtworkType.THUMBNAIL,
+                        idType = id.idType,
+                        mediaId = id.mediaId,
+                        pathParams = pathParams
+                    )
+                    add(
+                        ArtworkCandidate(
+                            ownerKey = ownerKey,
+                            canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
+                            providerIds = providerIds,
+                            mediaKind = mediaKind,
+                            imageType = ArtworkType.THUMBNAIL,
+                            provider = premiumProvider,
+                            sourceRole = ArtworkSourceRole.PREMIUM,
+                            source = ArtworkSource.ProviderTemplate(
+                                provider = premiumProvider,
+                                idType = id.idType,
+                                mediaId = id.mediaId,
+                                providerPathHash = providerPathHash,
+                                settingsHash = settings.stableSettingsHash(ArtworkType.THUMBNAIL),
+                                credentialHash = settings.credentialHash(selectedThumbnailProvider),
+                                pathParams = pathParams
+                            ),
+                            priority = 10,
+                            requiresRuntimeFetch = true,
+                            trace = ArtworkTrace(
+                                selectedProvider = premiumProvider.key,
+                                sourceRole = ArtworkSourceRole.PREMIUM.name,
+                                reason = "premium_thumbnail_template_candidate"
+                            )
+                        )
+                    )
+                }
+            }
+
+            fallbackThumbnailUrl
+                ?.takeIf { it.isNotBlank() }
+                ?.let { rawUrl ->
+                    val normalizedUrlHash = ArtworkCacheKeys.normalizedUrlHash(rawUrl)
+                    add(
+                        ArtworkCandidate(
+                            ownerKey = ownerKey,
+                            canonicalContentId = (ownerKey as? ArtworkOwnerKey.CanonicalContent)?.contentId,
+                            providerIds = providerIds,
+                            mediaKind = mediaKind,
+                            imageType = ArtworkType.THUMBNAIL,
+                            provider = primaryProvider,
+                            sourceRole = ArtworkSourceRole.PRIMARY,
+                            source = ArtworkSource.RemoteUrl.of(
+                                rawUrl = SensitiveArtworkUrl.of(rawUrl),
+                                normalizedUrlHash = normalizedUrlHash
+                            ),
+                            priority = 20,
+                            requiresRuntimeFetch = true,
+                            trace = ArtworkTrace(
+                                selectedProvider = primaryProvider.key,
+                                sourceRole = ArtworkSourceRole.PRIMARY.name,
+                                reason = "primary_thumbnail_url_candidate"
+                            )
+                        )
+                    )
+                }
+        }
+
+    private fun ArtworkCandidate.toPersistedCandidate(policyVersion: Int): PersistedArtworkCandidate {
+        val sourceHash = when (val candidateSource = source) {
+            is ArtworkSource.RemoteUrl -> candidateSource.normalizedUrlHash
+            is ArtworkSource.ProviderTemplate -> candidateSource.providerPathHash
+            is ArtworkSource.LocalAsset -> candidateSource.assetKey.value
+            is ArtworkSource.Placeholder -> null
+            else -> null
+        }
+        val providerTemplate = (source as? ArtworkSource.ProviderTemplate)?.let { template ->
+            PersistedProviderTemplate(
+                provider = template.provider,
+                imageType = imageType,
+                idType = template.idType,
+                mediaId = template.mediaId,
+                providerPathHash = template.providerPathHash,
+                settingsHash = template.settingsHash,
+                credentialHash = template.credentialHash,
+                imageLanguage = imageLanguage,
+                policyVersion = policyVersion,
+                pathParams = template.pathParams
+            )
+        }
+        return PersistedArtworkCandidate(
+            provider = provider,
+            sourceRole = sourceRole,
+            sourceHash = sourceHash,
+            redactedSourceForTrace = (source as? ArtworkSource.RemoteUrl)?.redactedUrlForTrace,
+            providerTemplate = providerTemplate,
+            priority = priority
+        )
+    }
+
+    private fun ArtworkCandidate.assetKeyForRuntimeRef(policyVersion: Int): ArtworkAssetKey? =
+        when (val candidateSource = source) {
+            is ArtworkSource.ProviderTemplate ->
+                toPersistedCandidate(policyVersion).providerTemplate
+                    ?.let(ArtworkCacheKeys::assetKeyForProviderTemplate)
+            is ArtworkSource.RemoteUrl ->
+                provider?.let { selectedProvider ->
+                    ArtworkCacheKeys.assetKeyForRemoteUrl(
+                        provider = selectedProvider,
+                        imageType = imageType,
+                        normalizedUrlHash = candidateSource.normalizedUrlHash,
+                        variant = null,
+                        policyVersion = policyVersion
+                    )
+                }
+            is ArtworkSource.LocalAsset -> candidateSource.assetKey
+            else -> null
+        }
+
+    private fun ArtworkCandidate.displayHints(): ArtworkDisplayHints =
+        ArtworkDisplayHints(
+            embedsRatingOverlay = imageType == ArtworkType.THUMBNAIL &&
+                selectedTopPostersThumbnailProvider()
+        )
+
+    private fun ArtworkCandidate.selectedTopPostersThumbnailProvider(): Boolean =
+        (provider as? ArtworkProviderId.RuntimeProvider)?.providerId == IntegrationProvider.TOP_POSTERS &&
+            sourceRole == ArtworkSourceRole.PREMIUM
+
+    private fun fallbackProviderFor(url: String): ArtworkProviderId =
+        when {
+            url.contains("image.tmdb.org", ignoreCase = true) ->
+                ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB)
+            url.contains("thetvdb.com", ignoreCase = true) ||
+                url.contains("tvdb", ignoreCase = true) ->
+                ArtworkProviderId.RuntimeProvider(IntegrationProvider.TVDB)
+            url.contains("kitsu", ignoreCase = true) ->
+                ArtworkProviderId.RuntimeProvider(IntegrationProvider.KITSU)
+            else -> ArtworkProviderId.AddonPreview
+        }
+
+    private fun ArtworkProviderSettings.stableSettingsHash(): String =
+        stableHashHex(
+            listOf(
+                "posterProvider=${selection.posterProvider.value}",
+                "hasRpdbKey=$hasRpdbKey",
+                "hasTopPostersKey=$hasTopPostersKey",
+                "topPostersCanProvideThumbnails=$topPostersCanProvideThumbnails"
+            ).joinToString("|")
+        )
+
+    private fun ArtworkProviderSettings.stableSettingsHash(imageType: ArtworkType): String =
+        if (imageType == ArtworkType.THUMBNAIL) {
+            ArtworkCacheKeys.providerTemplateSettingsHash(
+                imageType = imageType,
+                settingsParts = listOf(
+                    "thumbnailProvider=${selection.thumbnailProvider.value}",
+                    "hasTopPostersKey=$hasTopPostersKey",
+                    "topPostersCanProvideThumbnails=$topPostersCanProvideThumbnails"
+                )
+            )
+        } else {
+            stableSettingsHash()
+        }
+
+    private fun ArtworkProviderSettings.credentialHash(): String? =
+        credentialHash(selection.posterProvider)
+
+    private fun ArtworkProviderSettings.credentialHash(providerChoice: ArtworkProviderChoiceKey): String? =
+        when (providerChoice) {
+            ArtworkProviderChoiceKey.RPDB -> rpdbApiKey.trim()
+            ArtworkProviderChoiceKey.TOP_POSTERS -> topPostersApiKey.trim()
+            else -> ""
+        }.takeIf { it.isNotBlank() }?.let { stableHashHex(it) }
+
+    private fun topPostersThumbnailPathParams(episodeContext: EpisodeArtworkContext): Map<String, String> =
+        mapOf(
+            "season" to episodeContext.season.toString(),
+            "episode" to episodeContext.episode.toString(),
+            "badgeSize" to TopPostersThumbnailRequest.BADGE_SIZE,
+            "badgePosition" to TopPostersThumbnailRequest.BADGE_POSITION,
+            "blur" to TopPostersThumbnailRequest.BLUR.toString()
+        )
+
+    private fun stableHashHex8(s: String): String {
+        return stableHashHex(s).take(8)
+    }
+
+    private fun stableHashHex(s: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(s.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { byte -> "%02x".format(byte) }
+    }
+
     private fun isAlreadyProviderUrl(url: String, provider: ActiveProvider): Boolean {
         val request = PosterIntegrationRequest.fromModel(url)
         if (request != null) {
@@ -114,6 +632,10 @@ class PosterRatingsUrlResolver @Inject constructor(
 
     private fun providerUrlPrefix(hostToken: String): String =
         "https://api.$hostToken.com/"
+
+    private fun String.isPremiumProviderRawUrl(): Boolean =
+        startsWith(providerUrlPrefix("ratingposterdb"), ignoreCase = true) ||
+            startsWith(providerUrlPrefix("top-posters"), ignoreCase = true)
 
     private fun buildRpdbPosterUrl(apiKey: String, id: ProviderId): String? {
         val idType = when (id.type) {
@@ -206,14 +728,8 @@ class PosterRatingsUrlResolver @Inject constructor(
         ANIDB
     }
 
-    private fun stableHashHex8(s: String): String {
-        val bytes = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(s.toByteArray(Charsets.UTF_8))
-        return buildString(8) {
-            for (i in 0 until 4) {
-                val b = bytes[i].toInt() and 0xFF
-                append(b.toString(16).padStart(2, '0'))
-            }
-        }
+    private companion object {
+        const val DECISION_TTL_MS: Long = 7L * 24L * 60L * 60L * 1000L
+        const val DECISION_STALE_TTL_MS: Long = 30L * 24L * 60L * 60L * 1000L
     }
 }
