@@ -1,10 +1,11 @@
 package com.nexio.tv.core.artwork
 
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 
 data class ArtworkRoutingPolicy(
-    val activePremiumProvider: ArtworkProviderId?,
-    val artworkProviderSettings: ArtworkProviderSettings = ArtworkProviderSettings()
+    val settings: ArtworkProviderSettings = ArtworkProviderSettings(),
+    val policyVersion: Int = 1
 )
 
 data class ArtworkSelectionResult(
@@ -15,6 +16,8 @@ data class ArtworkSelectionResult(
 class ArtworkRouter(
     private val capabilityResolver: ArtworkProviderCapabilityResolver = ArtworkProviderCapabilityResolver()
 ) {
+    private val registry = ArtworkProviderRegistry()
+
     fun select(
         candidates: List<ArtworkCandidate>,
         policy: ArtworkRoutingPolicy
@@ -67,17 +70,18 @@ class ArtworkRouter(
             else -> RoutingRank.FALLBACK
         }
 
-    private fun ArtworkCandidate.isActiveSupportedPremium(policy: ArtworkRoutingPolicy): Boolean =
-        provider != null &&
-            provider == policy.activePremiumProvider &&
-            provider.evaluatePremiumCandidate(this, policy).supported
+    private fun ArtworkCandidate.isActiveSupportedPremium(policy: ArtworkRoutingPolicy): Boolean {
+        val candidateProvider = provider ?: return false
+        return candidateProvider == policy.selectedProviderFor(imageType) &&
+            candidateProvider.evaluatePremiumCandidate(this, policy).supported
+    }
 
     private fun ArtworkCandidate.unsupportedPremiumRejection(policy: ArtworkRoutingPolicy): RejectedArtworkCandidate? {
         if (sourceRole != ArtworkSourceRole.PREMIUM) return null
 
         val candidateProvider = provider
-        if (candidateProvider == null || candidateProvider != policy.activePremiumProvider) {
-            return rejected("inactive_premium_artwork_provider")
+        if (candidateProvider == null || candidateProvider != policy.selectedProviderFor(imageType)) {
+            return rejected("inactive_premium_artwork_provider_for_${imageType.name.lowercase()}")
         }
 
         val capability = candidateProvider.evaluatePremiumCandidate(this, policy)
@@ -94,8 +98,15 @@ class ArtworkRouter(
             imageType = candidate.imageType,
             ids = candidate.providerIds,
             mediaKind = candidate.mediaKind,
-            settings = policy.artworkProviderSettings
+            settings = policy.settings
         )
+
+    private fun ArtworkRoutingPolicy.selectedProviderFor(imageType: ArtworkType): ArtworkProviderId? {
+        val choice = settings.selection.providerFor(imageType.toSettingsKey())
+        if (choice == ArtworkProviderChoiceKey.DEFAULT) return null
+        if (choice !in registry.availableChoices(imageType, settings)) return null
+        return registry.providerIdFor(choice)
+    }
 
     private fun ArtworkCandidate.rejectionReasonForSelected(selectedRank: RoutingRank): String =
         when (selectedRank) {
