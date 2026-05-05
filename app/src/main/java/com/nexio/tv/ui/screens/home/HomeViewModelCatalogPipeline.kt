@@ -2667,6 +2667,19 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val displayRows = composedOverlaySnapshot.displayRows
     val baseHeroItems = composedOverlaySnapshot.heroItems
     val fullRowsFiltered = composedOverlaySnapshot.fullRows
+    val profileSessionForSurface = profileManager.activeProfileSession.value
+    val rowsForSurface = rowsForResolvedDisplaySurface(
+        rows = updateResult.displayRows,
+        overlaysByItemKey = currentHydratedHomeOverlays
+    )
+    val resolvedItemsForSurface = HomeResolvedDisplayMapper.toResolvedDisplayItems(
+        rows = rowsForSurface,
+        overlaysByItemKey = currentHydratedHomeOverlays
+    )
+    resolvedDisplaySurfaceRepository.publishResolvedItems(
+        profileSession = profileSessionForSurface,
+        items = resolvedItemsForSurface
+    )
     val orderedGroupKeys = updateResult.orderedGroupKeys
     val nextTruncatedRowCache = updateResult.truncatedCache
     val persistableDisplayRows = persistableHomeCatalogRows(displayRows)

@@ -39,6 +39,11 @@ internal fun List<CatalogRow>.applyHydratedHomeOverlays(
     return if (changed) updatedRows else this
 }
 
+internal fun rowsForResolvedDisplaySurface(
+    rows: List<CatalogRow>,
+    overlaysByItemKey: Map<String, HydratedHomeOverlay>
+): List<CatalogRow> = rows.applyHydratedHomeOverlays(overlaysByItemKey)
+
 internal fun MetaPreview.homeOverlayItemKey(): String = homeDisplayItemKey(apiType, id)
 
 internal fun MetaPreview.displayHashForHomeOverlay(): String =
