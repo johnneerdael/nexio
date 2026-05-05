@@ -2,6 +2,8 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.ui.screensaver.IdleScreensaverImageModeData
+import com.nexio.tv.ui.screensaver.IdleScreensaverModeData
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import javax.inject.Inject
@@ -12,6 +14,26 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "IdleScreensaverRepo"
+private const val PLACEHOLDER_ITEM_ID = "__placeholder__"
+private const val PLACEHOLDER_BACKDROP_URL = "nexio-placeholder://backdrop"
+
+private val EMPTY_SURFACE_PLACEHOLDER_SLIDE = IdleScreensaverSlide(
+    itemId = PLACEHOLDER_ITEM_ID,
+    itemType = "placeholder",
+    addonBaseUrl = "",
+    title = "",
+    backgroundUrl = PLACEHOLDER_BACKDROP_URL,
+    logoUrl = null,
+    genres = emptyList(),
+    description = null,
+    releaseInfo = null,
+    runtime = null,
+    imdbRating = null,
+    tomatoesRating = null,
+    modeData = IdleScreensaverModeData(
+        image = IdleScreensaverImageModeData(fallbackArtworkUrls = listOf(PLACEHOLDER_BACKDROP_URL))
+    )
+)
 
 @Singleton
 class IdleScreensaverRepository(
@@ -45,7 +67,8 @@ class IdleScreensaverRepository(
         refreshMutex.withLock {
             val profileId = activeProfileId()
             val snapshot = screensaverCandidateRepository.getCandidatesSnapshot(profileId)
-            _slides.value = snapshot.imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
+            val imageSlides = snapshot.imageCandidates.mapNotNull { candidate -> candidate.toIdleScreensaverSlide() }
+            _slides.value = imageSlides.ifEmpty { listOf(EMPTY_SURFACE_PLACEHOLDER_SLIDE) }
             _trailerCandidates.value = snapshot.trailerCandidates.mapNotNull { candidate ->
                 candidate.toIdleTrailerScreensaverCandidate()
             }

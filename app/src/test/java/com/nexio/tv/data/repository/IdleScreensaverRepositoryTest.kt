@@ -15,6 +15,7 @@ import com.nexio.tv.ui.screensaver.ScreensaverSlideCandidate
 import com.nexio.tv.ui.screensaver.ScreensaverTrailerCandidate
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -130,6 +131,31 @@ class IdleScreensaverRepositoryTest {
         assertEquals(1, repository.trailerCandidates.value.size)
         assertEquals("Breaking Bad", repository.trailerCandidates.value.single().title)
         assertEquals("81189", repository.trailerCandidates.value.single().stableIds.tvdb)
+    }
+
+    @Test
+    fun `warmFromCache publishes placeholder slide when candidate snapshot has no image slides`() = runTest {
+        val candidateRepository = mockk<ScreensaverCandidateRepository>()
+        coEvery { candidateRepository.getCandidatesSnapshot(profileId = 4) } returns ScreensaverCandidatesSnapshot(
+            imageCandidates = emptyList(),
+            trailerCandidates = emptyList()
+        )
+        val repository = IdleScreensaverRepository(
+            screensaverCandidateRepository = candidateRepository,
+            activeProfileId = { 4 }
+        )
+
+        repository.warmFromCache()
+
+        val slide = repository.slides.value.single()
+        assertEquals("__placeholder__", slide.itemId)
+        assertEquals("placeholder", slide.itemType)
+        assertEquals("nexio-placeholder://backdrop", slide.backgroundUrl)
+        assertEquals(listOf("nexio-placeholder://backdrop"), slide.modeData.image.fallbackArtworkUrls)
+        assertNull(slide.modeData.trailer)
+        assertEquals(emptyList<Any>(), repository.trailerCandidates.value)
+        coVerify(exactly = 1) { candidateRepository.getCandidatesSnapshot(4) }
+        confirmVerified(candidateRepository)
     }
 
     @Test
