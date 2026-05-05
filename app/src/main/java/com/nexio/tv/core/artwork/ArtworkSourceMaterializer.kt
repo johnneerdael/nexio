@@ -17,12 +17,13 @@ class ArtworkSourceMaterializer(
                     mediaId = template.mediaId,
                     providerPathHash = template.providerPathHash,
                     settingsHash = template.settingsHash,
-                    credentialHash = template.credentialHash
+                    credentialHash = template.credentialHash,
+                    pathParams = template.pathParams
                 ),
                 assetKey = ArtworkCacheKeys.assetKeyForProviderTemplate(template),
                 provider = template.provider,
                 runtimeProvider = template.provider.runtimeProvider(),
-                apiShapeId = template.provider.providerTemplateApiShapeId(),
+                apiShapeId = template.provider.providerTemplateApiShapeId(template.imageType),
                 sourceHash = candidate.sourceHash ?: template.providerPathHash ?: template.mediaId
             )
         }
@@ -61,10 +62,13 @@ class ArtworkSourceMaterializer(
             ArtworkProviderId.Placeholder -> IntegrationProvider.ADDON
         }
 
-    private fun ArtworkProviderId.providerTemplateApiShapeId(): String =
+    private fun ArtworkProviderId.providerTemplateApiShapeId(imageType: ArtworkType): String =
         when ((this as? ArtworkProviderId.RuntimeProvider)?.providerId) {
             IntegrationProvider.RPDB -> ArtworkApiShapes.RPDB_POSTER_TEMPLATE
-            IntegrationProvider.TOP_POSTERS -> ArtworkApiShapes.TOP_POSTERS_POSTER_TEMPLATE
+            IntegrationProvider.TOP_POSTERS -> when (imageType) {
+                ArtworkType.THUMBNAIL -> ArtworkApiShapes.TOP_POSTERS_THUMBNAIL
+                else -> ArtworkApiShapes.TOP_POSTERS_POSTER_TEMPLATE
+            }
             else -> ArtworkApiShapes.GENERIC_IMAGE_FETCH
         }
 

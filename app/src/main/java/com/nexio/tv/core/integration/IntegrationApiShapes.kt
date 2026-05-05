@@ -90,6 +90,7 @@ object PosterApiShapes {
     const val TOP_POSTERS_KEY_VALIDATION = "topposters.key_validation"
     const val RPDB_POSTER_TEMPLATE = "rpdb.poster_template"
     const val TOP_POSTERS_POSTER_TEMPLATE = "topposters.poster_template"
+    const val TOP_POSTERS_THUMBNAIL = "topposters.thumbnail"
 }
 
 object ArtworkApiShapes {
@@ -98,6 +99,7 @@ object ArtworkApiShapes {
     const val ADDON_PREVIEW_IMAGE_FETCH = "artwork.addon_preview.image_fetch"
     const val RPDB_POSTER_TEMPLATE = "rpdb.poster_template"
     const val TOP_POSTERS_POSTER_TEMPLATE = "topposters.poster_template"
+    const val TOP_POSTERS_THUMBNAIL = "topposters.thumbnail"
 }
 
 object SimklApiShapes {

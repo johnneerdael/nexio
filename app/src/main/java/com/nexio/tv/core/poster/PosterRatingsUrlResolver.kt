@@ -317,7 +317,8 @@ class PosterRatingsUrlResolver @Inject constructor(
                 settingsHash = template.settingsHash,
                 credentialHash = template.credentialHash,
                 imageLanguage = imageLanguage,
-                policyVersion = policyVersion
+                policyVersion = policyVersion,
+                pathParams = template.pathParams
             )
         }
         return PersistedArtworkCandidate(

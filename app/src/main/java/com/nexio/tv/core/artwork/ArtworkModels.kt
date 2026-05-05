@@ -170,7 +170,8 @@ sealed interface ArtworkSource {
         val mediaId: String,
         val providerPathHash: String?,
         val settingsHash: String?,
-        val credentialHash: String?
+        val credentialHash: String?,
+        val pathParams: Map<String, String> = emptyMap()
     ) : ArtworkSource
 
     data class LocalAsset(val assetKey: ArtworkAssetKey) : ArtworkSource
@@ -211,7 +212,8 @@ data class PersistedProviderTemplate(
     val settingsHash: String?,
     val credentialHash: String?,
     val imageLanguage: String = "en",
-    val policyVersion: Int
+    val policyVersion: Int,
+    val pathParams: Map<String, String> = emptyMap()
 )
 
 data class RejectedArtworkCandidate(

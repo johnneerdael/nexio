@@ -1,6 +1,7 @@
 package com.nexio.tv.data.integration.posters
 
 import com.nexio.tv.core.image.PosterIntegrationRequest
+import com.nexio.tv.core.image.TopPostersThumbnailRequest
 import com.nexio.tv.core.integration.ByteArrayIntegrationCodec
 import com.nexio.tv.core.integration.IntegrationHeaderPolicies
 import com.nexio.tv.core.integration.IntegrationCachePolicy
@@ -52,6 +53,39 @@ class TopPostersIntegrationProvider @Inject constructor(
                             IntegrationLoadResult.HttpError(result.statusCode, reason = "topposters_poster_missing_body")
                         !result.isSuccessful ->
                             IntegrationLoadResult.HttpError(result.statusCode, reason = "topposters_poster_failed")
+                        else ->
+                            IntegrationLoadResult.Success(result.body)
+                    }
+                }.fold(
+                    onSuccess = { it },
+                    onFailure = { IntegrationLoadResult.NetworkError(it) }
+                )
+            }
+        )
+        return runtime.get(spec).valueOrNull()
+    }
+
+    suspend fun fetchThumbnail(request: TopPostersThumbnailRequest): ByteArray? {
+        val spec = IntegrationSpec(
+            provider = IntegrationProvider.TOP_POSTERS,
+            cacheKey = request.cacheKey,
+            codec = ByteArrayIntegrationCodec,
+            cachePolicy = IntegrationCachePolicy.CacheFirst(
+                ttlMs = request.ttlMs,
+                staleAfterExpiryMs = request.staleAfterExpiryMs
+            ),
+            workClass = IntegrationWorkClass.USER_VISIBLE,
+            apiShapeId = PosterApiShapes.TOP_POSTERS_THUMBNAIL,
+            headerPolicyId = IntegrationHeaderPolicies.TOP_POSTERS_THUMBNAIL_V1,
+            operationKey = request.thumbnailOperationKey(),
+            load = {
+                runCatching {
+                    val result = posterTransport.execute(request.toRemoteUrl())
+                    when {
+                        result.body == null ->
+                            IntegrationLoadResult.HttpError(result.statusCode, reason = "topposters_thumbnail_missing_body")
+                        !result.isSuccessful ->
+                            IntegrationLoadResult.HttpError(result.statusCode, reason = "topposters_thumbnail_failed")
                         else ->
                             IntegrationLoadResult.Success(result.body)
                     }
@@ -131,4 +165,18 @@ class TopPostersIntegrationProvider @Inject constructor(
         val fallback = fallbackUrl ?: return baseUrl
         return "$baseUrl?fallback_url=${URLEncoder.encode(fallback, StandardCharsets.UTF_8.name())}"
     }
+
+    private fun TopPostersThumbnailRequest.toRemoteUrl(): String =
+        "https://api.top-posters.com/$apiKey/$idType/thumbnail/$mediaId/$episodePath.jpg" +
+            "?badge_size=$badgeSize&badge_position=$badgePosition&blur=$blur"
+
+    private fun TopPostersThumbnailRequest.thumbnailOperationKey(): String =
+        "topposters.thumbnail.fetch:" +
+            "idType:$idType:" +
+            "mediaId:$mediaId:" +
+            "episode:$episodePath:" +
+            "badgePos:$badgePosition:" +
+            "badgeSize:$badgeSize:" +
+            "blur:$blur:" +
+            "credential:$credentialHash"
 }

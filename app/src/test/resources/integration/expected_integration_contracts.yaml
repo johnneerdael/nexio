@@ -1893,7 +1893,7 @@ apiShapes:
     bestPracticeRules: [poster-cache-key-all-output-varying-inputs]
   topposters.thumbnail:
     provider: TOP_POSTERS
-    lifecycleStatus: ACTIVE_REQUIRED
+    lifecycleStatus: ACTIVE_RUNTIME_COVERED
     metadataRouterRequired: true
     method: GET
     path: "/{api_key}/{id_type}/thumbnail/{media_id}/S{season}E{episode}.jpg"
