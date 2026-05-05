@@ -38,7 +38,8 @@ class TrackingScrobbleServicePlaybackOwnerTest {
         val service = DefaultTrackingScrobbleService(
             traktScrobbleService = trakt,
             simklScrobbleService = simkl,
-            trackingProviderStateService = state
+            trackingProviderStateService = state,
+            rejectionReporter = mockk(relaxed = true)
         )
 
         val item = TrackingScrobbleItem.Movie(contentId = "tt1234567", title = "t", year = 2020)

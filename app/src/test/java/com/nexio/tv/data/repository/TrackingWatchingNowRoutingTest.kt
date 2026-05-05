@@ -52,7 +52,8 @@ class TrackingWatchingNowRoutingTest {
         val service = DefaultTrackingScrobbleService(
             traktScrobbleService = traktService,
             simklScrobbleService = simklService,
-            trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL)
+            trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL),
+            rejectionReporter = mockk(relaxed = true)
         )
 
         val observed = service.observeWatchingNowState().first()
@@ -71,7 +72,8 @@ class TrackingWatchingNowRoutingTest {
         val service = DefaultTrackingScrobbleService(
             traktScrobbleService = traktService,
             simklScrobbleService = simklService,
-            trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL)
+            trackingProviderStateService = trackingProviderStateService(TrackingProvider.SIMKL),
+            rejectionReporter = mockk(relaxed = true)
         )
 
         service.scrobbleStart(

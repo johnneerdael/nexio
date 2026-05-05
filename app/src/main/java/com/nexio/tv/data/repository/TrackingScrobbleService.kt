@@ -47,7 +47,8 @@ interface TrackingScrobbleService {
 class DefaultTrackingScrobbleService @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val simklScrobbleService: SimklScrobbleService,
-    private val trackingProviderStateService: TrackingProviderStateService
+    private val trackingProviderStateService: TrackingProviderStateService,
+    private val rejectionReporter: ScrobbleRejectionReporter
 ) : TrackingScrobbleService {
 
     override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float, owner: PlaybackOwnerContext) {
@@ -144,8 +145,16 @@ class DefaultTrackingScrobbleService @Inject constructor(
     }
 
     private fun toTraktItem(item: TrackingScrobbleItem): TraktScrobbleItem? {
-        val ids = toTraktIds(parseContentIds(item.contentId()))
-        if (!ids.hasAnyId()) return null
+        val contentId = item.contentId()
+        val ids = toTraktIds(parseContentIds(contentId))
+        if (!ids.hasAnyId()) {
+            rejectionReporter.reportRejection(
+                contentId = contentId,
+                reason = ScrobbleRejectionReason.NO_PARSEABLE_IDS,
+                provider = TrackingProvider.TRAKT,
+            )
+            return null
+        }
         return when (item) {
             is TrackingScrobbleItem.Movie -> TraktScrobbleItem.Movie(
                 title = item.title,
