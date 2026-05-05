@@ -91,6 +91,11 @@ internal fun shouldShowEpisodeManualStreamSelection(
     deterministicAutoplayEnabled: Boolean
 ): Boolean = deterministicAutoplayEnabled
 
+internal fun episodeRatingForThumbnailOverlay(
+    episode: Video,
+    rating: EpisodeRating?
+): EpisodeRating? = if (episode.thumbnailArtworkEmbedsRatingOverlay) null else rating
+
 @OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun SeasonTabs(
@@ -470,11 +475,14 @@ private fun EpisodeCard(
     val runtimeLabel = remember(episode.runtime) {
         episode.runtime?.takeIf { it > 0 }?.let(::formatEpisodeRuntime)
     }
-    val ratingLabel = remember(episodeRating) {
-        episodeRating?.value?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
+    val thumbnailOverlayRating = remember(episode.thumbnailArtworkEmbedsRatingOverlay, episodeRating) {
+        episodeRatingForThumbnailOverlay(episode, episodeRating)
     }
-    val ratingBadge = remember(episodeRating?.source) {
-        episodeRating?.source?.let(::episodeRatingBadge)
+    val ratingLabel = remember(thumbnailOverlayRating) {
+        thumbnailOverlayRating?.value?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
+    }
+    val ratingBadge = remember(thumbnailOverlayRating?.source) {
+        thumbnailOverlayRating?.source?.let(::episodeRatingBadge)
     }
     val description = remember(episode.overview) { episode.overview?.trim().orEmpty() }
     val isWatched = watchProgress?.isCompleted() == true || isMarkedWatched
@@ -708,7 +716,7 @@ private fun EpisodeCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 AsyncImage(
-                                    model = if (episodeRating?.source == EpisodeRatingSource.TMDB) tmdbLogoRequest else imdbLogoRequest,
+                                    model = if (thumbnailOverlayRating?.source == EpisodeRatingSource.TMDB) tmdbLogoRequest else imdbLogoRequest,
                                     contentDescription = ratingBadge?.contentDescription,
                                     modifier = Modifier
                                         .width(cardMetrics.imdbLogoWidth)
