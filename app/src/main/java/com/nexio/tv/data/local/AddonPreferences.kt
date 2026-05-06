@@ -32,7 +32,8 @@ class AddonPreferences @Inject constructor(
 ) {
     data class AddonInstallConfig(
         val url: String,
-        val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+        val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+        val isAnime: Boolean = false,
     )
 
     companion object {
@@ -95,7 +96,8 @@ class AddonPreferences @Inject constructor(
 
     suspend fun addAddon(
         url: String,
-        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+        isAnime: Boolean = false,
     ) {
         store().edit { preferences ->
             val current = getCurrentList(preferences).toMutableList()
@@ -104,7 +106,8 @@ class AddonPreferences @Inject constructor(
             preferences[orderedUrlsKey] = gson.toJson(
                 current + AddonInstallConfig(
                     url = normalizedUrl,
-                    parserPreset = parserPreset
+                    parserPreset = parserPreset,
+                    isAnime = isAnime
                 )
             )
         }
@@ -151,11 +154,29 @@ class AddonPreferences @Inject constructor(
         }
     }
 
+    suspend fun updateAddonIsAnime(url: String, isAnime: Boolean) {
+        store().edit { preferences ->
+            val normalizedUrl = canonicalizeUrl(url)
+            val updated = getCurrentList(preferences).map { addon ->
+                if (addon.url.equals(normalizedUrl, ignoreCase = true)) {
+                    addon.copy(isAnime = isAnime)
+                } else {
+                    addon
+                }
+            }
+            preferences[orderedUrlsKey] = gson.toJson(updated)
+        }
+    }
+
     suspend fun setAddonConfigs(configs: List<AddonInstallConfig>) {
         store().edit { preferences ->
             val normalized = configs.mapNotNull { addon ->
                 safeCanonicalizeUrl(addon.url, "remote sync")?.let { url ->
-                    AddonInstallConfig(url = url, parserPreset = addon.parserPreset)
+                    AddonInstallConfig(
+                        url = url,
+                        parserPreset = addon.parserPreset,
+                        isAnime = addon.isAnime
+                    )
                 }
             }.distinctBy { it.url.lowercase() }
             preferences[orderedUrlsKey] = gson.toJson(normalized)
@@ -192,7 +213,8 @@ class AddonPreferences @Inject constructor(
                     safeCanonicalizeUrl(addon.url, "preferences")?.let { normalized ->
                         AddonInstallConfig(
                             url = normalized,
-                            parserPreset = addon.parserPreset
+                            parserPreset = addon.parserPreset,
+                            isAnime = addon.isAnime,
                         )
                     }
                 }.distinctBy { it.url.lowercase() }
