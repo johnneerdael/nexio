@@ -17,6 +17,7 @@ tmdb.network.detail
 tvdb.login
 tvdb.remoteid.lookup
 tvdb.series.extended
+tvdb.tv.trailers
 tvdb.person.extended
 tvdb.series.translation
 tvdb.series.episodes.season_type

@@ -321,7 +321,7 @@ class ProviderPlanExecutorTest {
 
             assertEquals(
                 "depth=$depth",
-                listOf(TvdbApiShapes.SERIES_EXTENDED) + posterShapeIds(),
+                listOf(TvdbApiShapes.SERIES_EXTENDED, TvdbApiShapes.TV_TRAILERS) + posterShapeIds(),
                 plan.apiShapeIds()
             )
             assertFalse("depth=$depth", plan.apiShapeIds().contains(TvdbApiShapes.SERIES_TRANSLATION))

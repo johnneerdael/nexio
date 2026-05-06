@@ -486,8 +486,8 @@ class MetadataRouterFacade(
                 providerCandidates = resolution.providerRunResult.toSeasonTrailerPlaybackRefs()
             )
         )
-        providerSelection.selected?.let { selected ->
-            return selected.toSeasonPlaybackSource(service, title, year)
+        providerSelection.toFirstSeasonPlaybackSource(service, title, year)?.let { source ->
+            return source
         }
 
         val seasonTrailerRefs = seasonTrailerRefResolver
@@ -515,7 +515,7 @@ class MetadataRouterFacade(
                 itemKeySuffix = "season"
             )
         )
-        return seasonSelection.selected?.toSeasonPlaybackSource(service, title, year)
+        return seasonSelection.toFirstSeasonPlaybackSource(service, title, year)
     }
 
     /**
@@ -566,7 +566,7 @@ class MetadataRouterFacade(
                 itemKeySuffix = "recap"
             )
         )
-        return recapSelection.selected?.toSeasonPlaybackSource(service, title, year)
+        return recapSelection.toFirstSeasonPlaybackSource(service, title, year)
     }
 
     private fun seasonRefRequest(
@@ -1253,6 +1253,17 @@ class MetadataRouterFacade(
             is TrailerResolutionResult.External,
             null -> toInlinePlaybackSource()
         }
+    }
+
+    private suspend fun TrailerResolution.toFirstSeasonPlaybackSource(
+        service: TrailerService?,
+        title: String,
+        year: String?
+    ): TrailerPlaybackSource? {
+        for (candidate in candidates) {
+            candidate.toSeasonPlaybackSource(service, title, year)?.let { return it }
+        }
+        return null
     }
 
     private fun TrailerPlaybackRef.toInlinePlaybackSource(): TrailerPlaybackSource? =

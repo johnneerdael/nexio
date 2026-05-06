@@ -197,6 +197,16 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
+        if (depth == MetadataDepth.DETAIL_MEDIA ||
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
+            steps += step(
+                apiShapeId = TvdbApiShapes.TV_TRAILERS,
+                provider = MetadataPrimaryProvider.TVDB,
+                role = ProviderPlanRole.MEDIA
+            )
+        }
+
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
             depth == MetadataDepth.DETAIL_SECONDARY ||
