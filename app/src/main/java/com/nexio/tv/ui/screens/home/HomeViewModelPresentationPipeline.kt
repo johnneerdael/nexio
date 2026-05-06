@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.anime.AnimeStremioId
+import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.metadata.router.StableIdResolutionTrigger
 import com.nexio.tv.core.tmdb.TmdbEnrichment
@@ -618,13 +619,20 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
     items: List<MetaPreview>,
-    settings: TmdbSettings
+    settings: TmdbSettings,
+    expectedGeneration: Long = homeProfileGeneration,
+    expectedLanguageTag: String = profileBoundary.currentLanguageTag(),
+    expectedProfileSession: ActiveProfileSession? = null
 ): List<MetaPreview> {
     if (items.isEmpty()) return items
 
-    val expectedGeneration = homeProfileGeneration
-    val languageTag = profileBoundary.currentLanguageTag()
-    val expectedProfileSession = profileManager.activeProfileSession.value
+    val profileSessionForPublish = expectedProfileSession ?: runCatching {
+        profileManager.activeProfileSession.value
+    }.getOrNull()
+
+    if (!isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
+        return items
+    }
     return items
         .distinctBy { it.homeOverlayItemKey() }
         .associate { item ->
@@ -633,20 +641,24 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                     item = item,
                     trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM,
                     priority = HomeHydrationPriority.HERO,
-                    languageTag = languageTag,
+                    languageTag = expectedLanguageTag,
                     expectedGeneration = expectedGeneration,
                     currentGeneration = { homeProfileGeneration },
                     onOverlayApplied = { appliedOverlay ->
-                        applyHydratedHomeOverlayFromCoordinator(
-                            overlay = appliedOverlay,
-                            expectedGeneration = expectedGeneration,
-                            expectedLanguageTag = languageTag,
-                            expectedProfileSession = expectedProfileSession,
-                            trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
-                        )
+                        if (profileSessionForPublish != null) {
+                            applyHydratedHomeOverlayFromCoordinator(
+                                overlay = appliedOverlay,
+                                expectedGeneration = expectedGeneration,
+                                expectedLanguageTag = expectedLanguageTag,
+                                expectedProfileSession = profileSessionForPublish,
+                                trigger = StableIdResolutionTrigger.FOCUSED_HOME_ITEM
+                            )
+                        } else {
+                            isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag)
+                        }
                     }
                 )
-                if (isCurrentHomeHydrationScope(expectedGeneration, languageTag, expectedProfileSession)) {
+                if (isCurrentHomeHydrationScope(expectedGeneration, expectedLanguageTag, profileSessionForPublish)) {
                     overlay?.fields?.applyToHeroItem(item, settings) ?: item
                 } else {
                     item

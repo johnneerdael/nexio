@@ -213,6 +213,8 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     deferredStartupRefreshJob = null
     pendingSerializedHomeRefreshReason = null
     catalogUpdateJob?.cancel()
+    heroEnrichmentJob?.cancel()
+    heroEnrichmentJob = null
     continueWatchingEnrichmentJob?.cancel()
     catalogsMap.clear()
     catalogOrder.clear()
@@ -2783,17 +2785,34 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline(profileSessionForSu
 
     if (shouldUseEnrichedHeroItems && baseHeroItems.isNotEmpty() && isNonPlaybackHomeWorkAllowed()) {
         heroEnrichmentJob?.cancel()
+        val expectedHeroGeneration = homeProfileGeneration
+        val expectedHeroLanguageTag = profileBoundary.currentLanguageTag()
         heroEnrichmentJob = viewModelScope.launch {
+            if (!isCurrentHomeHydrationScope(expectedHeroGeneration, expectedHeroLanguageTag, profileSessionForSurface)) {
+                return@launch
+            }
             if (!isNonPlaybackHomeWorkAllowed()) return@launch
             val enrichmentSignature = heroEnrichmentSignaturePipeline(baseHeroItems, tmdbSettings)
             if (lastHeroEnrichmentSignature == enrichmentSignature) {
                 val cached = lastHeroEnrichedItems
+                if (!isCurrentHomeHydrationScope(expectedHeroGeneration, expectedHeroLanguageTag, profileSessionForSurface)) {
+                    return@launch
+                }
                 updateInMemoryHomeSnapshotPipeline { snapshot ->
                     snapshot.copy(heroItems = cached)
                 }
             } else {
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
-                val enrichedItems = enrichHeroItemsPipeline(baseHeroItems, tmdbSettings)
+                val enrichedItems = enrichHeroItemsPipeline(
+                    items = baseHeroItems,
+                    settings = tmdbSettings,
+                    expectedGeneration = expectedHeroGeneration,
+                    expectedLanguageTag = expectedHeroLanguageTag,
+                    expectedProfileSession = profileSessionForSurface
+                )
+                if (!isCurrentHomeHydrationScope(expectedHeroGeneration, expectedHeroLanguageTag, profileSessionForSurface)) {
+                    return@launch
+                }
                 if (!isNonPlaybackHomeWorkAllowed()) return@launch
                 lastHeroEnrichmentSignature = enrichmentSignature
                 lastHeroEnrichedItems = enrichedItems
