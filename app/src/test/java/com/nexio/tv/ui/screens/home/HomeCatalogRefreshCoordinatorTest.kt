@@ -32,6 +32,7 @@ import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HydratedHomeOverlay
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
@@ -842,6 +843,45 @@ class HomeCatalogRefreshCoordinatorTest {
         assertTrue(logs.any { it.first == "image_prefetch_end" && it.second?.contains("fetched_urls=0") == true })
     }
 
+    @Test
+    fun `home refresh uses shared artwork projection and not legacy provider apply`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
+        val artworkPreview = rawPreview.copy(poster = "nexio-artwork://decision/home")
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
+        every { posterRatingsUrlResolver.applyArtworkRef(rawPreview, any()) } returns artworkPreview
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals("nexio-artwork://decision/home", hydratedRows.single().items.single().poster)
+        coVerify(exactly = 1) { posterRatingsUrlResolver.currentSettings() }
+        verify(exactly = 1) { posterRatingsUrlResolver.applyArtworkRef(rawPreview, any()) }
+        verify(exactly = 0) { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) }
+    }
+
     private fun preview(id: String, poster: String?): MetaPreview {
         return MetaPreview(
             id = id,
@@ -892,7 +932,8 @@ class HomeCatalogRefreshCoordinatorTest {
             coEvery { it.enrichPreview(any()) } answers { firstArg() }
         }
         val posterResolver = posterRatingsUrlResolver ?: mockk<PosterRatingsUrlResolver>(relaxed = true).also {
-            every { it.apply(any<MetaPreview>(), any()) } answers { firstArg() }
+            coEvery { it.currentSettings() } returns ArtworkProviderSettings()
+            every { it.applyArtworkRef(any(), any()) } answers { firstArg() }
         }
         val profileBoundary = mockk<ProfileBoundary>()
         val playbackActivityTracker = mockk<PlaybackActivityTracker>()

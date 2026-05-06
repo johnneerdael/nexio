@@ -33,6 +33,7 @@ import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
@@ -88,6 +89,31 @@ class PosterRatingsUrlResolver @Inject constructor(
                 contentType = metaPreview.type,
                 activeProvider = activeProvider
             ),
+            posterProviderTag = providerTag
+        )
+    }
+
+    fun applyArtworkRef(metaPreview: MetaPreview, settings: ArtworkProviderSettings): MetaPreview {
+        val providerIds = metaPreview.posterArtworkProviderIds()
+        val ownerKey = metaPreview.posterArtworkOwnerKey()
+        val resolved = resolvePosterArtworkRef(
+            settings = settings,
+            providerIds = providerIds,
+            mediaKind = metaPreview.type.toMetadataMediaKind(),
+            ownerKey = ownerKey,
+            fallbackPosterUrl = metaPreview.poster?.takeIf { !it.isPremiumProviderRawUrl() }
+        ) as? ArtworkDisplayRef.RuntimeAsset
+
+        val poster = resolved.toLegacyArtworkString()
+            ?: metaPreview.poster?.takeIf { !it.isPremiumProviderRawUrl() }
+        val providerTag = resolved
+            ?.takeIf { it.sourceRole == ArtworkSourceRole.PREMIUM }
+            ?.selectedProvider
+            ?.key
+            ?.lowercase()
+
+        return metaPreview.copy(
+            poster = poster,
             posterProviderTag = providerTag
         )
     }
@@ -616,6 +642,89 @@ class PosterRatingsUrlResolver @Inject constructor(
     private fun String.isPremiumProviderRawUrl(): Boolean =
         startsWith(providerUrlPrefix("ratingposterdb"), ignoreCase = true) ||
             startsWith(providerUrlPrefix("top-posters"), ignoreCase = true)
+
+    private fun MetaPreview.posterArtworkOwnerKey(): ArtworkOwnerKey {
+        val stableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
+        return stableIds.canonicalArtworkContentId(type)?.let(ArtworkOwnerKey::CanonicalContent)
+            ?: ArtworkOwnerKey.PreviewItem(
+                itemKey = "${apiType}:${id.trim()}",
+                sourcePayloadHash = stableHashHex(
+                    listOf(
+                        "source=${(firstPaintSource as FirstPaintSource?) ?: FirstPaintSource.ADDON_META_PREVIEW}",
+                        "sourceProvider=${firstPaintSourceProvider?.name.orEmpty()}",
+                        "sourceItemId=${firstPaintSourceItemId.orEmpty()}",
+                        "railSource=${firstPaintRailSource?.name.orEmpty()}",
+                        "id=${id.trim()}",
+                        "type=$apiType",
+                        "poster=${poster.orEmpty()}"
+                    ).joinToString("|")
+                )
+            )
+    }
+
+    private fun MetaPreview.posterArtworkProviderIds(): ProviderIds {
+        val stableIds = (firstPaintStableIds as ProviderIds?) ?: ProviderIds()
+        val derived = parseContentId(id, type)?.toProviderIds() ?: ProviderIds()
+        return stableIds.withFallback(derived)
+    }
+
+    private fun ProviderIds.canonicalArtworkContentId(contentType: ContentType): String? {
+        return when {
+            !imdb.isNullOrBlank() -> "imdb:${imdb.trim()}"
+            !tmdb.isNullOrBlank() -> "tmdb:${tmdb.trim().withTmdbMediaPrefix(contentType)}"
+            !tvdb.isNullOrBlank() -> "tvdb:${tvdb.trim()}"
+            !kitsu.isNullOrBlank() -> "kitsu:${kitsu.trim()}"
+            !trakt.isNullOrBlank() -> "trakt:${trakt.trim()}"
+            !simkl.isNullOrBlank() -> "simkl:${simkl.trim()}"
+            !mal.isNullOrBlank() -> "mal:${mal.trim()}"
+            !anilist.isNullOrBlank() -> "anilist:${anilist.trim()}"
+            !anidb.isNullOrBlank() -> "anidb:${anidb.trim()}"
+            else -> null
+        }
+    }
+
+    private fun ProviderIds.withFallback(fallback: ProviderIds): ProviderIds =
+        ProviderIds(
+            imdb = imdb ?: fallback.imdb,
+            tmdb = tmdb ?: fallback.tmdb,
+            tvdb = tvdb ?: fallback.tvdb,
+            trakt = trakt ?: fallback.trakt,
+            simkl = simkl ?: fallback.simkl,
+            kitsu = kitsu ?: fallback.kitsu,
+            slug = slug ?: fallback.slug,
+            mal = mal ?: fallback.mal,
+            anilist = anilist ?: fallback.anilist,
+            anidb = anidb ?: fallback.anidb
+        )
+
+    private fun ProviderId.toProviderIds(): ProviderIds =
+        when (type) {
+            IdType.IMDB -> ProviderIds(imdb = value)
+            IdType.TMDB -> ProviderIds(tmdb = value)
+            IdType.TVDB -> ProviderIds(tvdb = value)
+            IdType.TRAKT -> ProviderIds(trakt = value)
+            IdType.MAL -> ProviderIds(mal = value)
+            IdType.KITSU -> ProviderIds(kitsu = value)
+            IdType.ANILIST -> ProviderIds(anilist = value)
+            IdType.ANIDB -> ProviderIds(anidb = value)
+        }
+
+    private fun ContentType.toMetadataMediaKind(): MetadataMediaKind =
+        when (this) {
+            ContentType.MOVIE -> MetadataMediaKind.MOVIE
+            ContentType.SERIES,
+            ContentType.TV -> MetadataMediaKind.SERIES
+            ContentType.CHANNEL,
+            ContentType.PERSON,
+            ContentType.UNKNOWN -> MetadataMediaKind.UNKNOWN
+        }
+
+    private fun String.withTmdbMediaPrefix(contentType: ContentType): String =
+        when {
+            startsWith("movie-", ignoreCase = true) || startsWith("series-", ignoreCase = true) -> this
+            contentType == ContentType.MOVIE -> "movie-$this"
+            else -> "series-$this"
+        }
 
     private fun buildRpdbPosterUrl(apiKey: String, id: ProviderId): String? {
         val idType = when (id.type) {

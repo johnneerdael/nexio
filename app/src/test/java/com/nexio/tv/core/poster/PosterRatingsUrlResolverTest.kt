@@ -18,7 +18,10 @@ import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
 import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.ArtworkProviderSettings
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FirstPaintSource
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterRatingsProvider
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.TopPostersEntitlementSnapshot
 import io.mockk.mockk
@@ -356,6 +359,60 @@ class PosterRatingsUrlResolverTest {
         assertNull(decision?.selectedCandidate?.providerTemplate)
     }
 
+    @Test
+    fun `meta preview premium projection returns shared artwork ref not raw provider url`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(id = "tt15940132", poster = "https://image.tmdb.org/t/p/w500/poster.jpg").copy(
+            firstPaintStableIds = ProviderIds(imdb = "tt15940132")
+        )
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        assertInternalArtworkRef(resolved.poster)
+        assertNoRawPremiumUrl(resolved.poster)
+        assertEquals("rpdb", resolved.posterProviderTag)
+        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
+        assertEquals(ArtworkOwnerKey.CanonicalContent("imdb:tt15940132"), decision?.ownerKey)
+    }
+
+    @Test
+    fun `meta preview fallback poster is not tagged premium`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val fallbackUrl = "https://image.tmdb.org/t/p/w500/poster.jpg"
+        val preview = preview(id = "addon-item-1", poster = fallbackUrl)
+
+        val resolved = resolver.applyArtworkRef(
+            preview,
+            ArtworkProviderSettings(
+                rpdbApiKey = "",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            )
+        )
+
+        assertInternalArtworkRef(resolved.poster)
+        assertEquals(null, resolved.posterProviderTag)
+        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
+        assertEquals(ArtworkOwnerKey.PreviewItem::class, decision?.ownerKey!!::class)
+    }
+
+    @Test
+    fun `meta preview without stable provider ids uses preview owner key`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(id = "tt15940132", poster = "https://image.tmdb.org/t/p/w500/poster.jpg")
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        assertEquals(ArtworkOwnerKey.PreviewItem::class, decision?.ownerKey!!::class)
+    }
+
     private fun resolver(cache: ArtworkDecisionCache): PosterRatingsUrlResolver =
         PosterRatingsUrlResolver(
             settingsDataStore = mockk<PosterRatingsSettingsDataStore>(),
@@ -409,4 +466,21 @@ class PosterRatingsUrlResolverTest {
 
     private fun decisionKeyFromRef(value: String): ArtworkDecisionKey =
         ArtworkDecisionKey(value.substringAfter("nexio-artwork://decision/"))
+
+    private fun preview(id: String, poster: String?): MetaPreview =
+        MetaPreview(
+            id = id,
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Item $id",
+            poster = poster,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
+        )
 }
