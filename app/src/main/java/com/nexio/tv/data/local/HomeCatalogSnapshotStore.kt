@@ -5,6 +5,9 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
 import com.nexio.tv.core.integration.RailKeyFactory
 import com.nexio.tv.core.integration.RailMediaIdentityResolver
 import com.nexio.tv.core.integration.RailMembership
@@ -24,6 +27,7 @@ class HomeCatalogSnapshotStore private constructor(
     @ApplicationContext private val context: Context,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val artworkDecisionCache: ArtworkDecisionCache,
     private val activeProfileId: () -> Int,
     private val identityResolver: RailMediaIdentityResolver
 ) {
@@ -32,12 +36,14 @@ class HomeCatalogSnapshotStore private constructor(
         @ApplicationContext context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
         posterRatingsUrlResolver: PosterRatingsUrlResolver,
+        artworkDecisionCache: ArtworkDecisionCache,
         profileManager: ProfileManager,
         identityResolver: RailMediaIdentityResolver
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
+        artworkDecisionCache = artworkDecisionCache,
         activeProfileId = { profileManager.activeProfileId.value },
         identityResolver = identityResolver
     )
@@ -45,11 +51,13 @@ class HomeCatalogSnapshotStore private constructor(
     constructor(
         context: Context,
         metadataDiskCacheStore: MetadataDiskCacheStore,
-        posterRatingsUrlResolver: PosterRatingsUrlResolver
+        posterRatingsUrlResolver: PosterRatingsUrlResolver,
+        artworkDecisionCache: ArtworkDecisionCache = InMemoryArtworkDecisionCache()
     ) : this(
         context = context,
         metadataDiskCacheStore = metadataDiskCacheStore,
         posterRatingsUrlResolver = posterRatingsUrlResolver,
+        artworkDecisionCache = artworkDecisionCache,
         activeProfileId = { 1 },
         identityResolver = RailMediaIdentityResolver()
     )
@@ -59,6 +67,11 @@ class HomeCatalogSnapshotStore private constructor(
         private const val PREFS_NAME = "home_catalog_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 4
+        private const val ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
+        private val PREMIUM_PROVIDER_URL_PREFIXES = listOf(
+            "https://api.ratingposterdb.com/",
+            "https://api.top-posters.com/"
+        )
     }
 
     private val gson = Gson()
@@ -102,16 +115,17 @@ class HomeCatalogSnapshotStore private constructor(
         profileId: Int = activeProfileId()
     ) {
         runCatching {
+            val sanitizedSnapshot = snapshot.sanitize()
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
                 addProperty("languageTag", currentLanguageTag())
                 addProperty("posterProviderToken", posterProviderToken)
-                add("catalogRows", gson.toJsonTree(snapshot.catalogRows))
-                add("fullCatalogRows", gson.toJsonTree(snapshot.fullCatalogRows))
-                add("heroItems", gson.toJsonTree(snapshot.heroItems))
-                add("orderedGroupKeys", gson.toJsonTree(snapshot.orderedGroupKeys))
+                add("catalogRows", gson.toJsonTree(sanitizedSnapshot.catalogRows))
+                add("fullCatalogRows", gson.toJsonTree(sanitizedSnapshot.fullCatalogRows))
+                add("heroItems", gson.toJsonTree(sanitizedSnapshot.heroItems))
+                add("orderedGroupKeys", gson.toJsonTree(sanitizedSnapshot.orderedGroupKeys))
             }
             prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
@@ -282,7 +296,39 @@ class HomeCatalogSnapshotStore private constructor(
             if (item == null) {
                 Log.w(TAG, "Dropping malformed cached $label[$index]: ${value?.javaClass?.name}")
             }
-            item?.sanitizedForCache()
+            item?.sanitizedForCache()?.sanitizePremiumArtworkForSnapshot()
         }
+    }
+
+    private fun MetaPreview.sanitizePremiumArtworkForSnapshot(): MetaPreview {
+        val posterRef = poster?.trim().orEmpty()
+        if (posterRef.isBlank() || !shouldClearPosterRef(posterRef)) {
+            return this
+        }
+        return copy(poster = null, posterProviderTag = null)
+    }
+
+    private fun shouldClearPosterRef(ref: String): Boolean {
+        return isRawPremiumProviderUrl(ref) || isMissingDecisionRef(ref)
+    }
+
+    private fun isRawPremiumProviderUrl(ref: String): Boolean {
+        return PREMIUM_PROVIDER_URL_PREFIXES.any { prefix ->
+            ref.startsWith(prefix, ignoreCase = true)
+        }
+    }
+
+    private fun isMissingDecisionRef(ref: String): Boolean {
+        return ref.startsWith(ARTWORK_DECISION_PREFIX) && !hasDurableDecision(ref)
+    }
+
+    private fun hasDurableDecision(ref: String): Boolean {
+        val keyValue = ref.removePrefix(ARTWORK_DECISION_PREFIX)
+            .takeIf { it.isNotBlank() }
+            ?: return false
+
+        return runCatching {
+            artworkDecisionCache.get(ArtworkDecisionKey(keyValue)) != null
+        }.getOrDefault(false)
     }
 }

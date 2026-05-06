@@ -1,6 +1,14 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.nexio.tv.core.artwork.ArtworkDecision
+import com.nexio.tv.core.artwork.ArtworkDecisionKey
+import com.nexio.tv.core.artwork.ArtworkOwnerKey
+import com.nexio.tv.core.artwork.ArtworkProviderId
+import com.nexio.tv.core.artwork.ArtworkSourceRole
+import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
+import com.nexio.tv.core.artwork.PersistedArtworkCandidate
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -10,6 +18,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -211,6 +220,87 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
+    fun `write sanitizes raw premium provider URLs from persisted JSON`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = InMemoryArtworkDecisionCache()
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "https://api.ratingposterdb.com/rpdb-secret/imdb/poster-default/tt123.jpg",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains("api.ratingposterdb.com"))
+        assertFalse(raw.contains("rpdb-secret"))
+        assertFalse(raw.contains("\"posterProviderTag\":\"rpdb\""))
+    }
+
+    @Test
+    fun `read clears missing decision refs and tag`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = InMemoryArtworkDecisionCache()
+        val decisionKey = ArtworkDecisionKey("missing-decision")
+        cache.put(sampleArtworkDecision(decisionKey))
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/missing-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+        cache.remove(decisionKey)
+
+        val restored = store.read("RPDB:12345")
+        val restoredItem = restored?.catalogRows?.single()?.items?.single()
+        assertNull(restoredItem?.poster)
+        assertNull(restoredItem?.posterProviderTag)
+    }
+
+    @Test
+    fun `read preserves valid decision refs backed by cache`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cache = InMemoryArtworkDecisionCache()
+        cache.put(sampleArtworkDecision(ArtworkDecisionKey("valid-decision")))
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = cache
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "nexio-artwork://decision/valid-decision",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        assertEquals(snapshot, store.read("RPDB:12345"))
+    }
+
+    @Test
     fun `builder emits a profile scoped home catalog rail with canonical media keys`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
@@ -247,9 +337,23 @@ class HomeCatalogSnapshotStoreTest {
         )
     }
 
+    private fun sampleSnapshotWithPoster(
+        poster: String,
+        posterProviderTag: String?
+    ): HomeCatalogSnapshotStore.Snapshot {
+        val row = sampleRow("addon", "movies", poster = poster, posterProviderTag = posterProviderTag)
+        return HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("addon_movie_movies")
+        )
+    }
+
     private fun sampleRow(
         addonId: String,
         catalogId: String,
+        poster: String? = "poster",
         posterProviderTag: String? = null
     ): CatalogRow {
         return CatalogRow(
@@ -265,7 +369,7 @@ class HomeCatalogSnapshotStoreTest {
                     type = ContentType.MOVIE,
                     rawType = "movie",
                     name = "Sample",
-                    poster = "poster",
+                    poster = poster,
                     posterShape = PosterShape.POSTER,
                     background = "background",
                     logo = "logo",
@@ -278,6 +382,32 @@ class HomeCatalogSnapshotStoreTest {
             )
         )
     }
+
+    private fun sampleArtworkDecision(key: ArtworkDecisionKey): ArtworkDecision =
+        ArtworkDecision(
+            decisionKey = key,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt123"),
+            canonicalContentId = "imdb:tt123",
+            imageType = ArtworkType.POSTER,
+            selectedCandidate = PersistedArtworkCandidate(
+                provider = ArtworkProviderId.Placeholder,
+                sourceRole = ArtworkSourceRole.PLACEHOLDER,
+                sourceHash = null,
+                redactedSourceForTrace = null,
+                providerTemplate = null,
+                priority = 1
+            ),
+            rejectedCandidates = emptyList(),
+            policyVersion = 1,
+            settingsHash = "settings",
+            credentialHash = "credential",
+            createdAtMs = 100,
+            expiresAtMs = 200,
+            staleUntilMs = 300
+        )
+
+    private fun persistedSnapshotJson(prefs: InMemorySharedPreferences): String =
+        prefs.getAll().values.single() as String
 
     private fun localePrefs(tag: String): InMemorySharedPreferences {
         return InMemorySharedPreferences().also { prefs ->
