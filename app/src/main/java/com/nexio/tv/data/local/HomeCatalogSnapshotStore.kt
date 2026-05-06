@@ -68,6 +68,7 @@ class HomeCatalogSnapshotStore private constructor(
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 4
         private const val ARTWORK_DECISION_PREFIX = "nexio-artwork://decision/"
+        private const val LEGACY_INTEGRATION_POSTER_PREFIX = "integration-poster://"
         private val PREMIUM_PROVIDER_URL_PREFIXES = listOf(
             "https://api.ratingposterdb.com/",
             "https://api.top-posters.com/"
@@ -309,13 +310,17 @@ class HomeCatalogSnapshotStore private constructor(
     }
 
     private fun shouldClearPosterRef(ref: String): Boolean {
-        return isRawPremiumProviderUrl(ref) || isMissingDecisionRef(ref)
+        return isRawPremiumProviderUrl(ref) || isLegacyIntegrationPosterRef(ref) || isMissingDecisionRef(ref)
     }
 
     private fun isRawPremiumProviderUrl(ref: String): Boolean {
         return PREMIUM_PROVIDER_URL_PREFIXES.any { prefix ->
             ref.startsWith(prefix, ignoreCase = true)
         }
+    }
+
+    private fun isLegacyIntegrationPosterRef(ref: String): Boolean {
+        return ref.startsWith(LEGACY_INTEGRATION_POSTER_PREFIX, ignoreCase = true)
     }
 
     private fun isMissingDecisionRef(ref: String): Boolean {

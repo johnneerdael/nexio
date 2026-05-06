@@ -1,11 +1,8 @@
 package com.nexio.tv.core.metadata.router
 
-import com.nexio.tv.core.image.PosterIntegrationRequest
-import com.nexio.tv.core.integration.IntegrationProvider
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FieldResolverTest {
@@ -86,7 +83,8 @@ class FieldResolverTest {
     }
 
     @Test
-    fun `premium artwork provider replaces primary poster only`() {
+    fun `shared premium artwork provider replaces primary poster only`() {
+        val premiumPoster = "nexio-artwork://decision/top-posters-poster"
         val primary = MetadataCandidate(
             provider = MetadataPrimaryProvider.TMDB,
             sourceProvider = "TMDB",
@@ -104,7 +102,7 @@ class FieldResolverTest {
             fields = mapOf(
                 ResolvedField.CANONICAL_ID to FieldValue("topposters:wrong", FieldOwner.ARTWORK),
                 ResolvedField.TITLE to FieldValue("Premium title", FieldOwner.ARTWORK),
-                ResolvedField.POSTER to FieldValue("integration-poster://fetch?provider=TOP_POSTERS", FieldOwner.ARTWORK)
+                ResolvedField.POSTER to FieldValue(premiumPoster, FieldOwner.ARTWORK)
             )
         )
 
@@ -112,14 +110,14 @@ class FieldResolverTest {
 
         assertEquals("tmdb:123", document.canonicalId)
         assertEquals("Primary title", document.title)
-        assertEquals("integration-poster://fetch?provider=TOP_POSTERS", document.poster)
+        assertEquals(premiumPoster, document.poster)
         assertEquals(SourceRole.PRIMARY, document.sourceRoles[ResolvedField.TITLE])
         assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
         assertEquals("TOP_POSTERS", document.sourceProviders[ResolvedField.POSTER])
     }
 
     @Test
-    fun `premium artwork override carries primary poster as render fallback`() {
+    fun `legacy premium integration poster does not replace primary poster`() {
         val primaryPoster = "https://image.tmdb.org/t/p/w500/native.jpg"
         val primary = MetadataCandidate(
             provider = MetadataPrimaryProvider.TMDB,
@@ -131,12 +129,7 @@ class FieldResolverTest {
                 ResolvedField.POSTER to FieldValue(primaryPoster, FieldOwner.PRIMARY, SourceRole.PRIMARY)
             )
         )
-        val premiumPoster = PosterIntegrationRequest(
-            provider = IntegrationProvider.RPDB,
-            cacheKey = "rpdb:imdb:tt0137523:poster-default:credential",
-            apiKey = "key",
-            path = "imdb/poster-default/tt0137523.jpg"
-        ).toModel()
+        val premiumPoster = "integration-poster://fetch?provider=RPDB"
         val premiumArtwork = MetadataCandidate(
             provider = MetadataPrimaryProvider.RPDB,
             resolverType = ResolverType.ARTWORK,
@@ -148,17 +141,14 @@ class FieldResolverTest {
         )
 
         val document = resolver.resolve(primary, listOf(premiumArtwork))
-        val request = PosterIntegrationRequest.fromModel(document.poster!!)
 
         assertEquals("Primary title", document.title)
-        assertEquals(IntegrationProvider.RPDB, request?.provider)
-        assertEquals(primaryPoster, request?.fallbackUrl)
-        assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
+        assertEquals(primaryPoster, document.poster)
+        assertEquals(SourceRole.PRIMARY, document.sourceRoles[ResolvedField.POSTER])
         assertEquals(
-            "premium_artwork_provider_precedence",
+            "legacy_premium_artwork_model_not_displayable",
             document.rejectedCandidatesByField.getValue(ResolvedField.POSTER).single()["reason"]
         )
-        assertTrue(document.poster!!.startsWith("integration-poster://fetch?"))
     }
 
     @Test
@@ -186,12 +176,7 @@ class FieldResolverTest {
                 ResolvedField.POSTER to FieldValue(primaryPoster, FieldOwner.PRIMARY, SourceRole.PRIMARY)
             )
         )
-        val premiumPoster = PosterIntegrationRequest(
-            provider = IntegrationProvider.RPDB,
-            cacheKey = "rpdb:imdb:tt0137523:poster-default:credential",
-            apiKey = "key",
-            path = "imdb/poster-default/tt0137523.jpg"
-        ).toModel()
+        val premiumPoster = "nexio-artwork://decision/rpdb-poster"
         val premiumArtwork = MetadataCandidate(
             provider = MetadataPrimaryProvider.RPDB,
             resolverType = ResolverType.ARTWORK,
@@ -207,10 +192,8 @@ class FieldResolverTest {
             primary = primary,
             secondary = listOf(premiumArtwork)
         )
-        val request = PosterIntegrationRequest.fromModel(document.poster!!)
 
-        assertEquals(IntegrationProvider.RPDB, request?.provider)
-        assertEquals(primaryPoster, request?.fallbackUrl)
+        assertEquals(premiumPoster, document.poster)
         assertEquals(SourceRole.ARTWORK, document.sourceRoles[ResolvedField.POSTER])
         assertEquals(
             listOf(

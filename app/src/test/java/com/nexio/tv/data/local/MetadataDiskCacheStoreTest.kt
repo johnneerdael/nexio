@@ -16,6 +16,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -233,6 +234,76 @@ class MetadataDiskCacheStoreTest {
         store.flushPendingWritesForTest()
 
         assertEquals(meta, store.readMeta("movie:tt1", "en", "RPDB:12345"))
+    }
+
+    @Test
+    fun `writeMeta sanitizes raw premium poster urls from persisted JSON`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        val meta = meta("tt1").copy(
+            poster = "https://api.ratingposterdb.com/secret/imdb/poster-default/tt1.jpg",
+            posterProviderTag = "rpdb"
+        )
+
+        store.writeMeta("movie:tt1", "en", "RPDB:12345", meta)
+        store.flushPendingWritesForTest()
+
+        val raw = prefs.all.getValue("meta::movie:tt1::en::RPDB:12345") as String
+        assertFalse(raw.contains("api.ratingposterdb.com"))
+        assertFalse(raw.contains("secret"))
+        assertFalse(raw.contains("posterProviderTag"))
+        assertNull(store.readMeta("movie:tt1", "en", "RPDB:12345"))
+    }
+
+    @Test
+    fun `readMeta sanitizes legacy integration poster refs from cached JSON`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "meta::movie:tt1::en::native",
+            """
+            {
+              "value": {
+                "id": "tt1",
+                "type": "MOVIE",
+                "rawType": "movie",
+                "name": "Legacy Movie",
+                "poster": "integration-poster://fetch?provider=RPDB",
+                "posterShape": "POSTER",
+                "background": null,
+                "logo": null,
+                "description": null,
+                "releaseInfo": "2024",
+                "imdbRating": 8.0,
+                "ratingSource": "IMDB",
+                "genres": [],
+                "runtime": "120m",
+                "director": [],
+                "writer": [],
+                "cast": [],
+                "castMembers": [],
+                "videos": [],
+                "productionCompanies": [],
+                "networks": [],
+                "country": null,
+                "awards": null,
+                "language": null,
+                "links": [],
+                "trailerYtIds": [],
+                "posterProviderTag": "rpdb"
+              },
+              "languageEpoch": 0,
+              "metaSchemaVersion": 4,
+              "updatedAtMs": 1700000000000
+            }
+            """.trimIndent()
+        ).commit()
+
+        val restored = store.readMeta("movie:tt1", "en", "native")
+
+        assertNotNull(restored)
+        assertNull(restored?.poster)
+        assertNull(restored?.posterProviderTag)
     }
 
     @Test

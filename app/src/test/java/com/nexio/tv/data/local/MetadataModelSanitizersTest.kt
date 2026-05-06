@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.Video
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class MetadataModelSanitizersTest {
@@ -166,6 +167,58 @@ class MetadataModelSanitizersTest {
         assertEquals(TitleRatingSource.IMDB, sanitized.ratingSource)
     }
 
+    @Test
+    fun `sanitize meta removes legacy premium poster refs`() {
+        val meta = sampleMeta(
+            poster = "integration-poster://fetch?provider=RPDB",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertNull(sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `sanitize meta removes raw premium poster urls`() {
+        val meta = sampleMeta(
+            poster = "https://api.ratingposterdb.com/secret/imdb/poster-default/tt123.jpg",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertNull(sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `sanitize home display metadata removes raw premium poster urls`() {
+        val metadata = HomeDisplayMetadata(
+            poster = "https://api.top-posters.com/secret/imdb/poster/tt123.jpg",
+            posterProviderTag = "top_posters"
+        )
+
+        val sanitized = metadata.sanitizedForCache()
+
+        assertNull(sanitized.poster)
+        assertNull(sanitized.posterProviderTag)
+    }
+
+    @Test
+    fun `sanitize meta preserves nexio artwork refs`() {
+        val meta = sampleMeta(
+            poster = "nexio-artwork://decision/premium-poster",
+            posterProviderTag = "rpdb"
+        )
+
+        val sanitized = meta.sanitizedForCache()
+
+        assertEquals("nexio-artwork://decision/premium-poster", sanitized.poster)
+        assertEquals("rpdb", sanitized.posterProviderTag)
+    }
+
     private fun legacyPreviewJson(): MetaPreview {
         return gson.fromJson(
             """
@@ -192,4 +245,38 @@ class MetadataModelSanitizersTest {
             MetaPreview::class.java
         )
     }
+
+    private fun sampleMeta(
+        poster: String?,
+        posterProviderTag: String?
+    ): Meta =
+        Meta(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Movie",
+            poster = poster,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = "2025",
+            imdbRating = 8.3f,
+            ratingSource = TitleRatingSource.IMDB,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            writer = emptyList(),
+            cast = emptyList(),
+            castMembers = emptyList(),
+            videos = emptyList<Video>(),
+            productionCompanies = emptyList<MetaCompany>(),
+            networks = emptyList<MetaCompany>(),
+            ageRating = null,
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList<MetaLink>(),
+            trailerYtIds = emptyList(),
+            posterProviderTag = posterProviderTag
+        )
 }

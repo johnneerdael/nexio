@@ -58,4 +58,28 @@ class PremiumArtworkSharedPipelineContractTest {
         assertFalse(combined.contains("api.ratingposterdb.com"))
         assertFalse(combined.contains("api.top-posters.com"))
     }
+
+    @Test
+    fun `production metadata paths do not call legacy premium poster url resolver`() {
+        val offenders = File("app/src/main/java/com/nexio/tv")
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filterNot { it.invariantSeparatorsPath.endsWith("/core/poster/PosterRatingsUrlResolver.kt") }
+            .flatMap { file ->
+                file.readLines().mapIndexedNotNull { index, line ->
+                    if (line.contains("resolvePosterUrl(")) {
+                        "${file.invariantSeparatorsPath}:${index + 1}:resolvePosterUrl"
+                    } else {
+                        null
+                    }
+                }
+            }
+            .toList()
+
+        assertTrue(
+            "Production metadata/display paths must use resolvePosterArtworkRef/String so premium posters stay in the shared artwork pipeline:\n" +
+                offenders.joinToString(separator = "\n"),
+            offenders.isEmpty()
+        )
+    }
 }

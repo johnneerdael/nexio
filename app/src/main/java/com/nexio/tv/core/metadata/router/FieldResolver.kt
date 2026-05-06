@@ -3,7 +3,6 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.artwork.ArtworkBundle
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
 import com.nexio.tv.core.artwork.toLegacyArtworkString
-import com.nexio.tv.core.image.PosterIntegrationRequest
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
 import com.nexio.tv.core.trace.TraceMetadataEvents
 import javax.inject.Inject
@@ -323,7 +322,8 @@ class FieldResolver @Inject constructor(
     }
 
     private fun artworkString(fieldValue: Any?, ref: ArtworkDisplayRef?): String? =
-        ref.toLegacyArtworkString() ?: fieldValue as? String
+        ref.toLegacyArtworkString() ?: (fieldValue as? String)
+            ?.takeUnless { it.isLegacyPosterDisplayModel() }
 
     private fun SourceRole?.isPreviewRole(): Boolean =
         this == SourceRole.RAIL_PREVIEW || this == SourceRole.ADDON_PREVIEW
@@ -359,6 +359,17 @@ class FieldResolver @Inject constructor(
         rejectedByField: MutableMap<ResolvedField, MutableList<Map<String, Any?>>>
     ) {
         candidate.fields.forEach { (field, fieldValue) ->
+            if (isRejectedLegacyPosterDisplayModel(field, fieldValue)) {
+                rejectedByField.getOrPut(field) { mutableListOf() }.add(
+                    mapOf(
+                        "provider" to candidate.provider.name,
+                        "sourceProvider" to candidate.sourceProvider,
+                        "sourceRole" to effectiveSourceRole(candidate, fieldValue).name,
+                        "reason" to "legacy_premium_artwork_model_not_displayable"
+                    )
+                )
+                return@forEach
+            }
             val existingOwner = owners[field]
             if (existingOwner == null) {
                 selectField(
@@ -376,9 +387,7 @@ class FieldResolver @Inject constructor(
             } else if (canReplaceExistingField(field, sourceRoles[field], candidate, fieldValue)) {
                 val replacementReason = replacementReason(field, sourceRoles[field], candidate, fieldValue)
                 val replacementFieldValue = fieldValueForReplacement(
-                    field = field,
-                    fieldValue = fieldValue,
-                    previousValue = fields[field]
+                    fieldValue = fieldValue
                 )
                 ignoredOverwrites += IgnoredFieldOverwrite(
                     field = field,
@@ -426,16 +435,8 @@ class FieldResolver @Inject constructor(
     }
 
     private fun fieldValueForReplacement(
-        field: ResolvedField,
-        fieldValue: FieldValue,
-        previousValue: Any?
-    ): FieldValue {
-        if (field != ResolvedField.POSTER) return fieldValue
-        val fallback = previousValue as? String ?: return fieldValue
-        val model = fieldValue.value as? String ?: return fieldValue
-        val request = PosterIntegrationRequest.fromModel(model) ?: return fieldValue
-        return fieldValue.copy(value = request.withFallbackUrlIfAbsent(fallback).toModel())
-    }
+        fieldValue: FieldValue
+    ): FieldValue = fieldValue
 
     private fun canReplaceExistingField(
         field: ResolvedField,
@@ -443,6 +444,7 @@ class FieldResolver @Inject constructor(
         candidate: MetadataCandidate,
         fieldValue: FieldValue
     ): Boolean {
+        if (isRejectedLegacyPosterDisplayModel(field, fieldValue)) return false
         if (canReplacePosterWithPremiumArtwork(field, candidate, fieldValue)) return true
         if (existingSourceRole != SourceRole.RAIL_PREVIEW) return false
 
@@ -477,10 +479,21 @@ class FieldResolver @Inject constructor(
         fieldValue: FieldValue
     ): Boolean {
         return field == ResolvedField.POSTER &&
+            !isRejectedLegacyPosterDisplayModel(field, fieldValue) &&
             fieldValue.owner == FieldOwner.ARTWORK &&
             effectiveSourceRole(candidate, fieldValue) == SourceRole.ARTWORK &&
             candidate.provider in premiumArtworkProviders
     }
+
+    private fun isRejectedLegacyPosterDisplayModel(
+        field: ResolvedField,
+        fieldValue: FieldValue
+    ): Boolean =
+        field == ResolvedField.POSTER &&
+            (fieldValue.value as? String)?.isLegacyPosterDisplayModel() == true
+
+    private fun String.isLegacyPosterDisplayModel(): Boolean =
+        startsWith("integration-poster://", ignoreCase = true)
 
     private fun selectField(
         fields: MutableMap<ResolvedField, Any>,

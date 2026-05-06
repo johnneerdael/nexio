@@ -159,7 +159,7 @@ class TvdbMetadataServiceTest {
 
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery { posterResolver.getActiveProvider() } returns null
-        every { posterResolver.resolvePosterUrl(any(), any(), any(), null) } answers { firstArg() }
+        every { posterResolver.resolvePosterArtworkString(any(), any(), any(), null) } answers { firstArg() }
         every { cacheStore.readTvdbEnrichment(any(), any(), any(), any()) } returns null
         every { cacheStore.writeTvdbEnrichment(any(), any(), any(), any(), any()) } just Runs
         coEvery {
@@ -343,7 +343,7 @@ class TvdbMetadataServiceTest {
         } returns null
         every { cacheStore.writeTvdbEnrichment(any(), any(), any(), any(), any()) } just Runs
         every {
-            posterResolver.resolvePosterUrl(
+            posterResolver.resolvePosterArtworkString(
                 originalPosterUrl = "https://art.example/poster.jpg",
                 contentId = "tvdb:121361",
                 contentType = ContentType.SERIES,
@@ -980,7 +980,7 @@ class TvdbMetadataServiceTest {
         every { cacheStore.writeTvdbEnrichment(any(), any(), any(), any(), any()) } just Runs
         every { cacheStore.readTvdbSeasonEpisodes(any(), any(), any(), any()) } returns null
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
-        every { posterResolver.resolvePosterUrl(any(), any(), any(), null) } answers { firstArg() }
+        every { posterResolver.resolvePosterArtworkString(any(), any(), any(), null) } answers { firstArg() }
 
         val mergeAliasStore = mockk<com.nexio.tv.data.local.TvdbMergeAliasStore>(relaxed = true)
         coEvery { mergeAliasStore.resolveAlias(any(), any()) } returns null

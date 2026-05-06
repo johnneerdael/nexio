@@ -14,6 +14,8 @@ import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.orDefault
 
 internal fun MetaPreview.sanitizedForCache(): MetaPreview = copy(
+    poster = poster.sanitizedPremiumArtworkRef(),
+    posterProviderTag = posterProviderTag.takeIf { poster.sanitizedPremiumArtworkRef() != null },
     ratingSource = ratingSource.orDefault(),
     genres = genres.orEmpty(),
     trailerYtIds = trailerYtIds.orEmpty(),
@@ -24,6 +26,8 @@ internal fun MetaPreview.sanitizedForCache(): MetaPreview = copy(
 )
 
 internal fun HomeDisplayMetadata.sanitizedForCache(): HomeDisplayMetadata = copy(
+    poster = poster.sanitizedPremiumArtworkRef(),
+    posterProviderTag = posterProviderTag.takeIf { poster.sanitizedPremiumArtworkRef() != null },
     ratingSource = ratingSource.orDefault(),
     genres = genres.orEmpty()
 )
@@ -33,6 +37,8 @@ internal fun CatalogRow.sanitizedForCache(): CatalogRow = copy(
 )
 
 internal fun Meta.sanitizedForCache(): Meta = copy(
+    poster = poster.sanitizedPremiumArtworkRef(),
+    posterProviderTag = posterProviderTag.takeIf { poster.sanitizedPremiumArtworkRef() != null },
     ratingSource = ratingSource.orDefault(),
     genres = genres.orEmpty(),
     director = director.orEmpty(),
@@ -45,6 +51,14 @@ internal fun Meta.sanitizedForCache(): Meta = copy(
     links = links.orEmpty(),
     trailerYtIds = trailerYtIds.orEmpty()
 )
+
+private fun String?.sanitizedPremiumArtworkRef(): String? {
+    val value = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    if (value.startsWith("integration-poster://", ignoreCase = true)) return null
+    if (value.startsWith("https://api.ratingposterdb.com/", ignoreCase = true)) return null
+    if (value.startsWith("https://api.top-posters.com/", ignoreCase = true)) return null
+    return value
+}
 
 internal fun TmdbEnrichment.sanitizedForCache(): TmdbEnrichment = copy(
     ratingSource = ratingSource.orDefault(TitleRatingSource.TMDB),

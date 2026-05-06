@@ -246,6 +246,31 @@ class HomeCatalogSnapshotStoreTest {
     }
 
     @Test
+    fun `write sanitizes legacy integration poster refs from persisted JSON`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver,
+            artworkDecisionCache = InMemoryArtworkDecisionCache()
+        )
+        val snapshot = sampleSnapshotWithPoster(
+            poster = "integration-poster://fetch?provider=RPDB",
+            posterProviderTag = "rpdb"
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        val raw = persistedSnapshotJson(snapshotPrefs)
+        assertFalse(raw.contains("integration-poster://"))
+        assertFalse(raw.contains("\"posterProviderTag\":\"rpdb\""))
+    }
+
+    @Test
     fun `read clears missing decision refs and tag`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
