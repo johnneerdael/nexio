@@ -52,12 +52,15 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertInternalArtworkRef(resolved)
+        assertNoRawPremiumUrl(resolved)
         assertFalse(resolved.orEmpty().contains("api.top-posters.com"))
         assertFalse(resolved.orEmpty().contains("ratingposterdb.com"))
         val decision = cache.get(decisionKeyFromRef(resolved!!))
         assertEquals("TOP_POSTERS", decision?.selectedCandidate?.provider?.key)
         assertEquals("tmdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("movie-550", decision?.selectedCandidate?.providerTemplate?.mediaId)
+        assertFalse(decision?.credentialHash.orEmpty().contains("key"))
+        assertEquals(64, decision?.credentialHash?.length)
     }
 
     @Test
@@ -73,12 +76,15 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertInternalArtworkRef(resolved)
+        assertNoRawPremiumUrl(resolved)
         assertFalse(resolved.orEmpty().contains("api.top-posters.com"))
         assertFalse(resolved.orEmpty().contains("ratingposterdb.com"))
         val decision = cache.get(decisionKeyFromRef(resolved!!))
         assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
         assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
         assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
+        assertFalse(decision?.credentialHash.orEmpty().contains("key"))
+        assertEquals(64, decision?.credentialHash?.length)
     }
 
     @Test
@@ -324,6 +330,32 @@ class PosterRatingsUrlResolverTest {
         assertFalse(runtimeRef.displayHints.embedsRatingOverlay)
     }
 
+    @Test
+    fun `premium key clear falls back to primary artwork`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val fallbackUrl = "https://image.tmdb.org/t/p/w500/poster.jpg"
+
+        val resolved = resolver.resolvePosterArtworkString(
+            settings = ArtworkProviderSettings(
+                rpdbApiKey = "",
+                selection = ArtworkProviderSelectionSettings(
+                    posterProvider = ArtworkProviderChoiceKey.RPDB
+                )
+            ),
+            providerIds = ProviderIds(imdb = "tt15940132"),
+            mediaKind = MetadataMediaKind.MOVIE,
+            ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt15940132"),
+            fallbackPosterUrl = fallbackUrl
+        )
+
+        assertInternalArtworkRef(resolved)
+        assertNoRawPremiumUrl(resolved)
+        val decision = cache.get(decisionKeyFromRef(resolved!!))
+        assertEquals("TMDB", decision?.selectedCandidate?.provider?.key)
+        assertNull(decision?.selectedCandidate?.providerTemplate)
+    }
+
     private fun resolver(cache: ArtworkDecisionCache): PosterRatingsUrlResolver =
         PosterRatingsUrlResolver(
             settingsDataStore = mockk<PosterRatingsSettingsDataStore>(),
@@ -366,6 +398,13 @@ class PosterRatingsUrlResolverTest {
     private fun assertInternalArtworkRef(value: String?) {
         assertNotNull(value)
         assertTrue(value!!.startsWith("nexio-artwork://"))
+    }
+
+    private fun assertNoRawPremiumUrl(value: String?) {
+        val text = value.orEmpty()
+        assertFalse(text.startsWith("https://api.ratingposterdb.com"))
+        assertFalse(text.startsWith("https://api.top-posters.com"))
+        assertFalse(text.startsWith("integration-poster://"))
     }
 
     private fun decisionKeyFromRef(value: String): ArtworkDecisionKey =

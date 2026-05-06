@@ -16,15 +16,25 @@ import okio.Path.Companion.toOkioPath
 
 class NexioArtworkFetcher(
     private val assetKey: ArtworkAssetKey?,
+    private val decisionKey: ArtworkDecisionKey?,
     private val repository: ArtworkAssetRepository
 ) : Fetcher {
     override suspend fun fetch(): FetchResult? {
-        val key = assetKey ?: return null
-        val file = repository.getExistingFile(key) ?: return null
-        val source = createImageSource(file)
+        val result = when {
+            assetKey != null -> {
+                val file = repository.getExistingFile(assetKey) ?: return null
+                ArtworkFetchFile(file = file, mimeType = null)
+            }
+            decisionKey != null -> {
+                val materialized = repository.getOrFetchDecision(decisionKey) ?: return null
+                ArtworkFetchFile(file = materialized.localFile, mimeType = materialized.mimeType)
+            }
+            else -> return null
+        }
+        val source = createImageSource(result.file)
         return SourceResult(
             source = source,
-            mimeType = null,
+            mimeType = result.mimeType,
             dataSource = DataSource.DISK
         )
     }
@@ -32,6 +42,11 @@ class NexioArtworkFetcher(
     private fun createImageSource(file: java.io.File): ImageSource {
         return ImageSource(file = file.toOkioPath())
     }
+
+    private data class ArtworkFetchFile(
+        val file: java.io.File,
+        val mimeType: String?
+    )
 
     @Singleton
     class Factory @Inject constructor(
@@ -46,12 +61,14 @@ class NexioArtworkFetcher(
             parseAssetKey(model)?.let { assetKey ->
                 return NexioArtworkFetcher(
                     assetKey = assetKey,
+                    decisionKey = null,
                     repository = repository
                 )
             }
-            parseDecisionKey(model)?.let {
+            parseDecisionKey(model)?.let { decisionKey ->
                 return NexioArtworkFetcher(
                     assetKey = null,
+                    decisionKey = decisionKey,
                     repository = repository
                 )
             }

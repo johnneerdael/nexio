@@ -8,8 +8,14 @@ import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.IntegrationWorkClass
+import com.nexio.tv.core.trace.NoopRuntimeTraceSink
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
+import javax.inject.Inject
+import javax.inject.Singleton
 
 fun interface ArtworkByteLoader {
     suspend fun load(source: ArtworkSource, decision: ArtworkDecision): IntegrationLoadResult<ByteArray>
@@ -34,13 +40,44 @@ data class ArtworkAssetResult(
     val networkExecuted: Boolean
 )
 
-class ArtworkAssetRepository(
+@Singleton
+class ArtworkAssetRepository @Inject constructor(
     private val runtime: IntegrationRuntime,
     private val diskCache: ArtworkAssetDiskCache,
     private val sourceMaterializer: ArtworkSourceMaterializer,
-    private val byteLoader: ArtworkByteLoader = UnregisteredArtworkByteLoader(),
-    private val nowMs: () -> Long = { System.currentTimeMillis() }
+    private val byteLoader: ArtworkByteLoader,
+    private val decisionCache: ArtworkDecisionCache,
+    private val traceSink: RuntimeTraceSink = NoopRuntimeTraceSink
 ) {
+    private val traceSequence = AtomicLong(0L)
+
+    suspend fun getOrFetchDecision(decisionKey: ArtworkDecisionKey): ArtworkAssetResult? {
+        val decision = decisionCache.get(decisionKey)
+        traceArtwork(
+            eventType = "artwork.decision_lookup",
+            payload = mapOf(
+                "decisionKey" to decisionKey.value,
+                "found" to (decision != null)
+            )
+        )
+        if (decision == null) return null
+
+        val result = getOrFetch(decision)
+        traceArtwork(
+            eventType = "artwork.asset_materialized",
+            payload = mapOf(
+                "decisionKey" to decisionKey.value,
+                "assetKey" to result?.assetKey?.value,
+                "provider" to result?.record?.provider?.key,
+                "imageType" to result?.record?.imageType?.name,
+                "cacheDecision" to result?.cacheDecision,
+                "networkExecuted" to result?.networkExecuted,
+                "success" to (result != null)
+            )
+        )
+        return result
+    }
+
     suspend fun getOrFetch(decision: ArtworkDecision): ArtworkAssetResult? {
         val materialized = sourceMaterializer.materialize(decision) ?: return null
         val apiShapeId = materialized.apiShapeId
@@ -75,7 +112,7 @@ class ArtworkAssetRepository(
             sourceHash = materialized.sourceHash,
             mimeType = ByteArrayIntegrationCodec.mimeType,
             byteCount = bytes.size.toLong(),
-            fetchedAtMs = nowMs()
+            fetchedAtMs = System.currentTimeMillis()
         )
         val write = diskCache.write(record, bytes)
         return ArtworkAssetResult(
@@ -93,6 +130,23 @@ class ArtworkAssetRepository(
     fun getExistingFile(assetKey: ArtworkAssetKey): File? =
         diskCache.getExistingFile(assetKey)
 
+    private fun traceArtwork(
+        eventType: String,
+        payload: Map<String, Any?>
+    ) {
+        traceSink.emit(
+            TraceEventEnvelope(
+                traceSessionId = traceSink.activeTraceSessionId() ?: LOGCAT_ONLY_TRACE_SESSION_ID,
+                sequence = traceSequence.incrementAndGet(),
+                wallClockMs = System.currentTimeMillis(),
+                elapsedRealtimeMs = System.nanoTime() / 1_000_000,
+                threadName = Thread.currentThread().name,
+                eventType = eventType,
+                payload = payload
+            )
+        )
+    }
+
     private fun IntegrationFetchResult<ByteArray>.bytesOrNull(): ByteArray? =
         when (this) {
             is IntegrationFetchResult.Fresh -> value
@@ -108,4 +162,8 @@ class ArtworkAssetRepository(
             is IntegrationFetchResult.Stale -> "STALE_HIT"
             IntegrationFetchResult.Missing -> "MISS_NETWORK_SUPPRESSED"
         }
+
+    private companion object {
+        const val LOGCAT_ONLY_TRACE_SESSION_ID = "logcat-only"
+    }
 }

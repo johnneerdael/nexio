@@ -3,6 +3,7 @@ package com.nexio.tv.core.poster
 import com.nexio.tv.core.artwork.ArtworkCacheKeys
 import com.nexio.tv.core.artwork.ArtworkAssetKey
 import com.nexio.tv.core.artwork.ArtworkCandidate
+import com.nexio.tv.core.artwork.ArtworkCredentialHash
 import com.nexio.tv.core.artwork.ArtworkDecision
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDisplayHints
@@ -590,10 +591,10 @@ class PosterRatingsUrlResolver @Inject constructor(
 
     private fun ArtworkProviderSettings.credentialHash(providerChoice: ArtworkProviderChoiceKey): String? =
         when (providerChoice) {
-            ArtworkProviderChoiceKey.RPDB -> rpdbApiKey.trim()
-            ArtworkProviderChoiceKey.TOP_POSTERS -> topPostersApiKey.trim()
-            else -> ""
-        }.takeIf { it.isNotBlank() }?.let { stableHashHex(it) }
+            ArtworkProviderChoiceKey.RPDB -> ArtworkCredentialHash.hashCredential(rpdbApiKey)
+            ArtworkProviderChoiceKey.TOP_POSTERS -> ArtworkCredentialHash.hashCredential(topPostersApiKey)
+            else -> null
+        }
 
     private fun topPostersThumbnailPathParams(episodeContext: EpisodeArtworkContext): Map<String, String> =
         mapOf(

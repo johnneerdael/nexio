@@ -7,11 +7,15 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
@@ -231,17 +235,26 @@ private fun ArtworkProviderSelectionDialog(
         subtitle = stringResource(R.string.poster_ratings_provider_dialog_subtitle),
         width = 560.dp
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
         ) {
-            choices.forEach { choice ->
-                SettingsChoiceChip(
-                    label = providerChoiceLabel(choice),
-                    selected = choice == selected,
-                    onClick = { onSelect(choice) },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(
+                    items = choices,
+                    key = { choice -> choice.value }
+                ) { choice ->
+                    SettingsChoiceChip(
+                        label = providerChoiceLabel(choice),
+                        selected = choice == selected,
+                        onClick = { onSelect(choice) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
