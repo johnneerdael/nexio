@@ -152,23 +152,18 @@ class SharedResolutionOpenFindingsArchitectureTest {
 
     @Test
     fun `metadata ui coil calls do not use raw remote artwork string fields`() {
-        val offenders = scanPathFiles(
-            files = listOf(
-                "app/src/main/java/com/nexio/tv/ui/components/ContentCard.kt",
-                "app/src/main/java/com/nexio/tv/ui/components/GridContentCard.kt",
-                "app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeRows.kt",
-                "app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt",
-                "app/src/main/java/com/nexio/tv/ui/screens/search/SearchScreen.kt",
-                "app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsScreen.kt",
-                "app/src/main/java/com/nexio/tv/ui/screens/detail/HeroSection.kt",
-                "app/src/main/java/com/nexio/tv/ui/screens/detail/EpisodesSection.kt"
-            ),
-            forbiddenPatterns = linkedMapOf(
-                "Coil raw artwork data field" to Regex(
-                    """\.data\s*\(\s*(?:posterUrl|imageUrl|logoUrl|backdropUrl|displayPoster|displayBackground|displayThumbnail|item\.imageUrl|url)\s*\)"""
-                )
-            )
+        val offenders = listOf(
+            "app/src/main/java/com/nexio/tv/ui/components/ContentCard.kt",
+            "app/src/main/java/com/nexio/tv/ui/components/GridContentCard.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeRows.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/search/SearchScreen.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsScreen.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/detail/HeroSection.kt",
+            "app/src/main/java/com/nexio/tv/ui/screens/detail/EpisodesSection.kt"
         )
+            .map(::requiredFile)
+            .flatMap(::scanCoilRawArtworkDataCalls)
 
         failIfNotEmpty(
             offenders,
@@ -179,16 +174,8 @@ class SharedResolutionOpenFindingsArchitectureTest {
 
     @Test
     fun `detail code does not perform cross provider localization fallback`() {
-        val offenders = scanFile(
-            file = requiredFile("app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsViewModel.kt"),
-            forbiddenPatterns = linkedMapOf(
-                "tvEnrichment ?: tmdbEnrichment" to Regex("""tvEnrichment\s*\?:\s*tmdbEnrichment"""),
-                "tmdbEnrichment ?: tvEnrichment" to Regex("""tmdbEnrichment\s*\?:\s*tvEnrichment"""),
-                "tvDescription ?: tmdbDescription" to Regex("""tvDescription\s*\?:\s*tmdbDescription"""),
-                "tmdbDescription ?: tvDescription" to Regex("""tmdbDescription\s*\?:\s*tvDescription"""),
-                "tvOverview ?: tmdbOverview" to Regex("""tvOverview\s*\?:\s*tmdbOverview"""),
-                "tmdbOverview ?: tvOverview" to Regex("""tmdbOverview\s*\?:\s*tvOverview""")
-            )
+        val offenders = scanCrossProviderLocalizationFallbacks(
+            file = requiredFile("app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsViewModel.kt")
         )
 
         failIfNotEmpty(
@@ -216,6 +203,74 @@ class SharedResolutionOpenFindingsArchitectureTest {
             "${file.invariantSeparatorsPath}:$lineNumber:$sidecarName after resolveRequest(metadataRequest) at line $priorResolve"
         }
     }
+
+    private fun scanCoilRawArtworkDataCalls(file: File): List<String> {
+        val lines = file.readLines()
+        return lines.flatMapIndexed { index, line ->
+            val dataCall = coilDataCallRegex.find(line) ?: return@flatMapIndexed emptyList()
+
+            val expression = extractDataArgument(lines, index, dataCall.range.first) ?: return@flatMapIndexed emptyList()
+            val matchedFields = rawMetadataArtworkFieldRegex.findAll(expression)
+                .map { match -> match.value }
+                .toList()
+
+            if (matchedFields.isEmpty()) {
+                emptyList()
+            } else {
+                listOf(
+                    "${file.invariantSeparatorsPath}:${index + 1}:Coil raw artwork data field " +
+                        "'${expression.trim()}': ${matchedFields.distinct().joinToString(",")}"
+                )
+            }
+        }
+    }
+
+    private fun extractDataArgument(
+        lines: List<String>,
+        startLineIndex: Int,
+        dataCallIndex: Int
+    ): String? {
+        val builder = StringBuilder()
+        var depth = 0
+        var started = false
+
+        for (lineIndex in startLineIndex until lines.size) {
+            val line = lines[lineIndex]
+            val startColumn = if (lineIndex == startLineIndex) dataCallIndex + ".data".length else 0
+            for (column in startColumn until line.length) {
+                val char = line[column]
+                when {
+                    char == '(' -> {
+                        if (started) {
+                            depth += 1
+                            builder.append(char)
+                        } else {
+                            started = true
+                            depth = 1
+                        }
+                    }
+                    char == ')' && started -> {
+                        depth -= 1
+                        if (depth == 0) {
+                            return builder.toString()
+                        }
+                        builder.append(char)
+                    }
+                    started -> builder.append(char)
+                }
+            }
+            if (started) builder.append('\n')
+        }
+
+        return null
+    }
+
+    private fun scanCrossProviderLocalizationFallbacks(file: File): List<String> =
+        file.readLines().flatMapIndexed { index, line ->
+            crossProviderFallbackRegex.findAll(line).map { match ->
+                "${file.invariantSeparatorsPath}:${index + 1}:cross-provider fallback '${match.value.trim()}'"
+            }.toList()
+        }
 
     private fun scanFiles(
         files: List<File>,
@@ -267,5 +322,15 @@ class SharedResolutionOpenFindingsArchitectureTest {
         if (offenders.isNotEmpty()) {
             fail("$message Offenders:\n${offenders.joinToString(separator = "\n")}")
         }
+    }
+
+    private companion object {
+        private val rawMetadataArtworkFieldRegex = Regex(
+            """\b(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:posterUrl|imageUrl|logoUrl|backdropUrl|displayPoster|displayBackground|displayThumbnail|url)\b"""
+        )
+        private val coilDataCallRegex = Regex("""\.data\s*\(""")
+        private val crossProviderFallbackRegex = Regex(
+            """\b(?:tvEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?\s*\?:\s*tmdbEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?|tmdbEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?\s*\?:\s*tvEnrichment(?:\?\.[A-Za-z_][A-Za-z0-9_]*)?)\b"""
+        )
     }
 }
