@@ -14,6 +14,12 @@ import com.nexio.tv.domain.model.PersonDetail
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Low-level TMDB secondary adapter used by ProviderPlanRunner adapters only.
+ *
+ * Production UI, ViewModel, home, screensaver, player, and facade code must not inject this class.
+ * Provider-plan adapters may call it while executing IntegrationRuntime-governed provider steps.
+ */
 @Singleton
 class MetadataSecondaryRepository @Inject constructor(
     private val tmdbMetadataService: TmdbMetadataService,

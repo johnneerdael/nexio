@@ -3,11 +3,10 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
 import com.nexio.tv.domain.model.ContentType
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,52 +16,58 @@ import org.junit.Test
  * Pins the contract that `MetadataRouterFacade.fetchTmdbEnrichment(...)`:
  *  1. Fires the canonical `metadata.route_decision` (and at least one `metadata.field_selected`)
  *     trace events via the resolve pipeline.
- *  2. Returns the rich [TmdbEnrichment] from [MetadataSecondaryRepository] unchanged.
- *
- * This is the facade-level pin for Task 5 of the cluster-A facade-bypass migration:
- * `MetaDetailsViewModel` no longer calls the secondary repository directly for TMDB
- * enrichment, so trace observability (audit's primary goal) is restored without
- * dropping the 22-field TMDB carry-set that downstream `enrichMeta(...)` needs.
+ *  2. Returns a legacy [TmdbEnrichment] projection from resolved provider-plan output.
  */
 class MetadataRouterFacadeFetchTmdbEnrichmentTest {
 
     @Test
-    fun `fetchTmdbEnrichment delegates to secondary repo and emits canonical trace events`() = runTest {
+    fun `fetchTmdbEnrichment projects resolved provider-plan output and emits canonical trace events`() = runTest {
         val sink = RecordingTraceSink()
         val events = TraceMetadataEvents(sink, sessionId = { "s1" })
-
-        val canned = TmdbEnrichment(
+        val cast = listOf(MetaCastMember(name = "Keanu Reeves", character = "Neo", tmdbId = 6384))
+        val productionCompany = MetaCompany(tmdbId = 79, name = "Village Roadshow", kind = MetaCompanyKind.COMPANY)
+        val network = MetaCompany(tmdbId = 49, name = "HBO", kind = MetaCompanyKind.NETWORK)
+        val expected = TmdbEnrichment(
             localizedTitle = "The Matrix",
             description = "Neo discovers the truth.",
-            genres = emptyList(),
-            backdrop = null,
-            logo = null,
-            poster = null,
+            genres = listOf("Action", "Science Fiction"),
+            backdrop = "/backdrop.jpg",
+            logo = "/logo.png",
+            poster = "/poster.jpg",
             directorMembers = emptyList(),
             writerMembers = emptyList(),
-            castMembers = emptyList(),
-            releaseInfo = null,
-            rating = null,
-            ratingSource = null,
+            castMembers = cast,
+            releaseInfo = "1999-03-31",
+            rating = 8.7,
             runtimeMinutes = 136,
             director = emptyList(),
             writer = emptyList(),
-            productionCompanies = emptyList(),
-            networks = emptyList(),
-            ageRating = null,
-            countries = null,
-            language = null,
+            productionCompanies = listOf(productionCompany),
+            networks = listOf(network),
+            ageRating = "R",
+            countries = listOf("US"),
+            language = "en",
             collectionId = null,
             collectionName = null
         )
 
-        val secondaryRepo = mockk<MetadataSecondaryRepository>()
-        coEvery { secondaryRepo.fetchTmdbEnrichment("603", ContentType.MOVIE) } returns canned
-
         val tmdbCandidate = MetadataCandidate(
             provider = MetadataPrimaryProvider.TMDB,
             fields = mapOf(
-                ResolvedField.TITLE to FieldValue("The Matrix", FieldOwner.PRIMARY)
+                ResolvedField.TITLE to FieldValue("The Matrix", FieldOwner.PRIMARY),
+                ResolvedField.OVERVIEW to FieldValue("Neo discovers the truth.", FieldOwner.PRIMARY),
+                ResolvedField.GENRES to FieldValue(listOf("Action", "Science Fiction"), FieldOwner.PRIMARY),
+                ResolvedField.BACKDROP to FieldValue("/backdrop.jpg", FieldOwner.PRIMARY),
+                ResolvedField.LOGO to FieldValue("/logo.png", FieldOwner.PRIMARY),
+                ResolvedField.POSTER to FieldValue("/poster.jpg", FieldOwner.PRIMARY),
+                ResolvedField.CAST to FieldValue(cast, FieldOwner.PRIMARY),
+                ResolvedField.RELEASE_DATE to FieldValue("1999-03-31", FieldOwner.PRIMARY),
+                ResolvedField.RATING to FieldValue(8.7, FieldOwner.RATING),
+                ResolvedField.RUNTIME to FieldValue(136, FieldOwner.PRIMARY),
+                ResolvedField.ORGANIZATION_LIST to FieldValue(listOf(productionCompany, network), FieldOwner.PRIMARY),
+                ResolvedField.AGE_RATING to FieldValue("R", FieldOwner.PRIMARY),
+                ResolvedField.COUNTRIES to FieldValue(listOf("US"), FieldOwner.PRIMARY),
+                ResolvedField.LANGUAGE to FieldValue("en", FieldOwner.PRIMARY)
             )
         )
 
@@ -84,8 +89,7 @@ class MetadataRouterFacadeFetchTmdbEnrichmentTest {
             providerPlanRunner = ProviderPlanRunner(
                 setOf(CannedCandidateAdapter(MetadataPrimaryProvider.TMDB, tmdbCandidate))
             ),
-            fieldResolver = FieldResolver(events),
-            metadataSecondaryRepository = secondaryRepo
+            fieldResolver = FieldResolver(events)
         )
 
         val result = facade.fetchTmdbEnrichment(
@@ -100,8 +104,7 @@ class MetadataRouterFacadeFetchTmdbEnrichmentTest {
             contentType = ContentType.MOVIE
         )
 
-        assertEquals(canned, result)
-        coVerify(exactly = 1) { secondaryRepo.fetchTmdbEnrichment("603", ContentType.MOVIE) }
+        assertEquals(expected, result)
 
         val routeEvents = sink.events.filter { it.eventType == "metadata.route_decision" }
         assertEquals(
