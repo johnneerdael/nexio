@@ -90,6 +90,7 @@ import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
+import com.nexio.tv.ui.components.FallbackArtworkImage
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
 import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.components.rememberShimmerBrush
@@ -947,8 +948,9 @@ private fun ModernCarouselCard(
 
                 Box(modifier = mediaLayerModifier) {
                     if (hasImage) {
-                        AsyncImage(
+                        FallbackArtworkImage(
                             model = imageModel,
+                            fallbackModel = item.heroPreview.poster?.takeIf { it != imageUrl },
                             contentDescription = item.title,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
