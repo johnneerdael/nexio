@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.resolver.RatingResolver
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -10,8 +11,6 @@ import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.Video
-import com.nexio.tv.ui.screens.detail.EpisodeRating
-import com.nexio.tv.ui.screens.detail.EpisodeRatingSource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -84,14 +83,16 @@ class EpisodeRatingsSelectionRepositoryTest {
             customActive = true
         )
 
-        val result = repository.getEpisodeRatings(
+        val candidates = repository.episodeRatingCandidates(
             meta = stubMeta("tmdb:100"),
             fallbackItemId = "tmdb:100",
             fallbackItemType = "series",
             episodesBySeason = mapOf(1 to setOf(1))
         )
+        val result = RatingResolver.resolveEpisodeRatings(candidates)
 
-        assertEquals(mapOf((1 to 1) to EpisodeRating(8.1, EpisodeRatingSource.OMDB)), result)
+        assertEquals(SourceRole.OMDB, result[1 to 1]?.sourceRole)
+        assertEquals(8.1, result[1 to 1]?.value ?: 0.0, 0.0)
         coVerify(exactly = 1) { tmdbService.ensureTmdbId("tmdb:100", "series") }
         coVerify(exactly = 1) { omdbRepository.getEpisodeRatingsForMeta(any(), any(), any(), any()) }
     }
@@ -122,16 +123,20 @@ class EpisodeRatingsSelectionRepositoryTest {
             customActive = false
         )
 
-        val result = repository.getEpisodeRatings(
+        val candidates = repository.episodeRatingCandidates(
             meta = stubMeta("tt27444205"),
             fallbackItemId = "",
             fallbackItemType = "series",
             episodesBySeason = mapOf(1 to setOf(1, 2, 3))
         )
+        val result = RatingResolver.resolveEpisodeRatings(candidates)
 
-        assertEquals(EpisodeRating(7.2, EpisodeRatingSource.TMDB), result[1 to 1])
-        assertEquals(EpisodeRating(8.4, EpisodeRatingSource.OMDB), result[1 to 2])
-        assertEquals(EpisodeRating(8.1, EpisodeRatingSource.OMDB), result[1 to 3])
+        assertEquals(SourceRole.PRIMARY_PROVIDER, result[1 to 1]?.sourceRole)
+        assertEquals(7.2, result[1 to 1]?.value ?: 0.0, 0.0)
+        assertEquals(SourceRole.OMDB, result[1 to 2]?.sourceRole)
+        assertEquals(8.4, result[1 to 2]?.value ?: 0.0, 0.0)
+        assertEquals(SourceRole.OMDB, result[1 to 3]?.sourceRole)
+        assertEquals(8.1, result[1 to 3]?.value ?: 0.0, 0.0)
         coVerify(exactly = 0) { customRepository.getEpisodeRatingsForMeta(any(), any(), any(), any()) }
     }
 

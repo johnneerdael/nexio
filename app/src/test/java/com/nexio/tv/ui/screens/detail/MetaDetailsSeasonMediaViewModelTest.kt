@@ -1066,7 +1066,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { addonRepository.getInstalledAddons() } returns flowOf(installedAddons)
         every { profileBoundary.currentLanguageTag() } returns "en"
-        coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+        coEvery { titleRatingOverrideRepository.titleRatingCandidates(any(), any(), any(), any(), any()) } returns emptyList()
 
         val metadataSecondaryRepositoryInstance = MetadataSecondaryRepository(
             tmdbMetadataService = resolvedTmdbMetadataService,
