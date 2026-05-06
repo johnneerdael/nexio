@@ -84,14 +84,7 @@ data class IdleTrailerScreensaverCandidate(
     )
 
     val playbackRefs: List<TrailerPlaybackRef>
-        get() = buildList {
-            trailerState.selectedPlaybackRef?.let(::add)
-            trailerState.fallbackTrailerYtIds.mapNotNullTo(this) { id ->
-                id.trim()
-                    .takeIf { it.isNotBlank() }
-                    ?.let(TrailerPlaybackRef::YouTubeId)
-            }
-        }.distinct()
+        get() = listOfNotNull(trailerState.selectedPlaybackRef).distinct()
 
     val slide: IdleScreensaverSlide
         get() = IdleScreensaverSlide(
@@ -139,6 +132,6 @@ data class ScreensaverTrailerCandidate(
     val overview: String?,
     val rating: TitleRating?,
     val artwork: ArtworkBundle,
-    val fallbackTrailerYtIds: List<String>,
+    val trailerState: TrailerDisplayState,
     val stableIds: ProviderIds
 )

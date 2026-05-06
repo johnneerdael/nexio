@@ -289,7 +289,7 @@ class MainActivityIdleScreensaverTest {
         assertEquals("movie", requests.single().type)
         assertEquals("tvdb:81189", requests.single().contentId)
         assertEquals(emptyList<String>(), requests.single().fallbackYtIds)
-        assertTrue(requests.single().providerCandidates.single() is TrailerPlaybackRef.ItemLookup)
+        assertEquals(emptyList<TrailerPlaybackRef>(), requests.single().providerCandidates)
         assertEquals(TrailerSurface.SCREENSAVER, requests.single().surface)
     }
 

@@ -219,10 +219,15 @@ private fun IdleTrailerScreensaverCandidate.toTrailerResolverRequest(
         title = title,
         year = extractIdleTrailerReleaseYear(releaseInfo),
         stableIds = stableIds,
+        fallbackYtIds = (playbackRef as? TrailerPlaybackRef.ItemLookup)?.fallbackYtIds.orEmpty(),
         surface = TrailerSurface.SCREENSAVER,
         type = itemType,
         contentId = trailerResolverContentId(),
-        providerCandidates = listOf(playbackRef)
+        providerCandidates = if (playbackRef is TrailerPlaybackRef.ItemLookup) {
+            emptyList()
+        } else {
+            listOf(playbackRef)
+        }
     )
 }
 
