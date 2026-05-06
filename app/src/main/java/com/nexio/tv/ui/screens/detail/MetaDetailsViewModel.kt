@@ -12,6 +12,7 @@ import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataRequest
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
+import com.nexio.tv.core.metadata.router.PaginationCursor
 import com.nexio.tv.core.metadata.router.ReviewsPage
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
@@ -50,6 +51,7 @@ import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ProviderId
 import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.TmdbSettings
@@ -692,7 +694,9 @@ class MetaDetailsViewModel @Inject constructor(
     private suspend fun loadResolvedDetailDocument(
         contentId: String,
         contentType: ContentType,
-        previewMeta: Meta?
+        previewMeta: Meta?,
+        reviewPage: Int? = null,
+        reviewLimit: Int? = null
     ): ResolvedDetailDisplayDocument =
         metadataDisplayRepository.resolveDetailDisplay(
             request = MetadataRequest(
@@ -704,7 +708,13 @@ class MetaDetailsViewModel @Inject constructor(
                     previewSourceItemId = contentId
                 ),
                 language = profileBoundary.currentLanguageTag(),
-                depth = MetadataDepth.DETAIL_FULL
+                depth = MetadataDepth.DETAIL_FULL,
+                pagination = reviewPage?.let { page ->
+                    PaginationCursor(
+                        page = page,
+                        limit = reviewLimit ?: KITSU_REVIEWS_PAGE_SIZE
+                    )
+                }
             ),
             ratingContext = previewMeta?.let { meta ->
                 DetailRatingDisplayContext(
@@ -940,12 +950,10 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     isAnimeDetail = true,
-                    relatedItems = enrichment.animeRelated,
-                    reviews = enrichment.resolvedDetail?.reviews.orEmpty(),
-                    isReviewsLoading = false,
-                    reviewsError = null
+                    relatedItems = enrichment.animeRelated
                 )
             }
+            loadKitsuReviewsAsync(enrichment)
         } else {
             // Start recommendations fetch early for non-anime titles.
             _uiState.update { it.copy(isAnimeDetail = false) }
@@ -1134,6 +1142,10 @@ class MetaDetailsViewModel @Inject constructor(
                 currentTmdbReviewId = resolvedDetail.identity.providerIds.tmdb
                 currentTmdbReviewContentType = resolveTmdbContentType(meta)
                 aggregatedReviewsCache = resolvedDetail.reviews.toMutableList()
+                if (resolvedDetail.reviewPagination.provider == ProviderId.TRAKT) {
+                    hasMoreTraktReviews = resolvedDetail.reviewPagination.hasMore
+                    nextTraktReviewsPage = resolvedDetail.reviewPagination.nextPage ?: 2
+                }
                 _uiState.update { state ->
                     if (state.meta == null || state.meta.id == meta.id) {
                         state.copy(
@@ -1226,7 +1238,9 @@ class MetaDetailsViewModel @Inject constructor(
             currentReviewsMetaId = meta.id
             resetReviewsPaginationState()
             aggregatedReviewsCache = enrichment.resolvedDetail?.reviews.orEmpty().toMutableList()
-            hasMoreKitsuReviews = false
+            val pagination = enrichment.resolvedDetail?.reviewPagination
+            hasMoreKitsuReviews = pagination?.provider == ProviderId.KITSU && pagination.hasMore
+            nextKitsuReviewsPage = pagination?.nextPage ?: 2
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
@@ -1243,7 +1257,62 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun loadMoreKitsuReviewsPage(expectedMetaId: String) {
-        hasMoreKitsuReviews = false
+        if (!hasMoreKitsuReviews || isLoadingMoreReviews) return
+        val currentMeta = _uiState.value.meta ?: return
+        val pageToLoad = nextKitsuReviewsPage
+
+        isLoadingMoreReviews = true
+        viewModelScope.launch {
+            try {
+                val pageDocument = runCatching {
+                    loadResolvedDetailDocument(
+                        contentId = currentMeta.id,
+                        contentType = resolveTmdbContentType(currentMeta),
+                        previewMeta = currentMeta,
+                        reviewPage = pageToLoad,
+                        reviewLimit = KITSU_REVIEWS_PAGE_SIZE
+                    )
+                }.getOrElse {
+                    if (it is CancellationException) throw it
+                    Log.w(
+                        TAG,
+                        "Failed to load Kitsu reviews page=$pageToLoad for $expectedMetaId: ${it.message}"
+                    )
+                    return@launch
+                }
+
+                if (currentReviewsMetaId != expectedMetaId) return@launch
+
+                val existingIds = aggregatedReviewsCache
+                    .asSequence()
+                    .map { "${it.source}:${it.id}" }
+                    .toHashSet()
+                val uniqueNewReviews = pageDocument.reviews.filter { review ->
+                    existingIds.add("${review.source}:${review.id}")
+                }
+                if (uniqueNewReviews.isNotEmpty()) {
+                    aggregatedReviewsCache.addAll(uniqueNewReviews)
+                }
+
+                hasMoreKitsuReviews = pageDocument.reviewPagination.hasMore
+                nextKitsuReviewsPage = pageDocument.reviewPagination.nextPage ?: (pageToLoad + 1)
+
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id == expectedMetaId) {
+                        state.copy(
+                            reviews = aggregatedReviewsCache.toList(),
+                            reviewsError = if (aggregatedReviewsCache.isEmpty()) "Reviews are unavailable for this title." else null
+                        )
+                    } else {
+                        state
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } finally {
+                isLoadingMoreReviews = false
+            }
+        }
     }
 
     private fun loadMoreTraktReviewsPage(expectedMetaId: String) {

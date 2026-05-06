@@ -20,7 +20,8 @@ data class ResolvedDetailDisplayDocument(
     val sourceTrace: List<HydratedHomeFieldTrace>,
     val localization: LocalizationDisplayState,
     val advanced: DetailAdvancedMetadata = DetailAdvancedMetadata(),
-    val ratings: ResolvedDetailRatingDisplay = ResolvedDetailRatingDisplay()
+    val ratings: ResolvedDetailRatingDisplay = ResolvedDetailRatingDisplay(),
+    val reviewPagination: ReviewPaginationDisplayState = ReviewPaginationDisplayState()
 )
 
 @Immutable
@@ -78,4 +79,12 @@ data class ResolvedDetailRatingDisplay(
 data class ResolvedEpisodeRating(
     val value: Double,
     val source: String
+)
+
+@Immutable
+data class ReviewPaginationDisplayState(
+    val provider: ProviderId? = null,
+    val hasMore: Boolean = false,
+    val nextPage: Int? = null,
+    val pageSize: Int = 20
 )

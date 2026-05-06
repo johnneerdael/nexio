@@ -507,6 +507,74 @@ class MetaDetailsKitsuAdvancedMetadataTest {
     }
 
     @Test
+    fun `anime detail loads more Kitsu reviews from resolved pagination state`() = runTest(dispatcher) {
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        val kitsuMetadataService = mockk<KitsuMetadataService>()
+        coEvery { kitsuMetadataService.fetchReviews(any(), any(), any(), any()) } returns emptyReviewsPage()
+
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.KITSU,
+            reason = TvMetadataDecisionReason.KITSU_SUCCESS,
+            value = TvMetadataEnrichment(seriesTvdbId = null, localizedTitle = "One Piece", language = "ja")
+        )
+        coEvery { kitsuMetadataService.fetchAdvancedDetail("kitsu:12", any(), "ja") } returns KitsuAdvancedAnimeDetail()
+        coEvery { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 1, limit = 20) } returns ReviewsPage(
+            reviews = listOf(
+                MetaReview(
+                    id = "2355",
+                    author = "Zoro",
+                    content = "Before I begin, let me address one thing.",
+                    rating = 9.0,
+                    source = MetaReviewSource.KITSU
+                )
+            ),
+            hasMore = true,
+            nextPage = 2
+        )
+        coEvery { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 2, limit = 20) } returns ReviewsPage(
+            reviews = listOf(
+                MetaReview(
+                    id = "2356",
+                    author = "Nami",
+                    content = "The voyage keeps going.",
+                    rating = 8.0,
+                    source = MetaReviewSource.KITSU
+                )
+            ),
+            hasMore = false,
+            nextPage = null
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildAnimeMeta().copy(id = "kitsu:12", name = "One Piece"),
+            itemId = "kitsu:12",
+            itemType = "series",
+            tvMetadataRouter = tvMetadataRouter,
+            kitsuMetadataService = kitsuMetadataService,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useBasicInfo = true,
+                useDetails = true,
+                useCredits = true,
+                useProductions = true,
+                useNetworks = false,
+                useEpisodes = false,
+                useMoreLikeThis = true,
+                useReviews = true,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+        viewModel.onEvent(MetaDetailsEvent.OnReviewItemFocused(index = 0))
+        advanceUntilIdle()
+
+        assertEquals(listOf("Zoro", "Nami"), viewModel.uiState.value.reviews.map { it.author })
+        coVerify(exactly = 1) { kitsuMetadataService.fetchReviews("kitsu:12", any(), page = 2, limit = 20) }
+    }
+
+    @Test
     fun `addon franchise links expand anime detail seasons across linked season metas`() = runTest(dispatcher) {
         val metaRepository = mockk<com.nexio.tv.domain.repository.MetaRepository>()
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)

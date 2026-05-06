@@ -6,6 +6,7 @@ import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
 import com.nexio.tv.domain.model.ResolvedEpisodeRating
 import com.nexio.tv.domain.model.TitleRating
 import com.nexio.tv.domain.model.orDefault
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 data class DetailRatingDisplayContext(
@@ -44,24 +45,31 @@ class DetailRatingDisplayRepository private constructor(
         providerIds: ProviderIds,
         episodesBySeason: Map<Int, Set<Int>>
     ): ResolvedDetailRatingDisplay {
+        val dependencies = deps ?: return ResolvedDetailRatingDisplay()
         val ratingFallbackItemId = providerIds.imdb?.takeIf { it.isNotBlank() } ?: fallbackItemId
-        val enrichedMeta = deps?.titleRatingOverrideRepository?.enrichMeta(
-            meta = meta,
-            fallbackItemId = ratingFallbackItemId,
-            fallbackItemType = fallbackItemType
-        ) ?: meta
+        val enrichedMeta = runOptional {
+            dependencies.titleRatingOverrideRepository.enrichMeta(
+                meta = meta,
+                fallbackItemId = ratingFallbackItemId,
+                fallbackItemType = fallbackItemType
+            )
+        } ?: meta
 
-        val mdbListResult = deps?.mdbListRepository?.getRatingsForMeta(
-            meta = enrichedMeta,
-            fallbackItemId = ratingFallbackItemId,
-            fallbackItemType = fallbackItemType
-        )
-        val episodeRatings = deps?.episodeRatingsSelectionRepository?.getEpisodeRatings(
-            meta = enrichedMeta,
-            fallbackItemId = ratingFallbackItemId,
-            fallbackItemType = fallbackItemType,
-            episodesBySeason = episodesBySeason
-        ).orEmpty()
+        val mdbListResult = runOptional {
+            dependencies.mdbListRepository.getRatingsForMeta(
+                meta = enrichedMeta,
+                fallbackItemId = ratingFallbackItemId,
+                fallbackItemType = fallbackItemType
+            )
+        }
+        val episodeRatings = runOptional {
+            dependencies.episodeRatingsSelectionRepository.getEpisodeRatings(
+                meta = enrichedMeta,
+                fallbackItemId = ratingFallbackItemId,
+                fallbackItemType = fallbackItemType,
+                episodesBySeason = episodesBySeason
+            )
+        }.orEmpty()
 
         return ResolvedDetailRatingDisplay(
             titleRating = enrichedMeta.imdbRating?.toDouble()?.let { value ->
@@ -83,3 +91,12 @@ class DetailRatingDisplayRepository private constructor(
             DetailRatingDisplayRepository(deps = null)
     }
 }
+
+private inline fun <T> runOptional(block: () -> T): T? =
+    try {
+        block()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
