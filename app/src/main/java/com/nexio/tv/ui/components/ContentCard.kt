@@ -55,6 +55,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.MetaPreview
@@ -204,22 +206,31 @@ fun ContentCard(
         }
         val displayPoster = item.displayPoster
         val displayBackground = item.displayBackground
-        val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+        val selectedArtworkRef = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+            item.artwork?.backdrop ?: item.artwork?.poster
+        } else {
+            item.artwork?.poster
+        }
+        val selectedArtworkFallback = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
             displayBackground ?: displayPoster
         } else {
             displayPoster
         }
-        val imageModel = remember(imageUrl, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
-            val isBackdrop = focusedPosterBackdropExpandEnabled && imageUrl == displayBackground
+        val coilModel = selectedArtworkRef.toCoilModelOrNull()
+            ?: selectedArtworkFallback.toSafeArtworkCoilModelOrNull()
+        val hasArtworkModel = coilModel != null
+        val imageModel = remember(coilModel, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
+            val modelKey = coilModel?.toString()
+            val isBackdrop = focusedPosterBackdropExpandEnabled && isBackdropExpanded
             val diskKey = if (isBackdrop) {
                 ArtworkImageCacheKeys.backdrop(item.id)
             } else {
-                ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, imageUrl)
+                ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, modelKey)
             }
             ImageRequest.Builder(context)
-                .data(imageUrl)
+                .data(coilModel)
                 .crossfade(false)
-                .memoryCacheKey("${imageUrl}_${requestWidthPx}x${requestHeightPx}")
+                .memoryCacheKey("${modelKey}_${requestWidthPx}x${requestHeightPx}")
                 .diskCacheKey(diskKey)
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
@@ -228,19 +239,20 @@ fun ContentCard(
             with(density) { 48.dp.roundToPx() }
         }
         val displayLogo = item.displayLogo
-        val logoModel = remember(displayLogo, requestWidthPx, logoRequestHeightPx, item.id) {
-            displayLogo?.let { logoUrl ->
+        val logoModel = remember(item.artwork, displayLogo, requestWidthPx, logoRequestHeightPx, item.id) {
+            (item.artwork?.logo.toCoilModelOrNull() ?: displayLogo.toSafeArtworkCoilModelOrNull())?.let { logoModel ->
+                val modelKey = logoModel.toString()
                 ImageRequest.Builder(context)
-                    .data(logoUrl)
+                    .data(logoModel)
                     .crossfade(false)
-                    .memoryCacheKey("${logoUrl}_${requestWidthPx}x${logoRequestHeightPx}")
+                    .memoryCacheKey("${modelKey}_${requestWidthPx}x${logoRequestHeightPx}")
                     .diskCacheKey(ArtworkImageCacheKeys.logo(item.id))
                     .size(width = requestWidthPx, height = logoRequestHeightPx)
                     .build()
             }
         }
         var logoLoadFailed by remember(displayLogo) { mutableStateOf(false) }
-        val showExpandedLogo = !displayLogo.isNullOrBlank() && !logoLoadFailed
+        val showExpandedLogo = logoModel != null && !logoLoadFailed
         LaunchedEffect(isBackdropExpanded, isFocused, trailerPreviewUrl, trailerPreviewExternalUrl) {
             if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
             if (!isBackdropExpanded || !isFocused) return@LaunchedEffect
@@ -338,7 +350,7 @@ fun ContentCard(
                     .height(baseCardHeight)
                     .clip(cardShape)
             ) {
-                if (!imageUrl.isNullOrBlank()) {
+                if (hasArtworkModel) {
                     AsyncImage(
                         model = imageModel,
                         contentDescription = item.name,
@@ -391,7 +403,7 @@ fun ContentCard(
                     )
                 }
 
-                if (shouldPlayTrailerPreview && !imageUrl.isNullOrBlank()) {
+                if (shouldPlayTrailerPreview && hasArtworkModel) {
                     AsyncImage(
                         model = imageModel,
                         contentDescription = null,
