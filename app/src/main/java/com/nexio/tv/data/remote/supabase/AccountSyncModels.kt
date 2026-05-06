@@ -49,6 +49,7 @@ data class AccountAddonPayload(
     val url: String,
     @SerialName("manifest_url") val manifestUrl: String? = null,
     @SerialName("parser_preset") val parserPreset: String = "GENERIC",
+    @SerialName("is_anime") val isAnime: Boolean = false,
     val name: String? = null,
     val description: String? = null,
     val enabled: Boolean = true,

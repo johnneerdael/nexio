@@ -311,7 +311,8 @@ internal suspend fun buildRemoteAddonInstallConfigs(
                         url = url,
                         parserPreset = runCatching {
                             enumValueOf<AddonParserPreset>(addon.parserPreset.trim().uppercase())
-                        }.getOrDefault(AddonParserPreset.GENERIC)
+                        }.getOrDefault(AddonParserPreset.GENERIC),
+                        isAnime = addon.isAnime
                     )
                 }
         }
