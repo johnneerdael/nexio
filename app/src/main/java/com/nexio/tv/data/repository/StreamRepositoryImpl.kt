@@ -79,6 +79,8 @@ class StreamRepositoryImpl @Inject constructor(
                 } else {
                     try {
                         animeIdentityIndex.isAnime(parsedContentId)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.w(TAG, "Anime identity lookup failed for stream bucket hint: ${e.message}")
                         false

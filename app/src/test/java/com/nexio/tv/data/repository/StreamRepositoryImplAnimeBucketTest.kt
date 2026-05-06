@@ -26,9 +26,11 @@ import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.repository.AddonRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
@@ -111,6 +113,59 @@ class StreamRepositoryImplAnimeBucketTest {
 
         assertFalse(buckets.single().isAnimeBucket)
         assertEquals(1, buckets.single().streams.size)
+    }
+
+    @Test
+    fun `anime identity lookup cancellation propagates before stream requests`() = runTest {
+        mockAndroidLog()
+
+        val addonStreamIntegrationProvider = mockk<AddonStreamIntegrationProvider>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
+        val addonStreamRequestCanceller = mockk<AddonStreamRequestCanceller>(relaxed = true)
+        val animeAddon = streamAddon("https://anime.example", "Anime Addon", isAnime = true)
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(listOf(animeAddon))
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        coEvery {
+            addonStreamIntegrationProvider.getStreams(animeAddon.id, any(), any())
+        } returns NetworkResult.Success(StreamResponseDto(streams = listOf(streamDto("Unexpected"))))
+
+        val repository = StreamRepositoryImpl(
+            addonStreamIntegrationProvider = addonStreamIntegrationProvider,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            addonStreamRequestCanceller = addonStreamRequestCanceller,
+            animeIdentityIndex = object : AnimeIdentityIndex {
+                override suspend fun resolveKitsuId(id: ParsedMetadataId): String? = null
+
+                override suspend fun isAnime(id: ParsedMetadataId): Boolean {
+                    throw CancellationException("cancelled")
+                }
+            }
+        )
+        var thrown: CancellationException? = null
+
+        try {
+            repository.getStreamsFromAllAddons(
+                type = "movie",
+                videoId = "mal:21",
+                requestOrigin = "test_anime_bucket_cancellation",
+                requestId = "request-anime-bucket-cancellation"
+            ).toList()
+        } catch (e: CancellationException) {
+            thrown = e
+        }
+
+        assertEquals("cancelled", thrown?.message)
+        coVerify(exactly = 0) {
+            addonStreamIntegrationProvider.getStreams(any(), any(), any())
+        }
     }
 
     @Test
