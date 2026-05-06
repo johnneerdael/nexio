@@ -14,6 +14,8 @@ import com.nexio.tv.core.artwork.ArtworkAssetDiskCache
 import com.nexio.tv.core.artwork.ArtworkAssetRepository
 import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.image.IntegrationPosterFetcher
+import com.nexio.tv.core.image.LegacyRemoteArtworkFetcher
+import com.nexio.tv.core.image.LegacyRemoteArtworkKeyer
 import com.nexio.tv.core.image.ImageCacheTtlWorker
 import com.nexio.tv.core.image.NexioArtworkFetcher
 import com.nexio.tv.core.image.SearchSuggestionPosterFetcher
@@ -40,6 +42,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var integrationPlaybackGate: IntegrationPlaybackGate
     @Inject lateinit var integrationRuntime: IntegrationRuntime
     @Inject lateinit var integrationPosterFetcherFactory: IntegrationPosterFetcher.Factory
+    @Inject lateinit var legacyRemoteArtworkFetcherFactory: LegacyRemoteArtworkFetcher.Factory
     @Inject lateinit var searchSuggestionPosterFetcherFactory: SearchSuggestionPosterFetcher.Factory
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -78,6 +81,8 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             .components {
                 add(nexioArtworkFetcherFactory())
                 add(integrationPosterFetcherFactory)
+                add(legacyRemoteArtworkFetcherFactory)
+                add(LegacyRemoteArtworkKeyer())
                 add(searchSuggestionPosterFetcherFactory)
                 add(SearchSuggestionPosterKeyer())
             }

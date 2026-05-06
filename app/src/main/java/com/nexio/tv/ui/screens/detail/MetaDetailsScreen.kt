@@ -88,8 +88,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
-import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.core.metadata.episodeRuntimeOrSeriesAverageMinutes
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.ui.findLifecycleOwner
@@ -890,8 +891,14 @@ fun MetaDetailsScreen(
             ImmediateDetailTrailerTakeoverOverlay(
                 backdropModel = immediateTakeoverMeta.artwork?.backdrop.toCoilModelOrNull()
                     ?: immediateTakeoverMeta.artwork?.poster.toCoilModelOrNull()
-                    ?: immediateTakeoverMeta.displayBackground.toSafeArtworkCoilModelOrNull()
-                    ?: immediateTakeoverMeta.displayPoster.toSafeArtworkCoilModelOrNull()
+                    ?: immediateTakeoverMeta.displayBackground.toLegacyArtworkCoilModelOrNull(
+                        "${immediateTakeoverMeta.id}:backdrop",
+                        ArtworkType.BACKDROP
+                    )
+                    ?: immediateTakeoverMeta.displayPoster.toLegacyArtworkCoilModelOrNull(
+                        "${immediateTakeoverMeta.id}:poster",
+                        ArtworkType.POSTER
+                    )
             )
         }
     }
@@ -1037,8 +1044,8 @@ private fun MetaDetailsContent(
     val backdropCoilModel = remember(meta.artwork, displayBackground, displayPoster) {
         meta.artwork?.backdrop.toCoilModelOrNull()
             ?: meta.artwork?.poster.toCoilModelOrNull()
-            ?: displayBackground.toSafeArtworkCoilModelOrNull()
-            ?: displayPoster.toSafeArtworkCoilModelOrNull()
+            ?: displayBackground.toLegacyArtworkCoilModelOrNull("${meta.id}:backdrop", ArtworkType.BACKDROP)
+            ?: displayPoster.toLegacyArtworkCoilModelOrNull("${meta.id}:poster", ArtworkType.POSTER)
     }
     val displayMeta = remember(meta, displayPoster, displayBackground, displayLogo) {
         meta.copy(

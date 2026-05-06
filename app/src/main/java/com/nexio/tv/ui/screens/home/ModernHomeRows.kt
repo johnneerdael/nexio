@@ -86,9 +86,10 @@ import coil.imageLoader
 import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
-import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
@@ -132,7 +133,11 @@ internal fun resolveModernCarouselCardArtworkModel(
     } else {
         artwork?.poster.toCoilModelOrNull() ?: artwork?.backdrop.toCoilModelOrNull()
     }
-    return typedModel ?: fallbackModel.toSafeArtworkCoilModelOrNull()
+    val fallbackType = if (useBackdrop) ArtworkType.BACKDROP else ArtworkType.POSTER
+    return typedModel ?: fallbackModel.toLegacyArtworkCoilModelOrNull(
+        ownerKey = "${item.key}:${fallbackType.name.lowercase()}",
+        imageType = fallbackType
+    )
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -827,7 +832,8 @@ private fun ModernCarouselCard(
     }
     val effectiveLogoUrl = frozenLogoUrl.value
     val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, item.metaPreview?.id) {
-        (item.metaPreview?.artwork?.logo.toCoilModelOrNull() ?: effectiveLogoUrl.toSafeArtworkCoilModelOrNull())?.let {
+        (item.metaPreview?.artwork?.logo.toCoilModelOrNull()
+            ?: effectiveLogoUrl.toLegacyArtworkCoilModelOrNull("${item.key}:logo", ArtworkType.LOGO))?.let {
             val modelKey = it.toString()
             ImageRequest.Builder(context)
                 .data(it)
