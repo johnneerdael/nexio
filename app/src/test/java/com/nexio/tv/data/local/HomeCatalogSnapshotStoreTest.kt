@@ -270,9 +270,7 @@ class HomeCatalogSnapshotStoreTest {
         cache.remove(decisionKey)
 
         val restored = store.read("RPDB:12345")
-        val restoredItem = restored?.catalogRows?.single()?.items?.single()
-        assertNull(restoredItem?.poster)
-        assertNull(restoredItem?.posterProviderTag)
+        assertClearedPosterFields(restored)
     }
 
     @Test
@@ -408,6 +406,18 @@ class HomeCatalogSnapshotStoreTest {
 
     private fun persistedSnapshotJson(prefs: InMemorySharedPreferences): String =
         prefs.getAll().values.single() as String
+
+    private fun assertClearedPosterFields(snapshot: HomeCatalogSnapshotStore.Snapshot?) {
+        val items = buildList {
+            add(snapshot?.catalogRows?.single()?.items?.single())
+            add(snapshot?.fullCatalogRows?.single()?.items?.single())
+            add(snapshot?.heroItems?.single())
+        }
+        items.forEach { item ->
+            assertNull(item?.poster)
+            assertNull(item?.posterProviderTag)
+        }
+    }
 
     private fun localePrefs(tag: String): InMemorySharedPreferences {
         return InMemorySharedPreferences().also { prefs ->
