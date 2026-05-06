@@ -8,10 +8,13 @@ import com.nexio.tv.core.artwork.ArtworkProviderId
 import com.nexio.tv.core.artwork.ArtworkSourceRole
 import com.nexio.tv.core.artwork.ArtworkTrace
 import com.nexio.tv.core.artwork.ArtworkType
+import com.nexio.tv.core.image.LegacyRemoteArtworkModel
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModernHomeRowsArtworkModelTest {
@@ -75,14 +78,62 @@ class ModernHomeRowsArtworkModelTest {
         assertEquals("nexio-artwork://asset/posterAsset", model)
     }
 
-    private fun carouselItem(artwork: ArtworkBundle): ModernCarouselItem {
+    @Test
+    fun `raw only landscape fallback uses safe legacy model`() {
+        val item = carouselItem(
+            artwork = null,
+            poster = "https://image.tmdb.org/t/p/w500/raw-poster.jpg?token=secret",
+            background = "https://image.tmdb.org/t/p/w780/raw-backdrop.jpg?token=secret"
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = true,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.imageUrl
+        )
+
+        assertTrue(model is LegacyRemoteArtworkModel)
+        assertFalse(model is String)
+        assertFalse(model.toString().contains("https://"))
+        assertFalse((model as LegacyRemoteArtworkModel).key.contains("secret"))
+    }
+
+    @Test
+    fun `raw only portrait fallback uses safe legacy model`() {
+        val item = carouselItem(
+            artwork = null,
+            poster = "https://image.tmdb.org/t/p/w500/raw-poster.jpg?token=secret",
+            background = "https://image.tmdb.org/t/p/w780/raw-backdrop.jpg?token=secret"
+        )
+
+        val model = resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = false,
+            focusedPosterBackdropExpandEnabled = false,
+            isBackdropExpanded = false,
+            fallbackModel = item.heroPreview.poster
+        )
+
+        assertTrue(model is LegacyRemoteArtworkModel)
+        assertFalse(model is String)
+        assertFalse(model.toString().contains("https://"))
+        assertFalse((model as LegacyRemoteArtworkModel).key.contains("secret"))
+    }
+
+    private fun carouselItem(
+        artwork: ArtworkBundle?,
+        poster: String = "https://image.tmdb.org/t/p/w500/raw-poster.jpg",
+        background: String = "https://image.tmdb.org/t/p/w780/raw-backdrop.jpg"
+    ): ModernCarouselItem {
         val preview = MetaPreview(
             id = "tt123",
             type = ContentType.MOVIE,
             name = "Movie",
-            poster = "https://image.tmdb.org/t/p/w500/raw-poster.jpg",
+            poster = poster,
             posterShape = PosterShape.POSTER,
-            background = "https://image.tmdb.org/t/p/w780/raw-backdrop.jpg",
+            background = background,
             logo = null,
             description = null,
             releaseInfo = null,

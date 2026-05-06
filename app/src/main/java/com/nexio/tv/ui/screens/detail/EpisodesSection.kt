@@ -75,9 +75,10 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
-import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -520,7 +521,7 @@ private fun EpisodeCard(
     }
     val displayThumbnail = episode.displayThumbnail
     val thumbnailModel = episode.thumbnailArtwork.toCoilModelOrNull()
-        ?: displayThumbnail.toSafeArtworkCoilModelOrNull()
+        ?: displayThumbnail.toLegacyArtworkCoilModelOrNull("${episode.id}:thumbnail", ArtworkType.THUMBNAIL)
     val thumbnailRequest = remember(context, thumbnailModel, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         val modelKey = thumbnailModel?.toString()
         ImageRequest.Builder(context)

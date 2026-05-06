@@ -57,8 +57,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.artwork.toCoilModelOrNull
-import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -94,15 +94,18 @@ internal fun resolveContentCardArtworkSelection(
     } else {
         displayPoster
     }
-    val model = selectedArtworkRef.toCoilModelOrNull()
-        ?: selectedArtworkFallback.toSafeArtworkCoilModelOrNull()
-    val modelKey = model?.toString()
     val selectedType = selectedArtworkRef?.imageType
         ?: fallbackArtworkType(
             expandedBackdropRequested = expandedBackdropRequested,
             displayBackground = displayBackground,
             selectedArtworkFallback = selectedArtworkFallback
         )
+    val model = selectedArtworkRef.toCoilModelOrNull()
+        ?: selectedArtworkFallback.toLegacyArtworkCoilModelOrNull(
+            ownerKey = "${item.id}:${selectedType.name.lowercase()}",
+            imageType = selectedType
+        )
+    val modelKey = model?.toString()
     val diskKey = when (selectedType) {
         ArtworkType.BACKDROP -> ArtworkImageCacheKeys.backdrop(item.id)
         else -> ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, modelKey)
@@ -288,7 +291,7 @@ fun ContentCard(
         }
         val displayLogo = item.displayLogo
         val logoModel = remember(item.artwork, displayLogo, requestWidthPx, logoRequestHeightPx, item.id) {
-            (item.artwork?.logo.toCoilModelOrNull() ?: displayLogo.toSafeArtworkCoilModelOrNull())?.let { logoModel ->
+            (item.artwork?.logo.toCoilModelOrNull() ?: displayLogo.toLegacyArtworkCoilModelOrNull("${item.id}:logo", ArtworkType.LOGO))?.let { logoModel ->
                 val modelKey = logoModel.toString()
                 ImageRequest.Builder(context)
                     .data(logoModel)

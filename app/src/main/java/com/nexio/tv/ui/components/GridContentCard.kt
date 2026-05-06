@@ -42,8 +42,9 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.core.artwork.toCoilModelOrNull
-import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
+import com.nexio.tv.core.artwork.ArtworkType
 import com.nexio.tv.core.image.ArtworkImageCacheKeys
+import com.nexio.tv.core.image.toLegacyArtworkCoilModelOrNull
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.rememberBreathingFocusRing
@@ -147,7 +148,7 @@ fun GridContentCard(
                 val context = LocalContext.current
                 val displayPoster = item.displayPoster
                 val coilModel = item.artwork?.poster.toCoilModelOrNull()
-                    ?: displayPoster.toSafeArtworkCoilModelOrNull()
+                    ?: displayPoster.toLegacyArtworkCoilModelOrNull("${item.id}:poster", ArtworkType.POSTER)
                 val imageModel = remember(coilModel, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
                     val modelKey = coilModel?.toString()
                     ImageRequest.Builder(context)
