@@ -104,6 +104,7 @@ class MetadataDisplayRepository @Inject constructor(
         val reviews = result.providerRunResult.toFieldValues(ResolvedField.REVIEWS)
             .flatMap(::reviewsFrom)
             .ifEmpty { kitsuBridge?.reviewsPage?.reviews.orEmpty() }
+        val selectedLocalizationTrace = resolvedDocument.selectedLocalizationTrace()
 
         return ResolvedDetailDisplayDocument(
             route = result.route,
@@ -121,8 +122,10 @@ class MetadataDisplayRepository @Inject constructor(
             sourceTrace = resolvedDocument.toSourceTrace(),
             localization = LocalizationDisplayState(
                 requestedLanguage = request.language,
-                selectedLanguage = resolvedDocument.selectedLocalizationLanguage(request.language),
-                fallbackReason = resolvedDocument.localizationFallbackReason()
+                selectedLanguage = selectedLocalizationTrace?.selectedLanguage
+                    ?: resolvedDocument.language
+                    ?: request.language,
+                fallbackReason = selectedLocalizationTrace?.localizationFallbackReason()
             ),
             advanced = resolvedDocument.toDetailAdvancedMetadata(
                 productionCompanies = productionCompanies,
@@ -481,15 +484,14 @@ class MetadataDisplayRepository @Inject constructor(
         }
     }
 
-    private fun ResolvedMetadataDocument.localizationFallbackReason(): String? =
-        localization.values
-            .firstOrNull { it.fallbackRole != MetadataLocalizationFallbackRole.LOCALIZED }
-            ?.toFallbackReason()
+    private fun ResolvedMetadataDocument.selectedLocalizationTrace(): MetadataLocalizationFieldTrace? =
+        localization[ResolvedField.OVERVIEW]
+            ?: localization[ResolvedField.TITLE]
+            ?: localization.values.firstOrNull()
 
-    private fun ResolvedMetadataDocument.selectedLocalizationLanguage(requestedLanguage: String?): String? =
-        localization.values.firstOrNull()?.selectedLanguage
-            ?: language
-            ?: requestedLanguage
+    private fun MetadataLocalizationFieldTrace.localizationFallbackReason(): String? =
+        takeIf { fallbackRole != MetadataLocalizationFallbackRole.LOCALIZED }
+            ?.toFallbackReason()
 
     private fun MetadataLocalizationFieldTrace.toFallbackReason(): String =
         "${field.name} fell back to $selectedLanguage via ${selectedProvider.name} (${fallbackRole.name})"
