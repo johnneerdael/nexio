@@ -8,27 +8,14 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.anime.AnimeIdSource
 import com.nexio.tv.core.anime.AnimeStremioId
 import com.nexio.tv.core.anime.ContentMediaKind
-import com.nexio.tv.core.metadata.router.FieldResolver
-import com.nexio.tv.core.metadata.router.InMemoryAnimeIdentityIndex
-import com.nexio.tv.core.metadata.router.InMemoryIdMappingStore
 import com.nexio.tv.core.metadata.router.MetadataDepth
-import com.nexio.tv.core.metadata.router.MetadataIdentityResolver
 import com.nexio.tv.core.metadata.router.MetadataRequest
-import com.nexio.tv.core.metadata.router.MetadataRequestNormalizer
-import com.nexio.tv.core.metadata.router.MetadataRouter
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
-import com.nexio.tv.core.trace.NoopRuntimeTraceSink
-import com.nexio.tv.core.trace.TraceMetadataEvents
-import com.nexio.tv.core.metadata.router.MetadataResolutionResult
 import com.nexio.tv.core.metadata.router.MetadataSourceContext
 import com.nexio.tv.core.metadata.router.ReviewsPage
-import com.nexio.tv.core.metadata.router.ProviderPlanExecutor
-import com.nexio.tv.core.metadata.router.ProviderPlanRunner
-import com.nexio.tv.core.metadata.router.ResolverOrchestrator
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
@@ -42,17 +29,13 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.trailer.TrailerResolutionResult
-import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
-import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
-import com.nexio.tv.data.repository.MDBListRepository
-import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.data.repository.ReviewsRepository
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.data.repository.AirDateGate
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.ContentType
@@ -61,14 +44,18 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.PeopleDisplay
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.TrailerDisplayState
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.orDefault
+import com.nexio.tv.core.artwork.toLegacyArtworkString
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.AddonRepository
@@ -167,6 +154,7 @@ internal fun shouldTreatDetailTrailerPlaybackAsActiveTime(
 
 private data class DetailMetadataEnrichment(
     val meta: Meta,
+    val resolvedDetail: ResolvedDetailDisplayDocument?,
     val tvEnrichment: TvMetadataEnrichment?,
     val animeRelated: List<com.nexio.tv.domain.model.MetaPreview> = emptyList(),
     val isAnimeDetail: Boolean = false,
@@ -183,14 +171,10 @@ class MetaDetailsViewModel @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val reviewsRepository: ReviewsRepository,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
-    private val tmdbService: TmdbService,
     private val metadataRouterFacade: MetadataRouterFacade,
-    private val metadataSecondaryRepository: MetadataSecondaryRepository,
+    private val metadataDisplayRepository: MetadataDisplayRepository,
     private val profileBoundary: ProfileBoundary,
     private val profileManager: ProfileManager,
-    private val mdbListRepository: MDBListRepository,
-    private val titleRatingOverrideRepository: TitleRatingOverrideRepository,
-    private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
     private val traktLibraryService: TraktLibraryService,
     private val watchProgressRepository: WatchProgressRepository,
@@ -199,7 +183,6 @@ class MetaDetailsViewModel @Inject constructor(
     private val trackingScrobbleService: TrackingScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
-    private val trailerService: TrailerService,
     private val animeSeasonDetailRepository: AnimeSeasonDetailRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -593,7 +576,10 @@ class MetaDetailsViewModel @Inject constructor(
                     isReviewsLoading = false,
                     reviewsError = null,
                     collection = emptyList(),
-                    collectionName = null
+                    collectionName = null,
+                    resolvedDetail = null,
+                    localizationFallbackReason = null,
+                    trailerState = TrailerDisplayState()
                 )
             }
             trailerHasPlayed = false
@@ -605,27 +591,21 @@ class MetaDetailsViewModel @Inject constructor(
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
 
-            val metadataRequest = MetadataRequest(
-                contentId = metaLookupId,
-                contentType = ContentType.fromString(itemType),
-                sourceContext = MetadataSourceContext(
-                    itemType = itemType,
-                    addonMetadata = _uiState.value.meta?.toHomeDisplayMetadata()
-                ),
-                depth = MetadataDepth.DETAIL_CORE
-            )
-
-            val canonical = try {
-                metadataRouterFacade.resolveRequest(metadataRequest)
+            val resolvedDetail = try {
+                loadResolvedDetailDocument(
+                    contentId = metaLookupId,
+                    contentType = ContentType.fromString(itemType),
+                    previewMeta = _uiState.value.meta
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "loadMeta resolveRequest failed for $metaLookupId: ${e.message}", e)
+                Log.w(TAG, "loadMeta resolveDetailDisplay failed for $metaLookupId: ${e.message}", e)
                 null
             }
 
-            if (canonical != null && canonical.route != null) {
-                var meta = canonical.toMeta(
+            if (resolvedDetail != null && resolvedDetail.route != null) {
+                var meta = resolvedDetail.toMeta(
                     contentId = metaLookupId,
                     contentType = ContentType.fromString(itemType)
                 )
@@ -651,7 +631,7 @@ class MetaDetailsViewModel @Inject constructor(
                         )
                     }
                 }
-                applyMetaWithEnrichment(meta)
+                applyMetaWithEnrichment(meta, resolvedDetail)
             } else if (preferredAddonBaseUrl?.isNotBlank() == true) {
                 // Last-resort A: item came from an addon catalog rail and the router yielded nothing.
                 metaRepository.getMeta(
@@ -699,6 +679,25 @@ class MetaDetailsViewModel @Inject constructor(
         val raw = itemId.trim()
         return raw
     }
+
+    private suspend fun loadResolvedDetailDocument(
+        contentId: String,
+        contentType: ContentType,
+        previewMeta: Meta?
+    ): ResolvedDetailDisplayDocument =
+        metadataDisplayRepository.resolveDetailDisplay(
+            MetadataRequest(
+                contentId = contentId,
+                contentType = contentType,
+                sourceContext = MetadataSourceContext(
+                    itemType = contentType.toApiString(),
+                    addonMetadata = previewMeta?.toHomeDisplayMetadata(),
+                    previewSourceItemId = contentId
+                ),
+                language = profileBoundary.currentLanguageTag(),
+                depth = MetadataDepth.DETAIL_FULL
+            )
+        )
 
     private fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {
         if (!shouldUseStreamOnlyFallback(errorMessage)) return false
@@ -761,20 +760,52 @@ class MetaDetailsViewModel @Inject constructor(
         }
         _uiState.update { state -> state.withRefreshedMeta(meta) }
         trailerHasPlayed = false
-        preloadTitleTrailerAvailability(meta)
-        preloadAllSeasonMediaAvailability(meta)
+        applyTitleTrailerAvailabilityFromResolvedDocument()
 
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
     }
 
-    private suspend fun applyMetaWithEnrichment(meta: Meta) {
+    private fun applyTitleTrailerAvailabilityFromResolvedDocument() {
+        _uiState.update { state ->
+            val available = state.trailerState.fallbackTrailerYtIds.any { it.isNotBlank() }
+            state.copy(
+                titleHasPlayableTrailerMedia = available,
+                trailerResolutionStatus = when {
+                    state.trailerResolutionStatus == TrailerResolutionStatus.RESOLVING ->
+                        TrailerResolutionStatus.RESOLVING
+                    !state.trailerUrl.isNullOrBlank() || !state.trailerExternalUrl.isNullOrBlank() ->
+                        TrailerResolutionStatus.READY
+                    available -> TrailerResolutionStatus.IDLE
+                    else -> TrailerResolutionStatus.FAILED
+                }
+            )
+        }
+    }
+
+    private fun applyResolvedDetailState(document: ResolvedDetailDisplayDocument) {
+        _uiState.update { state ->
+            state.copy(
+                resolvedDetail = document,
+                trailerState = document.trailer,
+                localizationFallbackReason = document.localization.fallbackReason,
+                reviews = document.reviews,
+                relatedItems = document.recommendations,
+                collection = document.collection
+            )
+        }
+    }
+
+    private suspend fun applyMetaWithEnrichment(
+        meta: Meta,
+        resolvedDetail: ResolvedDetailDisplayDocument? = null
+    ) {
         val expandedMeta = expandAnimeAddonSeasons(meta)
         val preferredSeason = meta.videos
             .mapNotNull { it.season }
             .distinct()
             .singleOrNull()
-        var enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false)
+        var enrichment = enrichMeta(expandedMeta, includeEpisodeMetadata = false, resolvedDetail = resolvedDetail)
         val blockedForMandatoryEpisodes = shouldBlockSeriesReadyStateForMandatoryEpisodes(enrichment)
         if (blockedForMandatoryEpisodes) {
             Log.i(
@@ -850,6 +881,7 @@ class MetaDetailsViewModel @Inject constructor(
             )
             enrichment = enrichment.copy(meta = episodeHydratedMeta)
         }
+        enrichment.resolvedDetail?.let(::applyResolvedDetailState)
         applyMeta(enrichment.meta)
         hydrateSecondaryNavigationTargetsAsync(enrichment.meta)
         if (preferredSeason != null) {
@@ -862,18 +894,14 @@ class MetaDetailsViewModel @Inject constructor(
             }
         }
         if (enrichment.isAnimeDetail) {
-            val shouldLoadAnimeReviews = shouldLoadReviews(enrichment.settings)
             _uiState.update { state ->
                 state.copy(
                     isAnimeDetail = true,
                     relatedItems = enrichment.animeRelated,
-                    reviews = emptyList(),
-                    isReviewsLoading = shouldLoadAnimeReviews,
+                    reviews = enrichment.resolvedDetail?.reviews.orEmpty(),
+                    isReviewsLoading = false,
                     reviewsError = null
                 )
-            }
-            if (shouldLoadAnimeReviews) {
-                loadKitsuReviewsAsync(enrichment)
             }
         } else {
             // Start recommendations fetch early for non-anime titles.
@@ -884,8 +912,6 @@ class MetaDetailsViewModel @Inject constructor(
         if (!blockedForMandatoryEpisodes) {
             loadEpisodeMetadataAsync(enrichment)
         }
-        loadEpisodeRatingsAsync(enrichment.meta, enrichment.tvEnrichment)
-        loadMDBListRatings(enrichment.meta, enrichment.tvEnrichment)
     }
 
     private fun shouldBlockSeriesReadyStateForMandatoryEpisodes(enrichment: DetailMetadataEnrichment): Boolean =
@@ -971,10 +997,22 @@ class MetaDetailsViewModel @Inject constructor(
                 return@launch
             }
 
+            val resolvedDetail = _uiState.value.resolvedDetail
+            if (resolvedDetail?.recommendations?.isNotEmpty() == true) {
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id == meta.id) {
+                        state.copy(relatedItems = resolvedDetail.recommendations)
+                    } else {
+                        state
+                    }
+                }
+                return@launch
+            }
+
             val tmdbContentType = resolveTmdbContentType(meta)
-            val tmdbLookupType = tmdbContentType.toApiString()
-            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                ?: tmdbService.ensureTmdbId(itemId, itemType)
+            val tmdbId = resolvedDetail?.identity?.providerIds?.tmdb
+                ?: parseContentIds(meta.id).tmdb?.toString()
+                ?: parseContentIds(itemId).tmdb?.toString()
             if (tmdbId.isNullOrBlank()) {
                 _uiState.update { it.copy(relatedItems = emptyList()) }
                 return@launch
@@ -985,7 +1023,7 @@ class MetaDetailsViewModel @Inject constructor(
                     metadataRequest = MetadataRequest(
                         contentId = "tmdb:$tmdbId",
                         contentType = tmdbContentType,
-                        sourceContext = MetadataSourceContext(itemType = tmdbLookupType),
+                        sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
                         language = currentTvdbLanguageTag(),
                         depth = MetadataDepth.DETAIL_SECONDARY
                     ),
@@ -1048,10 +1086,29 @@ class MetaDetailsViewModel @Inject constructor(
                 }
             }
 
+            val resolvedDetail = _uiState.value.resolvedDetail
+            if (resolvedDetail?.reviews?.isNotEmpty() == true) {
+                currentTmdbReviewId = resolvedDetail.identity.providerIds.tmdb
+                currentTmdbReviewContentType = resolveTmdbContentType(meta)
+                aggregatedReviewsCache = resolvedDetail.reviews.toMutableList()
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id == meta.id) {
+                        state.copy(
+                            reviews = aggregatedReviewsCache.toList(),
+                            isReviewsLoading = false,
+                            reviewsError = null
+                        )
+                    } else {
+                        state
+                    }
+                }
+                return@launch
+            }
+
             val tmdbContentType = resolveTmdbContentType(meta)
-            val tmdbLookupType = tmdbContentType.toApiString()
-            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                ?: tmdbService.ensureTmdbId(itemId, itemType)
+            val tmdbId = resolvedDetail?.identity?.providerIds?.tmdb
+                ?: parseContentIds(meta.id).tmdb?.toString()
+                ?: parseContentIds(itemId).tmdb?.toString()
             currentTmdbReviewId = tmdbId
             currentTmdbReviewContentType = tmdbContentType
 
@@ -1125,41 +1182,8 @@ class MetaDetailsViewModel @Inject constructor(
             val meta = enrichment.meta
             currentReviewsMetaId = meta.id
             resetReviewsPaginationState()
-
-            val rawId = listOf(meta.id, itemId)
-                .firstOrNull { AnimeStremioId.parse(it) != null }
-                ?: run {
-                    _uiState.update {
-                        it.copy(
-                            reviews = emptyList(),
-                            isReviewsLoading = false,
-                            reviewsError = "Reviews are unavailable for this title."
-                        )
-                    }
-                    return@launch
-                }
-            val mediaKind = enrichment.tmdbContentType.toAnimeMediaKind()
-            currentKitsuReviewRawId = rawId
-            currentKitsuReviewMediaKind = mediaKind
-
-            val initialPage = runCatching {
-                metadataSecondaryRepository.fetchKitsuReviews(
-                    rawId = rawId,
-                    mediaKind = mediaKind,
-                    page = 1,
-                    limit = KITSU_REVIEWS_PAGE_SIZE
-                )
-            }.getOrElse {
-                if (it is CancellationException) throw it
-                Log.w(TAG, "Failed to load Kitsu reviews for ${meta.id}: ${it.message}")
-                ReviewsPage(reviews = emptyList(), hasMore = false, nextPage = null)
-            }
-
-            if (currentReviewsMetaId != meta.id) return@launch
-
-            aggregatedReviewsCache = initialPage.reviews.toMutableList()
-            hasMoreKitsuReviews = initialPage.hasMore
-            nextKitsuReviewsPage = initialPage.nextPage ?: 2
+            aggregatedReviewsCache = enrichment.resolvedDetail?.reviews.orEmpty().toMutableList()
+            hasMoreKitsuReviews = false
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
@@ -1176,59 +1200,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun loadMoreKitsuReviewsPage(expectedMetaId: String) {
-        if (!hasMoreKitsuReviews || isLoadingMoreReviews) return
-        val rawId = currentKitsuReviewRawId ?: return
-        val mediaKind = currentKitsuReviewMediaKind ?: return
-        val pageToLoad = nextKitsuReviewsPage
-
-        isLoadingMoreReviews = true
-        viewModelScope.launch {
-            try {
-                val pageResult = runCatching {
-                    metadataSecondaryRepository.fetchKitsuReviews(
-                        rawId = rawId,
-                        mediaKind = mediaKind,
-                        page = pageToLoad,
-                        limit = KITSU_REVIEWS_PAGE_SIZE
-                    )
-                }.getOrElse {
-                    if (it is CancellationException) throw it
-                    Log.w(TAG, "Failed to load Kitsu reviews page=$pageToLoad for $expectedMetaId: ${it.message}")
-                    return@launch
-                }
-
-                if (currentReviewsMetaId != expectedMetaId) return@launch
-
-                val existingIds = aggregatedReviewsCache
-                    .asSequence()
-                    .map { "${it.source}:${it.id}" }
-                    .toHashSet()
-                val uniqueNewReviews = pageResult.reviews.filter { review ->
-                    existingIds.add("${review.source}:${review.id}")
-                }
-                if (uniqueNewReviews.isNotEmpty()) {
-                    aggregatedReviewsCache.addAll(uniqueNewReviews)
-                }
-
-                hasMoreKitsuReviews = pageResult.hasMore
-                nextKitsuReviewsPage = pageResult.nextPage ?: (pageToLoad + 1)
-
-                _uiState.update { state ->
-                    if (state.meta == null || state.meta.id == expectedMetaId) {
-                        state.copy(
-                            reviews = aggregatedReviewsCache.toList(),
-                            reviewsError = if (aggregatedReviewsCache.isEmpty()) "Reviews are unavailable for this title." else null
-                        )
-                    } else {
-                        state
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } finally {
-                isLoadingMoreReviews = false
-            }
-        }
+        hasMoreKitsuReviews = false
     }
 
     private fun loadMoreTraktReviewsPage(expectedMetaId: String) {
@@ -1313,46 +1285,20 @@ class MetaDetailsViewModel @Inject constructor(
     private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {
         collectionJob?.cancel()
         collectionJob = viewModelScope.launch {
-            if (!settings.isActive || !settings.useCollections) {
-                _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
-                return@launch
-            }
-
-            val items = runCatching {
-                metadataSecondaryRepository.fetchMovieCollection(
-                    collectionId = collectionId
-                )
-            }.getOrElse {
-                if (it is CancellationException) throw it
-                Log.w(TAG, "Failed to load collection $collectionId: ${it.message}")
-                emptyList()
-            }
-
-            val filteredItems = items
-
             _uiState.update { state ->
-                state.copy(collection = filteredItems, collectionName = collectionName)
+                state.copy(
+                    collection = state.resolvedDetail?.collection.orEmpty(),
+                    collectionName = collectionName.takeIf { state.resolvedDetail?.collection?.isNotEmpty() == true }
+                )
             }
         }
     }
 
     private suspend fun loadMDBListRatings(meta: Meta, tvEnrichment: TvMetadataEnrichment?) {
-        val ratingsFallbackItemId = resolveRatingsFallbackItemId(meta, tvEnrichment)
-        val ratingsResult = runCatching {
-            mdbListRepository.getRatingsForMeta(
-                meta = meta,
-                fallbackItemId = ratingsFallbackItemId,
-                fallbackItemType = itemType
-            )
-        }.getOrElse {
-            if (it is CancellationException) throw it
-            null
-        }
-
         _uiState.update { state ->
             state.copy(
-                mdbListRatings = ratingsResult?.ratings,
-                showMdbListImdb = ratingsResult?.hasImdbRating == true
+                mdbListRatings = null,
+                showMdbListImdb = false
             )
         }
     }
@@ -1361,7 +1307,6 @@ class MetaDetailsViewModel @Inject constructor(
         episodeRatingsJob?.cancel()
         val isSeries = isSeriesDetailMeta(meta)
         val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct().sorted()
-        val ratingsFallbackItemId = resolveRatingsFallbackItemId(meta, tvEnrichment)
 
         _uiState.update { state ->
             if (state.meta == null || state.meta.id != meta.id) {
@@ -1378,48 +1323,15 @@ class MetaDetailsViewModel @Inject constructor(
         if (!isSeries || seasonNumbers.isEmpty()) return
 
         episodeRatingsJob = viewModelScope.launch {
-            val episodesBySeason = meta.videos
-                .mapNotNull { video ->
-                    val season = video.season
-                    val episode = video.episode
-                    if (season != null && episode != null) season to episode else null
-                }
-                .groupBy({ it.first }, { it.second })
-                .mapValues { (_, episodes) -> episodes.toSet() }
-
-            try {
-                val ratings = episodeRatingsSelectionRepository.getEpisodeRatings(
-                    meta = meta,
-                    fallbackItemId = ratingsFallbackItemId,
-                    fallbackItemType = itemType,
-                    episodesBySeason = episodesBySeason
-                )
-
-                _uiState.update { state ->
-                    if (state.meta?.id != meta.id) {
-                        state
-                    } else {
-                        state.copy(
-                            episodeRatings = ratings,
-                            isEpisodeRatingsLoading = false,
-                            episodeRatingsError = null
-                        )
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Log.w(TAG, "Failed to load episode ratings for ${meta.id}: ${error.message}", error)
-                _uiState.update { state ->
-                    if (state.meta?.id != meta.id) {
-                        state
-                    } else {
-                        state.copy(
-                            episodeRatings = emptyMap(),
-                            isEpisodeRatingsLoading = false,
-                            episodeRatingsError = context.getString(R.string.ratings_unavailable)
-                        )
-                    }
+            _uiState.update { state ->
+                if (state.meta?.id != meta.id) {
+                    state
+                } else {
+                    state.copy(
+                        episodeRatings = emptyMap(),
+                        isEpisodeRatingsLoading = false,
+                        episodeRatingsError = null
+                    )
                 }
             }
         }
@@ -1427,253 +1339,32 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun enrichMeta(
         meta: Meta,
-        includeEpisodeMetadata: Boolean = true
+        includeEpisodeMetadata: Boolean = true,
+        resolvedDetail: ResolvedDetailDisplayDocument? = null
     ): DetailMetadataEnrichment {
         val settings = tmdbSettingsDataStore.settings.first()
         val tmdbContentType = resolveTmdbContentType(meta)
         val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
-        val parsedAnimeIds = listOfNotNull(
-            AnimeStremioId.parse(meta.id),
-            AnimeStremioId.parse(itemId)
-        )
-        val hasAnimeId = parsedAnimeIds.any { animeId ->
-            animeId.source != AnimeIdSource.IMDB || tmdbContentType != ContentType.MOVIE
-        }
         val tvdbLanguage = currentTvdbLanguageTag()
-        val tvDecision = if (isTvContent || hasAnimeId) {
-            metadataRouterFacade.fetchTvEnrichment(
-                metadataRequest = MetadataRequest(
-                    contentId = meta.id,
-                    contentType = tmdbContentType,
-                    sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
-                    language = tvdbLanguage,
-                    depth = MetadataDepth.DETAIL_CORE
-                ),
-                tvRequest = TvMetadataRequest(
-                    contentId = meta.id,
-                    fallbackContentId = itemId,
-                    contentType = tmdbContentType,
-                    language = tvdbLanguage
-                )
+        val detailDocument = resolvedDetail ?: runCatching {
+            loadResolvedDetailDocument(
+                contentId = meta.id,
+                contentType = tmdbContentType,
+                previewMeta = meta
             )
-        } else {
+        }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            Log.w(TAG, "Failed to resolve detail display document for ${meta.id}: ${error.message}", error)
             null
         }
-        val tvEnrichment = tvDecision?.value
-        val isKitsuAnimeByProvider = tvDecision?.provider == TvProvider.KITSU
-        fun result(updatedMeta: Meta): DetailMetadataEnrichment {
-            return DetailMetadataEnrichment(
-                meta = updatedMeta,
-                tvEnrichment = tvEnrichment,
-                animeRelated = emptyList(),
-                isAnimeDetail = isKitsuAnimeByProvider,
-                tvdbLanguage = tvdbLanguage,
-                tmdbContentType = tmdbContentType,
-                isTvContent = isTvContent,
-                settings = settings
-            )
-        }
 
-        val tmdbEnrichment = if (isTvContent) {
-            val tmdbId = tvEnrichment?.remoteIds
-                ?.get("tmdb")
-                ?.firstOrNull()
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-            if (
-                tmdbId != null &&
-                settings.isActive &&
-                shouldSupplementTvdbDetailWithTmdb(tvEnrichment, settings)
-            ) {
-                metadataRouterFacade.fetchTmdbEnrichment(
-                    metadataRequest = MetadataRequest(
-                        contentId = "tmdb:$tmdbId",
-                        contentType = tmdbContentType,
-                        sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
-                        language = tvdbLanguage,
-                        depth = MetadataDepth.DETAIL_CORE
-                    ),
-                    tmdbId = tmdbId,
-                    contentType = tmdbContentType
-                )
-            } else {
-                null
-            }
+        var updated = detailDocument?.let { meta.applyResolvedDetail(it, settings) } ?: meta
+        val tvEnrichment = detailDocument?.toTvMetadataEnrichment()
+        val isKitsuAnimeByProvider = detailDocument?.route?.provider == com.nexio.tv.core.metadata.router.MetadataPrimaryProvider.KITSU
+        val animeRelated = if (isKitsuAnimeByProvider) {
+            detailDocument.recommendations
         } else {
-            if (hasAnimeId && tvEnrichment != null) {
-                null
-            } else {
-                if (!settings.isActive) return result(meta)
-                val tmdbId = listOf(meta.id, itemId)
-                    .firstNotNullOfOrNull { id -> parseContentIds(id).tmdb }
-                    ?.toString()
-                    ?: return result(meta)
-                metadataRouterFacade.fetchTmdbEnrichment(
-                    metadataRequest = MetadataRequest(
-                        contentId = "tmdb:$tmdbId",
-                        contentType = tmdbContentType,
-                        sourceContext = MetadataSourceContext(itemType = tmdbContentType.toApiString()),
-                        language = tvdbLanguage,
-                        depth = MetadataDepth.DETAIL_CORE
-                    ),
-                    tmdbId = tmdbId,
-                    contentType = tmdbContentType
-                )
-            }
-        }
-
-        var updated = meta
-        val localizedTitle = tvEnrichment?.localizedTitle ?: tmdbEnrichment?.localizedTitle
-        val description = tvEnrichment?.description ?: tmdbEnrichment?.description
-        val genres = tvEnrichment?.genres?.takeIf { it.isNotEmpty() }
-            ?: tmdbEnrichment?.genres?.takeIf { it.isNotEmpty() }
-        val backdrop = tvEnrichment?.backdrop ?: tmdbEnrichment?.backdrop
-        val logo = tvEnrichment?.logo ?: tmdbEnrichment?.logo
-        val kitsuAdvancedSourceId = if (isKitsuAnimeByProvider) {
-            listOf(meta.id, itemId).firstOrNull { AnimeStremioId.parse(it) != null }
-        } else {
-            null
-        }
-        val kitsuAdvanced = if (kitsuAdvancedSourceId != null) {
-            metadataSecondaryRepository.fetchKitsuAdvancedDetail(
-                rawId = kitsuAdvancedSourceId,
-                mediaKind = tmdbContentType.toAnimeMediaKind(),
-                preferredLanguageCode = tvEnrichment?.language
-            )
-        } else {
-            null
-        }
-        if (isKitsuAnimeByProvider) {
-            Log.i(
-                TAG,
-                "detail.kitsu_advanced_result metaId=${meta.id} sourceId=$kitsuAdvancedSourceId " +
-                    "characters=${kitsuAdvanced?.characters?.size ?: 0} " +
-                    "productions=${kitsuAdvanced?.productionCompanies?.size ?: 0} " +
-                    "related=${kitsuAdvanced?.relatedTitles?.size ?: 0}"
-            )
-        }
-
-        val releaseInfo = tvEnrichment?.releaseInfo ?: tmdbEnrichment?.releaseInfo
-        val localReleaseInfo = tvEnrichment?.let(::formatTvdbDetailLocalReleaseInfo)
-        val rating = tvEnrichment?.rating ?: tmdbEnrichment?.rating
-        val ratingSource = when {
-            tvEnrichment?.rating != null -> tvEnrichment.ratingSource.orDefault()
-            tmdbEnrichment?.rating != null -> tmdbEnrichment.ratingSource.orDefault(com.nexio.tv.domain.model.TitleRatingSource.TMDB)
-            else -> updated.ratingSource.orDefault()
-        }
-        val runtimeMinutes = tvEnrichment?.runtimeMinutes ?: tmdbEnrichment?.runtimeMinutes
-        val ageRating = tvEnrichment?.ageRating ?: tmdbEnrichment?.ageRating
-        val countries = tvEnrichment?.countries ?: tmdbEnrichment?.countries
-        val language = tvEnrichment?.language ?: tmdbEnrichment?.language
-
-        // Group: Artwork (logo, backdrop)
-        if ((tvEnrichment != null || tmdbEnrichment != null) && settings.useArtwork) {
-            updated = updated.copy(
-                background = backdrop ?: updated.background,
-                logo = logo ?: updated.logo
-            )
-        }
-
-        // Group: Basic Info (description, genres, rating)
-        if ((tvEnrichment != null || tmdbEnrichment != null) && settings.useBasicInfo) {
-            updated = updated.copy(
-                name = localizedTitle ?: updated.name,
-                description = description ?: updated.description
-            )
-            if (!genres.isNullOrEmpty()) {
-                updated = updated.copy(genres = genres)
-            }
-            updated = updated.copy(
-                imdbRating = rating?.toFloat() ?: updated.imdbRating,
-                ratingSource = if (rating != null) ratingSource else updated.ratingSource.orDefault()
-            )
-        }
-
-        // Group: Details (runtime, release info, country, language)
-        if ((tvEnrichment != null || tmdbEnrichment != null) && settings.useDetails) {
-            updated = updated.copy(
-                runtime = runtimeMinutes?.toString() ?: updated.runtime,
-                releaseInfo = releaseInfo ?: updated.releaseInfo,
-                localReleaseInfo = localReleaseInfo ?: updated.localReleaseInfo,
-                ageRating = ageRating ?: updated.ageRating,
-                country = countries?.joinToString(", ") ?: updated.country,
-                language = language ?: updated.language
-            )
-        }
-
-        // Group: Credits (cast with photos, director, writer)
-        if (tmdbEnrichment != null && settings.useCredits) {
-            val peopleCredits = buildList {
-                addAll(tmdbEnrichment.directorMembers)
-                addAll(tmdbEnrichment.writerMembers)
-                addAll(tmdbEnrichment.castMembers)
-            }
-                .filter { it.name.isNotBlank() }
-                .distinctBy { it.tmdbId ?: (it.name.lowercase() + "|" + (it.character ?: "")) }
-
-            if (peopleCredits.isNotEmpty()) {
-                updated = updated.copy(
-                    castMembers = peopleCredits,
-                    cast = tmdbEnrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
-                )
-            }
-            updated = updated.copy(
-                director = if (tmdbEnrichment.director.isNotEmpty()) tmdbEnrichment.director else updated.director,
-                writer = if (tmdbEnrichment.writer.isNotEmpty()) tmdbEnrichment.writer else updated.writer
-            )
-        } else if (isKitsuAnimeByProvider && settings.useCredits && kitsuAdvanced?.characters?.isNotEmpty() == true) {
-            val animeCharacters = kitsuAdvanced.characters.map { character ->
-                com.nexio.tv.domain.model.MetaCastMember(
-                    name = character.characterName,
-                    character = character.actorName,
-                    photo = character.characterImage ?: character.actorImage,
-                    tmdbId = null,
-                    provider = "kitsu",
-                    providerId = character.actorId
-                )
-            }
-            updated = updated.copy(
-                castMembers = animeCharacters,
-                cast = animeCharacters.map { it.name }
-            )
-        } else if (tvEnrichment != null && settings.useCredits) {
-            if (tvEnrichment.castMembers.isNotEmpty()) {
-                updated = updated.copy(
-                    castMembers = tvEnrichment.castMembers,
-                    cast = tvEnrichment.castMembers.map { it.name }
-                )
-            }
-        }
-
-        // Group: Productions
-        if (tmdbEnrichment != null && settings.useProductions && tmdbEnrichment.productionCompanies.isNotEmpty()) {
-            updated = updated.copy(productionCompanies = tmdbEnrichment.productionCompanies)
-        } else if (isKitsuAnimeByProvider && settings.useProductions && kitsuAdvanced?.productionCompanies?.isNotEmpty() == true) {
-            updated = updated.copy(
-                productionCompanies = kitsuAdvanced.productionCompanies.map { company ->
-                    com.nexio.tv.domain.model.MetaCompany(
-                        tmdbId = null,
-                        name = company.producerName,
-                        kind = com.nexio.tv.domain.model.MetaCompanyKind.COMPANY,
-                        provider = "kitsu",
-                        providerId = company.producerId
-                    )
-                }
-            )
-        } else if (tvEnrichment != null && settings.useProductions && tvEnrichment.productionCompanies.isNotEmpty()) {
-            updated = updated.copy(productionCompanies = tvEnrichment.productionCompanies)
-        }
-
-        // Group: Networks
-        if (tmdbEnrichment != null && settings.useNetworks && tmdbEnrichment.networks.isNotEmpty()) {
-            updated = updated.copy(networks = tmdbEnrichment.networks)
-        } else if (tvEnrichment != null && settings.useNetworks && tvEnrichment.networks.isNotEmpty()) {
-            updated = updated.copy(networks = tvEnrichment.networks)
-        }
-
-        // Group: TVDB season-order context
-        if (tvEnrichment?.seasonOrderContext != null) {
-            updated = updated.copy(tvdbSeasonOrderContext = tvEnrichment.seasonOrderContext)
+            emptyList()
         }
 
         // Group: Episodes (titles, overviews, thumbnails, runtime)
@@ -1688,37 +1379,119 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        val ratingsFallbackItemId = resolveRatingsFallbackItemId(updated, tvEnrichment)
-        updated = titleRatingOverrideRepository.enrichMeta(
+        return DetailMetadataEnrichment(
             meta = updated,
-            fallbackItemId = ratingsFallbackItemId,
-            fallbackItemType = itemType
+            resolvedDetail = detailDocument,
+            tvEnrichment = tvEnrichment,
+            animeRelated = animeRelated,
+            isAnimeDetail = isKitsuAnimeByProvider,
+            tvdbLanguage = tvdbLanguage,
+            tmdbContentType = tmdbContentType,
+            isTvContent = isTvContent,
+            settings = settings
         )
-
-        if (tmdbEnrichment?.collectionId != null) {
-            loadCollectionAsync(tmdbEnrichment.collectionId, tmdbEnrichment.collectionName, settings)
-        }
-        val animeRelated = kitsuAdvanced?.relatedTitles
-            .orEmpty()
-            .map { item ->
-                com.nexio.tv.domain.model.MetaPreview(
-                    id = "kitsu:${item.mediaId}",
-                    type = ContentType.SERIES,
-                    rawType = "anime",
-                    name = item.title,
-                    poster = item.displayPoster,
-                    posterShape = PosterShape.POSTER,
-                    background = null,
-                    logo = null,
-                    description = item.synopsis,
-                    releaseInfo = item.releaseInfo?.take(4),
-                    imdbRating = null,
-                    genres = emptyList()
-                )
-            }
-
-        return result(updated).copy(animeRelated = animeRelated)
     }
+
+    private fun Meta.applyResolvedDetail(
+        document: ResolvedDetailDisplayDocument,
+        settings: TmdbSettings
+    ): Meta {
+        var updated = this
+        if (settings.useArtwork) {
+            updated = updated.copy(
+                poster = document.artwork.poster.toLegacyArtworkString() ?: updated.poster,
+                background = document.artwork.backdrop.toLegacyArtworkString() ?: updated.background,
+                logo = document.artwork.logo.toLegacyArtworkString() ?: updated.logo,
+                artwork = document.artwork.takeUnless { it.isEmpty() } ?: updated.artwork
+            )
+        }
+        if (settings.useBasicInfo) {
+            val resolvedGenres = document.fields.genres.takeIf { it.isNotEmpty() }
+            updated = updated.copy(
+                name = document.fields.title ?: updated.name,
+                description = document.fields.overview ?: updated.description,
+                genres = resolvedGenres ?: updated.genres,
+                imdbRating = document.rating?.value?.toFloat() ?: updated.imdbRating,
+                ratingSource = document.rating?.source ?: updated.ratingSource.orDefault()
+            )
+        }
+        if (settings.useDetails) {
+            updated = updated.copy(
+                runtime = document.fields.runtimeText?.parseRuntimeMinutesText() ?: updated.runtime,
+                releaseInfo = document.fields.releaseDate ?: document.fields.year?.toString() ?: updated.releaseInfo,
+                language = document.localization.selectedLanguage ?: updated.language
+            )
+        }
+        if (settings.useCredits) {
+            val people = document.people
+            if (people != null) {
+                updated = updated.withPeople(people)
+            }
+        }
+        return updated.copy(
+            trailerYtIds = document.trailer.fallbackTrailerYtIds.ifEmpty { updated.trailerYtIds }
+        )
+    }
+
+    private fun Meta.withPeople(people: PeopleDisplay): Meta {
+        val castMembers = people.cast.filter { it.name.isNotBlank() }
+        if (castMembers.isEmpty()) return this
+        return copy(
+            castMembers = castMembers,
+            cast = castMembers.map { it.name }
+        )
+    }
+
+    private fun String.parseRuntimeMinutesText(): String? =
+        Regex("""\d+""").find(this)?.value
+
+    private fun ResolvedDetailDisplayDocument.toTvMetadataEnrichment(): TvMetadataEnrichment? {
+        val fields = fields
+        val hasDetailData = listOf(
+            fields.title,
+            fields.overview,
+            fields.releaseDate,
+            fields.runtimeText,
+            rating
+        ).any { it != null } ||
+            fields.genres.isNotEmpty() ||
+            people?.cast?.isNotEmpty() == true
+        if (!hasDetailData) return null
+
+        return TvMetadataEnrichment(
+            seriesTvdbId = identity.providerIds.tvdb?.toIntOrNull()
+                ?: identity.canonicalId?.toIntOrNull().takeIf { identity.canonicalProvider == com.nexio.tv.domain.model.ProviderId.TVDB },
+            localizedTitle = fields.title,
+            description = fields.overview,
+            genres = fields.genres,
+            backdrop = artwork.backdrop.toLegacyArtworkString(),
+            logo = artwork.logo.toLegacyArtworkString(),
+            poster = artwork.poster.toLegacyArtworkString(),
+            releaseInfo = fields.releaseDate,
+            rating = rating?.value,
+            ratingSource = rating?.source,
+            runtimeMinutes = fields.runtimeText?.parseRuntimeMinutesText()?.toIntOrNull(),
+            language = localization.selectedLanguage,
+            castMembers = people?.cast.orEmpty(),
+            remoteIds = identity.providerIds.toRemoteIds()
+        )
+    }
+
+    private fun com.nexio.tv.domain.model.ProviderIds.toRemoteIds(): Map<String, Set<String>> =
+        buildMap {
+            imdb?.let { put("imdb", setOf(it)) }
+            tmdb?.let { put("tmdb", setOf(it)) }
+            tvdb?.let { put("tvdb", setOf(it)) }
+            trakt?.let { put("trakt", setOf(it)) }
+            simkl?.let { put("simkl", setOf(it)) }
+            kitsu?.let { put("kitsu", setOf(it)) }
+            mal?.let { put("mal", setOf(it)) }
+            anilist?.let { put("anilist", setOf(it)) }
+            anidb?.let { put("anidb", setOf(it)) }
+        }
+
+    private fun com.nexio.tv.core.artwork.ArtworkBundle.isEmpty(): Boolean =
+        poster == null && backdrop == null && logo == null && thumbnail == null
 
     private fun resolveRatingsFallbackItemId(meta: Meta, tvEnrichment: TvMetadataEnrichment?): String {
         return extractImdbIdForRatings(meta.id)
@@ -2143,43 +1916,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun preloadTitleTrailerAvailability(meta: Meta) {
-        viewModelScope.launch {
-            val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
-            val tmdbId = if (isTvContent) null else runCatching {
-                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-            }.getOrElse {
-                if (it is CancellationException) throw it
-                null
-            }
-            debugLog(
-                TAG,
-                "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId isTvContent=$isTvContent fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
-            )
-            val available = trailerService.getTitleMediaAvailability(
-                tmdbId = tmdbId,
-                type = meta.apiType,
-                contentId = meta.id,
-                fallbackYtIds = meta.trailerYtIds
-            )
-            _uiState.update { state ->
-                state.copy(
-                    titleHasPlayableTrailerMedia = available,
-                    trailerResolutionStatus = when {
-                        state.trailerResolutionStatus == TrailerResolutionStatus.RESOLVING ->
-                            TrailerResolutionStatus.RESOLVING
-                        !state.trailerUrl.isNullOrBlank() || !state.trailerExternalUrl.isNullOrBlank() ->
-                            TrailerResolutionStatus.READY
-                        available -> TrailerResolutionStatus.IDLE
-                        else -> TrailerResolutionStatus.FAILED
-                    }
-                )
-            }
-            val state = _uiState.value
-            debugLog(
-                TAG,
-                "preloadTitleTrailerAvailability result itemId=${meta.id} available=$available resolutionStatus=${state.trailerResolutionStatus} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
-            )
-        }
+        applyTitleTrailerAvailabilityFromResolvedDocument()
     }
 
     private fun preloadAllSeasonMediaAvailability(meta: Meta) {
@@ -2199,20 +1936,10 @@ class MetaDetailsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val tmdbId = null // TV content: let TrailerService try TVDB first
-                val seasonAvailability = trailerService.getSeasonMediaAvailability(
-                    tmdbId = tmdbId,
-                    type = meta.apiType,
-                    seasonNumber = season,
-                    contentId = meta.id
-                )
                 _uiState.update { state ->
                     state.withSeasonMediaAvailability(
                         season,
-                        SeasonMediaActionAvailability(
-                            hasTrailerOrTeaser = seasonAvailability.hasTrailerOrTeaser,
-                            hasRecap = seasonAvailability.hasRecap
-                        )
+                        state.seasonMediaAvailabilityBySeason[season] ?: SeasonMediaActionAvailability()
                     )
                 }
             } finally {
@@ -2235,17 +1962,7 @@ class MetaDetailsViewModel @Inject constructor(
             return cached
         }
 
-        val tmdbId = null // TV content: let TrailerService try TVDB first
-        val seasonAvailability = trailerService.getSeasonMediaAvailability(
-            tmdbId = tmdbId,
-            type = meta.apiType,
-            seasonNumber = season,
-            contentId = meta.id
-        )
-        val resolvedAvailability = SeasonMediaActionAvailability(
-            hasTrailerOrTeaser = seasonAvailability.hasTrailerOrTeaser,
-            hasRecap = seasonAvailability.hasRecap
-        )
+        val resolvedAvailability = SeasonMediaActionAvailability()
         _uiState.update { state ->
             state.withSeasonMediaAvailability(season, resolvedAvailability)
         }
@@ -2619,22 +2336,12 @@ class MetaDetailsViewModel @Inject constructor(
                             )
                         }
                 } else {
-                    val tmdbIdStr = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
-                    val tvId = tmdbIdStr?.toIntOrNull()
-                        ?: parseContentIds(meta.id).tmdb
-                        ?: run {
-                            showMessage(
-                                message = context.getString(R.string.detail_marked_episodes_watched, 0),
-                                isError = true
-                            )
-                            return@launch
-                        }
-                    metadataSecondaryRepository.fetchSeasonEpisodes(tvId, season, null)
-                        .filter { ep -> AirDateGate.isAired(0L, ep.airDate, nowMs) }
-                        .map { ep ->
+                    meta.videos
+                        .filter { video -> video.season == season && AirDateGate.isAired(0L, video.released, nowMs) }
+                        .map { video ->
                             com.nexio.tv.domain.model.SeasonEpisodeMark(
-                                episodeNumber = ep.episodeNumber,
-                                airDate = ep.airDate
+                                episodeNumber = video.episode,
+                                airDate = video.released
                             )
                         }
                 }
@@ -2927,11 +2634,10 @@ class MetaDetailsViewModel @Inject constructor(
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
 
             val isTvContent = parseDetailApiTypeToContentType(meta.apiType) == ContentType.SERIES
-            val tmdbId = if (isTvContent) null else runCatching {
-                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-            }.getOrElse {
-                if (it is CancellationException) throw it
-                null
+            val tmdbId = if (isTvContent) null else {
+                _uiState.value.resolvedDetail?.identity?.providerIds?.tmdb
+                    ?: parseContentIds(meta.id).tmdb?.toString()
+                    ?: parseContentIds(itemId).tmdb?.toString()
             }
 
             val trailerContentType = resolveTmdbContentType(meta)
@@ -3037,7 +2743,7 @@ class MetaDetailsViewModel @Inject constructor(
             val year = meta.releaseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
-            val tmdbId = null // TV content: let TrailerService try TVDB first
+            val tmdbId = null
             // F2-TM-01: route through facade so metadata.route_decision and
             // metadata.resolver_schedule trace events fire for the recap path.
             val recapSource = metadataRouterFacade.fetchSeasonRecap(
@@ -3127,7 +2833,7 @@ class MetaDetailsViewModel @Inject constructor(
             val year = meta.releaseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
-            val tmdbId = null // TV content: let TrailerService try TVDB first
+            val tmdbId = null
             // F2-TM-01: route through facade so metadata.route_decision and
             // metadata.resolver_schedule trace events fire for the season-trailer path.
             val seasonTrailerSource = metadataRouterFacade.fetchSeasonTrailer(
@@ -3518,40 +3224,35 @@ class MetaDetailsViewModel @Inject constructor(
     }
 }
 
-/**
- * Converts a [MetadataResolutionResult] from [MetadataRouterFacade.resolveRequest] to the legacy
- * [Meta] shape expected by [MetaDetailsViewModel.applyMetaWithEnrichment].
- *
- * cast / videos / director / writer etc. are left empty because [applyMetaWithEnrichment]
- * calls [enrichMeta] which chains [fetchTvEnrichment] / [fetchTmdbEnrichment] /
- * [fetchTvEpisodeEnrichment] after this returns — those enrich the missing fields.
- */
-private fun MetadataResolutionResult.toMeta(contentId: String, contentType: ContentType): Meta {
-    val doc = resolvedDocument
-    val display = displayMetadata
+private fun ResolvedDetailDisplayDocument.toMeta(contentId: String, contentType: ContentType): Meta {
+    val fields = fields
     return Meta(
-        id = doc.canonicalId ?: contentId,
+        id = identity.canonicalProvider?.let { provider ->
+            identity.canonicalId?.let { canonicalId -> "${provider.name.lowercase()}:$canonicalId" }
+        } ?: contentId,
         type = contentType,
         rawType = contentType.toApiString(),
-        name = doc.title ?: display.title.orEmpty(),
-        poster = doc.poster ?: display.poster,
+        name = fields.title.orEmpty(),
+        poster = artwork.poster.toLegacyArtworkString(),
         posterShape = PosterShape.POSTER,
-        background = doc.backdrop ?: display.backdrop,
-        logo = doc.logo ?: display.logo,
-        description = doc.overview ?: display.description,
-        releaseInfo = display.releaseInfo,
-        imdbRating = (doc.rating as? Number)?.toFloat() ?: display.imdbRating,
-        ratingSource = display.ratingSource,
-        genres = display.genres,
-        runtime = doc.runtimeMinutes?.let { "${it}m" } ?: display.runtime,
+        background = artwork.backdrop.toLegacyArtworkString(),
+        logo = artwork.logo.toLegacyArtworkString(),
+        description = fields.overview,
+        releaseInfo = fields.releaseDate ?: fields.year?.toString(),
+        imdbRating = rating?.value?.toFloat(),
+        ratingSource = rating?.source,
+        genres = fields.genres,
+        runtime = fields.runtimeText?.let { Regex("""\d+""").find(it)?.value },
         director = emptyList(),
-        cast = emptyList(),
+        cast = people?.cast.orEmpty().map { it.name },
+        castMembers = people?.cast.orEmpty(),
         videos = emptyList(),
         country = null,
         awards = null,
-        language = null,
+        language = localization.selectedLanguage,
         links = emptyList(),
-        posterProviderTag = display.posterProviderTag
+        trailerYtIds = trailer.fallbackTrailerYtIds,
+        artwork = artwork.takeUnless { it.poster == null && it.backdrop == null && it.logo == null && it.thumbnail == null }
     )
 }
 

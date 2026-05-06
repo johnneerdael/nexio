@@ -8,10 +8,15 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.MDBListRatings
+import com.nexio.tv.domain.model.ResolvedDetailDisplayDocument
+import com.nexio.tv.domain.model.TrailerDisplayState
 
 data class MetaDetailsUiState(
     val isLoading: Boolean = true,
     val meta: Meta? = null,
+    val resolvedDetail: ResolvedDetailDisplayDocument? = null,
+    val localizationFallbackReason: String? = null,
+    val trailerState: TrailerDisplayState = TrailerDisplayState(),
     val error: String? = null,
     val selectedSeason: Int = 1,
     val manualSeasonOverrideActive: Boolean = false,

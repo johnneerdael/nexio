@@ -17,6 +17,7 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
@@ -1072,24 +1073,22 @@ class MetaDetailsSeasonMediaViewModelTest {
             kitsuMetadataService = mockk(relaxed = true)
         )
 
+        val metadataRouterFacade = testMetadataRouterFacade(
+            providerMetadataRouter = tvMetadataRouter,
+            metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
+            trailerService = trailerService
+        )
+
         return MetaDetailsViewModel(
             context = context,
             metaRepository = metaRepository,
             traktAuthDataStore = traktAuthDataStore,
             reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
             tmdbSettingsDataStore = tmdbSettingsDataStore,
-            tmdbService = resolvedTmdbService,
-            metadataRouterFacade = testMetadataRouterFacade(
-                providerMetadataRouter = tvMetadataRouter,
-                metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
-                trailerService = trailerService
-            ),
-            metadataSecondaryRepository = metadataSecondaryRepositoryInstance,
+            metadataRouterFacade = metadataRouterFacade,
+            metadataDisplayRepository = MetadataDisplayRepository(metadataRouterFacade),
             profileBoundary = profileBoundary,
             profileManager = defaultProfileManager(),
-            mdbListRepository = mdbListRepository,
-            titleRatingOverrideRepository = titleRatingOverrideRepository,
-            episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
             traktLibraryService = mockk(relaxed = true),
             watchProgressRepository = effectiveWatchProgressRepository,
@@ -1098,7 +1097,6 @@ class MetaDetailsSeasonMediaViewModelTest {
             trackingScrobbleService = traktScrobbleService,
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
-            trailerService = trailerService,
             animeSeasonDetailRepository = mockk(relaxed = true),
             savedStateHandle = SavedStateHandle(
                 mapOf(

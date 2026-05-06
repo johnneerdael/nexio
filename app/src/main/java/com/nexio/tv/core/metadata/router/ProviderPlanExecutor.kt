@@ -61,7 +61,7 @@ class ProviderPlanExecutor @Inject constructor() {
     }
 
     private fun objectEntitySteps(route: MetadataRoute, depth: MetadataDepth): List<ProviderPlanStep>? {
-        if (depth != MetadataDepth.DETAIL_SECONDARY) return null
+        if (depth != MetadataDepth.DETAIL_SECONDARY && depth != MetadataDepth.DETAIL_FULL) return null
         val parts = route.parentId.split(":")
         if (parts.size < 3) return null
         val provider = parts[0].lowercase()
@@ -126,7 +126,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
-        if (depth == MetadataDepth.DETAIL_MEDIA || depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.DETAIL_MEDIA || depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             if (isSeries && route.seasonNumber != null) {
                 steps += step(
                     apiShapeId = TmdbApiShapes.SEASON_VIDEOS,
@@ -141,7 +141,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
-        if (depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             steps += step(
                 apiShapeId = if (isSeries) TmdbApiShapes.TV_REVIEWS else TmdbApiShapes.MOVIE_REVIEWS,
                 provider = MetadataPrimaryProvider.TMDB,
@@ -167,7 +167,8 @@ class ProviderPlanExecutor @Inject constructor() {
 
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
-            depth == MetadataDepth.DETAIL_SECONDARY) {
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
             steps += posterSteps()
         }
 
@@ -198,7 +199,8 @@ class ProviderPlanExecutor @Inject constructor() {
 
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
-            depth == MetadataDepth.DETAIL_SECONDARY) {
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
             steps += posterSteps()
         }
 
@@ -216,7 +218,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         )
 
-        if (depth == MetadataDepth.SEASON || depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.SEASON || depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             steps += step(
                 apiShapeId = KitsuApiShapes.ANIME_EPISODES,
                 provider = MetadataPrimaryProvider.KITSU,
@@ -224,7 +226,7 @@ class ProviderPlanExecutor @Inject constructor() {
             )
         }
 
-        if (depth == MetadataDepth.DETAIL_SECONDARY) {
+        if (depth == MetadataDepth.DETAIL_SECONDARY || depth == MetadataDepth.DETAIL_FULL) {
             steps += step(KitsuApiShapes.CASTINGS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.ANIME_STAFF, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
             steps += step(KitsuApiShapes.ANIME_PRODUCTIONS, MetadataPrimaryProvider.KITSU, ProviderPlanRole.SECONDARY)
@@ -233,7 +235,8 @@ class ProviderPlanExecutor @Inject constructor() {
 
         if (depth == MetadataDepth.DETAIL_CORE ||
             depth == MetadataDepth.DETAIL_MEDIA ||
-            depth == MetadataDepth.DETAIL_SECONDARY) {
+            depth == MetadataDepth.DETAIL_SECONDARY ||
+            depth == MetadataDepth.DETAIL_FULL) {
             steps += posterSteps()
         }
 

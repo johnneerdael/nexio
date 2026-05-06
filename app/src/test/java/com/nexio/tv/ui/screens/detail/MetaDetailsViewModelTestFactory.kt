@@ -22,6 +22,7 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.repository.MetadataDisplayRepository
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
@@ -78,6 +79,7 @@ fun buildMetaDetailsViewModel(
     libraryRepository: LibraryRepository = defaultLibraryRepository(),
     trailerService: TrailerService? = null,
     metadataRouterFacade: MetadataRouterFacade? = null,
+    metadataDisplayRepository: MetadataDisplayRepository? = null,
     addonRepository: AddonRepository? = null,
     mdbListRepository: MDBListRepository = mockk(relaxed = true),
     titleRatingOverrideRepository: TitleRatingOverrideRepository = defaultTitleRatingOverrideRepository(),
@@ -117,24 +119,22 @@ fun buildMetaDetailsViewModel(
         kitsuMetadataService = kitsuMetadataService
     )
 
+    val effectiveMetadataRouterFacade = metadataRouterFacade ?: testMetadataRouterFacade(
+        providerMetadataRouter = tvMetadataRouter,
+        metadataSecondaryRepository = metadataSecondaryRepository,
+        trailerService = effectiveTrailerService
+    )
+
     return MetaDetailsViewModel(
         context = context,
         metaRepository = metaRepository,
         traktAuthDataStore = traktAuthDataStore,
         reviewsRepository = mockk<ReviewsRepository>(relaxed = true),
         tmdbSettingsDataStore = tmdbSettingsDataStore,
-        tmdbService = tmdbService,
-        metadataRouterFacade = metadataRouterFacade ?: testMetadataRouterFacade(
-            providerMetadataRouter = tvMetadataRouter,
-            metadataSecondaryRepository = metadataSecondaryRepository,
-            trailerService = effectiveTrailerService
-        ),
-        metadataSecondaryRepository = metadataSecondaryRepository,
+        metadataRouterFacade = effectiveMetadataRouterFacade,
+        metadataDisplayRepository = metadataDisplayRepository ?: MetadataDisplayRepository(effectiveMetadataRouterFacade),
         profileBoundary = profileBoundary,
         profileManager = profileManager,
-        mdbListRepository = mdbListRepository,
-        titleRatingOverrideRepository = titleRatingOverrideRepository,
-        episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
         libraryRepository = libraryRepository,
         traktLibraryService = mockk(relaxed = true),
         watchProgressRepository = watchProgressRepository,
@@ -143,7 +143,6 @@ fun buildMetaDetailsViewModel(
         trackingScrobbleService = mockk<TrackingScrobbleService>(relaxed = true),
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         playerSettingsDataStore = playerSettingsDataStore,
-        trailerService = effectiveTrailerService,
         animeSeasonDetailRepository = animeSeasonDetailRepository,
         savedStateHandle = SavedStateHandle(
             mapOf(

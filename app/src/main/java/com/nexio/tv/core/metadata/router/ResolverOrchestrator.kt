@@ -34,7 +34,8 @@ class ResolverOrchestrator @Inject constructor(
             MetadataDepth.DETAIL_MEDIA -> {
                 networkResolvers += ResolverType.TRAILERS
             }
-            MetadataDepth.DETAIL_SECONDARY -> {
+            MetadataDepth.DETAIL_SECONDARY,
+            MetadataDepth.DETAIL_FULL -> {
                 localResolvers += ResolverType.RATING
                 localResolvers += ResolverType.ARTWORK
                 networkResolvers += ResolverType.REVIEWS
