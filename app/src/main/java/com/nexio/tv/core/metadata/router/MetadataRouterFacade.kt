@@ -30,7 +30,10 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.ProviderSeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
+import com.nexio.tv.data.trailer.SeasonTrailerRefRequest
+import com.nexio.tv.data.trailer.SeasonTrailerRefResolver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
@@ -75,7 +78,8 @@ class MetadataRouterFacade(
     private val recommendationResolver: RecommendationResolver? = null,
     private val organizationPersonResolver: OrganizationPersonResolver? = null,
     private val tmdbOrganizationService: TmdbOrganizationService? = null,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver? = null,
+    private val seasonTrailerRefResolver: SeasonTrailerRefResolver? = null
 ) {
     private val effectiveTrailerResolver: TrailerResolver by lazy {
         trailerResolver ?: TrailerResolver(traceEvents)
@@ -98,7 +102,8 @@ class MetadataRouterFacade(
         recommendationResolver: RecommendationResolver? = null,
         organizationPersonResolver: OrganizationPersonResolver? = null,
         tmdbOrganizationService: TmdbOrganizationService? = null,
-        posterRatingsUrlResolver: PosterRatingsUrlResolver? = null
+        posterRatingsUrlResolver: PosterRatingsUrlResolver? = null,
+        seasonTrailerRefResolver: ProviderSeasonTrailerRefResolver
     ) : this(
         router = router,
         providerPlanExecutor = providerPlanExecutor,
@@ -117,7 +122,8 @@ class MetadataRouterFacade(
         recommendationResolver = recommendationResolver,
         organizationPersonResolver = organizationPersonResolver,
         tmdbOrganizationService = tmdbOrganizationService,
-        posterRatingsUrlResolver = posterRatingsUrlResolver
+        posterRatingsUrlResolver = posterRatingsUrlResolver,
+        seasonTrailerRefResolver = seasonTrailerRefResolver
     )
 
     suspend fun routeRequest(request: MetadataRequest): MetadataRoute {
@@ -397,24 +403,17 @@ class MetadataRouterFacade(
             )
         )
 
-        val legacyAvailability = trailerService?.getSeasonMediaAvailability(
+        val refRequest = seasonRefRequest(
+            title = metadataRequest.contentId,
+            year = null,
             tmdbId = tmdbId,
             type = type,
             seasonNumber = effectiveSeason,
             contentId = contentId
-        ) ?: SeasonMediaAvailability()
-        val legacyTrailerCandidate = if (legacyAvailability.hasTrailerOrTeaser) {
-            trailerService?.getSeasonTrailerPlaybackSource(
-                title = metadataRequest.contentId,
-                year = null,
-                tmdbId = tmdbId,
-                type = type,
-                seasonNumber = effectiveSeason,
-                contentId = contentId
-            )?.toTrailerPlaybackRef()
-        } else {
-            null
-        }
+        )
+        val seasonTrailerRefs = seasonTrailerRefResolver
+            ?.resolveSeasonTrailerRefs(refRequest)
+            .orEmpty()
         val trailerAvailability = resolveTrailer(
             seasonTrailerResolveRequest(
                 metadataRequest = metadataRequest,
@@ -424,22 +423,13 @@ class MetadataRouterFacade(
                 type = type,
                 seasonNumber = effectiveSeason,
                 contentId = contentId,
-                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs() + listOfNotNull(legacyTrailerCandidate)
+                providerCandidates = resolution.providerRunResult.toTrailerPlaybackRefs() + seasonTrailerRefs
             )
         ).availability.available
 
-        val recapCandidate = if (legacyAvailability.hasRecap) {
-            trailerService?.getSeasonRecapPlaybackSource(
-                title = metadataRequest.contentId,
-                year = null,
-                tmdbId = tmdbId,
-                type = type,
-                seasonNumber = effectiveSeason,
-                contentId = contentId
-            )?.toTrailerPlaybackRef()
-        } else {
-            null
-        }
+        val seasonRecapRefs = seasonTrailerRefResolver
+            ?.resolveSeasonRecapRefs(refRequest)
+            .orEmpty()
         val recapAvailability = resolveTrailer(
             seasonTrailerResolveRequest(
                 metadataRequest = metadataRequest,
@@ -449,7 +439,7 @@ class MetadataRouterFacade(
                 type = type,
                 seasonNumber = effectiveSeason,
                 contentId = contentId,
-                providerCandidates = listOfNotNull(recapCandidate),
+                providerCandidates = seasonRecapRefs,
                 itemKeySuffix = "recap"
             )
         ).availability.available
@@ -463,9 +453,8 @@ class MetadataRouterFacade(
     /**
      * F2-TM-01: Season trailer path routed through canonical facade.
      *
-     * Provider-plan candidates are selected by [TrailerResolver]. [TrailerService] remains a
-     * transport adapter for the resolver-selected ref, with a legacy source candidate only used
-     * as compatibility input when provider-plan output has no playable ref.
+     * Provider-plan candidates and resolver-owned season-ref adapter candidates are selected by
+     * [TrailerResolver]. [TrailerService] remains only a transport adapter for the selected ref.
      */
     suspend fun fetchSeasonTrailer(
         metadataRequest: MetadataRequest,
@@ -500,15 +489,19 @@ class MetadataRouterFacade(
             return selected.toSeasonPlaybackSource(service, title, year)
         }
 
-        val legacyCandidate = service?.getSeasonTrailerPlaybackSource(
-            title = title,
-            year = year,
-            tmdbId = tmdbId,
-            type = type,
-            seasonNumber = effectiveSeason,
-            contentId = contentId
-        )?.toTrailerPlaybackRef()
-        val legacySelection = resolveTrailer(
+        val seasonTrailerRefs = seasonTrailerRefResolver
+            ?.resolveSeasonTrailerRefs(
+                seasonRefRequest(
+                    title = title,
+                    year = year,
+                    tmdbId = tmdbId,
+                    type = type,
+                    seasonNumber = effectiveSeason,
+                    contentId = contentId
+                )
+            )
+            .orEmpty()
+        val seasonSelection = resolveTrailer(
             seasonTrailerResolveRequest(
                 metadataRequest = metadataRequest,
                 title = title,
@@ -517,18 +510,18 @@ class MetadataRouterFacade(
                 type = type,
                 seasonNumber = effectiveSeason,
                 contentId = contentId,
-                providerCandidates = listOfNotNull(legacyCandidate),
-                itemKeySuffix = "legacy"
+                providerCandidates = seasonTrailerRefs,
+                itemKeySuffix = "season"
             )
         )
-        return legacySelection.selected?.toSeasonPlaybackSource(service, title, year)
+        return seasonSelection.selected?.toSeasonPlaybackSource(service, title, year)
     }
 
     /**
      * F2-TM-01: Season recap path routed through canonical facade.
      *
-     * Recap transport candidates are still adapted by [TrailerService], but the selected
-     * playback ref and availability are owned by [TrailerResolver].
+     * Recap refs are discovered through the resolver-owned season-ref adapter and selected by
+     * [TrailerResolver]. [TrailerService] only translates the selected ref into playback.
      */
     suspend fun fetchSeasonRecap(
         metadataRequest: MetadataRequest,
@@ -539,7 +532,7 @@ class MetadataRouterFacade(
         seasonNumber: Int? = null,
         contentId: String? = null
     ): TrailerPlaybackSource? {
-        val service = trailerService ?: return null
+        val service = trailerService
         val effectiveSeason = seasonNumber ?: metadataRequest.seasonNumber
         resolveRequest(
             metadataRequest.copy(
@@ -547,14 +540,18 @@ class MetadataRouterFacade(
                 seasonNumber = effectiveSeason
             )
         )
-        val legacyCandidate = service.getSeasonRecapPlaybackSource(
-            title = title,
-            year = year,
-            tmdbId = tmdbId,
-            type = type,
-            seasonNumber = effectiveSeason,
-            contentId = contentId
-        )?.toTrailerPlaybackRef()
+        val seasonRecapRefs = seasonTrailerRefResolver
+            ?.resolveSeasonRecapRefs(
+                seasonRefRequest(
+                    title = title,
+                    year = year,
+                    tmdbId = tmdbId,
+                    type = type,
+                    seasonNumber = effectiveSeason,
+                    contentId = contentId
+                )
+            )
+            .orEmpty()
         val recapSelection = resolveTrailer(
             seasonTrailerResolveRequest(
                 metadataRequest = metadataRequest,
@@ -564,12 +561,29 @@ class MetadataRouterFacade(
                 type = type,
                 seasonNumber = effectiveSeason,
                 contentId = contentId,
-                providerCandidates = listOfNotNull(legacyCandidate),
+                providerCandidates = seasonRecapRefs,
                 itemKeySuffix = "recap"
             )
         )
         return recapSelection.selected?.toSeasonPlaybackSource(service, title, year)
     }
+
+    private fun seasonRefRequest(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?
+    ): SeasonTrailerRefRequest =
+        SeasonTrailerRefRequest(
+            title = title,
+            year = year,
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId
+        )
 
     /**
      * Routes a review fetch through the canonical resolve pipeline at depth

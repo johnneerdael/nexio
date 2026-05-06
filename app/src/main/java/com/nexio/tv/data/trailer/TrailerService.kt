@@ -40,7 +40,7 @@ private fun trailerWarnLog(message: String) {
     runCatching { Log.w(TAG, message) }
 }
 
-private const val STREAILER_ADDON_ID = "org.streailer.trailer"
+internal const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
 private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
