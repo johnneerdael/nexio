@@ -882,6 +882,54 @@ class HomeCatalogRefreshCoordinatorTest {
         verify(exactly = 0) { posterRatingsUrlResolver.apply(any<MetaPreview>(), any()) }
     }
 
+    @Test
+    fun `home refresh preserves persisted internal poster before artwork projection`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
+        val persistedPreview = rawPreview.copy(
+            poster = "nexio-artwork://decision/existing",
+            posterProviderTag = "rpdb"
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+        val existingRow = row.copy(items = listOf(persistedPreview))
+        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
+        every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } answers { firstArg() }
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            existingRowsByKey = mapOf(homeCatalogGlobalKey(row) to existingRow),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals("nexio-artwork://decision/existing", hydratedRows.single().items.single().poster)
+        assertEquals("rpdb", hydratedRows.single().items.single().posterProviderTag)
+        verify(exactly = 1) {
+            posterRatingsUrlResolver.applyArtworkRef(
+                match { it.poster == "nexio-artwork://decision/existing" },
+                any()
+            )
+        }
+    }
+
     private fun preview(id: String, poster: String?): MetaPreview {
         return MetaPreview(
             id = id,

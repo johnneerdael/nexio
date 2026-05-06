@@ -228,7 +228,7 @@ class HomeCatalogSnapshotStore private constructor(
             fullCatalogRows.forEach { row -> yieldAll(row.items) }
             yieldAll(heroItems)
         }.all { item ->
-            item.posterProviderTag == requiredTag
+            item.posterProviderTag == null || item.posterProviderTag == requiredTag
         }
     }
 

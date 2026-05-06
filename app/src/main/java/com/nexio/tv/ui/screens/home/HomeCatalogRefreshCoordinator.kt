@@ -165,7 +165,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 // This path can hydrate every refreshed row item, so keep stable-bundle routing
                 // in the existing visible/focused hydration paths where work is bounded.
                 val enriched = titleRatingOverrideRepository.enrichPreview(localized)
-                posterRatingsUrlResolver.applyArtworkRef(enriched, artworkProviderSettings)
+                posterRatingsUrlResolver.applyArtworkRef(
+                    enriched.withPersistedInternalPoster(persistedFallback),
+                    artworkProviderSettings
+                )
             }
             row.copy(items = hydratedItems)
         }
@@ -405,6 +408,15 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
     private fun isInternalArtworkRef(value: String): Boolean =
         value.startsWith("nexio-artwork://") || value.startsWith("nexio-placeholder://")
+
+    private fun MetaPreview.withPersistedInternalPoster(persistedFallback: MetaPreview?): MetaPreview {
+        val persistedPoster = persistedFallback?.poster?.takeIf(::isInternalArtworkRef) ?: return this
+        if (poster == persistedPoster) return this
+        return copy(
+            poster = persistedPoster,
+            posterProviderTag = persistedFallback.posterProviderTag
+        )
+    }
 
     @OptIn(ExperimentalCoilApi::class)
     private fun hasImageCached(diskCacheKey: String): Boolean {
