@@ -136,6 +136,11 @@ class ProviderPlanExecutorTest {
                 "expected $depth plan to include SEASON_VIDEOS, got ${plan.apiShapeIds()}",
                 TmdbApiShapes.SEASON_VIDEOS in plan.apiShapeIds()
             )
+            assertTrue(
+                "expected $depth plan to prefer SEASON_VIDEOS before TV_VIDEOS, got ${plan.apiShapeIds()}",
+                plan.apiShapeIds().indexOf(TmdbApiShapes.SEASON_VIDEOS) <
+                    plan.apiShapeIds().indexOf(TmdbApiShapes.TV_VIDEOS)
+            )
             assertAllShapesCovered(plan)
         }
     }

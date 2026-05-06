@@ -127,11 +127,6 @@ class ProviderPlanExecutor @Inject constructor() {
         }
 
         if (depth == MetadataDepth.DETAIL_MEDIA || depth == MetadataDepth.DETAIL_SECONDARY) {
-            steps += step(
-                apiShapeId = if (isSeries) TmdbApiShapes.TV_VIDEOS else TmdbApiShapes.MOVIE_VIDEOS,
-                provider = MetadataPrimaryProvider.TMDB,
-                role = ProviderPlanRole.MEDIA
-            )
             if (isSeries && route.seasonNumber != null) {
                 steps += step(
                     apiShapeId = TmdbApiShapes.SEASON_VIDEOS,
@@ -139,6 +134,11 @@ class ProviderPlanExecutor @Inject constructor() {
                     role = ProviderPlanRole.MEDIA
                 )
             }
+            steps += step(
+                apiShapeId = if (isSeries) TmdbApiShapes.TV_VIDEOS else TmdbApiShapes.MOVIE_VIDEOS,
+                provider = MetadataPrimaryProvider.TMDB,
+                role = ProviderPlanRole.MEDIA
+            )
         }
 
         if (depth == MetadataDepth.DETAIL_SECONDARY) {
