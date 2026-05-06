@@ -118,11 +118,15 @@ internal fun resolveModernCarouselCardImageUrl(
     }
 }
 
-private fun ModernCarouselItem.safeCardArtworkModel(
-    useBackdrop: Boolean,
-    fallbackModel: String? = imageUrl
+internal fun resolveModernCarouselCardArtworkModel(
+    item: ModernCarouselItem,
+    useLandscapePosters: Boolean,
+    focusedPosterBackdropExpandEnabled: Boolean,
+    isBackdropExpanded: Boolean,
+    fallbackModel: String? = item.imageUrl
 ): Any? {
-    val artwork = metaPreview?.artwork
+    val useBackdrop = useLandscapePosters || (focusedPosterBackdropExpandEnabled && isBackdropExpanded)
+    val artwork = item.metaPreview?.artwork
     val typedModel = if (useBackdrop) {
         artwork?.backdrop.toCoilModelOrNull() ?: artwork?.poster.toCoilModelOrNull()
     } else {
@@ -459,7 +463,12 @@ internal fun ModernRowSection(
             val cwHeightPx = with(density) { continueWatchingCardHeight.roundToPx() }
 
             fun enqueueIfNeeded(item: ModernCarouselItem) {
-                val model = item.safeCardArtworkModel(useBackdrop = false) ?: return
+                val model = resolveModernCarouselCardArtworkModel(
+                    item = item,
+                    useLandscapePosters = useLandscapePosters,
+                    focusedPosterBackdropExpandEnabled = false,
+                    isBackdropExpanded = false
+                ) ?: return
                 val (widthPx, heightPx) = when (item.payload) {
                     is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
                     is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
@@ -782,8 +791,11 @@ private fun ModernCarouselCard(
         with(density) { cardHeight.roundToPx() }
     }
     val coilModel = remember(item, imageUrl, focusedPosterBackdropExpandEnabled, isBackdropExpanded) {
-        item.safeCardArtworkModel(
-            useBackdrop = focusedPosterBackdropExpandEnabled && isBackdropExpanded,
+        resolveModernCarouselCardArtworkModel(
+            item = item,
+            useLandscapePosters = useLandscapePosters,
+            focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
+            isBackdropExpanded = isBackdropExpanded,
             fallbackModel = imageUrl
         )
     }

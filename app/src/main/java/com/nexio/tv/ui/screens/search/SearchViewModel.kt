@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.image.SearchSuggestionPosterRegistry
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.ImdbPosterLookupService
 import com.nexio.tv.data.remote.api.ImdbSuggestion
@@ -48,7 +49,8 @@ class SearchViewModel @Inject constructor(
     private val imdbPosterLookupService: ImdbPosterLookupService,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val tmdbDiscoveryService: TmdbDiscoveryService,
-    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore
+    private val tmdbCatalogSettingsDataStore: TmdbCatalogSettingsDataStore,
+    private val searchSuggestionPosterRegistry: SearchSuggestionPosterRegistry = SearchSuggestionPosterRegistry()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -171,13 +173,17 @@ class SearchViewModel @Inject constructor(
                     } catch (_: Exception) {
                         null
                     } ?: return@launch
+                    val model = searchSuggestionPosterRegistry.register(
+                        tconst = suggestion.tconst,
+                        rawUrl = url
+                    ) ?: return@launch
                     val stillRelevant = _uiState.value.imdbSuggestions
                         .any { it.tconst == suggestion.tconst }
                     if (!stillRelevant) return@launch
                     _uiState.update { state ->
-                        if (state.imdbSuggestionPosters[suggestion.tconst] == url) state
+                        if (state.imdbSuggestionPosters[suggestion.tconst] == model) state
                         else state.copy(
-                            imdbSuggestionPosters = state.imdbSuggestionPosters + (suggestion.tconst to url)
+                            imdbSuggestionPosters = state.imdbSuggestionPosters + (suggestion.tconst to model)
                         )
                     }
                 }

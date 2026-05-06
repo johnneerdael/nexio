@@ -16,6 +16,7 @@ import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
 import com.nexio.tv.core.image.IntegrationPosterFetcher
 import com.nexio.tv.core.image.ImageCacheTtlWorker
 import com.nexio.tv.core.image.NexioArtworkFetcher
+import com.nexio.tv.core.image.SearchSuggestionPosterFetcher
 import com.nexio.tv.core.integration.IntegrationPlaybackGate
 import com.nexio.tv.core.integration.IntegrationRuntime
 import com.nexio.tv.core.sync.StartupSyncService
@@ -38,6 +39,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
     @Inject lateinit var integrationPlaybackGate: IntegrationPlaybackGate
     @Inject lateinit var integrationRuntime: IntegrationRuntime
     @Inject lateinit var integrationPosterFetcherFactory: IntegrationPosterFetcher.Factory
+    @Inject lateinit var searchSuggestionPosterFetcherFactory: SearchSuggestionPosterFetcher.Factory
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -75,6 +77,7 @@ class NexioApplication : Application(), ImageLoaderFactory, Configuration.Provid
             .components {
                 add(nexioArtworkFetcherFactory())
                 add(integrationPosterFetcherFactory)
+                add(searchSuggestionPosterFetcherFactory)
             }
             .memoryCache {
                 MemoryCache.Builder(this)
