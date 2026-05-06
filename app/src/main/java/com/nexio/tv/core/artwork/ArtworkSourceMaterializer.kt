@@ -30,7 +30,7 @@ class ArtworkSourceMaterializer(
 
         val sourceHash = candidate.sourceHash ?: return null
         val provider = candidate.provider ?: ArtworkProviderId.AddonPreview
-        val rawSource = remoteSourcesByHash[sourceHash]
+        val rawSource = remoteSourcesByHash[sourceHash] ?: ArtworkRemoteSourceRegistry.get(sourceHash)
         return MaterializedArtworkSource(
             source = if (rawSource != null) {
                 ArtworkSource.RemoteUrl.of(rawSource, sourceHash)
