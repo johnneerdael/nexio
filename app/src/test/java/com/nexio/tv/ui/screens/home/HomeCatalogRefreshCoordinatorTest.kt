@@ -26,6 +26,8 @@ import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.model.ArtworkProviderChoiceKey
+import com.nexio.tv.domain.model.ArtworkProviderSelectionSettings
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
@@ -883,7 +885,7 @@ class HomeCatalogRefreshCoordinatorTest {
     }
 
     @Test
-    fun `home refresh preserves persisted internal poster before artwork projection`() = runTest {
+    fun `home refresh preserves compatible persisted internal poster before artwork projection`() = runTest {
         val catalogRepository = mockk<CatalogRepository>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
@@ -905,7 +907,12 @@ class HomeCatalogRefreshCoordinatorTest {
         )
         val existingRow = row.copy(items = listOf(persistedPreview))
         coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
-        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings(
+            rpdbApiKey = "rpdb-key",
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.RPDB
+            )
+        )
         every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } answers { firstArg() }
 
         val hydratedRows = coordinator(
@@ -925,6 +932,115 @@ class HomeCatalogRefreshCoordinatorTest {
         verify(exactly = 1) {
             posterRatingsUrlResolver.applyArtworkRef(
                 match { it.poster == "nexio-artwork://decision/existing" },
+                any()
+            )
+        }
+    }
+
+    @Test
+    fun `home refresh does not preserve primary fallback when premium provider becomes active`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
+        val persistedPreview = rawPreview.copy(
+            poster = "nexio-artwork://decision/primary-fallback",
+            posterProviderTag = null
+        )
+        val premiumPreview = rawPreview.copy(
+            poster = "nexio-artwork://decision/rpdb",
+            posterProviderTag = "rpdb"
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+        val existingRow = row.copy(items = listOf(persistedPreview))
+        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings(
+            rpdbApiKey = "rpdb-key",
+            selection = ArtworkProviderSelectionSettings(
+                posterProvider = ArtworkProviderChoiceKey.RPDB
+            )
+        )
+        every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } returns premiumPreview
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            existingRowsByKey = mapOf(homeCatalogGlobalKey(row) to existingRow),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals("nexio-artwork://decision/rpdb", hydratedRows.single().items.single().poster)
+        assertEquals("rpdb", hydratedRows.single().items.single().posterProviderTag)
+        verify(exactly = 1) {
+            posterRatingsUrlResolver.applyArtworkRef(
+                match { it.poster == "https://image.tmdb.org/t/p/w500/raw.jpg" },
+                any()
+            )
+        }
+    }
+
+    @Test
+    fun `home refresh does not preserve premium poster after provider switches to default`() = runTest {
+        val catalogRepository = mockk<CatalogRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
+        val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
+        val rawPreview = preview(id = "tt-refresh-artwork", poster = "https://image.tmdb.org/t/p/w500/raw.jpg")
+        val persistedPreview = rawPreview.copy(
+            poster = "nexio-artwork://decision/rpdb",
+            posterProviderTag = "rpdb"
+        )
+        val primaryPreview = rawPreview.copy(
+            poster = "nexio-artwork://decision/primary-fallback",
+            posterProviderTag = null
+        )
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(rawPreview),
+            hasMore = false
+        )
+        val existingRow = row.copy(items = listOf(persistedPreview))
+        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
+        coEvery { posterRatingsUrlResolver.currentSettings() } returns ArtworkProviderSettings()
+        every { posterRatingsUrlResolver.applyArtworkRef(any(), any()) } returns primaryPreview
+
+        val hydratedRows = coordinator(
+            catalogRepository = catalogRepository,
+            tvMetadataRouter = tvMetadataRouter,
+            titleRatingOverrideRepository = titleRatingOverrideRepository,
+            posterRatingsUrlResolver = posterRatingsUrlResolver
+        ).hydrateAndPrefetchRows(
+            rows = listOf(row),
+            existingRowsByKey = mapOf(homeCatalogGlobalKey(row) to existingRow),
+            telemetryEnabled = false,
+            onLog = { _, _ -> }
+        )
+
+        assertEquals("nexio-artwork://decision/primary-fallback", hydratedRows.single().items.single().poster)
+        assertEquals(null, hydratedRows.single().items.single().posterProviderTag)
+        verify(exactly = 1) {
+            posterRatingsUrlResolver.applyArtworkRef(
+                match { it.poster == "https://image.tmdb.org/t/p/w500/raw.jpg" },
                 any()
             )
         }
