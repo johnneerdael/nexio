@@ -139,7 +139,10 @@ class AddonRepositoryImpl @Inject constructor(
 
                 // Emit cached addons immediately (now includes disk-persisted cache)
                 val cached = validConfigs.mapNotNull { addonConfig ->
-                    manifestCache[addonConfig.url]?.copy(parserPreset = addonConfig.parserPreset)
+                    manifestCache[addonConfig.url]?.copy(
+                        parserPreset = addonConfig.parserPreset,
+                        isAnime = addonConfig.isAnime
+                    )
                 }
                 if (cached.isNotEmpty()) {
                     emit(applyDisplayNames(cached))
@@ -149,9 +152,12 @@ class AddonRepositoryImpl @Inject constructor(
                     validConfigs.map { addonConfig ->
                         async {
                             when (val result = fetchAddon(addonConfig.url, addonConfig.parserPreset)) {
-                                is NetworkResult.Success -> result.data
+                                is NetworkResult.Success -> result.data.copy(isAnime = addonConfig.isAnime)
                                 else -> manifestCache[canonicalizeUrl(addonConfig.url)]
-                                    ?.copy(parserPreset = addonConfig.parserPreset)
+                                    ?.copy(
+                                        parserPreset = addonConfig.parserPreset,
+                                        isAnime = addonConfig.isAnime
+                                    )
                             }
                         }
                     }.awaitAll().filterNotNull()
@@ -173,7 +179,10 @@ class AddonRepositoryImpl @Inject constructor(
         }
         return applyDisplayNames(
             validConfigs.mapNotNull { addonConfig ->
-                manifestCache[addonConfig.url]?.copy(parserPreset = addonConfig.parserPreset)
+                manifestCache[addonConfig.url]?.copy(
+                    parserPreset = addonConfig.parserPreset,
+                    isAnime = addonConfig.isAnime
+                )
             }
         )
     }
@@ -207,9 +216,13 @@ class AddonRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun addAddon(url: String, parserPreset: AddonParserPreset) {
+    override suspend fun addAddon(
+        url: String,
+        parserPreset: AddonParserPreset,
+        isAnime: Boolean,
+    ) {
         val cleanUrl = canonicalizeUrl(url)
-        preferences.addAddon(cleanUrl, parserPreset)
+        preferences.addAddon(cleanUrl, parserPreset, isAnime)
         triggerRemoteSync()
     }
 
@@ -230,6 +243,16 @@ class AddonRepositoryImpl @Inject constructor(
         preferences.updateAddonParserPreset(cleanUrl, parserPreset)
         manifestCache[cleanUrl]?.let { cached ->
             manifestCache[cleanUrl] = cached.copy(parserPreset = parserPreset)
+            persistManifestCacheToDisk()
+        }
+        triggerRemoteSync()
+    }
+
+    override suspend fun updateAddonIsAnime(url: String, isAnime: Boolean) {
+        val cleanUrl = canonicalizeUrl(url)
+        preferences.updateAddonIsAnime(cleanUrl, isAnime)
+        manifestCache[cleanUrl]?.let { cached ->
+            manifestCache[cleanUrl] = cached.copy(isAnime = isAnime)
             persistManifestCacheToDisk()
         }
         triggerRemoteSync()
@@ -266,7 +289,7 @@ class AddonRepositoryImpl @Inject constructor(
 
         normalizedRemote
             .filter { normalizeUrl(it.url) !in initialLocalSet }
-            .forEach { addAddon(it.url, it.parserPreset) }
+            .forEach { addAddon(it.url, it.parserPreset, it.isAnime) }
 
         val currentAddons = preferences.installedAddons.first()
         val currentByNormalizedUrl = linkedMapOf<String, AddonPreferences.AddonInstallConfig>()
@@ -275,7 +298,10 @@ class AddonRepositoryImpl @Inject constructor(
         }
         val remoteOrdered = normalizedRemote
             .mapNotNull { remote ->
-                currentByNormalizedUrl[normalizeUrl(remote.url)]?.copy(parserPreset = remote.parserPreset)
+                currentByNormalizedUrl[normalizeUrl(remote.url)]?.copy(
+                    parserPreset = remote.parserPreset,
+                    isAnime = remote.isAnime
+                )
                     ?: remote
             }
         val extras = currentAddons
