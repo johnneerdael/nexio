@@ -415,7 +415,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
-        coEvery { viewModel.flushCatalogRowsForFirstPaint() } coAnswers {
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
             fullCatalogRows.value = catalogsMap.values.toList()
             renderedRows += fullCatalogRows.value
         }
@@ -493,7 +493,105 @@ class HomeCatalogRefreshCoordinatorTest {
                 onLog = any()
             )
         }
-        coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint() }
+        coVerify(exactly = 2) { viewModel.flushCatalogRowsForFirstPaint(profileSession) }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `serialized refresh rejects catalog callback after profile session changes`() = runTest {
+        val coordinator = mockk<HomeCatalogRefreshCoordinator>()
+        val viewModel = mockk<HomeViewModel>(relaxed = true)
+        val catalogsMap = linkedMapOf<String, CatalogRow>()
+        val fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+        val oldPreview = preview(id = "tt-old-profile-row", poster = null).copy(name = "Old Profile Row")
+        val oldRow = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "popular",
+            catalogName = "Popular",
+            type = ContentType.MOVIE,
+            items = listOf(oldPreview),
+            hasMore = false
+        )
+        val expectedProfileSession = activeProfileSession()
+        val activeProfileSession = MutableStateFlow(expectedProfileSession)
+
+        every { viewModel.isCurrentHomeProfileGeneration(1L) } returns true
+        every { viewModel.shouldBlockProfileSwitchDiskSnapshotRefresh(any()) } returns false
+        every { viewModel.playbackIdleGateState } returns com.nexio.tv.ui.screensaver.PlaybackIdleGateState()
+        every { viewModel.homeCatalogRefreshCoordinator } returns coordinator
+        every { viewModel.addonsCache } returns listOf(addon())
+        every { viewModel.startupPerfTelemetryEnabled } returns false
+        every { viewModel.catalogsMap } returns catalogsMap
+        every { viewModel._uiState } returns MutableStateFlow(HomeUiState())
+        every { viewModel._fullCatalogRows } returns fullCatalogRows
+        every { viewModel.activeProfileTraktAuthenticated } returns false
+        every { viewModel.traktCatalogPreferences } returns TraktCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.simklCatalogPreferences } returns SimklCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.mdbListCatalogPreferences } returns MDBListCatalogPreferences()
+        every { viewModel.tmdbCatalogPreferences } returns TmdbCatalogPreferences(enabledCatalogs = emptySet())
+        every { viewModel.syntheticTomatoesOverridesByItemId } returns linkedMapOf()
+        every { viewModel.persistedTraktSyntheticGroups } returns emptyList()
+        every { viewModel.persistedSimklSyntheticGroups } returns emptyList()
+        every { viewModel.persistedMDBListSyntheticGroups } returns emptyList()
+        every { viewModel.persistedTmdbSyntheticGroups } returns emptyList()
+        every { viewModel.traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            TraktDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            SimklDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false) } returns flowOf(
+            MDBListDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
+            TmdbDiscoverySnapshot(updatedAtMs = 1L)
+        )
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
+            fullCatalogRows.value = catalogsMap.values.toList()
+        }
+        coEvery {
+            coordinator.refreshSerially(
+                addons = any(),
+                telemetryEnabled = any(),
+                isCatalogDisabled = any(),
+                getCurrentRow = any(),
+                isItemReferencedElsewhere = any(),
+                onCatalogReady = any(),
+                onRawCatalogBatchComplete = any(),
+                onLog = any()
+            )
+        } coAnswers {
+            val onCatalogReady = arg<suspend (String, CatalogRow, CatalogItemDiff) -> Unit>(5)
+            activeProfileSession.value = expectedProfileSession.copy(
+                profileId = 2,
+                sessionId = "new-session",
+                sessionOrdinal = 2L
+            )
+            onCatalogReady(
+                "addon_movie_popular",
+                oldRow,
+                CatalogItemDiff(addedOrChanged = listOf(oldPreview), removed = emptyList())
+            )
+            1
+        }
+        every { viewModel.profileManager.activeProfileSession } returns activeProfileSession
+
+        try {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            viewModel.runSerializedPostStartupRefreshPipeline(
+                expectedGeneration = 1L,
+                expectedProfileSession = expectedProfileSession,
+                reason = "account_sync"
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+
+        assertTrue(catalogsMap.isEmpty())
+        coVerify(exactly = 0) { viewModel.flushCatalogRowsForFirstPaint(any()) }
+        verify(exactly = 0) { viewModel.scheduleUpdateCatalogRows(any()) }
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -562,7 +660,7 @@ class HomeCatalogRefreshCoordinatorTest {
         every { viewModel.tmdbDiscoveryService.observeSnapshot() } returns flowOf(
             TmdbDiscoverySnapshot(updatedAtMs = 1L)
         )
-        coEvery { viewModel.flushCatalogRowsForFirstPaint() } coAnswers {
+        coEvery { viewModel.flushCatalogRowsForFirstPaint(any()) } coAnswers {
             fullCatalogRows.value = listOf(fullRow)
             uiState.value = uiState.value.copy(catalogRows = listOf(displayRow))
         }
