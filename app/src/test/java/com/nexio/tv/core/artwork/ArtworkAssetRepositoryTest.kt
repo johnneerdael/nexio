@@ -212,7 +212,7 @@ class ArtworkAssetRepositoryTest {
     @Test
     fun `selected provider failure falls back to primary remote candidate`() = runTest {
         val selected = rpdbTemplateDecision()
-        val fallback = remotePreviewCandidate()
+        val fallback = remotePreviewCandidateFromProductionSource()
         val decision = selected.copy(
             selectedCandidate = selected.selectedCandidate,
             rejectedCandidates = selected.rejectedCandidates + RejectedArtworkCandidate(
@@ -232,18 +232,15 @@ class ArtworkAssetRepositoryTest {
         val repository = repository(
             runtime = runtime,
             cache = cache,
-            sourceMaterializer = ArtworkSourceMaterializer(
-                mapOf(
-                    requireNotNull(fallback.sourceHash) to
-                        SensitiveArtworkUrl.of("https://image.tmdb.org/t/p/w500/fallback.jpg")
-                )
-            ),
             byteLoader = ArtworkByteLoader { source, _ ->
                 loadCount += 1
-                if (source is ArtworkSource.ProviderTemplate) {
-                    IntegrationLoadResult.NetworkError(IllegalStateException("premium unavailable"))
-                } else {
-                    IntegrationLoadResult.Success("fallback-bytes".toByteArray())
+                when (source) {
+                    is ArtworkSource.ProviderTemplate ->
+                        IntegrationLoadResult.NetworkError(IllegalStateException("premium unavailable"))
+                    is ArtworkSource.RemoteUrl ->
+                        IntegrationLoadResult.Success("fallback-bytes".toByteArray())
+                    else ->
+                        IntegrationLoadResult.NetworkError(IllegalStateException("fallback source unavailable"))
                 }
             }
         )
@@ -742,15 +739,20 @@ class ArtworkAssetRepositoryTest {
             staleUntilMs = 300L
         )
 
-    private fun remotePreviewCandidate(): PersistedArtworkCandidate =
-        PersistedArtworkCandidate(
+    private fun remotePreviewCandidateFromProductionSource(): PersistedArtworkCandidate =
+        ArtworkCandidate(
+            ownerKey = ArtworkOwnerKey.CanonicalContent("imdb:tt0137523"),
+            canonicalContentId = "imdb:tt0137523",
             provider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.TMDB),
+            imageType = ArtworkType.POSTER,
             sourceRole = ArtworkSourceRole.PRIMARY,
-            sourceHash = "fallbacksourcehash",
-            redactedSourceForTrace = "https://image.tmdb.org/t/p/w500/<redacted>",
-            providerTemplate = null,
-            priority = 10
-        )
+            source = ArtworkSource.RemoteUrl.of(
+                rawUrl = SensitiveArtworkUrl.of("https://image.tmdb.org/t/p/w500/fallback.jpg"),
+                normalizedUrlHash = "fallbacksourcehash"
+            ),
+            priority = 10,
+            requiresRuntimeFetch = true
+        ).toPersistedCandidate(policyVersion = 1)
 
     private fun topPostersThumbnailDecision(): ArtworkDecision =
         ArtworkDecision(
