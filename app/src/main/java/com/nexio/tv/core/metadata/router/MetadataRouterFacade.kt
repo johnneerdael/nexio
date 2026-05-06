@@ -291,7 +291,12 @@ class MetadataRouterFacade(
         tmdbId: String,
         contentType: ContentType
     ): TmdbEnrichment? {
-        val resolution = resolveRequest(metadataRequest)
+        val enrichmentRequest = if (metadataRequest.depth == MetadataDepth.DETAIL_SECONDARY) {
+            metadataRequest
+        } else {
+            metadataRequest.copy(depth = MetadataDepth.DETAIL_SECONDARY)
+        }
+        val resolution = resolveRequest(enrichmentRequest)
         return resolution.resolvedDocument.toLegacyTmdbEnrichmentOrNull()
     }
 

@@ -5,6 +5,8 @@ interface MetadataProviderAdapter {
 
     fun supports(step: ProviderPlanStep): Boolean
 
+    fun priorityFor(step: ProviderPlanStep): Int = 0
+
     suspend fun execute(
         route: MetadataRoute,
         step: ProviderPlanStep

@@ -3,8 +3,13 @@ package com.nexio.tv.core.metadata.router
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.integration.TmdbApiShapes
 import com.nexio.tv.core.trace.TraceMetadataEvents
+import com.nexio.tv.data.integration.metadata.MetadataSecondaryRepository
+import com.nexio.tv.data.integration.metadata.TmdbOrganizationPersonAdapter
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PersonDetail
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -46,6 +51,41 @@ class MetadataRouterFacadePersonCompanyTest {
     }
 
     @Test
+    fun `findPersonIdByExactName real adapter receives raw name`() = runTest {
+        val sink = RecordingTraceSink()
+        val secondaryRepo = mockk<MetadataSecondaryRepository>()
+        val person = PersonDetail(
+            tmdbId = 608,
+            name = "Hayao Miyazaki",
+            biography = null,
+            birthday = null,
+            deathday = null,
+            placeOfBirth = null,
+            profilePhoto = null,
+            knownFor = null,
+            movieCredits = emptyList(),
+            tvCredits = emptyList()
+        )
+        coEvery { secondaryRepo.findPersonIdByExactName("Hayao Miyazaki") } returns 608
+        coEvery { secondaryRepo.fetchPersonDetail(608, false) } returns person
+
+        val facade = newFacadeWithExtraAdapter(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(MetadataPrimaryProvider.TMDB, fields = emptyMap()),
+            extraAdapter = TmdbOrganizationPersonAdapter(secondaryRepo)
+        )
+
+        val result = facade.findPersonIdByExactName(
+            metadataRequest = personLookupRequest(name = "Hayao Miyazaki"),
+            name = "Hayao Miyazaki"
+        )
+
+        assertEquals(608, result)
+        coVerify(exactly = 1) { secondaryRepo.findPersonIdByExactName("Hayao Miyazaki") }
+        coVerify(exactly = 0) { secondaryRepo.findPersonIdByExactName("person:Hayao Miyazaki") }
+    }
+
+    @Test
     fun `findCompanyIdByExactName returns provider-plan organization id and emits canonical trace events`() = runTest {
         val sink = RecordingTraceSink()
         val facade = newFacade(
@@ -66,6 +106,28 @@ class MetadataRouterFacadePersonCompanyTest {
 
         assertEquals(10342, result)
         assertCanonicalTraceEvents(sink)
+    }
+
+    @Test
+    fun `findCompanyIdByExactName real adapter receives raw name`() = runTest {
+        val sink = RecordingTraceSink()
+        val secondaryRepo = mockk<MetadataSecondaryRepository>()
+        coEvery { secondaryRepo.findCompanyIdByExactName("Studio Ghibli") } returns 10342
+
+        val facade = newFacadeWithExtraAdapter(
+            sink = sink,
+            tmdbCandidate = MetadataCandidate(MetadataPrimaryProvider.TMDB, fields = emptyMap()),
+            extraAdapter = TmdbOrganizationPersonAdapter(secondaryRepo)
+        )
+
+        val result = facade.findCompanyIdByExactName(
+            metadataRequest = companyLookupRequest(name = "Studio Ghibli"),
+            name = "Studio Ghibli"
+        )
+
+        assertEquals(10342, result)
+        coVerify(exactly = 1) { secondaryRepo.findCompanyIdByExactName("Studio Ghibli") }
+        coVerify(exactly = 0) { secondaryRepo.findCompanyIdByExactName("company:Studio Ghibli") }
     }
 
     @Test
