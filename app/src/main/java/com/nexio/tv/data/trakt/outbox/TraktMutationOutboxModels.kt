@@ -1,6 +1,7 @@
 package com.nexio.tv.data.trakt.outbox
 
 import com.google.gson.JsonObject
+import com.nexio.tv.domain.model.TrackingProvider
 import java.util.UUID
 
 enum class TraktMutationPriorityBucket(
@@ -25,6 +26,8 @@ enum class TraktMutationLifecycleState {
 data class TraktMutationEnvelope(
     val id: String = UUID.randomUUID().toString(),
     val profileId: Int = 1,
+    val provider: TrackingProvider,
+    val credentialHash: String,
     val adapterKey: String,
     val mutationKind: String,
     val priority: TraktMutationPriorityBucket,
@@ -44,6 +47,14 @@ data class TraktMutationEnvelope(
     val lastHttpStatusCode: Int? = null,
     val completedAtMs: Long? = null
 ) {
+    init {
+        require(profileId >= 1) { "TraktMutationEnvelope.profileId must be positive" }
+        require(credentialHash.isNotBlank()) { "TraktMutationEnvelope.credentialHash must not be blank" }
+    }
+
+    val accountScopeKey: String
+        get() = "profile:$profileId:provider:${provider.name}:credential:${credentialHash.trim()}"
+
     fun isReadyLike(): Boolean {
         return state == TraktMutationLifecycleState.QUEUED ||
             state == TraktMutationLifecycleState.WAITING_RETRY
@@ -99,6 +110,11 @@ sealed interface TraktMutationSettlement {
 sealed interface TraktMutationExecutionResult {
     data class Success(
         val httpStatusCode: Int? = null
+    ) : TraktMutationExecutionResult
+
+    data class AccountScopeMismatch(
+        val reason: String = "ACCOUNT_SCOPE_MISMATCH",
+        val throwable: Throwable? = null
     ) : TraktMutationExecutionResult
 
     data class Failure(

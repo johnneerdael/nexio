@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.simkl
 
+import com.nexio.tv.data.repository.testSimklSession
 import com.nexio.tv.data.remote.dto.simkl.SimklHistoryAddRequestDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
@@ -35,7 +36,8 @@ class SimklSeasonMarkMutationAdapterTest {
             isAnime = false,
             seasonNumber = 2,
             episodeNumbers = listOf(1, 2, 3),
-            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState()
+            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState(),
+            session = testSimklSession()
         )
 
         adapter.applyOptimistic(envelope)
@@ -81,7 +83,8 @@ class SimklSeasonMarkMutationAdapterTest {
             isAnime = false,
             seasonNumber = 2,
             episodeNumbers = listOf(1, 2, 3),
-            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState()
+            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState(),
+            session = testSimklSession()
         )
 
         assertEquals("tt1520211:season:2", envelope.collapseKey)
@@ -101,7 +104,8 @@ class SimklSeasonMarkMutationAdapterTest {
             isAnime = false,
             seasonNumber = 2,
             episodeNumbers = listOf(1, 2, 3),
-            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState()
+            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState(),
+            session = testSimklSession()
         )
 
         coEvery { remote.addHistory(any<SimklHistoryAddRequestDto>()) } returns Response.success(Unit)
@@ -124,7 +128,8 @@ class SimklSeasonMarkMutationAdapterTest {
             isAnime = false,
             seasonNumber = 2,
             episodeNumbers = listOf(1, 2, 3),
-            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState()
+            rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState(),
+            session = testSimklSession()
         )
 
         adapter.rollbackToServerTruth(

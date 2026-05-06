@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.metadata.router.MetadataDecisionReason
 import com.nexio.tv.core.metadata.router.MetadataDepth
 import com.nexio.tv.core.metadata.router.MetadataMediaKind
@@ -159,7 +160,8 @@ class WatchProgressRepositoryRouterRoutingTest {
             snapshotServiceProvider = Provider {
                 mockk<ContinueWatchingSnapshotService>(relaxed = true)
             },
-            metadataRouterFacade = facade
+            metadataRouterFacade = facade,
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
     }
 

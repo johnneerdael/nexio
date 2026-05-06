@@ -54,7 +54,8 @@ class SimklLibraryService @Inject constructor(
     private val snapshotStore: SimklLibrarySnapshotStore,
     private val metadataRouterFacade: MetadataRouterFacade,
     private val profileManager: ProfileManager? = null,
-    private val ownershipService: IntegrationOwnershipService? = null
+    private val ownershipService: IntegrationOwnershipService? = null,
+    private val accountScopeProvider: TrackingAccountScopeProvider
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
@@ -167,7 +168,7 @@ class SimklLibraryService @Inject constructor(
                     SimklLibraryMutationAdapter.buildRemoveEnvelope(
                         body = body,
                         rollbackState = rollbackStateFor(before),
-                        profileId = profileId
+                        session = accountSession(profileId)
                     )
                 )
             }
@@ -181,7 +182,7 @@ class SimklLibraryService @Inject constructor(
                         listKey = WATCHLIST_KEY,
                         body = body,
                         rollbackState = rollbackStateFor(before),
-                        profileId = profileId
+                        session = accountSession(profileId)
                     )
                 )
             }
@@ -203,7 +204,7 @@ class SimklLibraryService @Inject constructor(
                     SimklLibraryMutationAdapter.buildRemoveEnvelope(
                         body = buildRemoveBody(item),
                         rollbackState = rollbackStateFor(before),
-                        profileId = profileId
+                        session = accountSession(profileId)
                     )
                 )
             }
@@ -217,7 +218,7 @@ class SimklLibraryService @Inject constructor(
                         listKey = target,
                         body = buildAddBody(item, target),
                         rollbackState = rollbackStateFor(before),
-                        profileId = profileId
+                        session = accountSession(profileId)
                     )
                 )
             }
@@ -905,4 +906,11 @@ class SimklLibraryService @Inject constructor(
     }
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    private suspend fun accountSession(profileId: Int): TrackingAuthSession {
+        return accountScopeProvider.accountScopedSession(
+            provider = TrackingProvider.SIMKL,
+            profileId = profileId
+        )
+    }
 }

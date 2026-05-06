@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.metadata.router.MetadataRouterFacade
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklLibrarySnapshotStore
@@ -98,7 +99,8 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = mockk(relaxed = true),
             snapshotStore = snapshotStore,
-            metadataRouterFacade = mockk(relaxed = true)
+            metadataRouterFacade = mockk(relaxed = true),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
 
         val items = service.observeAllItems().first()
@@ -140,7 +142,8 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = mockk(relaxed = true),
             snapshotStore = snapshotStore,
-            metadataRouterFacade = mockk(relaxed = true)
+            metadataRouterFacade = mockk(relaxed = true),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
 
         service.refreshNow(force = true)
@@ -171,7 +174,8 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metadataRouterFacade = mockk(relaxed = true)
+            metadataRouterFacade = mockk(relaxed = true),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
 
         service.refreshNow(force = true)
@@ -207,7 +211,8 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metadataRouterFacade = mockk(relaxed = true)
+            metadataRouterFacade = mockk(relaxed = true),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
 
         service.refreshNow(force = true)
@@ -240,7 +245,8 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metadataRouterFacade = mockk(relaxed = true)
+            metadataRouterFacade = mockk(relaxed = true),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
 
         service.refreshNow(force = true)
@@ -312,7 +318,8 @@ class SimklLibraryServiceTest {
             simklAuthDataStore = authDataStore,
             traktMutationOutboxCoordinator = outbox,
             snapshotStore = mockk(relaxed = true),
-            metadataRouterFacade = mockk(relaxed = true)
+            metadataRouterFacade = mockk(relaxed = true),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
 
         service.refreshNow(force = true)

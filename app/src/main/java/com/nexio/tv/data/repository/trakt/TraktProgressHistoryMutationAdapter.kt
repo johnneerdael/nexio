@@ -96,7 +96,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             reason = "Insufficient Trakt IDs to mark watched"
         )
 
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = envelope.session()
         val response = traktProgressMutationExecutor.addHistory(
             session = session,
             body = body
@@ -124,7 +124,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             removeShow = envelope.removeShow()
         ) ?: return TraktMutationExecutionResult.Success(httpStatusCode = 204)
 
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = envelope.session()
         val response = traktProgressMutationExecutor.removeHistory(
             session = session,
             body = body
@@ -145,7 +145,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
 
     private suspend fun executePlaybackDelete(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val playbackId = envelope.playbackId()
-        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val session = envelope.session()
         val response = traktProgressMutationExecutor.deletePlayback(
             session = session,
             playbackId = playbackId
@@ -186,7 +186,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             progress: WatchProgress,
             title: String?,
             year: Int?,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 add(PAYLOAD_PROGRESS, gson.toJsonTree(progress))
@@ -202,7 +202,11 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             }.ifBlank { null }
 
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_HISTORY_ADD,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -217,7 +221,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             season: Int?,
             episode: Int?,
             removeShow: Boolean = false,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_CONTENT_ID, contentId)
@@ -235,7 +239,11 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
                 }
             }.ifBlank { null }
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_HISTORY_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -250,7 +258,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             season: Int?,
             episode: Int?,
             clearShow: Boolean = false,
-            profileId: Int = 1
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_PLAYBACK_ID, playbackId)
@@ -260,7 +268,11 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
                 if (clearShow) addProperty(PAYLOAD_CLEAR_SHOW, true)
             }
             return TraktMutationEnvelope(
-                profileId = profileId,
+                profileId = session.profileId,
+                provider = TrackingProvider.TRAKT,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "Trakt mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_PLAYBACK_DELETE,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -309,6 +321,15 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
         private fun TraktMutationEnvelope.year(): Int? {
             return metadata.get(METADATA_YEAR)?.asInt
         }
+
+        private fun TraktMutationEnvelope.session(): TrackingAuthSession {
+            return TrackingAuthSession(
+                provider = provider,
+                profileId = profileId,
+                credentialHash = credentialHash
+            )
+        }
+
     }
 }
 

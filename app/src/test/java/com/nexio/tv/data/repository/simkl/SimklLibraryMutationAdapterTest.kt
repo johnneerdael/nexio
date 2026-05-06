@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.simkl
 
+import com.nexio.tv.data.repository.testSimklSession
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListRequestDto
 import com.nexio.tv.data.remote.dto.simkl.SimklAddToListResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
@@ -26,7 +27,8 @@ class SimklLibraryMutationAdapterTest {
                 to = "plantowatch",
                 movies = listOf(SimklMediaRefDto(title = "Arrival", year = 2016))
             ),
-            rollbackState = SimklLibraryService.LibraryRollbackState()
+            rollbackState = SimklLibraryService.LibraryRollbackState(),
+            session = testSimklSession()
         )
 
         assertEquals("simkl.library:${SimklLibraryService.WATCHLIST_KEY}", envelope.collapseKey)
@@ -40,7 +42,8 @@ class SimklLibraryMutationAdapterTest {
         val adapter = SimklLibraryMutationAdapter(remote, Provider { libraryService })
         val envelope = SimklLibraryMutationAdapter.buildRemoveEnvelope(
             body = com.nexio.tv.data.remote.dto.simkl.SimklHistoryRemoveRequestDto(),
-            rollbackState = SimklLibraryService.LibraryRollbackState()
+            rollbackState = SimklLibraryService.LibraryRollbackState(),
+            session = testSimklSession()
         )
 
         adapter.rollbackToServerTruth(
@@ -62,7 +65,8 @@ class SimklLibraryMutationAdapterTest {
                 to = "plantowatch",
                 movies = listOf(SimklMediaRefDto(title = "Arrival", year = 2016))
             ),
-            rollbackState = SimklLibraryService.LibraryRollbackState()
+            rollbackState = SimklLibraryService.LibraryRollbackState(),
+            session = testSimklSession()
         )
 
         coEvery { remote.addToList(any(), any()) } returns Response.success(SimklAddToListResponseDto(result = "ok"))
@@ -83,7 +87,8 @@ class SimklLibraryMutationAdapterTest {
                 to = "plantowatch",
                 movies = listOf(SimklMediaRefDto(title = "Arrival", year = 2016))
             ),
-            rollbackState = SimklLibraryService.LibraryRollbackState()
+            rollbackState = SimklLibraryService.LibraryRollbackState(),
+            session = testSimklSession()
         )
 
         adapter.reconcileSuccess(envelope)

@@ -1,5 +1,6 @@
 package com.nexio.tv.data.integration.simkl
 
+import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.integration.RecordingTraceSink
 import com.nexio.tv.core.profile.ProfileManager
@@ -64,7 +65,8 @@ class SimklScrobbleServiceProfileBoundaryTest {
             watchingNowStateController = watchingNow,
             traktMutationOutboxCoordinator = outbox,
             profileManager = profileManager,
-            traceMetadataEvents = events
+            traceMetadataEvents = events,
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
     }
 

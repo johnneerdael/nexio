@@ -10,12 +10,14 @@ import com.nexio.tv.data.remote.dto.simkl.SimklHistoryShowPayloadDto
 import com.nexio.tv.data.remote.dto.simkl.SimklIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -47,7 +49,7 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
     }
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = remote.addHistory(envelope.requestBody())
+        val response = remote.addHistory(envelope.requestBody(), envelope.session())
         return if (response.isSuccessful) {
             TraktMutationExecutionResult.Success(httpStatusCode = response.code())
         } else {
@@ -92,7 +94,8 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
             isAnime: Boolean,
             seasonNumber: Int,
             episodeNumbers: List<Int>,
-            rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState
+            rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState,
+            session: TrackingAuthSession
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_SHOW_CONTENT_ID, showContentId)
@@ -109,6 +112,11 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
                 })
             }
             return TraktMutationEnvelope(
+                profileId = session.profileId,
+                provider = TrackingProvider.SIMKL,
+                credentialHash = requireNotNull(session.credentialHash) {
+                    "SIMKL mutation envelopes require account-scoped credentialHash"
+                },
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -171,6 +179,14 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
                 rollbackPayload ?: JsonObject(),
                 ContinueWatchingSnapshotService.EpisodeRollbackState::class.java
             ) ?: ContinueWatchingSnapshotService.EpisodeRollbackState()
+        }
+
+        private fun TraktMutationEnvelope.session(): TrackingAuthSession {
+            return TrackingAuthSession(
+                provider = provider,
+                profileId = profileId,
+                credentialHash = credentialHash
+            )
         }
 
         private fun toCompletedProgress(

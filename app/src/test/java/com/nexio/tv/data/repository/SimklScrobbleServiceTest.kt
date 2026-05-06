@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.data.repository.TestTrackingAccountScopeProvider
 import com.nexio.tv.core.integration.ActiveProfileSession
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.trace.NoopRuntimeTraceSink
@@ -43,7 +44,8 @@ class SimklScrobbleServiceTest {
             watchingNowStateController = controller,
             traktMutationOutboxCoordinator = coordinator,
             profileManager = profileManager,
-            traceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink, sessionId = { null })
+            traceMetadataEvents = TraceMetadataEvents(NoopRuntimeTraceSink, sessionId = { null }),
+            accountScopeProvider = TestTrackingAccountScopeProvider()
         )
         val item = movieItem("simkl:12345", "Arrival")
 

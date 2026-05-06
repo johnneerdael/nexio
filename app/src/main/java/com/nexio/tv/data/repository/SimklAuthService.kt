@@ -70,6 +70,25 @@ class SimklAuthService @Inject constructor(
         )
     }
 
+    suspend fun mutationAccountScopedSession(session: TrackingAuthSession = currentAuthSession()): TrackingAuthSession {
+        val state = getCurrentAuthState(session)
+        val accountMaterial = stableMutationAccountMaterial(state)
+            ?: run {
+                fetchUserSettings(session)
+                stableMutationAccountMaterial(getCurrentAuthState(session))
+            }
+            ?: throw IllegalStateException("SIMKL mutation scope requires provider account identity")
+        return session.copy(
+            credentialHash = integrationCredentialHash(IntegrationProvider.SIMKL, "account:$accountMaterial"),
+            accountIdHash = integrationCredentialHash(IntegrationProvider.SIMKL, accountMaterial)
+        )
+    }
+
+    private fun stableMutationAccountMaterial(state: SimklAuthState): String? {
+        return state.accountId?.toString()
+            ?: state.username?.takeIf { it.isNotBlank() }
+    }
+
     suspend fun startPinAuth(): Result<Unit> {
         if (!hasRequiredCredentials()) {
             return Result.failure(IllegalStateException("Missing SIMKL_CLIENT_ID"))
