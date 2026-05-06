@@ -255,6 +255,50 @@ class RawRemoteArtworkUrlBoundaryTest {
         )
     }
 
+    @Test
+    fun `production snapshot writers do not persist raw premium urls`() {
+        val files = listOf(
+            File("app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt"),
+            File("app/src/main/java/com/nexio/tv/data/local/ContinueWatchingSnapshotStore.kt"),
+            File("app/src/main/java/com/nexio/tv/data/local/HydratedHomeOverlayStore.kt")
+        )
+        val forbidden = Regex("""https://api\.(top-posters|ratingposterdb)\.com""")
+        val allowlistedHits = mutableListOf<Pair<String, String>>()
+        val offenders = files.flatMap { file ->
+            file.readText()
+                .lines()
+                .mapIndexedNotNull { index, line ->
+                    val location = "${file.invariantSeparatorsPath}:${index + 1}"
+                    val allowlistIndex = expectedSnapshotSanitizerPrefixLocations.indexOf(location)
+                    if (
+                        forbidden.containsMatchIn(line) &&
+                        line.isPremiumProviderSanitizerAllowlistEntry() &&
+                        allowlistIndex >= 0
+                    ) {
+                        allowlistedHits += location to line.trim()
+                        null
+                    } else if (
+                        forbidden.containsMatchIn(line)
+                    ) {
+                        "$location:raw-premium-provider-url"
+                    } else {
+                        null
+                    }
+                }
+        }
+
+        assertTrue(
+            "Snapshot writers must not hard-code or persist raw premium provider URLs:\n" +
+                offenders.joinToString(separator = "\n"),
+            offenders.isEmpty()
+        )
+        assertEquals(
+            "Only the existing HomeCatalogSnapshotStore sanitizer prefixes may be allowlisted",
+            expectedSnapshotSanitizerAllowlist,
+            allowlistedHits
+        )
+    }
+
     private fun metadataUiArtworkFiles(): List<File> {
         val roots = listOf(
             File("app/src/main/java/com/nexio/tv/ui/screens/home"),
@@ -409,10 +453,21 @@ class RawRemoteArtworkUrlBoundaryTest {
         return subList(start, endExclusive)
     }
 
+    private fun String.isPremiumProviderSanitizerAllowlistEntry(): Boolean =
+        trim().matches(Regex(""""https://api\.(?:top-posters|ratingposterdb)\.com/",?$"""))
+
     private companion object {
         private const val CONTEXT_RADIUS = 3
         private const val RAW_BOUNDARY_TEST_PATH =
             "app/src/test/java/com/nexio/tv/architecture/RawRemoteArtworkUrlBoundaryTest.kt"
+        private val expectedSnapshotSanitizerAllowlist = listOf(
+            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:72" to
+                "\"https://api.ratingposterdb.com/\",",
+            "app/src/main/java/com/nexio/tv/data/local/HomeCatalogSnapshotStore.kt:73" to
+                "\"https://api.top-posters.com/\""
+        )
+        private val expectedSnapshotSanitizerPrefixLocations =
+            expectedSnapshotSanitizerAllowlist.map { it.first }
 
         private val rawUrlLiteralRegex = Regex("""["']https?://""")
         private val premiumProviderUrlLiteralRegex = Regex(

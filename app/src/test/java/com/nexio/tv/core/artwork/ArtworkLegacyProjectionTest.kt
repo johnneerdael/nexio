@@ -30,6 +30,23 @@ class ArtworkLegacyProjectionTest {
     }
 
     @Test
+    fun `runtime asset projection prefers asset key over decision key`() {
+        val ref = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("artwork-decision:poster:canonical:imdb:tt123"),
+            assetKey = ArtworkAssetKey("artwork-asset:RPDB:poster:imdb:tt123:settings:s:credential:c:imageLang:en:policy:1"),
+            imageType = ArtworkType.POSTER,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace.empty()
+        )
+
+        assertEquals(
+            "nexio-artwork://asset/artwork-asset:RPDB:poster:imdb:tt123:settings:s:credential:c:imageLang:en:policy:1",
+            ref.toLegacyArtworkString()
+        )
+    }
+
+    @Test
     fun `runtime asset display hints default to no rating overlay`() {
         val ref = ArtworkDisplayRef.RuntimeAsset(
             decisionKey = ArtworkDecisionKey("artwork-decision:thumbnail:imdb:tt0137523:S1E1"),
@@ -56,6 +73,23 @@ class ArtworkLegacyProjectionTest {
 
         assertEquals(
             "nexio-artwork://decision/artwork-decision:poster:preview:row1",
+            ref.toLegacyArtworkString()
+        )
+    }
+
+    @Test
+    fun `runtime asset projection uses decision key when asset key absent`() {
+        val ref = ArtworkDisplayRef.RuntimeAsset(
+            decisionKey = ArtworkDecisionKey("artwork-decision:poster:canonical:imdb:tt123"),
+            assetKey = null,
+            imageType = ArtworkType.POSTER,
+            selectedProvider = ArtworkProviderId.RuntimeProvider(IntegrationProvider.RPDB),
+            sourceRole = ArtworkSourceRole.PREMIUM,
+            trace = ArtworkTrace.empty()
+        )
+
+        assertEquals(
+            "nexio-artwork://decision/artwork-decision:poster:canonical:imdb:tt123",
             ref.toLegacyArtworkString()
         )
     }
