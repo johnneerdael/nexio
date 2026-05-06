@@ -347,12 +347,12 @@ class MetaDetailsTvdbProviderRoutingTest {
         )
 
         val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>()
-        coEvery { titleRatingOverrideRepository.enrichMeta(any(), any(), any()) } answers { firstArg() }
+        coEvery { titleRatingOverrideRepository.titleRatingCandidates(any<Meta>(), any(), any(), any(), any()) } returns emptyList()
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>()
         coEvery {
-            episodeRatingsSelectionRepository.getEpisodeRatings(any(), any(), any(), any())
-        } returns emptyMap()
+            episodeRatingsSelectionRepository.episodeRatingCandidates(any(), any(), any(), any())
+        } returns emptyList()
 
         buildMetaDetailsViewModel(
             meta = buildSeriesMeta().copy(id = "tvdb:121361"),
@@ -378,13 +378,13 @@ class MetaDetailsTvdbProviderRoutingTest {
         advanceUntilIdle()
 
         coVerify {
-            titleRatingOverrideRepository.enrichMeta(any(), "tt0944947", "series")
+            titleRatingOverrideRepository.titleRatingCandidates(any<Meta>(), "tt0944947", "series", any(), any())
         }
         coVerify {
             mdbListRepository.getRatingsForMeta(any(), "tt0944947", "series")
         }
         coVerify {
-            episodeRatingsSelectionRepository.getEpisodeRatings(any(), "tt0944947", "series", mapOf(1 to setOf(1)))
+            episodeRatingsSelectionRepository.episodeRatingCandidates(any(), "tt0944947", "series", mapOf(1 to setOf(1)))
         }
     }
 

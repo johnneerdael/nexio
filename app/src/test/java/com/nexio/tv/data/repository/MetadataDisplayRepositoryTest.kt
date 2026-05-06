@@ -25,6 +25,9 @@ import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.ResolverSchedule
 import com.nexio.tv.core.metadata.router.SourceRole
+import com.nexio.tv.core.metadata.router.resolver.Confidence
+import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.SourceRole as RatingSourceRole
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MDBListRatings
@@ -40,6 +43,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -289,8 +293,8 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemType = "series",
                 providerIds = any(),
                 episodesBySeason = emptyMap(),
-                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
-                previewFallbackTitleRating = null
+                primaryProviderTitleRatingCandidate = ratingCandidate(9.2, RatingSourceRole.PRIMARY_PROVIDER, "IMDB"),
+                previewFallbackTitleRatingCandidate = null
             )
         } returns ratings
 
@@ -314,8 +318,8 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemType = "series",
                 providerIds = any(),
                 episodesBySeason = emptyMap(),
-                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
-                previewFallbackTitleRating = null
+                primaryProviderTitleRatingCandidate = ratingCandidate(9.2, RatingSourceRole.PRIMARY_PROVIDER, "IMDB"),
+                previewFallbackTitleRatingCandidate = null
             )
         }
     }
@@ -417,8 +421,8 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemType = "series",
                 providerIds = any(),
                 episodesBySeason = emptyMap(),
-                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
-                previewFallbackTitleRating = null
+                primaryProviderTitleRatingCandidate = ratingCandidate(9.2, RatingSourceRole.PRIMARY_PROVIDER, "IMDB"),
+                previewFallbackTitleRatingCandidate = null
             )
         } returns ratings
 
@@ -433,8 +437,8 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemType = "series",
                 providerIds = any(),
                 episodesBySeason = emptyMap(),
-                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
-                previewFallbackTitleRating = null
+                primaryProviderTitleRatingCandidate = ratingCandidate(9.2, RatingSourceRole.PRIMARY_PROVIDER, "IMDB"),
+                previewFallbackTitleRatingCandidate = null
             )
         }
     }
@@ -487,7 +491,7 @@ class MetadataDisplayRepositoryTest {
 
         assertEquals("Game of Thrones", document.fields.title)
         assertEquals(ResolvedDetailRatingDisplay(), document.ratings)
-        assertEquals(9.2, document.rating?.value ?: 0.0, 0.0)
+        assertNull(document.rating)
     }
 
     private fun minimalRatingsMeta(id: String): Meta =
@@ -512,6 +516,18 @@ class MetadataDisplayRepositoryTest {
             awards = null,
             language = null,
             links = emptyList()
+        )
+
+    private fun ratingCandidate(
+        value: Double,
+        sourceRole: RatingSourceRole,
+        sourceProvider: String
+    ): RatingCandidate =
+        RatingCandidate(
+            value = value,
+            sourceRole = sourceRole,
+            sourceProvider = sourceProvider,
+            confidence = Confidence.MEDIUM
         )
 
     private fun artworkRef(key: String, type: ArtworkType): ArtworkDisplayRef.RuntimeAsset =

@@ -3,16 +3,12 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.metadata.router.StableIdBundle
 import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
-import com.nexio.tv.core.metadata.router.resolver.RatingResolver
-import com.nexio.tv.core.metadata.router.resolver.RatingResolution
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
-import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.ProviderIds
-import com.nexio.tv.domain.model.TitleRatingSource
 import com.nexio.tv.domain.model.Video
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -80,30 +76,6 @@ class TitleRatingOverrideRepository @Inject constructor(
         return candidates
     }
 
-    suspend fun enrichPreview(
-        preview: MetaPreview,
-        stableIdBundle: StableIdBundle? = null
-    ): MetaPreview {
-        val resolution = RatingResolver.resolveTitleRating(
-            titleRatingCandidates(preview, stableIdBundle) + listOfNotNull(previewFallbackCandidate(preview))
-        )
-        return resolution?.let { preview.copy(imdbRating = it.value.toFloat(), ratingSource = it.toTitleRatingSource()) }
-            ?: preview
-    }
-
-    suspend fun enrichMeta(
-        meta: Meta,
-        fallbackItemId: String,
-        fallbackItemType: String,
-        stableIdBundle: StableIdBundle? = null
-    ): Meta {
-        val resolution = RatingResolver.resolveTitleRating(
-            titleRatingCandidates(meta, fallbackItemId, fallbackItemType, stableIdBundle) + listOfNotNull(previewFallbackCandidate(meta))
-        )
-        return resolution?.let { meta.copy(imdbRating = it.value.toFloat(), ratingSource = it.toTitleRatingSource()) }
-            ?: meta
-    }
-
     private fun Double.toRatingCandidate(sourceRole: SourceRole, sourceProvider: String): RatingCandidate =
         RatingCandidate(
             value = this,
@@ -111,41 +83,6 @@ class TitleRatingOverrideRepository @Inject constructor(
             sourceProvider = sourceProvider,
             confidence = Confidence.HIGH
         )
-
-    private fun previewFallbackCandidate(preview: MetaPreview): RatingCandidate? =
-        preview.imdbRating?.toDouble()?.takeIf { it > 0.0 }?.let { value ->
-            RatingCandidate(
-                value = value,
-                sourceRole = SourceRole.PREVIEW_FALLBACK,
-                sourceProvider = preview.ratingSource.orDefaultProviderName(),
-                confidence = Confidence.LOW
-            )
-        }
-
-    private fun previewFallbackCandidate(meta: Meta): RatingCandidate? =
-        meta.imdbRating?.toDouble()?.takeIf { it > 0.0 }?.let { value ->
-            RatingCandidate(
-                value = value,
-                sourceRole = SourceRole.PREVIEW_FALLBACK,
-                sourceProvider = meta.ratingSource.orDefaultProviderName(),
-                confidence = Confidence.LOW
-            )
-        }
-
-    private fun RatingResolution.toTitleRatingSource(): TitleRatingSource =
-        when (sourceRole) {
-            SourceRole.CUSTOM_IMDB, SourceRole.MDBLIST, SourceRole.OMDB -> TitleRatingSource.IMDB
-            SourceRole.PRIMARY_PROVIDER, SourceRole.PREVIEW_FALLBACK -> sourceProvider.toTitleRatingSource()
-        }
-
-    private fun TitleRatingSource?.orDefaultProviderName(): String =
-        (this ?: TitleRatingSource.IMDB).name
-
-    private fun String.toTitleRatingSource(): TitleRatingSource =
-        when (trim().uppercase()) {
-            "TMDB", "TMDB_RATING" -> TitleRatingSource.TMDB
-            else -> TitleRatingSource.IMDB
-        }
 
     private fun MetaPreview.toRatingsMeta(): Meta =
         Meta(

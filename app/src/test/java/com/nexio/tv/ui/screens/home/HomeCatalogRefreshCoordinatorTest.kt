@@ -24,7 +24,6 @@ import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TmdbDiscoverySnapshot
-import com.nexio.tv.data.repository.TitleRatingOverrideRepository
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvProvider
@@ -1195,7 +1194,6 @@ class HomeCatalogRefreshCoordinatorTest {
     fun `visible prefetch only does not write metadata cache or resolve metadata`() = runTest {
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metadataRouterFacade = mockk<MetadataRouterFacade>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>(relaxed = true)
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
         val logs = mutableListOf<Pair<String, String?>>()
@@ -1228,14 +1226,12 @@ class HomeCatalogRefreshCoordinatorTest {
         verify(exactly = 0) {
             metadataDiskCacheStore.writeHomeDisplayMetadata(any(), any(), any())
         }
-        coVerify(exactly = 0) { titleRatingOverrideRepository.enrichPreview(any(), any()) }
     }
 
     @Test
     fun `visible prefetch skips internal artwork refs`() = runTest {
         val catalogRepository = mockk<CatalogRepository>(relaxed = true)
         val metadataRouterFacade = mockk<MetadataRouterFacade>()
-        val titleRatingOverrideRepository = mockk<TitleRatingOverrideRepository>(relaxed = true)
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true)
         val logs = mutableListOf<Pair<String, String?>>()

@@ -262,7 +262,5 @@ fun defaultTitleRatingOverrideRepository(): TitleRatingOverrideRepository {
     return mockk<TitleRatingOverrideRepository>().also { repository ->
         coEvery { repository.titleRatingCandidates(any<MetaPreview>(), any(), any()) } returns emptyList()
         coEvery { repository.titleRatingCandidates(any<Meta>(), any(), any(), any(), any()) } returns emptyList()
-        coEvery { repository.enrichMeta(any(), any(), any()) } answers { firstArg() }
-        coEvery { repository.enrichMeta(any(), any(), any(), any()) } answers { firstArg() }
     }
 }

@@ -19,8 +19,8 @@ data class DetailRatingDisplayContext(
     val fallbackItemId: String,
     val fallbackItemType: String,
     val episodesBySeason: Map<Int, Set<Int>>,
-    val primaryProviderTitleRating: TitleRating? = null,
-    val previewFallbackTitleRating: TitleRating? = null
+    val primaryProviderTitleRatingCandidate: RatingCandidate? = null,
+    val previewFallbackTitleRatingCandidate: RatingCandidate? = null
 )
 
 class DetailRatingDisplayRepository private constructor(
@@ -51,15 +51,15 @@ class DetailRatingDisplayRepository private constructor(
         fallbackItemType: String,
         providerIds: ProviderIds,
         episodesBySeason: Map<Int, Set<Int>>,
-        primaryProviderTitleRating: TitleRating? = null,
-        previewFallbackTitleRating: TitleRating? = null
+        primaryProviderTitleRatingCandidate: RatingCandidate? = null,
+        previewFallbackTitleRatingCandidate: RatingCandidate? = null
     ): ResolvedDetailRatingDisplay {
-        val dependencies = deps ?: return ResolvedDetailRatingDisplay()
+        val dependencies = deps
         val ratingFallbackItemId = providerIds.imdb?.takeIf { it.isNotBlank() } ?: fallbackItemId
         val titleCandidates = buildList {
             addAll(
-                runOptional {
-                    dependencies.titleRatingOverrideRepository.titleRatingCandidates(
+                dependencies?.let { availableDeps ->
+                    availableDeps.titleRatingOverrideRepository.safeTitleRatingCandidates(
                         meta = meta,
                         fallbackItemId = ratingFallbackItemId,
                         fallbackItemType = fallbackItemType,
@@ -67,29 +67,33 @@ class DetailRatingDisplayRepository private constructor(
                     )
                 }.orEmpty()
             )
-            primaryProviderTitleRating?.toCandidate(SourceRole.PRIMARY_PROVIDER, Confidence.MEDIUM)?.let(::add)
-            previewFallbackTitleRating?.toCandidate(SourceRole.PREVIEW_FALLBACK, Confidence.LOW)?.let(::add)
-            if (primaryProviderTitleRating == null && previewFallbackTitleRating == null) {
-                meta.toTitleRating()?.toCandidate(SourceRole.PREVIEW_FALLBACK, Confidence.LOW)?.let(::add)
+            primaryProviderTitleRatingCandidate?.let(::add)
+            previewFallbackTitleRatingCandidate?.let(::add)
+            if (primaryProviderTitleRatingCandidate == null && previewFallbackTitleRatingCandidate == null) {
+                meta.toPreviewFallbackRatingCandidate()?.let(::add)
             }
         }
         val titleRating = RatingResolver.resolveTitleRating(titleCandidates)
             ?.toTitleRating()
 
-        val mdbListResult = runOptional {
-            dependencies.mdbListRepository.getRatingsForMeta(
-                meta = meta,
-                fallbackItemId = ratingFallbackItemId,
-                fallbackItemType = fallbackItemType
-            )
+        val mdbListResult = dependencies?.let { availableDeps ->
+            runOptional {
+                availableDeps.mdbListRepository.getRatingsForMeta(
+                    meta = meta,
+                    fallbackItemId = ratingFallbackItemId,
+                    fallbackItemType = fallbackItemType
+                )
+            }
         }
-        val episodeCandidates = runOptional {
-            dependencies.episodeRatingsSelectionRepository.episodeRatingCandidates(
-                meta = meta,
-                fallbackItemId = ratingFallbackItemId,
-                fallbackItemType = fallbackItemType,
-                episodesBySeason = episodesBySeason
-            )
+        val episodeCandidates = dependencies?.let { availableDeps ->
+            runOptional {
+                availableDeps.episodeRatingsSelectionRepository.episodeRatingCandidates(
+                    meta = meta,
+                    fallbackItemId = ratingFallbackItemId,
+                    fallbackItemType = fallbackItemType,
+                    episodesBySeason = episodesBySeason
+                )
+            }
         }.orEmpty()
         val episodeRatings = RatingResolver.resolveEpisodeRatings(episodeCandidates)
 
@@ -106,6 +110,21 @@ class DetailRatingDisplayRepository private constructor(
         )
     }
 
+    private suspend fun TitleRatingOverrideRepository.safeTitleRatingCandidates(
+        meta: Meta,
+        fallbackItemId: String,
+        fallbackItemType: String,
+        providerIds: ProviderIds
+    ): List<RatingCandidate> =
+        runOptional {
+            titleRatingCandidates(
+                meta = meta,
+                fallbackItemId = fallbackItemId,
+                fallbackItemType = fallbackItemType,
+                providerIds = providerIds
+            )
+        }.orEmpty()
+
     companion object {
         fun noOp(): DetailRatingDisplayRepository =
             DetailRatingDisplayRepository(deps = null)
@@ -121,18 +140,15 @@ private inline fun <T> runOptional(block: () -> T): T? =
         null
     }
 
-private fun Meta.toTitleRating(): TitleRating? =
+private fun Meta.toPreviewFallbackRatingCandidate(): RatingCandidate? =
     imdbRating?.takeIf { it > 0.0f }?.let { value ->
-        TitleRating(value = value.toDouble(), source = ratingSource.orDefault())
+        RatingCandidate(
+            value = value.toDouble(),
+            sourceRole = SourceRole.PREVIEW_FALLBACK,
+            sourceProvider = ratingSource.orDefault().name,
+            confidence = Confidence.LOW
+        )
     }
-
-private fun TitleRating.toCandidate(sourceRole: SourceRole, confidence: Confidence): RatingCandidate =
-    RatingCandidate(
-        value = value,
-        sourceRole = sourceRole,
-        sourceProvider = source.name,
-        confidence = confidence
-    )
 
 private fun RatingResolution.toTitleRating(): TitleRating =
     TitleRating(value = value, source = toTitleRatingSource())

@@ -17,6 +17,9 @@ import com.nexio.tv.core.metadata.router.ProviderPlanRunResult
 import com.nexio.tv.core.metadata.router.ResolvedField
 import com.nexio.tv.core.metadata.router.ResolvedMetadataDocument
 import com.nexio.tv.core.metadata.router.ReviewsPage
+import com.nexio.tv.core.metadata.router.resolver.Confidence
+import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.core.tvdb.KitsuAdvancedAnimeCharacter
 import com.nexio.tv.core.tvdb.KitsuAdvancedProductionCompany
 import com.nexio.tv.core.tvdb.KitsuAdvancedRelatedTitle
@@ -69,15 +72,16 @@ class MetadataDisplayRepository @Inject constructor(
         val result = metadataRouterFacade.resolveRequest(request)
         val resolvedDocument = result.resolvedDocument
         val identity = result.toContentIdentity()
-        val primaryTitleRating = result.toTitleRating()
+        val primaryTitleRatingCandidate = result.toPrimaryProviderRatingCandidate()
         val effectiveRatingContext = if (ratingContext != null) {
             ratingContext.copy(
-                primaryProviderTitleRating = ratingContext.primaryProviderTitleRating ?: primaryTitleRating,
-                previewFallbackTitleRating = ratingContext.previewFallbackTitleRating ?: ratingContext.meta.toTitleRating()
+                primaryProviderTitleRatingCandidate = ratingContext.primaryProviderTitleRatingCandidate ?: primaryTitleRatingCandidate,
+                previewFallbackTitleRatingCandidate = ratingContext.previewFallbackTitleRatingCandidate
+                    ?: ratingContext.meta.toPreviewFallbackRatingCandidate()
             )
         } else {
             resolvedDocument.toRatingDisplayContext(request, identity)
-                ?.copy(primaryProviderTitleRating = primaryTitleRating)
+                ?.copy(primaryProviderTitleRatingCandidate = primaryTitleRatingCandidate)
         }
         val ratings = resolveRatings(effectiveRatingContext, identity)
         val kitsuBridge = result.fetchKitsuBridgeDetail(request, identity)
@@ -99,7 +103,7 @@ class MetadataDisplayRepository @Inject constructor(
             identity = identity,
             fields = resolvedDocument.toResolvedDisplayFields(),
             artwork = result.displayArtwork(),
-            rating = ratings?.titleRating ?: result.toTitleRating(),
+            rating = ratings?.titleRating,
             trailer = result.toTrailerDisplayState(),
             seasons = emptyList(),
             people = PeopleDisplay(cast = cast, crew = crew)
@@ -134,8 +138,8 @@ class MetadataDisplayRepository @Inject constructor(
                 fallbackItemType = effectiveContext.fallbackItemType,
                 providerIds = identity.providerIds,
                 episodesBySeason = effectiveContext.episodesBySeason,
-                primaryProviderTitleRating = effectiveContext.primaryProviderTitleRating,
-                previewFallbackTitleRating = effectiveContext.previewFallbackTitleRating
+                primaryProviderTitleRatingCandidate = effectiveContext.primaryProviderTitleRatingCandidate,
+                previewFallbackTitleRatingCandidate = effectiveContext.previewFallbackTitleRatingCandidate
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -377,19 +381,29 @@ class MetadataDisplayRepository @Inject constructor(
         )
     }
 
-    private fun MetadataResolutionResult.toTitleRating(): TitleRating? {
+    private fun MetadataResolutionResult.toPrimaryProviderRatingCandidate(): RatingCandidate? {
         val value = when (val rating = resolvedDocument.rating) {
             is Number -> rating.toDouble()
             is String -> rating.toDoubleOrNull()
             else -> return null
         } ?: return null
 
-        return TitleRating(value = value, source = ratingSource())
+        return RatingCandidate(
+            value = value,
+            sourceRole = SourceRole.PRIMARY_PROVIDER,
+            sourceProvider = ratingSource().name,
+            confidence = Confidence.MEDIUM
+        )
     }
 
-    private fun Meta.toTitleRating(): TitleRating? =
+    private fun Meta.toPreviewFallbackRatingCandidate(): RatingCandidate? =
         imdbRating?.takeIf { it > 0.0f }?.let { value ->
-            TitleRating(value = value.toDouble(), source = ratingSource.orDefault())
+            RatingCandidate(
+                value = value.toDouble(),
+                sourceRole = SourceRole.PREVIEW_FALLBACK,
+                sourceProvider = ratingSource.orDefault().name,
+                confidence = Confidence.LOW
+            )
         }
 
     private fun MetadataResolutionResult.ratingSource(): TitleRatingSource =

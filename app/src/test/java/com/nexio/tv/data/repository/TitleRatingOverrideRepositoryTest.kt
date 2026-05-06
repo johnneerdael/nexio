@@ -4,6 +4,8 @@ import com.nexio.tv.core.metadata.router.CanonicalStableIds
 import com.nexio.tv.core.metadata.router.SidecarStableIds
 import com.nexio.tv.core.metadata.router.SourceStableIds
 import com.nexio.tv.core.metadata.router.StableIdBundle
+import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.RatingResolver
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MDBListRatings
@@ -95,7 +97,7 @@ class TitleRatingOverrideRepositoryTest {
     }
 
     @Test
-    fun `compatibility enrich preview delegates final choice to rating resolver`() = runTest {
+    fun `resolver selects mdblist candidate over preview fallback`() = runTest {
         val custom = mockk<CustomImdbTitleRatingsRepository>()
         val mdb = mockk<MDBListRepository>()
         val repository = TitleRatingOverrideRepository(custom, mdb)
@@ -108,10 +110,17 @@ class TitleRatingOverrideRepositoryTest {
             mdb.getRatingsForMeta(any(), "tt0944947", "series", imdbIdOverride = null)
         } returns MDBListRatingsResult(MDBListRatings(imdb = 8.9), hasImdbRating = true)
 
-        val enriched = repository.enrichPreview(preview)
+        val resolved = RatingResolver.resolveTitleRating(
+            repository.titleRatingCandidates(preview) + RatingCandidate(
+                value = 8.1,
+                sourceRole = SourceRole.PREVIEW_FALLBACK,
+                sourceProvider = TitleRatingSource.TMDB.name,
+                confidence = com.nexio.tv.core.metadata.router.resolver.Confidence.LOW
+            )
+        )
 
-        assertEquals(8.9f, enriched.imdbRating ?: 0f, 0.0f)
-        assertEquals(TitleRatingSource.IMDB, enriched.ratingSource)
+        assertEquals(8.9, resolved?.value ?: 0.0, 0.0)
+        assertEquals(SourceRole.MDBLIST, resolved?.sourceRole)
     }
 
     private fun preview(

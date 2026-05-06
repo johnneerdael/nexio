@@ -3,15 +3,11 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.metadata.router.resolver.Confidence
 import com.nexio.tv.core.metadata.router.resolver.EpisodeRatingCandidate
-import com.nexio.tv.core.metadata.router.resolver.RatingResolver
-import com.nexio.tv.core.metadata.router.resolver.RatingResolution
 import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
-import com.nexio.tv.ui.screens.detail.EpisodeRating
-import com.nexio.tv.ui.screens.detail.EpisodeRatingSource
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,27 +51,6 @@ class EpisodeRatingsSelectionRepository @Inject constructor(
         ).mapTo(candidates, SourceRole.OMDB, "OMDB", Confidence.HIGH)
 
         return candidates
-    }
-
-    suspend fun getEpisodeRatings(
-        meta: Meta,
-        fallbackItemId: String,
-        fallbackItemType: String,
-        episodesBySeason: Map<Int, Set<Int>>
-    ): Map<Pair<Int, Int>, EpisodeRating> {
-        return RatingResolver.resolveEpisodeRatings(
-            episodeRatingCandidates(
-                meta = meta,
-                fallbackItemId = fallbackItemId,
-                fallbackItemType = fallbackItemType,
-                episodesBySeason = episodesBySeason
-            )
-        ).mapValues { (_, resolution) ->
-            EpisodeRating(
-                value = resolution.value,
-                source = resolution.toEpisodeRatingSource()
-            )
-        }
     }
 
     private suspend fun tmdbEpisodeRatings(
@@ -137,15 +112,4 @@ class EpisodeRatingsSelectionRepository @Inject constructor(
             )
         }
     }
-
-    private fun RatingResolution.toEpisodeRatingSource(): EpisodeRatingSource =
-        when (sourceRole) {
-            SourceRole.CUSTOM_IMDB -> EpisodeRatingSource.IMDB
-            SourceRole.OMDB -> EpisodeRatingSource.OMDB
-            SourceRole.MDBLIST, SourceRole.PRIMARY_PROVIDER, SourceRole.PREVIEW_FALLBACK -> sourceProvider.toEpisodeRatingSource()
-        }
-
-    private fun String.toEpisodeRatingSource(): EpisodeRatingSource =
-        EpisodeRatingSource.entries.firstOrNull { it.name.equals(this, ignoreCase = true) }
-            ?: EpisodeRatingSource.TMDB
 }

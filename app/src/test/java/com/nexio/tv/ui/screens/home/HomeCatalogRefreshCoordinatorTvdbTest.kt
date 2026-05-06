@@ -207,10 +207,8 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
     ): HomeCatalogRefreshCoordinator {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         val profileBoundary = mockk<ProfileBoundary>()
-        val titleRatingOverrideRepository = mockk<com.nexio.tv.data.repository.TitleRatingOverrideRepository>()
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
         every { profileBoundary.currentLanguageTag() } returns "en"
-        coEvery { titleRatingOverrideRepository.enrichPreview(any()) } answers { firstArg() }
         return HomeCatalogRefreshCoordinator(
             catalogRepository = mockk<CatalogRepository>(relaxed = true),
             metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true),
