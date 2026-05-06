@@ -36,6 +36,7 @@ import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -259,6 +260,8 @@ fun defaultLibraryRepository(): LibraryRepository {
 
 fun defaultTitleRatingOverrideRepository(): TitleRatingOverrideRepository {
     return mockk<TitleRatingOverrideRepository>().also { repository ->
+        coEvery { repository.titleRatingCandidates(any<MetaPreview>(), any(), any()) } returns emptyList()
+        coEvery { repository.titleRatingCandidates(any<Meta>(), any(), any(), any(), any()) } returns emptyList()
         coEvery { repository.enrichMeta(any(), any(), any()) } answers { firstArg() }
         coEvery { repository.enrichMeta(any(), any(), any(), any()) } answers { firstArg() }
     }

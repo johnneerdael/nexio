@@ -288,7 +288,9 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemId = "tt0944947",
                 fallbackItemType = "series",
                 providerIds = any(),
-                episodesBySeason = emptyMap()
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
+                previewFallbackTitleRating = null
             )
         } returns ratings
 
@@ -311,7 +313,9 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemId = "tt0944947",
                 fallbackItemType = "series",
                 providerIds = any(),
-                episodesBySeason = emptyMap()
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
+                previewFallbackTitleRating = null
             )
         }
     }
@@ -412,7 +416,9 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemId = "tt0944947",
                 fallbackItemType = "series",
                 providerIds = any(),
-                episodesBySeason = emptyMap()
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
+                previewFallbackTitleRating = null
             )
         } returns ratings
 
@@ -426,7 +432,9 @@ class MetadataDisplayRepositoryTest {
                 fallbackItemId = "tt0944947",
                 fallbackItemType = "series",
                 providerIds = any(),
-                episodesBySeason = emptyMap()
+                episodesBySeason = emptyMap(),
+                primaryProviderTitleRating = TitleRating(9.2, TitleRatingSource.IMDB),
+                previewFallbackTitleRating = null
             )
         }
     }
@@ -472,7 +480,7 @@ class MetadataDisplayRepositoryTest {
             trace = emptyList()
         )
         coEvery {
-            ratingRepository.resolve(any(), any(), any(), any(), any())
+            ratingRepository.resolve(any(), any(), any(), any(), any(), any(), any())
         } throws IllegalStateException("ratings unavailable")
 
         val document = repository.resolveDetailDisplay(request)

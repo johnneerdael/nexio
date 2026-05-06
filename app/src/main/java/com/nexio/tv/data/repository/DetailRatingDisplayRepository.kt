@@ -1,5 +1,10 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.metadata.router.resolver.Confidence
+import com.nexio.tv.core.metadata.router.resolver.RatingCandidate
+import com.nexio.tv.core.metadata.router.resolver.RatingResolver
+import com.nexio.tv.core.metadata.router.resolver.RatingResolution
+import com.nexio.tv.core.metadata.router.resolver.SourceRole
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.ProviderIds
 import com.nexio.tv.domain.model.ResolvedDetailRatingDisplay
@@ -13,7 +18,9 @@ data class DetailRatingDisplayContext(
     val meta: Meta,
     val fallbackItemId: String,
     val fallbackItemType: String,
-    val episodesBySeason: Map<Int, Set<Int>>
+    val episodesBySeason: Map<Int, Set<Int>>,
+    val primaryProviderTitleRating: TitleRating? = null,
+    val previewFallbackTitleRating: TitleRating? = null
 )
 
 class DetailRatingDisplayRepository private constructor(
@@ -43,44 +50,57 @@ class DetailRatingDisplayRepository private constructor(
         fallbackItemId: String,
         fallbackItemType: String,
         providerIds: ProviderIds,
-        episodesBySeason: Map<Int, Set<Int>>
+        episodesBySeason: Map<Int, Set<Int>>,
+        primaryProviderTitleRating: TitleRating? = null,
+        previewFallbackTitleRating: TitleRating? = null
     ): ResolvedDetailRatingDisplay {
         val dependencies = deps ?: return ResolvedDetailRatingDisplay()
         val ratingFallbackItemId = providerIds.imdb?.takeIf { it.isNotBlank() } ?: fallbackItemId
-        val enrichedMeta = runOptional {
-            dependencies.titleRatingOverrideRepository.enrichMeta(
+        val titleCandidates = buildList {
+            addAll(
+                runOptional {
+                    dependencies.titleRatingOverrideRepository.titleRatingCandidates(
+                        meta = meta,
+                        fallbackItemId = ratingFallbackItemId,
+                        fallbackItemType = fallbackItemType,
+                        providerIds = providerIds
+                    )
+                }.orEmpty()
+            )
+            primaryProviderTitleRating?.toCandidate(SourceRole.PRIMARY_PROVIDER, Confidence.MEDIUM)?.let(::add)
+            previewFallbackTitleRating?.toCandidate(SourceRole.PREVIEW_FALLBACK, Confidence.LOW)?.let(::add)
+            if (primaryProviderTitleRating == null && previewFallbackTitleRating == null) {
+                meta.toTitleRating()?.toCandidate(SourceRole.PREVIEW_FALLBACK, Confidence.LOW)?.let(::add)
+            }
+        }
+        val titleRating = RatingResolver.resolveTitleRating(titleCandidates)
+            ?.toTitleRating()
+
+        val mdbListResult = runOptional {
+            dependencies.mdbListRepository.getRatingsForMeta(
                 meta = meta,
                 fallbackItemId = ratingFallbackItemId,
                 fallbackItemType = fallbackItemType
             )
-        } ?: meta
-
-        val mdbListResult = runOptional {
-            dependencies.mdbListRepository.getRatingsForMeta(
-                meta = enrichedMeta,
-                fallbackItemId = ratingFallbackItemId,
-                fallbackItemType = fallbackItemType
-            )
         }
-        val episodeRatings = runOptional {
-            dependencies.episodeRatingsSelectionRepository.getEpisodeRatings(
-                meta = enrichedMeta,
+        val episodeCandidates = runOptional {
+            dependencies.episodeRatingsSelectionRepository.episodeRatingCandidates(
+                meta = meta,
                 fallbackItemId = ratingFallbackItemId,
                 fallbackItemType = fallbackItemType,
                 episodesBySeason = episodesBySeason
             )
         }.orEmpty()
+        val episodeRatings = RatingResolver.resolveEpisodeRatings(episodeCandidates)
 
         return ResolvedDetailRatingDisplay(
-            titleRating = enrichedMeta.imdbRating?.toDouble()?.let { value ->
-                TitleRating(value = value, source = enrichedMeta.ratingSource.orDefault())
-            },
+            titleRating = titleRating,
             mdbListRatings = mdbListResult?.ratings,
             showMdbListImdb = mdbListResult?.hasImdbRating == true,
             episodeRatings = episodeRatings.mapValues { (_, rating) ->
                 ResolvedEpisodeRating(
                     value = rating.value,
-                    source = rating.source.name
+                    source = rating.toEpisodeRatingSourceName()
                 )
             }
         )
@@ -99,4 +119,39 @@ private inline fun <T> runOptional(block: () -> T): T? =
         throw cancelled
     } catch (_: Exception) {
         null
+    }
+
+private fun Meta.toTitleRating(): TitleRating? =
+    imdbRating?.takeIf { it > 0.0f }?.let { value ->
+        TitleRating(value = value.toDouble(), source = ratingSource.orDefault())
+    }
+
+private fun TitleRating.toCandidate(sourceRole: SourceRole, confidence: Confidence): RatingCandidate =
+    RatingCandidate(
+        value = value,
+        sourceRole = sourceRole,
+        sourceProvider = source.name,
+        confidence = confidence
+    )
+
+private fun RatingResolution.toTitleRating(): TitleRating =
+    TitleRating(value = value, source = toTitleRatingSource())
+
+private fun RatingResolution.toTitleRatingSource(): com.nexio.tv.domain.model.TitleRatingSource =
+    when (sourceRole) {
+        SourceRole.CUSTOM_IMDB, SourceRole.MDBLIST, SourceRole.OMDB -> com.nexio.tv.domain.model.TitleRatingSource.IMDB
+        SourceRole.PRIMARY_PROVIDER, SourceRole.PREVIEW_FALLBACK -> sourceProvider.toTitleRatingSource()
+    }
+
+private fun String.toTitleRatingSource(): com.nexio.tv.domain.model.TitleRatingSource =
+    when (trim().uppercase()) {
+        "TMDB", "TMDB_RATING" -> com.nexio.tv.domain.model.TitleRatingSource.TMDB
+        else -> com.nexio.tv.domain.model.TitleRatingSource.IMDB
+    }
+
+private fun RatingResolution.toEpisodeRatingSourceName(): String =
+    when (sourceRole) {
+        SourceRole.CUSTOM_IMDB -> "IMDB"
+        SourceRole.OMDB -> "OMDB"
+        SourceRole.MDBLIST, SourceRole.PRIMARY_PROVIDER, SourceRole.PREVIEW_FALLBACK -> sourceProvider
     }
