@@ -1,12 +1,5 @@
 package com.nexio.tv.core.anime.projection
 
-enum class SeasonPresentationSource {
-    KITSU_SEASON_NUMBERS,
-    TVDB_PROJECTED,
-    TMDB_PROJECTED,
-    KITSU_FLAT_FALLBACK,
-}
-
 data class AnimeSeasonTab(
     val seasonNumber: Int,
     val title: String?,
