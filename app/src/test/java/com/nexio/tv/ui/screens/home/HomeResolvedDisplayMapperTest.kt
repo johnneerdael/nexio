@@ -139,7 +139,7 @@ class HomeResolvedDisplayMapperTest {
     }
 
     @Test
-    fun `mapper carries final home trailer fallbacks into display surface trailer state`() {
+    fun `mapper does not publish unresolved home trailer fallbacks into display surface trailer state`() {
         val finalItem = preview(
             id = "tmdb:550",
             title = "Final Home Title",
@@ -155,7 +155,7 @@ class HomeResolvedDisplayMapperTest {
             nowMs = 10_000L
         ).single()
 
-        assertEquals(listOf("trailer-a", "trailer-b"), resolved.trailer.fallbackTrailerYtIds)
+        assertEquals(emptyList<String>(), resolved.trailer.fallbackTrailerYtIds)
     }
 
     private fun preview(
