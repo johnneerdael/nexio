@@ -121,7 +121,7 @@ class MetadataDisplayRepository @Inject constructor(
             sourceTrace = resolvedDocument.toSourceTrace(),
             localization = LocalizationDisplayState(
                 requestedLanguage = request.language,
-                selectedLanguage = resolvedDocument.language ?: request.language,
+                selectedLanguage = resolvedDocument.selectedLocalizationLanguage(request.language),
                 fallbackReason = resolvedDocument.localizationFallbackReason()
             ),
             advanced = resolvedDocument.toDetailAdvancedMetadata(
@@ -485,6 +485,11 @@ class MetadataDisplayRepository @Inject constructor(
         localization.values
             .firstOrNull { it.fallbackRole != MetadataLocalizationFallbackRole.LOCALIZED }
             ?.toFallbackReason()
+
+    private fun ResolvedMetadataDocument.selectedLocalizationLanguage(requestedLanguage: String?): String? =
+        localization.values.firstOrNull()?.selectedLanguage
+            ?: language
+            ?: requestedLanguage
 
     private fun MetadataLocalizationFieldTrace.toFallbackReason(): String =
         "${field.name} fell back to $selectedLanguage via ${selectedProvider.name} (${fallbackRole.name})"
