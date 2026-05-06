@@ -21,12 +21,9 @@ class MetadataRouterBoundaryTest {
             allowedPaths = productionAllowedPathSuffixes(
                 "/com/nexio/tv/core/tvdb/ProviderMetadataRouter.kt",
                 "/com/nexio/tv/core/tvdb/TvMetadataRouter.kt",
-                "/com/nexio/tv/data/repository/EpisodeRatingsSelectionRepository.kt",
-                "/com/nexio/tv/data/trailer/TrailerService.kt",
                 "/com/nexio/tv/data/integration/metadata/TmdbMetadataProviderAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TvdbMetadataProviderAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/KitsuMetadataProviderAdapter.kt",
-                "/com/nexio/tv/data/integration/metadata/MetadataSecondaryRepository.kt",
                 // New adapters created during cluster A migration that reference legacy services in KDoc:
                 "/com/nexio/tv/data/integration/metadata/TmdbReviewMetadataAdapter.kt",
                 "/com/nexio/tv/data/integration/metadata/TmdbRecommendationMetadataAdapter.kt",

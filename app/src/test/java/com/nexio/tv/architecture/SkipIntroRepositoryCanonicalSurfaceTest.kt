@@ -39,8 +39,9 @@ class SkipIntroRepositoryCanonicalSurfaceTest {
         )
 
         assertTrue(
-            "Skip-segment APIs must be invoked only inside SkipIntroRepository or its registered " +
-                "sub-providers (data/integration/skip/*). Use SkipIntroRepository.getSkipIntervals(...). " +
+            "Skip-segment APIs must be invoked only by IntegrationRuntime-backed skip providers " +
+                "under SkipSegmentResolver. Player code must use " +
+                "SkipSegmentResolver.resolveSkipSegments(request). " +
                 "Offenders: $offenders",
             offenders.isEmpty()
         )
