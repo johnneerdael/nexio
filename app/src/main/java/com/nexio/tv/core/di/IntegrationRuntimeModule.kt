@@ -2,8 +2,18 @@ package com.nexio.tv.core.di
 
 import android.content.Context
 import androidx.room.Room
+import com.nexio.tv.core.artwork.ArtworkAssetDiskCache
+import com.nexio.tv.core.artwork.ArtworkByteLoader
+import com.nexio.tv.core.artwork.ArtworkCredentialResolver
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
+import com.nexio.tv.core.artwork.ArtworkPosterTransport
+import com.nexio.tv.core.artwork.ArtworkProviderSettingsSource
+import com.nexio.tv.core.artwork.ArtworkSourceMaterializer
+import com.nexio.tv.core.artwork.DefaultArtworkByteLoader
+import com.nexio.tv.core.artwork.DefaultArtworkPosterTransport
 import com.nexio.tv.core.artwork.InMemoryArtworkDecisionCache
+import com.nexio.tv.core.artwork.PosterRatingsArtworkCredentialResolver
+import com.nexio.tv.core.artwork.PosterRatingsArtworkProviderSettingsSource
 import com.nexio.tv.core.integration.DefaultIntegrationRuntime
 import com.nexio.tv.core.integration.DefaultIntegrationHydrationCoordinator
 import com.nexio.tv.core.integration.IntegrationCacheStore
@@ -87,6 +97,41 @@ object IntegrationRuntimeModule {
     @Provides
     @Singleton
     fun provideArtworkDecisionCache(): ArtworkDecisionCache = InMemoryArtworkDecisionCache()
+
+    @Provides
+    @Singleton
+    fun provideArtworkAssetDiskCache(
+        @ApplicationContext context: Context
+    ): ArtworkAssetDiskCache = ArtworkAssetDiskCache(context.cacheDir)
+
+    @Provides
+    @Singleton
+    fun provideArtworkSourceMaterializer(): ArtworkSourceMaterializer =
+        ArtworkSourceMaterializer(emptyMap())
+
+    @Provides
+    @Singleton
+    fun provideArtworkPosterTransport(
+        impl: DefaultArtworkPosterTransport
+    ): ArtworkPosterTransport = impl
+
+    @Provides
+    @Singleton
+    fun provideArtworkProviderSettingsSource(
+        impl: PosterRatingsArtworkProviderSettingsSource
+    ): ArtworkProviderSettingsSource = impl
+
+    @Provides
+    @Singleton
+    fun provideArtworkCredentialResolver(
+        impl: PosterRatingsArtworkCredentialResolver
+    ): ArtworkCredentialResolver = impl
+
+    @Provides
+    @Singleton
+    fun provideArtworkByteLoader(
+        impl: DefaultArtworkByteLoader
+    ): ArtworkByteLoader = impl
 
     @Provides
     @Singleton

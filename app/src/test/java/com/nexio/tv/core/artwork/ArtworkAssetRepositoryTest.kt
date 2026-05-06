@@ -14,10 +14,13 @@ import com.nexio.tv.core.integration.IntegrationScope
 import com.nexio.tv.core.integration.IntegrationSpec
 import com.nexio.tv.core.integration.IntegrationStreamHandle
 import com.nexio.tv.core.integration.IntegrationStreamSpec
+import com.nexio.tv.core.trace.RuntimeTraceSink
+import com.nexio.tv.core.trace.TraceEventEnvelope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -28,11 +31,7 @@ class ArtworkAssetRepositoryTest {
     @Test
     fun `provider template fetch uses runtime and global English image scope`() = runTest {
         val runtime = RecordingIntegrationRuntime(successValue = "image-bytes".toByteArray())
-        val repository = ArtworkAssetRepository(
-            runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
-            sourceMaterializer = ArtworkSourceMaterializer(emptyMap())
-        )
+        val repository = repository(runtime = runtime)
         val decision = rpdbTemplateDecision()
 
         val result = repository.getOrFetch(decision)
@@ -56,10 +55,8 @@ class ArtworkAssetRepositoryTest {
     fun `repository loader executes on runtime Updated path`() = runTest {
         val runtime = LoadingIntegrationRuntime()
         var loaderCalled = false
-        val repository = ArtworkAssetRepository(
+        val repository = repository(
             runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
-            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
             byteLoader = ArtworkByteLoader { _, _ ->
                 loaderCalled = true
                 IntegrationLoadResult.Success("loaded".toByteArray())
@@ -78,10 +75,8 @@ class ArtworkAssetRepositoryTest {
     @Test
     fun `repository marks stale result as network executed when loader was invoked`() = runTest {
         val runtime = StaleAfterLoadingIntegrationRuntime("stale".toByteArray())
-        val repository = ArtworkAssetRepository(
+        val repository = repository(
             runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
-            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
             byteLoader = ArtworkByteLoader { _, _ ->
                 IntegrationLoadResult.Success("network-attempt".toByteArray())
             }
@@ -98,11 +93,7 @@ class ArtworkAssetRepositoryTest {
     @Test
     fun `top posters thumbnail provider template materializes thumbnail shape and path params asset key`() = runTest {
         val runtime = RecordingIntegrationRuntime(successValue = "thumbnail".toByteArray())
-        val repository = ArtworkAssetRepository(
-            runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
-            sourceMaterializer = ArtworkSourceMaterializer(emptyMap())
-        )
+        val repository = repository(runtime = runtime)
         val decision = topPostersThumbnailDecision()
 
         val result = repository.getOrFetch(decision)
@@ -120,9 +111,8 @@ class ArtworkAssetRepositoryTest {
     fun `remote preview materialization recovers raw source by source hash without persisting raw url`() = runTest {
         val runtime = LoadingIntegrationRuntime()
         val loadedSources = mutableListOf<ArtworkSource>()
-        val repository = ArtworkAssetRepository(
+        val repository = repository(
             runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
             sourceMaterializer = ArtworkSourceMaterializer(
                 mapOf("hash" to SensitiveArtworkUrl.of("https://image.tmdb.org/t/p/w500/abc.jpg"))
             ),
@@ -149,10 +139,8 @@ class ArtworkAssetRepositoryTest {
     fun `remote preview fresh cache hit does not require raw source material or loader`() = runTest {
         val runtime = RecordingIntegrationRuntime(successValue = "cached".toByteArray())
         var loaderCalled = false
-        val repository = ArtworkAssetRepository(
+        val repository = repository(
             runtime = runtime,
-            diskCache = ArtworkAssetDiskCache(temp.root),
-            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
             byteLoader = ArtworkByteLoader { _, _ ->
                 loaderCalled = true
                 IntegrationLoadResult.NetworkError(IllegalStateException("loader should not run"))
@@ -167,6 +155,127 @@ class ArtworkAssetRepositoryTest {
         assertEquals("HIT", result.cacheDecision)
         assertArrayEquals("cached".toByteArray(), result.localFile.readBytes())
         assertEquals("artwork-asset:RAIL_PREVIEW:poster:urlHash:hash:variant:none:imageLang:en:policy:1", runtime.lastSpec!!.cacheKey)
+    }
+
+    @Test
+    fun `getOrFetchDecision looks up decision and materializes asset`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val decision = rpdbTemplateDecision()
+        cache.put(decision)
+        val runtime = LoadingIntegrationRuntime()
+        val repository = repository(
+            runtime = runtime,
+            cache = cache,
+            byteLoader = ArtworkByteLoader { _, _ ->
+                IntegrationLoadResult.Success("decision-image".toByteArray())
+            }
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        result!!
+        assertEquals(ArtworkCacheKeys.assetKeyForProviderTemplate(decision.selectedCandidate.providerTemplate!!), result.assetKey)
+        assertArrayEquals("decision-image".toByteArray(), result.localFile.readBytes())
+        assertEquals("MISS_THEN_NETWORK", result.cacheDecision)
+    }
+
+    @Test
+    fun `getOrFetchDecision returns null and traces missing decision`() = runTest {
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = InMemoryArtworkDecisionCache(),
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetchDecision(ArtworkDecisionKey("missing-decision"))
+
+        assertNull(result)
+        assertEquals("artwork.decision_lookup", traceSink.events.single().eventType)
+        assertEquals(false, (traceSink.events.single().payload as Map<*, *>)["found"])
+    }
+
+    @Test
+    fun `provider template decision materializes with empty source materializer`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val decision = rpdbTemplateDecision()
+        cache.put(decision)
+        var loadedSource: ArtworkSource? = null
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
+            byteLoader = ArtworkByteLoader { source, _ ->
+                loadedSource = source
+                IntegrationLoadResult.Success("template-image".toByteArray())
+            }
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNotNull(result)
+        assertArrayEquals("template-image".toByteArray(), result!!.localFile.readBytes())
+        assertTrue(loadedSource is ArtworkSource.ProviderTemplate)
+    }
+
+    @Test
+    fun `remote url decision missing source materializer fails traceably`() = runTest {
+        val cache = InMemoryArtworkDecisionCache()
+        val decision = remotePreviewDecision()
+        cache.put(decision)
+        val traceSink = RecordingArtworkTraceSink()
+        val repository = repository(
+            runtime = LoadingIntegrationRuntime(),
+            cache = cache,
+            sourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
+            byteLoader = ArtworkByteLoader { source, _ ->
+                if (source is UnavailableRemoteArtworkSource) {
+                    IntegrationLoadResult.NetworkError(IllegalStateException("raw source unavailable"))
+                } else {
+                    IntegrationLoadResult.Success("unexpected".toByteArray())
+                }
+            },
+            traceSink = traceSink
+        )
+
+        val result = repository.getOrFetchDecision(decision.decisionKey)
+
+        assertNull(result)
+        assertEquals("artwork.decision_lookup", traceSink.events.first().eventType)
+        assertEquals(true, (traceSink.events.first().payload as Map<*, *>)["found"])
+        assertEquals("artwork.asset_materialized", traceSink.events.last().eventType)
+        assertEquals(false, (traceSink.events.last().payload as Map<*, *>)["success"])
+    }
+
+    private fun repository(
+        runtime: IntegrationRuntime,
+        cache: ArtworkDecisionCache = InMemoryArtworkDecisionCache(),
+        sourceMaterializer: ArtworkSourceMaterializer = ArtworkSourceMaterializer(emptyMap()),
+        byteLoader: ArtworkByteLoader = ArtworkByteLoader { _, _ ->
+            IntegrationLoadResult.Success("image-bytes".toByteArray())
+        },
+        traceSink: RuntimeTraceSink = RecordingArtworkTraceSink()
+    ): ArtworkAssetRepository =
+        ArtworkAssetRepository(
+            runtime = runtime,
+            diskCache = ArtworkAssetDiskCache(temp.root),
+            sourceMaterializer = sourceMaterializer,
+            byteLoader = byteLoader,
+            decisionCache = cache,
+            traceSink = traceSink
+        )
+
+    private class RecordingArtworkTraceSink : RuntimeTraceSink {
+        val events = mutableListOf<TraceEventEnvelope<*>>()
+
+        override fun emit(event: TraceEventEnvelope<*>) {
+            events += event
+        }
+
+        override fun eventsWritten(): Long = events.size.toLong()
+
+        override fun eventsDropped(): Long = 0L
     }
 
     private class RecordingIntegrationRuntime(
