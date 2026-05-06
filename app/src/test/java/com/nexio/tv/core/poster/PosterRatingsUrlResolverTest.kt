@@ -1,6 +1,7 @@
 package com.nexio.tv.core.poster
 
 import com.nexio.tv.core.artwork.ArtworkCacheKeys
+import com.nexio.tv.core.artwork.ArtworkDecision
 import com.nexio.tv.core.artwork.ArtworkDecisionCache
 import com.nexio.tv.core.artwork.ArtworkDecisionKey
 import com.nexio.tv.core.artwork.ArtworkDisplayRef
@@ -413,6 +414,72 @@ class PosterRatingsUrlResolverTest {
         assertEquals(ArtworkOwnerKey.PreviewItem::class, decision?.ownerKey!!::class)
     }
 
+    @Test
+    fun `meta preview internal artwork ref is idempotent and does not write decision`() {
+        val cache = CountingArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(
+            id = "tt15940132",
+            poster = "nexio-artwork://decision/existing"
+        ).copy(posterProviderTag = "rpdb")
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        assertEquals(preview, resolved)
+        assertEquals(0, cache.putCount)
+    }
+
+    @Test
+    fun `meta preview placeholder ref is idempotent and does not write decision`() {
+        val cache = CountingArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(
+            id = "source-item",
+            poster = "nexio-placeholder://poster/source-item"
+        )
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        assertEquals(preview, resolved)
+        assertEquals(0, cache.putCount)
+    }
+
+    @Test
+    fun `meta preview legacy premium integration poster is not persisted as fallback`() {
+        val cache = CountingArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val legacyPremiumPoster = PosterIntegrationRequest(
+            provider = IntegrationProvider.RPDB,
+            cacheKey = "legacy-rpdb",
+            apiKey = "secret",
+            path = "imdb/poster-default/tt15940132.jpg"
+        ).toModel()
+        val preview = preview(id = "source-item", poster = legacyPremiumPoster)
+
+        val resolved = resolver.applyArtworkRef(preview, ArtworkProviderSettings())
+
+        assertNull(resolved.poster)
+        assertNull(resolved.posterProviderTag)
+        assertEquals(0, cache.putCount)
+    }
+
+    @Test
+    fun `blank stable ids do not suppress derived preview id`() {
+        val cache = InMemoryArtworkDecisionCache()
+        val resolver = resolver(cache)
+        val preview = preview(
+            id = "tt15940132",
+            poster = "https://image.tmdb.org/t/p/w500/poster.jpg"
+        ).copy(firstPaintStableIds = ProviderIds(imdb = " "))
+
+        val resolved = resolver.applyArtworkRef(preview, rpdbSettings())
+
+        val decision = cache.get(decisionKeyFromRef(resolved.poster!!))
+        assertEquals("RPDB", decision?.selectedCandidate?.provider?.key)
+        assertEquals("imdb", decision?.selectedCandidate?.providerTemplate?.idType)
+        assertEquals("tt15940132", decision?.selectedCandidate?.providerTemplate?.mediaId)
+    }
+
     private fun resolver(cache: ArtworkDecisionCache): PosterRatingsUrlResolver =
         PosterRatingsUrlResolver(
             settingsDataStore = mockk<PosterRatingsSettingsDataStore>(),
@@ -483,4 +550,45 @@ class PosterRatingsUrlResolverTest {
             genres = emptyList(),
             firstPaintSource = FirstPaintSource.ADDON_META_PREVIEW
         )
+
+    private class CountingArtworkDecisionCache : ArtworkDecisionCache {
+        private val delegate = InMemoryArtworkDecisionCache()
+        var putCount: Int = 0
+            private set
+
+        override fun get(key: ArtworkDecisionKey): ArtworkDecision? =
+            delegate.get(key)
+
+        override fun put(decision: ArtworkDecision) {
+            putCount += 1
+            delegate.put(decision)
+        }
+
+        override fun remove(key: ArtworkDecisionKey) {
+            delegate.remove(key)
+        }
+
+        override fun linkPreviewToCanonical(previewKey: ArtworkDecisionKey, canonicalKey: ArtworkDecisionKey) {
+            delegate.linkPreviewToCanonical(previewKey, canonicalKey)
+        }
+
+        override fun getCanonicalForPreview(previewKey: ArtworkDecisionKey): ArtworkDecision? =
+            delegate.getCanonicalForPreview(previewKey)
+
+        override fun invalidateBySettingsHash(settingsHash: String) {
+            delegate.invalidateBySettingsHash(settingsHash)
+        }
+
+        override fun invalidateByCredentialHash(credentialHash: String) {
+            delegate.invalidateByCredentialHash(credentialHash)
+        }
+
+        override fun invalidateArtworkPolicy(settingsHashes: Set<String>, credentialHashes: Set<String>) {
+            delegate.invalidateArtworkPolicy(settingsHashes, credentialHashes)
+        }
+
+        override fun invalidatePremiumArtworkPolicy() {
+            delegate.invalidatePremiumArtworkPolicy()
+        }
+    }
 }
