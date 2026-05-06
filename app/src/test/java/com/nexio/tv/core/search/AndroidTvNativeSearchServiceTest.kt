@@ -176,10 +176,11 @@ class AndroidTvNativeSearchServiceTest {
         override fun getInstalledAddons(): Flow<List<Addon>> = flowOf(installed)
         override suspend fun getCachedInstalledAddons(): List<Addon> = installed
         override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> = fetched
-        override suspend fun addAddon(url: String, parserPreset: AddonParserPreset) = Unit
+        override suspend fun addAddon(url: String, parserPreset: AddonParserPreset, isAnime: Boolean) = Unit
         override suspend fun removeAddon(url: String) = Unit
         override suspend fun setAddonOrder(urls: List<String>) = Unit
         override suspend fun updateAddonParserPreset(url: String, parserPreset: AddonParserPreset) = Unit
+        override suspend fun updateAddonIsAnime(url: String, isAnime: Boolean) = Unit
     }
 
     private class FakeCatalogRepository(
