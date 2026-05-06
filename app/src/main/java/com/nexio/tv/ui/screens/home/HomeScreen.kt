@@ -60,6 +60,8 @@ import androidx.compose.ui.res.stringResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.artwork.toCoilModelOrNull
+import com.nexio.tv.core.artwork.toSafeArtworkCoilModelOrNull
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -580,9 +582,13 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
+            val takeoverModel = pendingPosterTrailer.item.artwork?.backdrop.toCoilModelOrNull()
+                ?: pendingPosterTrailer.item.artwork?.poster.toCoilModelOrNull()
+                ?: pendingPosterTrailer.item.displayBackground.toSafeArtworkCoilModelOrNull()
+                ?: pendingPosterTrailer.item.displayPoster.toSafeArtworkCoilModelOrNull()
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(pendingPosterTrailer.item.displayBackground ?: pendingPosterTrailer.item.displayPoster)
+                    .data(takeoverModel)
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
